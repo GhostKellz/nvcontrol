@@ -60,7 +60,7 @@ Or download prebuilt binaries from the [Releases](https://github.com/youruser/nv
 
 ### Requirements
 
-- NVIDIA GPU with proprietary drivers
+- NVIDIA GPU with nvidia open drivers (570+) at least during testing
 - Wayland compositor (KDE, GNOME, Hyprland, Sway, etc.)
 - Rust (for building from source)
 
