@@ -15,10 +15,6 @@ path = "src/bin/nvcontrol.rs"
 name = "nvctl"
 path = "src/bin/nvctl.rs"
 
-[[bin]]
-name = "nvcontrol"
-path = "src/bin/nvcontrol.rs"
-
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 eframe = "0.27"
