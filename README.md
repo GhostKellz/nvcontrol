@@ -108,7 +108,7 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE) for detai
 
 ## Acknowledgments
 
-- [nvidia-vibrance-ctl](https://github.com/juv/nvidia-vibrance-ctl) for Digital Vibrance integration
+- [nvidia-vibrance-ctl](https://github.com/Tremeschin/nVibrant) for Digital Vibrance integration
 - [wlroots](https://gitlab.freedesktop.org/wlroots/wlroots) and the Wayland community
 - All contributors and testers
 
