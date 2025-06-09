@@ -1,0 +1,22 @@
+[package]
+name = "nvcontrol"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "nvcontrol"
+path = "src/lib.rs"
+
+[[bin]]
+name = "nvcontrol"
+path = "src/bin/nvcontrol.rs"
+
+[[bin]]
+name = "nvctl"
+path = "src/bin/nvctl.rs"
+
+[[bin]]
+name = "nvcontrol"
+path = "src/bin/nvcontrol.rs"
+
+[dependencies]
