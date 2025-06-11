@@ -3,9 +3,8 @@
 [![Wayland Support](https://img.shields.io/badge/Wayland-Ready-brightgreen?logo=wayland)](https://wayland.freedesktop.org/)
 [![NVIDIA](https://img.shields.io/badge/NVIDIA-Supported-brightgreen?logo=nvidia)](https://nvidia.com)
 [![CLI & GUI](https://img.shields.io/badge/CLI_%2B_GUI-Full_Featured-blueviolet)](#features)
-[![nvibrance Integration](https://img.shields.io/badge/nvibrance-Integrated-ff69b4)](https://github.com/juv/nvidia-vibrance-ctl)
-## [![Crates.io](https://img.shields.io/crates/v/nvcontrol)]## (https://crates.io/crates/nvcontrol)
-[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/ghostkellz/nvcontrol/ci.yml?branch=main)](https://github.com/youruser/nvcontrol/actions)
+[![nvibrance Integration](https://img.shields.io/badge/nvibrance-Integrated-ff69b4)](https://github.com/Tremeschin/nVibrant)
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/ghostkellz/nvcontrol/ci.yml?branch=main)](https://github.com/ghostkellz/nvcontrol/actions)
 
 ---
 
@@ -27,7 +26,7 @@ No more missing options. No more hacky workarounds. No more nvidia-settings bein
   - Memory timings, fan curves, temp/power monitoring
   - 🎛️ **Display & Color Management**
   - Per-display resolution, refresh rate, orientation, rotation
-  - Digital Vibrance, color profiles, gamma control (via integrated [nvibrance-ctl](https://github.com/juv/nvidia-vibrance-ctl))
+  - Digital Vibrance, color profiles, gamma control (via integrated [nVibrant](https://github.com/Tremeschin/nVibrant))
   - HDR toggling and fine-tuning (where supported)
   - Hotplug/multi-monitor configuration with persistent profiles
 
@@ -88,11 +87,7 @@ nvcontrol
 ## Roadmap
 
 - [ ] Full support for all NVIDIA GPUs (Turing, Ampere, Ada, etc.)
-- [ ] Flatpak & AUR PKG
-- [ ] Localization (multi-language support)
-- [ ] Plugin system for community extensions
-- [ ] More advanced monitoring widgets
-
+- [ ] Flatpak & AUR PKGhttps://github.com/Tremeschin/nVibrant
 ---
 
 ## Contributing
@@ -109,7 +104,7 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE) for detai
 
 ## Acknowledgments
 
-- [nvibrance](https://github.com/Tremeschin/nVibrant) for Digital Vibrance integration
+- [nVibrant](https://github.com/Tremeschin/nVibrant) for Digital Vibrance integration
 - [wlroots](https://gitlab.freedesktop.org/wlroots/wlroots) and the Wayland community
 - All contributors and testers
 
