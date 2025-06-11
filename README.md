@@ -4,8 +4,8 @@
 [![NVIDIA](https://img.shields.io/badge/NVIDIA-Supported-brightgreen?logo=nvidia)](https://nvidia.com)
 [![CLI & GUI](https://img.shields.io/badge/CLI_%2B_GUI-Full_Featured-blueviolet)](#features)
 [![nvibrance Integration](https://img.shields.io/badge/nvibrance-Integrated-ff69b4)](https://github.com/juv/nvidia-vibrance-ctl)
-[![Crates.io](https://img.shields.io/crates/v/nvcontrol)](https://crates.io/crates/nvcontrol)
-[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/youruser/nvcontrol/ci.yml?branch=main)](https://github.com/youruser/nvcontrol/actions)
+## [![Crates.io](https://img.shields.io/crates/v/nvcontrol)]## (https://crates.io/crates/nvcontrol)
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/ghostkellz/nvcontrol/ci.yml?branch=main)](https://github.com/youruser/nvcontrol/actions)
 
 ---
 
