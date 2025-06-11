@@ -1,5 +1,5 @@
 use eframe::egui;
-use nvcontrol::{display, vibrance, fan};
+use nvcontrol::{display, fan, vibrance};
 
 enum Tab {
     Display,
@@ -33,10 +33,16 @@ impl eframe::App for NvControlApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::TopBottomPanel::top("tabs").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                if ui.selectable_label(matches!(self.tab, Tab::Display), "Display & Color").clicked() {
+                if ui
+                    .selectable_label(matches!(self.tab, Tab::Display), "Display & Color")
+                    .clicked()
+                {
                     self.tab = Tab::Display;
                 }
-                if ui.selectable_label(matches!(self.tab, Tab::Fan), "Fan Control").clicked() {
+                if ui
+                    .selectable_label(matches!(self.tab, Tab::Fan), "Fan Control")
+                    .clicked()
+                {
                     self.tab = Tab::Fan;
                 }
             });
@@ -50,7 +56,8 @@ impl eframe::App for NvControlApp {
                     for (i, level) in self.vibrance_levels.iter_mut().enumerate() {
                         ui.horizontal(|ui| {
                             ui.label(format!("Display {}", i));
-                            changed |= ui.add(egui::Slider::new(level, -1024..=1023).suffix("%"))
+                            changed |= ui
+                                .add(egui::Slider::new(level, -1024..=1023).suffix("%"))
                                 .changed();
                         });
                     }
@@ -87,7 +94,9 @@ impl eframe::App for NvControlApp {
                     let mut hdr_enabled = unsafe { HDR_ENABLED };
                     if ui.checkbox(&mut hdr_enabled, "Enable HDR").changed() {
                         display::toggle_hdr(0);
-                        unsafe { HDR_ENABLED = hdr_enabled; }
+                        unsafe {
+                            HDR_ENABLED = hdr_enabled;
+                        }
                         if hdr_enabled {
                             ui.label("HDR Enabled (stub)");
                         } else {
@@ -101,7 +110,12 @@ impl eframe::App for NvControlApp {
                     ui.heading("Fan Control");
                     let fans = fan::list_fans();
                     let fans = if fans.is_empty() {
-                        vec![fan::FanInfo { id: 0, rpm: Some(1500), percent: Some(40), controllable: false }]
+                        vec![fan::FanInfo {
+                            id: 0,
+                            rpm: Some(1500),
+                            percent: Some(40),
+                            controllable: false,
+                        }]
                     } else {
                         fans
                     };

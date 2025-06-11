@@ -13,6 +13,9 @@ pub fn set_vibrance(levels: &[i16]) {
     match status {
         Ok(s) if s.success() => println!("Vibrance set: {:?}", levels),
         Ok(s) => eprintln!("nvibrant exited with status: {}", s),
-        Err(e) => eprintln!("nVibrant not found. Please install from https://github.com/Tremeschin/nVibrant. Error: {}", e),
+        Err(e) => eprintln!(
+            "nVibrant not found. Please install from https://github.com/Tremeschin/nVibrant. Error: {}",
+            e
+        ),
     }
 }

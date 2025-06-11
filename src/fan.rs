@@ -9,7 +9,12 @@ pub struct FanInfo {
 /// List all fans (stubbed)
 pub fn list_fans() -> Vec<FanInfo> {
     // TODO: Query real fan info via NVML/nvidia-smi
-    vec![FanInfo { id: 0, rpm: Some(1500), percent: Some(40), controllable: true }]
+    vec![FanInfo {
+        id: 0,
+        rpm: Some(1500),
+        percent: Some(40),
+        controllable: true,
+    }]
 }
 
 /// Get info for a specific fan (stub)

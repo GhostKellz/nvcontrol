@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use nvcontrol::{gpu, display, vibrance};
+use nvcontrol::{display, gpu, vibrance};
 
 #[derive(Parser)]
 #[command(name = "nvctl", version, about = "NVIDIA Control CLI", long_about = None)]

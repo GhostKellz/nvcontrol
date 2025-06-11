@@ -1,17 +1,17 @@
-use std::time::{Duration, Instant};
 use crossterm::{
     event::{self, Event, KeyCode},
-    terminal::{enable_raw_mode, disable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     execute,
-};
-use ratatui::{
-    backend::CrosstermBackend,
-    Terminal,
-    widgets::{Block, Borders, Paragraph, Table, Row},
-    layout::{Alignment, Constraint},
-    style::{Style, Color},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use nvml_wrapper::Nvml;
+use ratatui::{
+    Terminal,
+    backend::CrosstermBackend,
+    layout::{Alignment, Constraint},
+    style::{Color, Style},
+    widgets::{Block, Borders, Paragraph, Row, Table},
+};
+use std::time::{Duration, Instant};
 
 pub fn get_gpu_info() {
     // TODO: Query NVIDIA GPU info
@@ -47,33 +47,46 @@ pub fn monitor_gpu_stat() {
         if last_update.elapsed() >= Duration::from_secs(1) {
             gpu_rows.clear();
             match &nvml {
-                Ok(nvml) => {
-                    match nvml.device_count() {
-                        Ok(count) => {
-                            for idx in 0..count {
-                                let row = match nvml.device_by_index(idx) {
-                                    Ok(device) => {
-                                        let name = device.name().unwrap_or("Unknown".to_string());
-                                        let temp = device.temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu).unwrap_or(0);
-                                        let fan = device.fan_speed(0).unwrap_or(0);
-                                        let mem = device.memory_info().ok();
-                                        let mem_str = if let Some(m) = mem {
-                                            format!("{:.1}/{:.1} GB", m.used as f64 / 1e9, m.total as f64 / 1e9)
-                                        } else {
-                                            "N/A".to_string()
-                                        };
-                                        let util = device.utilization_rates().map(|u| u.gpu).unwrap_or(0);
-                                        let power = device.power_usage().map(|p| p as f64 / 1000.0).unwrap_or(0.0);
-                                        vec![name, format!("{temp}°C"), format!("{fan}%"), mem_str, format!("{util}%"), format!("{:.1}W", power)]
-                                    }
-                                    Err(_) => vec!["No NVIDIA GPU found.".to_string(); 6],
-                                };
-                                gpu_rows.push(row);
-                            }
+                Ok(nvml) => match nvml.device_count() {
+                    Ok(count) => {
+                        for idx in 0..count {
+                            let row = match nvml.device_by_index(idx) {
+                                Ok(device) => {
+                                    let name = device.name().unwrap_or("Unknown".to_string());
+                                    let temp = device.temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu).unwrap_or(0);
+                                    let fan = device.fan_speed(0).unwrap_or(0);
+                                    let mem = device.memory_info().ok();
+                                    let mem_str = if let Some(m) = mem {
+                                        format!(
+                                            "{:.1}/{:.1} GB",
+                                            m.used as f64 / 1e9,
+                                            m.total as f64 / 1e9
+                                        )
+                                    } else {
+                                        "N/A".to_string()
+                                    };
+                                    let util =
+                                        device.utilization_rates().map(|u| u.gpu).unwrap_or(0);
+                                    let power = device
+                                        .power_usage()
+                                        .map(|p| p as f64 / 1000.0)
+                                        .unwrap_or(0.0);
+                                    vec![
+                                        name,
+                                        format!("{temp}°C"),
+                                        format!("{fan}%"),
+                                        mem_str,
+                                        format!("{util}%"),
+                                        format!("{:.1}W", power),
+                                    ]
+                                }
+                                Err(_) => vec!["No NVIDIA GPU found.".to_string(); 6],
+                            };
+                            gpu_rows.push(row);
                         }
-                        Err(_) => gpu_rows.push(vec!["No NVIDIA GPU found.".to_string(); 6]),
                     }
-                }
+                    Err(_) => gpu_rows.push(vec!["No NVIDIA GPU found.".to_string(); 6]),
+                },
                 Err(_) => gpu_rows.push(vec!["NVML not available.".to_string(); 6]),
             }
             last_update = Instant::now();
@@ -82,37 +95,39 @@ pub fn monitor_gpu_stat() {
         }
 
         // Draw UI
-        terminal.draw(|f| {
-            let area = f.area();
-            let block = Block::default().title("nvcontrol GPU Monitor (q to quit)").borders(Borders::ALL);
-            let header = Row::new(vec!["GPU", "Temp", "Fan", "VRAM", "Util", "Power"])
-                .style(Style::default().fg(Color::Yellow));
-            let rows = gpu_rows.iter().map(|r| Row::new(r.clone()));
-            let column_widths = vec![
-                Constraint::Length(18),
-                Constraint::Length(8),
-                Constraint::Length(8),
-                Constraint::Length(16),
-                Constraint::Length(8),
-                Constraint::Length(10),
-            ];
-            let table = Table::new(rows, column_widths)
-                .header(header)
-                .block(block);
-            f.render_widget(table, area);
-            // Footer spinner/uptime
-            let footer = format!("{} Uptime: {}s", spinner[spinner_idx], uptime);
-            let footer_paragraph = Paragraph::new(footer)
-                .alignment(Alignment::Right)
-                .style(Style::default().fg(Color::Gray));
-            let footer_rect = ratatui::layout::Rect {
-                x: area.x,
-                y: area.y + area.height.saturating_sub(2),
-                width: area.width,
-                height: 1,
-            };
-            f.render_widget(footer_paragraph, footer_rect);
-        }).unwrap();
+        terminal
+            .draw(|f| {
+                let area = f.area();
+                let block = Block::default()
+                    .title("nvcontrol GPU Monitor (q to quit)")
+                    .borders(Borders::ALL);
+                let header = Row::new(vec!["GPU", "Temp", "Fan", "VRAM", "Util", "Power"])
+                    .style(Style::default().fg(Color::Yellow));
+                let rows = gpu_rows.iter().map(|r| Row::new(r.clone()));
+                let column_widths = vec![
+                    Constraint::Length(18),
+                    Constraint::Length(8),
+                    Constraint::Length(8),
+                    Constraint::Length(16),
+                    Constraint::Length(8),
+                    Constraint::Length(10),
+                ];
+                let table = Table::new(rows, column_widths).header(header).block(block);
+                f.render_widget(table, area);
+                // Footer spinner/uptime
+                let footer = format!("{} Uptime: {}s", spinner[spinner_idx], uptime);
+                let footer_paragraph = Paragraph::new(footer)
+                    .alignment(Alignment::Right)
+                    .style(Style::default().fg(Color::Gray));
+                let footer_rect = ratatui::layout::Rect {
+                    x: area.x,
+                    y: area.y + area.height.saturating_sub(2),
+                    width: area.width,
+                    height: 1,
+                };
+                f.render_widget(footer_paragraph, footer_rect);
+            })
+            .unwrap();
     }
 
     // Restore terminal

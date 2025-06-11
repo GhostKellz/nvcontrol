@@ -18,8 +18,16 @@ pub struct DisplayInfo {
 /// List all displays (stubbed)
 pub fn list_displays() -> Vec<DisplayInfo> {
     vec![
-        DisplayInfo { id: 0, name: "HDMI-1".to_string(), kind: "HDMI".to_string() },
-        DisplayInfo { id: 1, name: "DP-1".to_string(), kind: "DP".to_string() },
+        DisplayInfo {
+            id: 0,
+            name: "HDMI-1".to_string(),
+            kind: "HDMI".to_string(),
+        },
+        DisplayInfo {
+            id: 1,
+            name: "DP-1".to_string(),
+            kind: "DP".to_string(),
+        },
     ]
 }
 
