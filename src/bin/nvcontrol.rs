@@ -4,7 +4,7 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "nvcontrol",
         eframe::NativeOptions::default(),
-        Box::new(|_cc| Box::new(NvControlApp::default())),
+        Box::new(|_cc| Box::new(NvControlApp)),
     )
 }
 
