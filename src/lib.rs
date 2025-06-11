@@ -5,6 +5,7 @@ pub fn add(left: u64, right: u64) -> u64 {
 pub mod gpu;
 pub mod display;
 pub mod vibrance;
+pub mod fan;
 
 #[cfg(test)]
 mod tests {
