@@ -258,7 +258,11 @@ fn install_driver_arch(driver_type: &DriverType) -> NvResult<()> {
         DriverType::Nouveau => "xf86-video-nouveau",
     };
 
-    println!("Installing NVIDIA driver for Arch Linux: {} ({})", package, driver_type.package_name());
+    println!(
+        "Installing NVIDIA driver for Arch Linux: {} ({})",
+        package,
+        driver_type.package_name()
+    );
 
     // First, remove conflicting drivers
     let _ = Command::new("sudo")

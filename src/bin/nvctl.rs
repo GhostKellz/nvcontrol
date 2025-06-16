@@ -280,12 +280,10 @@ fn main() {
                     );
                 }
             }
-            FanSubcommand::Set { fan_id, percent } => {
-                match fan::set_fan_speed(fan_id, percent) {
-                    Ok(()) => println!("Set fan {fan_id} to {percent}%"),
-                    Err(e) => eprintln!("Failed to set fan speed: {e}"),
-                }
-            }
+            FanSubcommand::Set { fan_id, percent } => match fan::set_fan_speed(fan_id, percent) {
+                Ok(()) => println!("Set fan {fan_id} to {percent}%"),
+                Err(e) => eprintln!("Failed to set fan speed: {e}"),
+            },
         },
         Command::Overclock { subcommand } => match subcommand {
             OverclockSubcommand::Info => match overclocking::get_memory_timings() {
