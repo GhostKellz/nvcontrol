@@ -27,6 +27,17 @@ pub mod profiles;
 pub mod tray;
 pub mod vibrance;
 
+// New advanced modules
+pub mod drivers;
+pub mod gamescope;
+pub mod latency;
+pub mod overclocking;
+pub mod power;
+pub mod shaders;
+pub mod theme;
+pub mod upscaling;
+pub mod vrr;
+
 // Re-export commonly used types
 pub use config::Config;
 pub use profiles::Profile;

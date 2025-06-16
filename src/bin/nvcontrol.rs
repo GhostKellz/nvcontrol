@@ -228,7 +228,7 @@ impl eframe::App for NvControlApp {
                             let slider = egui::Slider::new(&mut speed, 0..=100).text("Set %");
                             let changed = ui.add_enabled(fan.controllable, slider).changed();
                             if changed {
-                                fan::set_fan_speed(fan.id, speed as u8);
+                                let _ = fan::set_fan_speed(fan.id, speed as u8);
                                 ui.label("Fan control not supported on this device.");
                             }
                         });
