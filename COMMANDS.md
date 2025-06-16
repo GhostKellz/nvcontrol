@@ -21,6 +21,18 @@ This document lists all CLI commands and options for nvcontrol (nvctl).
 - `nvctl display vibrance <levels>`  
   Set digital vibrance per display (requires nVibrant). Example: `nvctl display vibrance 512 1023`
 
+- `nvctl display hdr status`  
+  Show HDR status for all displays.
+
+- `nvctl display hdr enable <display_id>`  
+  Enable HDR for a specific display. Example: `nvctl display hdr enable 0`
+
+- `nvctl display hdr disable <display_id>`  
+  Disable HDR for a specific display. Example: `nvctl display hdr disable 0`
+
+- `nvctl display hdr toggle <display_id>`  
+  Toggle HDR on/off for a specific display. Example: `nvctl display hdr toggle 0`
+
 ## Fan Commands
 
 - `nvctl fan info`  

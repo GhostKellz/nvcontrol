@@ -69,9 +69,35 @@ impl eframe::App for NvControlApp {
                     for (i, level) in self.vibrance_levels.iter_mut().enumerate() {
                         ui.horizontal(|ui| {
                             ui.label(format!("Display {i}"));
-                            changed |= ui
-                                .add(egui::Slider::new(level, -1024..=1023).suffix("%"))
-                                .changed();
+                            
+                            // Convert from -1024..1023 range to 0..100 percentage
+                            let mut percentage = ((*level + 1024) as f32 / 2047.0 * 100.0) as u32;
+                            
+                            if ui.add(egui::Slider::new(&mut percentage, 0..=100).suffix("%")).changed() {
+                                // Convert back to -1024..1023 range
+                                *level = ((percentage as f32 / 100.0 * 2047.0) - 1024.0) as i16;
+                                changed = true;
+                            }
+                            
+                            // Show raw value for advanced users
+                            ui.label(format!("({level})"));
+                            
+                            // Show raw value for advanced users
+                            ui.label(format!("({level})"));
+                            
+                            // Quick preset buttons
+                            if ui.small_button("Off").clicked() {
+                                *level = 0;
+                                changed = true;
+                            }
+                            if ui.small_button("50%").clicked() {
+                                *level = 512;
+                                changed = true;
+                            }
+                            if ui.small_button("Max").clicked() {
+                                *level = 1023;
+                                changed = true;
+                            }
                         });
                     }
                     if changed {
@@ -94,26 +120,59 @@ impl eframe::App for NvControlApp {
                                 }
                             });
                         if ui.button("Apply ICC Profile").clicked() {
-                            display::load_icc_profile(0, &icc_profiles[self.selected_icc_profile_idx]);
-                            self.config.selected_icc_profile = icc_profiles[self.selected_icc_profile_idx].clone();
-                            self.config.save();
-                            ui.label("Profile applied (stub)");
+                            match display::load_icc_profile(0, &icc_profiles[self.selected_icc_profile_idx]) {
+                                Ok(()) => {
+                                    self.config.selected_icc_profile = icc_profiles[self.selected_icc_profile_idx].clone();
+                                    self.config.save();
+                                    ui.label("✅ Profile applied successfully");
+                                }
+                                Err(e) => {
+                                    ui.label(format!("❌ Profile error: {e}"));
+                                }
+                            }
                         }
                     }
                     if ui.button("Open ICC Folder").clicked() {
-                        // Stub: just show a message
-                        ui.label("ICC folder: ~/.icc (stub)");
+                        match display::open_icc_folder() {
+                            Ok(()) => ui.label("✅ Opened ICC folder"),
+                            Err(e) => ui.label(format!("❌ Error: {e}")),
+                        };
+                    }
+                    ui.separator();
+                    // Display HDR capabilities
+                    ui.label("HDR Status:");
+                    let displays = display::list_displays();
+                    for display in displays {
+                        ui.horizontal(|ui| {
+                            ui.label(format!("{}: {}", display.name, display.kind));
+                            if display.hdr_capable {
+                                let status = if display.hdr_enabled { "✅ HDR ON" } else { "⚫ HDR OFF" };
+                                ui.label(status);
+                                ui.label(format!("{}bit", display.color_depth));
+                            } else {
+                                ui.label("❌ No HDR");
+                            }
+                        });
                     }
                     ui.separator();
                     // HDR Toggle
                     if ui.checkbox(&mut self.hdr_enabled, "Enable HDR").changed() {
-                        display::toggle_hdr(0);
-                        self.config.hdr_enabled = self.hdr_enabled;
-                        self.config.save();
-                        if self.hdr_enabled {
-                            ui.label("HDR Enabled (stub)");
-                        } else {
-                            ui.label("HDR Disabled (stub)");
+                        match display::toggle_hdr(0) {
+                            Ok(new_status) => {
+                                self.hdr_enabled = new_status;
+                                self.config.hdr_enabled = self.hdr_enabled;
+                                self.config.save();
+                                if self.hdr_enabled {
+                                    ui.label("HDR Enabled");
+                                } else {
+                                    ui.label("HDR Disabled");
+                                }
+                            }
+                            Err(e) => {
+                                ui.label(format!("HDR Error: {e}"));
+                                // Revert checkbox state on error
+                                self.hdr_enabled = !self.hdr_enabled;
+                            }
                         }
                     }
                 });

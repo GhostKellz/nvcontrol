@@ -40,6 +40,27 @@ enum DisplaySubcommand {
         #[arg(required = true)]
         levels: Vec<i16>,
     },
+    Hdr {
+        #[command(subcommand)]
+        subcommand: HdrSubcommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum HdrSubcommand {
+    Status,
+    Enable {
+        /// Display ID (0, 1, etc.)
+        display_id: usize,
+    },
+    Disable {
+        /// Display ID (0, 1, etc.)
+        display_id: usize,
+    },
+    Toggle {
+        /// Display ID (0, 1, etc.)
+        display_id: usize,
+    },
 }
 
 #[derive(Subcommand)]
@@ -73,6 +94,49 @@ fn main() {
                 if let Err(e) = vibrance::set_vibrance(&levels) {
                     eprintln!("Error: {e}");
                     std::process::exit(1);
+                }
+            }
+            DisplaySubcommand::Hdr { subcommand } => match subcommand {
+                HdrSubcommand::Status => {
+                    let displays = display::list_displays();
+                    println!("HDR Status:");
+                    for display in displays {
+                        println!("  {}: {} ({})", 
+                            display.name, 
+                            if display.hdr_enabled { "ON" } else { "OFF" },
+                            if display.hdr_capable { "HDR Capable" } else { "No HDR" }
+                        );
+                    }
+                }
+                HdrSubcommand::Enable { display_id } => {
+                    match display::toggle_hdr(display_id) {
+                        Ok(true) => println!("HDR enabled for display {display_id}"),
+                        Ok(false) => println!("HDR was already enabled for display {display_id}"),
+                        Err(e) => {
+                            eprintln!("Failed to enable HDR: {e}");
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                HdrSubcommand::Disable { display_id } => {
+                    match display::toggle_hdr(display_id) {
+                        Ok(false) => println!("HDR disabled for display {display_id}"),
+                        Ok(true) => println!("HDR was already disabled for display {display_id}"),
+                        Err(e) => {
+                            eprintln!("Failed to disable HDR: {e}");
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                HdrSubcommand::Toggle { display_id } => {
+                    match display::toggle_hdr(display_id) {
+                        Ok(true) => println!("HDR enabled for display {display_id}"),
+                        Ok(false) => println!("HDR disabled for display {display_id}"),
+                        Err(e) => {
+                            eprintln!("Failed to toggle HDR: {e}");
+                            std::process::exit(1);
+                        }
+                    }
                 }
             }
         },
