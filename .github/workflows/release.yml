@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Build Release
+        run: cargo build --release
+
+      - name: Create Release Archive
+        run: |
+          mkdir -p nvcontrol-${{ github.ref_name }}
+          cp target/release/nvcontrol nvcontrol-${{ github.ref_name }}/
+          cp target/release/nvctl nvcontrol-${{ github.ref_name }}/
+          cp README.md DOCS.md COMMANDS.md LICENSE nvcontrol-${{ github.ref_name }}/
+          tar -czf nvcontrol-${{ github.ref_name }}-linux-x86_64.tar.gz nvcontrol-${{ github.ref_name }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: nvcontrol-${{ github.ref_name }}-linux-x86_64.tar.gz
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

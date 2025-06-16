@@ -55,7 +55,7 @@ No more missing options. No more hacky workarounds. No more nvidia-settings bein
 cargo install nvcontrol
 ```
 
-Or download prebuilt binaries from the [Releases](https://github.com/youruser/nvcontrol/releases) page.
+Or download prebuilt binaries from the [Releases](https://github.com/ghostkellz/nvcontrol/releases) page.
 
 ### Requirements
 
@@ -87,7 +87,13 @@ nvcontrol
 ## Roadmap
 
 - [ ] Full support for all NVIDIA GPUs (Turing, Ampere, Ada, etc.)
-- [ ] Flatpak & AUR PKGhttps://github.com/Tremeschin/nVibrant
+- [ ] Flatpak & AUR packaging
+- [ ] Profile system with save/load functionality
+- [ ] System tray widget for quick access
+- [ ] Advanced display management (resolution, refresh rate, orientation)
+- [ ] Custom fan curves and thermal management
+- [ ] Real-time notifications and alerts
+
 ---
 
 ## Contributing

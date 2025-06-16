@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use nvcontrol::{display, gpu, vibrance};
+use nvcontrol::{display, gpu, vibrance, fan};
 
 #[derive(Parser)]
 #[command(name = "nvctl", version, about = "NVIDIA Control CLI", long_about = None)]
@@ -17,6 +17,10 @@ enum Command {
     Display {
         #[command(subcommand)]
         subcommand: DisplaySubcommand,
+    },
+    Fan {
+        #[command(subcommand)]
+        subcommand: FanSubcommand,
     },
 }
 
@@ -38,6 +42,17 @@ enum DisplaySubcommand {
     },
 }
 
+#[derive(Subcommand)]
+enum FanSubcommand {
+    Info,
+    Set {
+        /// Fan ID (0, 1, 2, etc.)
+        fan_id: usize,
+        /// Fan speed percentage (0-100)
+        percent: u8,
+    },
+}
+
 fn main() {
     let cli = Cli::parse();
     match cli.command {
@@ -49,12 +64,35 @@ fn main() {
             DisplaySubcommand::Info => display::get_display_info(),
             DisplaySubcommand::Ls => {
                 let count = display::get_display_count();
-                println!("Detected {} display(s):", count);
+                println!("Detected {count} display(s):");
                 for i in 0..count {
-                    println!("  Display {}", i);
+                    println!("  Display {i}");
                 }
             }
-            DisplaySubcommand::Vibrance { levels } => vibrance::set_vibrance(&levels),
+            DisplaySubcommand::Vibrance { levels } => {
+                if let Err(e) = vibrance::set_vibrance(&levels) {
+                    eprintln!("Error: {e}");
+                    std::process::exit(1);
+                }
+            }
+        },
+        Command::Fan { subcommand } => match subcommand {
+            FanSubcommand::Info => {
+                let fans = fan::list_fans();
+                println!("Fan Information:");
+                for fan in fans {
+                    println!("  Fan {}: {} RPM, {}%, Controllable: {}", 
+                        fan.id, 
+                        fan.rpm.unwrap_or(0), 
+                        fan.percent.unwrap_or(0),
+                        fan.controllable
+                    );
+                }
+            }
+            FanSubcommand::Set { fan_id, percent } => {
+                fan::set_fan_speed(fan_id, percent);
+                println!("Set fan {fan_id} to {percent}%");
+            }
         },
     }
 }

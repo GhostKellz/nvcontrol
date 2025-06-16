@@ -14,7 +14,65 @@ use ratatui::{
 use std::time::{Duration, Instant};
 
 pub fn get_gpu_info() {
-    // TODO: Query NVIDIA GPU info
+    match Nvml::init() {
+        Ok(nvml) => {
+            match nvml.device_count() {
+                Ok(count) => {
+                    println!("Found {count} NVIDIA GPU(s):");
+                    for idx in 0..count {
+                        if let Ok(device) = nvml.device_by_index(idx) {
+                            let name = device.name().unwrap_or("Unknown".to_string());
+                            let driver = nvml.sys_driver_version().unwrap_or("Unknown".to_string());
+                            let mem = device.memory_info().ok();
+                            let mem_str = if let Some(m) = mem {
+                                format!("{:.1} GB", m.total as f64 / 1e9)
+                            } else {
+                                "Unknown".to_string()
+                            };
+                            let temp = device.temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu).unwrap_or(0);
+                            let power_state = device.performance_state().map(|p| format!("{p:?}")).unwrap_or("Unknown".to_string());
+                            
+                            println!("  GPU {idx}: {name}");
+                            println!("    Driver: {driver}");
+                            println!("    VRAM: {mem_str}");
+                            println!("    Temperature: {temp}°C");
+                            println!("    Power State: {power_state}");
+                            println!();
+                        }
+                    }
+                }
+                Err(e) => eprintln!("Failed to get GPU count: {e}"),
+            }
+        }
+        Err(e) => {
+            eprintln!("NVML not available: {e}");
+            eprintln!("Falling back to nvidia-smi...");
+            
+            // Fallback to nvidia-smi
+            match std::process::Command::new("nvidia-smi").arg("--query-gpu=name,driver_version,memory.total,temperature.gpu,power.state").arg("--format=csv,noheader,nounits").output() {
+                Ok(output) => {
+                    if output.status.success() {
+                        let output_str = String::from_utf8_lossy(&output.stdout);
+                        println!("GPU Information (via nvidia-smi):");
+                        for (idx, line) in output_str.lines().enumerate() {
+                            let fields: Vec<&str> = line.split(',').map(|s| s.trim()).collect();
+                            if fields.len() >= 5 {
+                                println!("  GPU {}: {}", idx, fields[0]);
+                                println!("    Driver: {}", fields[1]);
+                                println!("    VRAM: {} MB", fields[2]);
+                                println!("    Temperature: {}°C", fields[3]);
+                                println!("    Power State: {}", fields[4]);
+                                println!();
+                            }
+                        }
+                    } else {
+                        eprintln!("nvidia-smi failed");
+                    }
+                }
+                Err(_) => eprintln!("nvidia-smi not found. Please install NVIDIA drivers."),
+            }
+        }
+    }
 }
 
 pub fn monitor_gpu_stat() {
@@ -35,13 +93,11 @@ pub fn monitor_gpu_stat() {
 
     loop {
         // Poll for keypress
-        if event::poll(Duration::from_millis(200)).unwrap() {
-            if let Event::Key(key) = event::read().unwrap() {
-                if key.code == KeyCode::Char('q') {
-                    break;
-                }
+        if event::poll(Duration::from_millis(200)).unwrap()
+            && let Event::Key(key) = event::read().unwrap()
+            && key.code == KeyCode::Char('q') {
+                break;
             }
-        }
 
         // Refresh stats every second
         if last_update.elapsed() >= Duration::from_secs(1) {

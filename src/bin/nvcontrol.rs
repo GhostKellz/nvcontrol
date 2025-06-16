@@ -1,5 +1,5 @@
 use eframe::egui;
-use nvcontrol::{display, fan, vibrance};
+use nvcontrol::{display, fan, vibrance, config};
 
 enum Tab {
     Display,
@@ -17,14 +17,27 @@ fn main() -> eframe::Result<()> {
 struct NvControlApp {
     vibrance_levels: Vec<i16>,
     tab: Tab,
+    config: config::Config,
+    hdr_enabled: bool,
+    selected_icc_profile_idx: usize,
 }
 
 impl NvControlApp {
     fn new() -> Self {
+        let config = config::Config::load();
         let display_count = display::get_display_count();
+        let vibrance_levels = if config.vibrance_levels.len() == display_count {
+            config.vibrance_levels.clone()
+        } else {
+            vec![0; display_count]
+        };
+        
         Self {
-            vibrance_levels: vec![0; display_count],
+            vibrance_levels,
             tab: Tab::Display,
+            hdr_enabled: config.hdr_enabled,
+            selected_icc_profile_idx: 0,
+            config,
         }
     }
 }
@@ -55,32 +68,35 @@ impl eframe::App for NvControlApp {
                     let mut changed = false;
                     for (i, level) in self.vibrance_levels.iter_mut().enumerate() {
                         ui.horizontal(|ui| {
-                            ui.label(format!("Display {}", i));
+                            ui.label(format!("Display {i}"));
                             changed |= ui
                                 .add(egui::Slider::new(level, -1024..=1023).suffix("%"))
                                 .changed();
                         });
                     }
                     if changed {
-                        vibrance::set_vibrance(&self.vibrance_levels);
+                        let _ = vibrance::set_vibrance(&self.vibrance_levels);
+                        self.config.vibrance_levels = self.vibrance_levels.clone();
+                        self.config.save();
                     }
                     ui.separator();
                     // ICC Profile Management
                     ui.label("ICC Profile Management");
                     let icc_profiles = display::list_icc_profiles();
-                    let mut selected_profile = 0;
                     if icc_profiles.is_empty() {
                         ui.label("No ICC profiles found");
                     } else {
                         egui::ComboBox::from_label("ICC Profile")
-                            .selected_text(&icc_profiles[selected_profile])
+                            .selected_text(&icc_profiles[self.selected_icc_profile_idx])
                             .show_ui(ui, |cb_ui| {
                                 for (i, profile) in icc_profiles.iter().enumerate() {
-                                    cb_ui.selectable_value(&mut selected_profile, i, profile);
+                                    cb_ui.selectable_value(&mut self.selected_icc_profile_idx, i, profile);
                                 }
                             });
                         if ui.button("Apply ICC Profile").clicked() {
-                            display::load_icc_profile(0, &icc_profiles[selected_profile]);
+                            display::load_icc_profile(0, &icc_profiles[self.selected_icc_profile_idx]);
+                            self.config.selected_icc_profile = icc_profiles[self.selected_icc_profile_idx].clone();
+                            self.config.save();
                             ui.label("Profile applied (stub)");
                         }
                     }
@@ -90,14 +106,11 @@ impl eframe::App for NvControlApp {
                     }
                     ui.separator();
                     // HDR Toggle
-                    static mut HDR_ENABLED: bool = false;
-                    let mut hdr_enabled = unsafe { HDR_ENABLED };
-                    if ui.checkbox(&mut hdr_enabled, "Enable HDR").changed() {
+                    if ui.checkbox(&mut self.hdr_enabled, "Enable HDR").changed() {
                         display::toggle_hdr(0);
-                        unsafe {
-                            HDR_ENABLED = hdr_enabled;
-                        }
-                        if hdr_enabled {
+                        self.config.hdr_enabled = self.hdr_enabled;
+                        self.config.save();
+                        if self.hdr_enabled {
                             ui.label("HDR Enabled (stub)");
                         } else {
                             ui.label("HDR Disabled (stub)");

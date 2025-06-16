@@ -23,11 +23,11 @@ This document lists all CLI commands and options for nvcontrol (nvctl).
 
 ## Fan Commands
 
-- (Planned) `nvctl fan info`  
+- `nvctl fan info`  
   Show fan speeds and control status.
 
-- (Planned) `nvctl fan set <fan_id> <percent>`  
-  Set fan speed (if supported).
+- `nvctl fan set <fan_id> <percent>`  
+  Set fan speed (if supported). Example: `nvctl fan set 0 75`
 
 ## Profiles & Automation
 

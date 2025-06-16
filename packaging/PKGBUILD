@@ -1,0 +1,42 @@
+# Maintainer: ghostkellz <your-email@example.com>
+pkgname=nvcontrol
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Modern NVIDIA settings manager for Linux and Wayland"
+arch=('x86_64')
+url="https://github.com/ghostkellz/nvcontrol"
+license=('MIT')
+depends=('nvidia-utils' 'wayland')
+makedepends=('rust' 'cargo')
+optdepends=('nvibrant: For digital vibrance support on Wayland')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "$pkgname-$pkgver"
+    cargo build --release --locked
+}
+
+check() {
+    cd "$pkgname-$pkgver"
+    cargo test --release --locked
+}
+
+package() {
+    cd "$pkgname-$pkgver"
+    
+    # Install binaries
+    install -Dm755 target/release/nvcontrol "$pkgdir/usr/bin/nvcontrol"
+    install -Dm755 target/release/nvctl "$pkgdir/usr/bin/nvctl"
+    
+    # Install desktop file
+    install -Dm644 packaging/nvcontrol.desktop "$pkgdir/usr/share/applications/nvcontrol.desktop"
+    
+    # Install documentation
+    install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+    install -Dm644 DOCS.md "$pkgdir/usr/share/doc/$pkgname/DOCS.md"
+    install -Dm644 COMMANDS.md "$pkgdir/usr/share/doc/$pkgname/COMMANDS.md"
+    
+    # Install license
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
