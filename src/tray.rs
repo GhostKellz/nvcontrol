@@ -1,5 +1,6 @@
 #[cfg(feature = "tray")]
 use tray_icon::{TrayIcon, TrayIconBuilder, menu::{Menu, MenuItem}};
+#[cfg(feature = "tray")]
 use std::sync::mpsc;
 
 pub enum TrayEvent {

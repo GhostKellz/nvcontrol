@@ -15,18 +15,20 @@ pub fn get_display_info() {
 /// Returns the number of connected displays
 pub fn get_display_count() -> usize {
     // Try wlr-randr first (Wayland)
-    if let Ok(output) = std::process::Command::new("wlr-randr").output()
-        && output.status.success() {
+    if let Ok(output) = std::process::Command::new("wlr-randr").output() {
+        if output.status.success() {
             let output_str = String::from_utf8_lossy(&output.stdout);
             return output_str.lines().filter(|line| !line.starts_with(' ') && !line.is_empty()).count();
         }
+    }
     
     // Try xrandr (X11)
-    if let Ok(output) = std::process::Command::new("xrandr").arg("--query").output()
-        && output.status.success() {
+    if let Ok(output) = std::process::Command::new("xrandr").arg("--query").output() {
+        if output.status.success() {
             let output_str = String::from_utf8_lossy(&output.stdout);
             return output_str.lines().filter(|line| line.contains(" connected")).count();
         }
+    }
     
     // Fallback to stub
     2
@@ -47,8 +49,8 @@ pub fn list_displays() -> Vec<DisplayInfo> {
     let mut displays = Vec::new();
     
     // Try wlr-randr first (Wayland)
-    if let Ok(output) = std::process::Command::new("wlr-randr").output()
-        && output.status.success() {
+    if let Ok(output) = std::process::Command::new("wlr-randr").output() {
+        if output.status.success() {
             let output_str = String::from_utf8_lossy(&output.stdout);
             for (id, line) in output_str.lines().enumerate() {
                 if !line.starts_with(' ') && !line.is_empty() {
@@ -69,10 +71,11 @@ pub fn list_displays() -> Vec<DisplayInfo> {
             }
             return displays;
         }
+    }
     
     // Try xrandr (X11)
-    if let Ok(output) = std::process::Command::new("xrandr").arg("--query").output()
-        && output.status.success() {
+    if let Ok(output) = std::process::Command::new("xrandr").arg("--query").output() {
+        if output.status.success() {
             let output_str = String::from_utf8_lossy(&output.stdout);
             for (id, line) in output_str.lines().enumerate() {
                 if line.contains(" connected") {
@@ -93,6 +96,7 @@ pub fn list_displays() -> Vec<DisplayInfo> {
             }
             return displays;
         }
+    }
     
     // Fallback to stub data
     vec![
@@ -125,21 +129,23 @@ pub fn is_hdr_capable(display_name: &str) -> bool {
     // Try to get display capabilities via kscreen-doctor
     if let Ok(output) = std::process::Command::new("kscreen-doctor")
         .arg("-j")
-        .output()
-        && output.status.success() {
+        .output() {
+        if output.status.success() {
             let output_str = String::from_utf8_lossy(&output.stdout);
             // Parse JSON output to check for HDR capabilities
             return output_str.contains(&format!("\"name\":\"{display_name}\"")) 
                 && (output_str.contains("\"hdr\":true") || output_str.contains("\"hdr10\":true"));
         }
+    }
     
     // Fallback: Check via DRM properties if available
     if let Ok(output) = std::process::Command::new("drm_info")
-        .output()
-        && output.status.success() {
+        .output() {
+        if output.status.success() {
             let output_str = String::from_utf8_lossy(&output.stdout);
             return output_str.contains(display_name) && output_str.contains("HDR");
         }
+    }
     
     // Default assumption for modern displays
     display_name.contains("DP") || display_name.contains("HDMI")
@@ -150,26 +156,28 @@ pub fn get_hdr_status(display_name: &str) -> bool {
     // Try kscreen-doctor to get current status
     if let Ok(output) = std::process::Command::new("kscreen-doctor")
         .arg("-j")
-        .output()
-        && output.status.success() {
+        .output() {
+        if output.status.success() {
             let output_str = String::from_utf8_lossy(&output.stdout);
             // Look for HDR enabled status in JSON
             if let Some(display_section) = find_display_in_json(&output_str, display_name) {
                 return display_section.contains("\"hdr\":true") || display_section.contains("\"hdrEnabled\":true");
             }
         }
+    }
     
     // Fallback: check via /sys/class/drm if available
     if let Ok(entries) = std::fs::read_dir("/sys/class/drm") {
         for entry in entries.flatten() {
             let path = entry.path();
-            if let Some(name) = path.file_name().and_then(|n| n.to_str())
-                && name.starts_with("card") && name.contains(&display_name.replace("-", "_")) {
+            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                if name.starts_with("card") && name.contains(&display_name.replace("-", "_")) {
                     let hdr_path = path.join("hdr_output_metadata");
                     if let Ok(content) = std::fs::read_to_string(hdr_path) {
                         return !content.trim().is_empty() && content.trim() != "0";
                     }
                 }
+            }
         }
     }
     
@@ -179,11 +187,13 @@ pub fn get_hdr_status(display_name: &str) -> bool {
 /// Helper function to find display section in kscreen-doctor JSON output
 fn find_display_in_json<'a>(json_str: &'a str, display_name: &str) -> Option<&'a str> {
     // Simple JSON parsing - find the section for our display
-    if let Some(start) = json_str.find(&format!("\"name\":\"{display_name}\""))
-        && let Some(brace_start) = json_str[..start].rfind('{')
-        && let Some(brace_end) = json_str[start..].find('}') {
-            return Some(&json_str[brace_start..start + brace_end + 1]);
+    if let Some(start) = json_str.find(&format!("\"name\":\"{display_name}\"")) {
+        if let Some(brace_start) = json_str[..start].rfind('{') {
+            if let Some(brace_end) = json_str[start..].find('}') {
+                return Some(&json_str[brace_start..start + brace_end + 1]);
+            }
         }
+    }
     None
 }
 
@@ -352,17 +362,20 @@ pub fn list_icc_profiles() -> Vec<String> {
     ];
     
     for dir in icc_dirs {
-        if dir.exists()
-            && let Ok(entries) = std::fs::read_dir(&dir) {
+        if dir.exists() {
+            if let Ok(entries) = std::fs::read_dir(&dir) {
                 for entry in entries.flatten() {
                     let path = entry.path();
-                    if let Some(ext) = path.extension()
-                        && (ext == "icc" || ext == "icm")
-                        && let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                            profiles.push(name.to_string());
+                    if let Some(ext) = path.extension() {
+                        if ext == "icc" || ext == "icm" {
+                            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                                profiles.push(name.to_string());
+                            }
                         }
+                    }
                 }
             }
+        }
     }
     
     // Add some common fallback profiles if none found
@@ -394,17 +407,18 @@ pub fn load_icc_profile(display_id: usize, profile_name: &str) -> NvResult<()> {
     // Method 1: KDE's kscreen-doctor (if available)
     if let Ok(output) = std::process::Command::new("kscreen-doctor")
         .arg(format!("output.{}.colorprofile.{}", display.name, profile_path.display()))
-        .output()
-        && output.status.success() {
+        .output() {
+        if output.status.success() {
             println!("ICC profile {profile_name} loaded via kscreen-doctor for {}", display.name);
             return Ok(());
         }
+    }
     
     // Method 2: colord (color daemon)
     if let Ok(output) = std::process::Command::new("colormgr")
         .args(["device-add-profile", &display.name, &profile_path.to_string_lossy()])
-        .output()
-        && output.status.success() {
+        .output() {
+        if output.status.success() {
             // Set as default profile
             let _ = std::process::Command::new("colormgr")
                 .args(["device-make-profile-default", &display.name, profile_name])
@@ -412,24 +426,27 @@ pub fn load_icc_profile(display_id: usize, profile_name: &str) -> NvResult<()> {
             println!("ICC profile {profile_name} loaded via colord for {}", display.name);
             return Ok(());
         }
+    }
     
     // Method 3: xcalib (X11 fallback)
     if let Ok(output) = std::process::Command::new("xcalib")
         .arg(&profile_path)
-        .output()
-        && output.status.success() {
+        .output() {
+        if output.status.success() {
             println!("ICC profile {profile_name} loaded via xcalib for {}", display.name);
             return Ok(());
         }
+    }
     
     // Method 4: dispwin (ArgyllCMS)
     if let Ok(output) = std::process::Command::new("dispwin")
         .args(["-d", &display_id.to_string(), &profile_path.to_string_lossy()])
-        .output()
-        && output.status.success() {
+        .output() {
+        if output.status.success() {
             println!("ICC profile {profile_name} loaded via dispwin for {}", display.name);
             return Ok(());
         }
+    }
     
     Err(NvControlError::DisplayDetectionFailed(
         format!("Failed to load ICC profile {profile_name}. Install colord, xcalib, or ArgyllCMS for ICC profile support.")

@@ -93,11 +93,13 @@ pub fn monitor_gpu_stat() {
 
     loop {
         // Poll for keypress
-        if event::poll(Duration::from_millis(200)).unwrap()
-            && let Event::Key(key) = event::read().unwrap()
-            && key.code == KeyCode::Char('q') {
-                break;
+        if event::poll(Duration::from_millis(200)).unwrap() {
+            if let Event::Key(key) = event::read().unwrap() {
+                if key.code == KeyCode::Char('q') {
+                    break;
+                }
             }
+        }
 
         // Refresh stats every second
         if last_update.elapsed() >= Duration::from_secs(1) {
