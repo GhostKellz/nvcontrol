@@ -1,3 +1,4 @@
+#[cfg(feature = "tray")]
 use tray_icon::{TrayIcon, TrayIconBuilder, menu::{Menu, MenuItem}};
 use std::sync::mpsc;
 
@@ -7,11 +8,13 @@ pub enum TrayEvent {
     Exit,
 }
 
+#[cfg(feature = "tray")]
 pub struct SystemTray {
     _tray_icon: TrayIcon,
     event_receiver: mpsc::Receiver<TrayEvent>,
 }
 
+#[cfg(feature = "tray")]
 impl SystemTray {
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let (_sender, receiver) = mpsc::channel();
@@ -36,5 +39,19 @@ impl SystemTray {
     
     pub fn try_recv(&self) -> Option<TrayEvent> {
         self.event_receiver.try_recv().ok()
+    }
+}
+
+#[cfg(not(feature = "tray"))]
+pub struct SystemTray;
+
+#[cfg(not(feature = "tray"))]
+impl SystemTray {
+    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
+        Ok(SystemTray)
+    }
+    
+    pub fn try_recv(&self) -> Option<TrayEvent> {
+        None
     }
 }

@@ -1,11 +1,15 @@
+#[cfg(feature = "gui")]
 use eframe::egui;
+#[cfg(feature = "gui")]
 use nvcontrol::{display, fan, vibrance, config};
 
+#[cfg(feature = "gui")]
 enum Tab {
     Display,
     Fan,
 }
 
+#[cfg(feature = "gui")]
 fn main() -> eframe::Result<()> {
     eframe::run_native(
         "nvcontrol",
@@ -14,6 +18,13 @@ fn main() -> eframe::Result<()> {
     )
 }
 
+#[cfg(not(feature = "gui"))]
+fn main() {
+    eprintln!("GUI feature not enabled. Build with --features gui to enable the GUI.");
+    std::process::exit(1);
+}
+
+#[cfg(feature = "gui")]
 struct NvControlApp {
     vibrance_levels: Vec<i16>,
     tab: Tab,
@@ -22,6 +33,7 @@ struct NvControlApp {
     selected_icc_profile_idx: usize,
 }
 
+#[cfg(feature = "gui")]
 impl NvControlApp {
     fn new() -> Self {
         let config = config::Config::load();
@@ -42,6 +54,7 @@ impl NvControlApp {
     }
 }
 
+#[cfg(feature = "gui")]
 impl eframe::App for NvControlApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::TopBottomPanel::top("tabs").show(ctx, |ui| {
