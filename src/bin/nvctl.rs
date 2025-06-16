@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use nvcontrol::{display, gpu, vibrance, fan};
+use nvcontrol::{display, fan, gpu, vibrance};
 
 #[derive(Parser)]
 #[command(name = "nvctl", version, about = "NVIDIA Control CLI", long_about = None)]
@@ -101,53 +101,53 @@ fn main() {
                     let displays = display::list_displays();
                     println!("HDR Status:");
                     for display in displays {
-                        println!("  {}: {} ({})", 
-                            display.name, 
+                        println!(
+                            "  {}: {} ({})",
+                            display.name,
                             if display.hdr_enabled { "ON" } else { "OFF" },
-                            if display.hdr_capable { "HDR Capable" } else { "No HDR" }
+                            if display.hdr_capable {
+                                "HDR Capable"
+                            } else {
+                                "No HDR"
+                            }
                         );
                     }
                 }
-                HdrSubcommand::Enable { display_id } => {
-                    match display::toggle_hdr(display_id) {
-                        Ok(true) => println!("HDR enabled for display {display_id}"),
-                        Ok(false) => println!("HDR was already enabled for display {display_id}"),
-                        Err(e) => {
-                            eprintln!("Failed to enable HDR: {e}");
-                            std::process::exit(1);
-                        }
+                HdrSubcommand::Enable { display_id } => match display::toggle_hdr(display_id) {
+                    Ok(true) => println!("HDR enabled for display {display_id}"),
+                    Ok(false) => println!("HDR was already enabled for display {display_id}"),
+                    Err(e) => {
+                        eprintln!("Failed to enable HDR: {e}");
+                        std::process::exit(1);
                     }
-                }
-                HdrSubcommand::Disable { display_id } => {
-                    match display::toggle_hdr(display_id) {
-                        Ok(false) => println!("HDR disabled for display {display_id}"),
-                        Ok(true) => println!("HDR was already disabled for display {display_id}"),
-                        Err(e) => {
-                            eprintln!("Failed to disable HDR: {e}");
-                            std::process::exit(1);
-                        }
+                },
+                HdrSubcommand::Disable { display_id } => match display::toggle_hdr(display_id) {
+                    Ok(false) => println!("HDR disabled for display {display_id}"),
+                    Ok(true) => println!("HDR was already disabled for display {display_id}"),
+                    Err(e) => {
+                        eprintln!("Failed to disable HDR: {e}");
+                        std::process::exit(1);
                     }
-                }
-                HdrSubcommand::Toggle { display_id } => {
-                    match display::toggle_hdr(display_id) {
-                        Ok(true) => println!("HDR enabled for display {display_id}"),
-                        Ok(false) => println!("HDR disabled for display {display_id}"),
-                        Err(e) => {
-                            eprintln!("Failed to toggle HDR: {e}");
-                            std::process::exit(1);
-                        }
+                },
+                HdrSubcommand::Toggle { display_id } => match display::toggle_hdr(display_id) {
+                    Ok(true) => println!("HDR enabled for display {display_id}"),
+                    Ok(false) => println!("HDR disabled for display {display_id}"),
+                    Err(e) => {
+                        eprintln!("Failed to toggle HDR: {e}");
+                        std::process::exit(1);
                     }
-                }
-            }
+                },
+            },
         },
         Command::Fan { subcommand } => match subcommand {
             FanSubcommand::Info => {
                 let fans = fan::list_fans();
                 println!("Fan Information:");
                 for fan in fans {
-                    println!("  Fan {}: {} RPM, {}%, Controllable: {}", 
-                        fan.id, 
-                        fan.rpm.unwrap_or(0), 
+                    println!(
+                        "  Fan {}: {} RPM, {}%, Controllable: {}",
+                        fan.id,
+                        fan.rpm.unwrap_or(0),
                         fan.percent.unwrap_or(0),
                         fan.controllable
                     );

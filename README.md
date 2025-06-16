@@ -51,18 +51,37 @@ No more missing options. No more hacky workarounds. No more nvidia-settings bein
 
 ## Installation
 
+### Pre-built Binaries
+Download prebuilt binaries from the [Releases](https://github.com/ghostkellz/nvcontrol/releases) page.
+
+### From Source
 ```sh
-cargo install nvcontrol
+# Full installation with GUI and system tray
+cargo install nvcontrol --all-features
+
+# CLI only (no GUI dependencies)
+cargo install nvcontrol --no-default-features
+
+# GUI without system tray
+cargo install nvcontrol --features gui
 ```
 
-Or download prebuilt binaries from the [Releases](https://github.com/ghostkellz/nvcontrol/releases) page.
+### Build Options
+- `--all-features` - Full GUI with system tray support (default for releases)
+- `--features gui` - GUI without system tray
+- `--no-default-features` - CLI only, minimal dependencies
 
 ### Requirements
 
 - NVIDIA GPU with nvidia open drivers (570+) at least during testing
 - Wayland compositor (KDE, GNOME, Hyprland, Sway, etc.)
-- Rust (for building from source) 
-- AUR (TBD)
+- Rust (for building from source)
+
+### Optional Dependencies
+- **GUI features**: GTK3, GLib (automatically handled by package managers)
+- **System tray**: Desktop environment with system tray support
+- **Digital vibrance**: [nVibrant](https://github.com/Tremeschin/nVibrant) for Wayland
+- **AUR**: TBD
 
 ---
 
@@ -79,8 +98,11 @@ nvctl --help
 Launch via your application launcher or run:
 
 ```sh
+# Full GUI (requires --features gui or --all-features during build)
 nvcontrol
 ```
+
+If built without GUI features, nvcontrol will display an error message.
 
 ---
 
@@ -99,6 +121,8 @@ nvcontrol
 ## Contributing
 
 Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+For detailed build instructions, see [BUILDING.md](BUILDING.md).
 
 ---
 

@@ -1,5 +1,5 @@
+use crate::{NvControlError, NvResult};
 use std::process::Command;
-use crate::{NvResult, NvControlError};
 
 /// Set vibrance for each display using nVibrant.
 /// `levels` should be a vector of values (-1024 to 1023) for each display in physical port order.
@@ -22,7 +22,9 @@ pub fn set_vibrance(levels: &[i16]) -> NvResult<()> {
             Err(NvControlError::VibranceControlFailed(msg))
         }
         Err(e) => {
-            let msg = format!("nVibrant not found. Please install from https://github.com/Tremeschin/nVibrant. Error: {e}");
+            let msg = format!(
+                "nVibrant not found. Please install from https://github.com/Tremeschin/nVibrant. Error: {e}"
+            );
             eprintln!("{msg}");
             Err(NvControlError::VibranceControlFailed(msg))
         }

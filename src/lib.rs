@@ -19,13 +19,13 @@ pub fn add(left: u64, right: u64) -> u64 {
     left + right
 }
 
+pub mod config;
 pub mod display;
 pub mod fan;
 pub mod gpu;
-pub mod vibrance;
-pub mod config;
 pub mod profiles;
 pub mod tray;
+pub mod vibrance;
 
 // Re-export commonly used types
 pub use config::Config;

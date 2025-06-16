@@ -2,11 +2,47 @@
 
 ## Overview
 
-nvcontrol is a modern, full-featured NVIDIA settings manager for Linux, designed for Wayland compositors (KDE, GNOME, Hyprland, Sway, etc.) and NVIDIA open drivers (>= 570). It provides both a CLI (nvctl) and a GUI for controlling GPU, display, color, and fan settings.
+nvcontrol is a modern, full-featured NVIDIA settings manager for Linux, designed for Wayland compositors (KDE, GNOME, Hyprland, Sway, etc.) and NVIDIA open drivers (>= 570). It provides both a CLI (nvctl) and an optional GUI for controlling GPU, display, color, and fan settings.
+
+## Build Features
+
+nvcontrol uses Cargo features to provide flexible builds:
+
+- **`gui`** - Enables the graphical interface (eframe/egui)
+- **`tray`** - Enables system tray integration
+- **`default`** - Includes both `gui` and `tray` features
+
+### Build Examples
+```sh
+# Full build (GUI + tray)
+cargo build --all-features
+
+# GUI only (no tray)
+cargo build --features gui
+
+# CLI only (minimal dependencies)
+cargo build --no-default-features
+
+# Release build for distribution
+cargo build --release --all-features
+```
 
 ---
 
-## Supported Platforms
+## Deployment & CI
+
+### Continuous Integration
+The project uses GitHub Actions with two workflows:
+
+- **CI** (`ci.yml`) - Runs on every push/PR, builds with `--no-default-features` to avoid GUI dependencies in headless environments
+- **Release** (`release.yml`) - Runs on tags, builds with `--all-features` on self-hosted runner with full GUI support
+
+### Self-Hosted Runner Requirements
+The release workflow runs on `nv-palladium` with:
+- NVIDIA GPU and drivers
+- Full desktop environment 
+- GTK3/GLib development libraries
+- System tray support
 - **Wayland** (KDE Plasma 6+, GNOME, Hyprland, Sway, etc.)
 - **NVIDIA Open Drivers** (>= 570, required for most features)
 - **X11** (legacy support, some features may be limited)
@@ -55,10 +91,44 @@ nvcontrol is a modern, full-featured NVIDIA settings manager for Linux, designed
 
 ---
 
+## System Dependencies
+
+### Runtime Dependencies
+- `nvctl` (CLI): No additional dependencies beyond standard system libraries
+- `nvcontrol` (GUI): GTK3, GLib, system tray support
+- Digital vibrance: [nVibrant](https://github.com/Tremeschin/nVibrant) for Wayland
+
+### Build Dependencies
+```sh
+# Ubuntu/Debian (for full GUI builds)
+sudo apt-get install libgtk-3-dev libglib2.0-dev libgdk-pixbuf2.0-dev \
+  libpango1.0-dev libatk1.0-dev libcairo2-dev pkg-config build-essential
+
+# Minimal (for CLI-only builds)
+sudo apt-get install pkg-config build-essential
+```
+
+### Distribution Support
+- **Arch Linux**: AUR package (planned)
+- **Ubuntu/Debian**: Manual build or download releases
+- **Flatpak**: Planned
+- **Self-hosted runners**: Full GUI support on nv-palladium
+
+---
+
 ## Troubleshooting
 - If vibrance does not work, ensure nVibrant is installed and in your PATH.
 - For HDR, ensure you are running KDE Plasma 6+ and have a compatible monitor and driver.
 - Some features may require running as root or with specific permissions.
+
+### Build Issues
+- **GUI dependencies missing**: Use `--no-default-features` for CLI-only builds
+- **System tray errors**: Build with `--features gui` (excludes tray)
+- **Headless CI environments**: Use `--no-default-features` in automation
+
+### Runtime Issues
+- **Permissions**: Some features may require elevated permissions
+- **Missing dependencies**: Ensure all runtime dependencies are installed
 
 ---
 

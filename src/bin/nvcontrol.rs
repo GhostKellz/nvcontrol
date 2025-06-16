@@ -1,7 +1,7 @@
 #[cfg(feature = "gui")]
 use eframe::egui;
 #[cfg(feature = "gui")]
-use nvcontrol::{display, fan, vibrance, config};
+use nvcontrol::{config, display, fan, vibrance};
 
 #[cfg(feature = "gui")]
 enum Tab {
@@ -43,7 +43,7 @@ impl NvControlApp {
         } else {
             vec![0; display_count]
         };
-        
+
         Self {
             vibrance_levels,
             tab: Tab::Display,
@@ -82,22 +82,25 @@ impl eframe::App for NvControlApp {
                     for (i, level) in self.vibrance_levels.iter_mut().enumerate() {
                         ui.horizontal(|ui| {
                             ui.label(format!("Display {i}"));
-                            
+
                             // Convert from -1024..1023 range to 0..100 percentage
                             let mut percentage = ((*level + 1024) as f32 / 2047.0 * 100.0) as u32;
-                            
-                            if ui.add(egui::Slider::new(&mut percentage, 0..=100).suffix("%")).changed() {
+
+                            if ui
+                                .add(egui::Slider::new(&mut percentage, 0..=100).suffix("%"))
+                                .changed()
+                            {
                                 // Convert back to -1024..1023 range
                                 *level = ((percentage as f32 / 100.0 * 2047.0) - 1024.0) as i16;
                                 changed = true;
                             }
-                            
+
                             // Show raw value for advanced users
                             ui.label(format!("({level})"));
-                            
+
                             // Show raw value for advanced users
                             ui.label(format!("({level})"));
-                            
+
                             // Quick preset buttons
                             if ui.small_button("Off").clicked() {
                                 *level = 0;
@@ -129,13 +132,21 @@ impl eframe::App for NvControlApp {
                             .selected_text(&icc_profiles[self.selected_icc_profile_idx])
                             .show_ui(ui, |cb_ui| {
                                 for (i, profile) in icc_profiles.iter().enumerate() {
-                                    cb_ui.selectable_value(&mut self.selected_icc_profile_idx, i, profile);
+                                    cb_ui.selectable_value(
+                                        &mut self.selected_icc_profile_idx,
+                                        i,
+                                        profile,
+                                    );
                                 }
                             });
                         if ui.button("Apply ICC Profile").clicked() {
-                            match display::load_icc_profile(0, &icc_profiles[self.selected_icc_profile_idx]) {
+                            match display::load_icc_profile(
+                                0,
+                                &icc_profiles[self.selected_icc_profile_idx],
+                            ) {
                                 Ok(()) => {
-                                    self.config.selected_icc_profile = icc_profiles[self.selected_icc_profile_idx].clone();
+                                    self.config.selected_icc_profile =
+                                        icc_profiles[self.selected_icc_profile_idx].clone();
                                     self.config.save();
                                     ui.label("✅ Profile applied successfully");
                                 }
@@ -159,7 +170,11 @@ impl eframe::App for NvControlApp {
                         ui.horizontal(|ui| {
                             ui.label(format!("{}: {}", display.name, display.kind));
                             if display.hdr_capable {
-                                let status = if display.hdr_enabled { "✅ HDR ON" } else { "⚫ HDR OFF" };
+                                let status = if display.hdr_enabled {
+                                    "✅ HDR ON"
+                                } else {
+                                    "⚫ HDR OFF"
+                                };
                                 ui.label(status);
                                 ui.label(format!("{}bit", display.color_depth));
                             } else {

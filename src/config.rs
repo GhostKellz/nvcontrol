@@ -14,12 +14,10 @@ impl Config {
         let config_path = Self::config_path();
         if config_path.exists() {
             match fs::read_to_string(&config_path) {
-                Ok(content) => {
-                    match toml::from_str(&content) {
-                        Ok(config) => return config,
-                        Err(e) => eprintln!("Failed to parse config: {e}"),
-                    }
-                }
+                Ok(content) => match toml::from_str(&content) {
+                    Ok(config) => return config,
+                    Err(e) => eprintln!("Failed to parse config: {e}"),
+                },
                 Err(e) => eprintln!("Failed to read config: {e}"),
             }
         }
@@ -31,7 +29,7 @@ impl Config {
         if let Some(parent) = config_path.parent() {
             let _ = fs::create_dir_all(parent);
         }
-        
+
         match toml::to_string_pretty(self) {
             Ok(content) => {
                 if let Err(e) = fs::write(&config_path, content) {

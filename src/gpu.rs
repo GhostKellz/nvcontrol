@@ -15,41 +15,50 @@ use std::time::{Duration, Instant};
 
 pub fn get_gpu_info() {
     match Nvml::init() {
-        Ok(nvml) => {
-            match nvml.device_count() {
-                Ok(count) => {
-                    println!("Found {count} NVIDIA GPU(s):");
-                    for idx in 0..count {
-                        if let Ok(device) = nvml.device_by_index(idx) {
-                            let name = device.name().unwrap_or("Unknown".to_string());
-                            let driver = nvml.sys_driver_version().unwrap_or("Unknown".to_string());
-                            let mem = device.memory_info().ok();
-                            let mem_str = if let Some(m) = mem {
-                                format!("{:.1} GB", m.total as f64 / 1e9)
-                            } else {
-                                "Unknown".to_string()
-                            };
-                            let temp = device.temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu).unwrap_or(0);
-                            let power_state = device.performance_state().map(|p| format!("{p:?}")).unwrap_or("Unknown".to_string());
-                            
-                            println!("  GPU {idx}: {name}");
-                            println!("    Driver: {driver}");
-                            println!("    VRAM: {mem_str}");
-                            println!("    Temperature: {temp}°C");
-                            println!("    Power State: {power_state}");
-                            println!();
-                        }
+        Ok(nvml) => match nvml.device_count() {
+            Ok(count) => {
+                println!("Found {count} NVIDIA GPU(s):");
+                for idx in 0..count {
+                    if let Ok(device) = nvml.device_by_index(idx) {
+                        let name = device.name().unwrap_or("Unknown".to_string());
+                        let driver = nvml.sys_driver_version().unwrap_or("Unknown".to_string());
+                        let mem = device.memory_info().ok();
+                        let mem_str = if let Some(m) = mem {
+                            format!("{:.1} GB", m.total as f64 / 1e9)
+                        } else {
+                            "Unknown".to_string()
+                        };
+                        let temp = device
+                            .temperature(
+                                nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu,
+                            )
+                            .unwrap_or(0);
+                        let power_state = device
+                            .performance_state()
+                            .map(|p| format!("{p:?}"))
+                            .unwrap_or("Unknown".to_string());
+
+                        println!("  GPU {idx}: {name}");
+                        println!("    Driver: {driver}");
+                        println!("    VRAM: {mem_str}");
+                        println!("    Temperature: {temp}°C");
+                        println!("    Power State: {power_state}");
+                        println!();
                     }
                 }
-                Err(e) => eprintln!("Failed to get GPU count: {e}"),
             }
-        }
+            Err(e) => eprintln!("Failed to get GPU count: {e}"),
+        },
         Err(e) => {
             eprintln!("NVML not available: {e}");
             eprintln!("Falling back to nvidia-smi...");
-            
+
             // Fallback to nvidia-smi
-            match std::process::Command::new("nvidia-smi").arg("--query-gpu=name,driver_version,memory.total,temperature.gpu,power.state").arg("--format=csv,noheader,nounits").output() {
+            match std::process::Command::new("nvidia-smi")
+                .arg("--query-gpu=name,driver_version,memory.total,temperature.gpu,power.state")
+                .arg("--format=csv,noheader,nounits")
+                .output()
+            {
                 Ok(output) => {
                     if output.status.success() {
                         let output_str = String::from_utf8_lossy(&output.stdout);
