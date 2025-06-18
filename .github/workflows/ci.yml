@@ -38,7 +38,7 @@ jobs:
         run: cargo build --bin nvctl --no-default-features --verbose
 
       - name: Build GUI stub (no features)
-        run: cargo build --bin nvcontrol --no-default-features --verbose
+        run: cargo build --bin nvcontrol --no-default-features --features="gui" --verbose
 
       - name: Test (library only - no features)
         run: cargo test --lib --no-default-features --verbose
