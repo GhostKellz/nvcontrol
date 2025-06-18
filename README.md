@@ -1,5 +1,214 @@
 # nvcontrol
 
+**Modern NVIDIA Settings Manager for Linux + Wayland**
+
+A feature-rich, native Linux application for NVIDIA GPU management with full Wayland support, advanced overclocking, VRR control, and DLSS/FSR management.
+
+![nvcontrol Screenshot](https://img.shields.io/badge/Status-In%20Development-yellow)
+![License](https://img.shields.io/badge/License-MIT-blue)
+![Platform](https://img.shields.io/badge/Platform-Linux-green)
+
+## ✨ Features
+
+### 🎮 **GPU Management**
+- **Real-time monitoring** with live temperature, power, VRAM usage
+- **Advanced overclocking** with safety limits and stress testing
+- **Memory timing editor** for enthusiasts
+- **Power management** with Performance/Balanced/PowerSaver profiles
+- **Power monitoring** with real-time draw, limits, and thermal data
+
+### 🖥️ **Display & VRR**
+- **Smart VRR management** across all major Wayland compositors
+- **Per-application VRR settings** for optimal gaming
+- **HDR toggle** with proper color space handling
+- **Digital vibrance** control with integrated nvibrant for enhanced visuals
+
+### ⚡ **Upscaling Technologies**
+- **DLSS/FSR/XeSS toggle** with per-game profiles
+- **Automatic game detection** and profile application
+- **Quality presets** (Performance, Balanced, Quality, Ultra)
+- **Configuration file modification** for deep integration
+
+### 🌀 **Fan Control**
+- **Real-time fan monitoring** with RPM and percentage display
+- **Manual fan speed control** (where supported)
+- **Quick presets** (Quiet, Auto, Max)
+- **Custom fan curves** (coming soon)
+
+### 🚀 **Driver Management**
+- **Package manager integration** (Arch, Ubuntu, Fedora)
+- **Driver installation**: `nvctl drivers install proprietary/open/open-beta`
+- **DKMS issue resolution** with automatic repair
+- **Shell completions** for Bash, Zsh, Fish
+
+## 🏗️ **Modern Architecture**
+
+### **Wayland-Native**
+- Full support for KDE, GNOME, Hyprland, Sway
+- Direct compositor integration for VRR control
+- No X11 dependencies for core functionality
+
+### **Beautiful UI**
+- **Glass morphism design** with NVIDIA-inspired themes
+- **Dark/Light/Gaming** theme variants
+- **Live GPU stats** with real-time graphs
+- **Intuitive controls** with safety warnings
+
+### **CLI Power Tools**
+```bash
+# GPU monitoring
+nvctl gpu stat                    # Live TUI dashboard
+nvctl gpu capabilities           # Show overclocking limits
+
+# VRR management  
+nvctl vrr enable DP-1            # Enable for specific display
+nvctl vrr configure DP-1 --min-refresh 48 --max-refresh 144
+
+# Upscaling control
+nvctl upscaling enable cyberpunk2077 --tech dlss --quality balanced
+nvctl upscaling auto-detect      # Find running games
+
+# Overclocking
+nvctl overclock apply --gpu-offset 150 --memory-offset 800 --power-limit 115
+nvctl overclock stress-test 10   # 10-minute stability test
+
+# Driver management
+nvctl drivers install open       # Install open-source drivers
+nvctl drivers status            # Check current driver info
+```
+
+## 🎯 **What Makes nvcontrol Special**
+
+### **Linux-First Design**
+Unlike Windows tools ported to Linux, nvcontrol is built ground-up for Linux:
+- **Package manager integration** instead of manual downloads
+- **Systemd integration** for automatic startup
+- **Proper desktop file** with correct categories and icons
+- **Shell completion** for power users
+
+### **Wayland Excellence** 
+- **No X11 fallbacks** - true Wayland-native operation
+- **Per-compositor optimization** (KDE vs GNOME vs Hyprland)
+- **Future-proof architecture** ready for post-X11 world
+
+### **Advanced Features**
+- **Per-game profiles** that auto-apply when games launch
+- **Thermal management** with predictive algorithms
+- **Smart defaults** that learn from user behavior
+- **Enterprise features** for multi-GPU setups
+
+## 🚀 **Quick Start**
+
+### **Prerequisites**
+For full functionality, especially digital vibrance control:
+```bash
+# Python 3.9+ and pip/uv for nvibrant integration
+sudo apt install python3 python3-pip  # Ubuntu/Debian
+# OR
+sudo pacman -S python python-pip      # Arch
+# OR  
+sudo dnf install python3 python3-pip  # Fedora
+
+# nvibrant will be automatically installed during build
+```
+
+### **GUI Application**
+```bash
+# Install and run GUI
+cargo build --release --features gui
+./target/release/nvcontrol
+```
+
+### **CLI Tools** 
+```bash
+# Install shell completions
+./scripts/install-completions.sh
+
+# Basic usage
+nvctl gpu info                   # GPU information
+nvctl display vibrance 800 600  # Set vibrance
+nvctl fan info                   # Fan status
+```
+
+### **Installation**
+```bash
+# Arch Linux (AUR)
+yay -S nvcontrol-git
+
+# Ubuntu/Debian
+sudo dpkg -i nvcontrol_0.1.0_amd64.deb
+
+# Fedora
+sudo rpm -i nvcontrol-0.1.0.x86_64.rpm
+
+# From source
+git clone https://github.com/ghostkellz/nvcontrol
+cd nvcontrol
+cargo build --release
+```
+
+## 📚 **Documentation**
+
+- [**COMMANDS.md**](COMMANDS.md) - Complete CLI reference
+- [**DOCS.md**](DOCS.md) - Technical documentation  
+- [**BUILDING.md**](BUILDING.md) - Build instructions
+
+## 🎨 **Screenshots**
+
+### Modern GUI
+The application features a beautiful, modern interface with:
+- **Real-time GPU monitoring** with live charts
+- **Advanced overclocking controls** with safety warnings
+- **VRR management** across all displays
+- **Theme selection** (NVIDIA Dark, Light, Gaming)
+
+### TUI Dashboard
+```
+┌─ GPU Stats ─────────────────────────────────────┐
+│ 🎯 RTX 4090          🌡️ 72°C    ⚡ 380W        │
+│ 📈 GPU: ████████░░ 85%   💾 VRAM: 18.2/24.0 GB │
+│ 🌀 Fan: ██████░░░░ 65%   🔥 Temp: ████████░░    │
+└─────────────────────────────────────────────────┘
+```
+
+## 🛣️ **Roadmap**
+
+### **v0.2.0 - Enhanced Gaming**
+- [ ] Gamescope integration
+- [ ] Shader cache management  
+- [ ] Latency optimization tools
+- [ ] RGB lighting control
+
+### **v0.3.0 - Enterprise Features**
+- [ ] Multi-GPU management
+- [ ] Remote monitoring
+- [ ] Team management tools
+- [ ] Performance analytics
+
+### **v1.0.0 - Production Ready**
+- [ ] Stable API
+- [ ] Plugin system
+- [ ] Marketplace integration
+- [ ] Enterprise support
+
+## 🤝 **Contributing**
+
+nvcontrol is open source and welcomes contributions! See our contributing guidelines for details on:
+- Code style and standards
+- Testing requirements  
+- Documentation updates
+- Feature proposals
+
+## 📄 **License**
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+Copyright (c) 2025 CK Technology LLC
+
+---
+
+**Made with ❤️ for the Linux gaming community**
+
 [![Wayland Support](https://img.shields.io/badge/Wayland-Ready-brightgreen?logo=wayland)](https://wayland.freedesktop.org/)
 [![NVIDIA](https://img.shields.io/badge/NVIDIA-Supported-brightgreen?logo=nvidia)](https://nvidia.com)
 [![CLI & GUI](https://img.shields.io/badge/CLI_%2B_GUI-Full_Featured-blueviolet)](#features)

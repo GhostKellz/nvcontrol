@@ -1,0 +1,3 @@
+[submodule "vendor/nvibrant"]
+	path = vendor/nvibrant
+	url = https://github.com/Tremeschin/nVibrant.git

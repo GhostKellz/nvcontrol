@@ -13,6 +13,17 @@ use ratatui::{
 };
 use std::time::{Duration, Instant};
 
+/// Check if NVIDIA GPU is available on the system
+pub fn is_nvidia_available() -> bool {
+    match Nvml::init() {
+        Ok(nvml) => match nvml.device_count() {
+            Ok(count) => count > 0,
+            Err(_) => false,
+        },
+        Err(_) => false,
+    }
+}
+
 pub fn get_gpu_info() {
     match Nvml::init() {
         Ok(nvml) => match nvml.device_count() {

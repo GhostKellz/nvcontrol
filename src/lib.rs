@@ -11,6 +11,8 @@ pub enum NvControlError {
     VibranceControlFailed(String),
     #[error("Fan control not supported")]
     FanControlNotSupported,
+    #[error("Power management failed: {0}")]
+    PowerManagementFailed(String),
 }
 
 pub type NvResult<T> = Result<T, NvControlError>;
@@ -37,6 +39,13 @@ pub mod shaders;
 pub mod theme;
 pub mod upscaling;
 pub mod vrr;
+
+// CUDA development tools
+pub mod cuda;
+
+// Monitoring and TUI modules
+pub mod monitoring;
+pub mod tui;
 
 // Re-export commonly used types
 pub use config::Config;

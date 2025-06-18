@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use nvcontrol::{display, drivers, fan, gpu, overclocking, upscaling, vibrance, vrr};
+use nvcontrol::{display, drivers, fan, gpu, overclocking, upscaling, vibrance, vrr, monitoring, power};
 
 #[derive(Parser)]
 #[command(name = "nvctl", version, about = "NVIDIA Control CLI - Advanced GPU Management", long_about = None)]
@@ -38,13 +38,62 @@ enum Command {
         #[command(subcommand)]
         subcommand: DriversSubcommand,
     },
+    Power {
+        #[command(subcommand)]
+        subcommand: PowerSubcommand,
+    },
 }
 
 #[derive(Subcommand)]
 enum GpuSubcommand {
+    /// Show comprehensive GPU information
     Info,
+    /// Launch live TUI dashboard for GPU monitoring
     Stat,
+    /// Show detailed GPU overclocking capabilities
     Capabilities,
+    /// Benchmark GPU performance
+    Benchmark {
+        /// Benchmark duration in seconds
+        #[arg(short, long, default_value = "30")]
+        duration: u32,
+        /// Test type: compute, graphics, memory, all
+        #[arg(short, long, default_value = "all")]
+        test_type: String,
+    },
+    /// Live GPU utilization monitoring (text output)
+    Watch {
+        /// Update interval in seconds
+        #[arg(short, long, default_value = "1")]
+        interval: u64,
+        /// Maximum number of updates (0 = infinite)
+        #[arg(short, long, default_value = "0")]
+        count: u32,
+    },
+    /// Export GPU metrics to JSON/CSV
+    Export {
+        /// Output format: json, csv
+        #[arg(short, long, default_value = "json")]
+        format: String,
+        /// Output file path
+        #[arg(short, long)]
+        output: Option<String>,
+        /// Duration to collect data (seconds)
+        #[arg(short, long, default_value = "60")]
+        duration: u32,
+    },
+    /// Stress test GPU with monitoring
+    Stress {
+        /// Test duration in minutes
+        #[arg(short, long, default_value = "5")]
+        duration: u32,
+        /// Test intensity: light, medium, heavy
+        #[arg(short, long, default_value = "medium")]
+        intensity: String,
+        /// Monitor and log results
+        #[arg(short, long)]
+        log: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -52,14 +101,43 @@ enum DisplaySubcommand {
     Info,
     Ls,
     Vibrance {
-        /// Vibrance levels for each display (e.g. 512 1023)
-        #[arg(required = true)]
-        levels: Vec<i16>,
+        #[command(subcommand)]
+        subcommand: VibranceSubcommand,
     },
     Hdr {
         #[command(subcommand)]
         subcommand: HdrSubcommand,
     },
+}
+
+#[derive(Subcommand)]
+enum VibranceSubcommand {
+    /// Get current vibrance for all displays
+    Get,
+    /// Set vibrance for all displays (0-200%, where 100% is default)
+    Set { 
+        #[arg(help = "Vibrance percentage (0-200, where 100 is default)")]
+        percentage: u32 
+    },
+    /// Set vibrance for specific display
+    SetDisplay { 
+        #[arg(help = "Display index (0, 1, 2, etc.)")]
+        display: usize,
+        #[arg(help = "Vibrance percentage (0-200)")]
+        percentage: u32 
+    },
+    /// Set vibrance using raw nvibrant values for multiple displays
+    SetRaw {
+        /// Raw vibrance levels (-1024 to 1023) for each display
+        #[arg(required = true, help = "Raw vibrance values for each display (e.g. 512 1023)")]
+        levels: Vec<i16>,
+    },
+    /// List all displays and their current vibrance
+    List,
+    /// Reset all displays to default vibrance (100%)
+    Reset,
+    /// Show driver compatibility info
+    Info,
 }
 
 #[derive(Subcommand)]
@@ -175,37 +253,76 @@ enum DriversSubcommand {
     },
 }
 
+#[derive(Subcommand)]
+enum PowerSubcommand {
+    /// Show comprehensive power information
+    Info,
+    /// Set power management profile
+    Profile {
+        /// Profile: performance, balanced, powersaver, or custom name
+        profile: String,
+    },
+    /// Set power limit percentage
+    Limit {
+        /// Power limit percentage (50-120)
+        percentage: u32,
+    },
+    /// Toggle persistence mode
+    Persistence {
+        /// Enable or disable persistence mode
+        #[arg(value_parser = clap::builder::BoolishValueParser::new())]
+        enabled: bool,
+    },
+    /// Monitor power consumption
+    Monitor {
+        /// Duration in seconds to monitor
+        #[arg(short, long, default_value = "60")]
+        duration: u32,
+    },
+    /// Create power management automation
+    Automate,
+}
+
 fn main() {
     let cli = Cli::parse();
     match cli.command {
         Command::Gpu { subcommand } => match subcommand {
             GpuSubcommand::Info => gpu::get_gpu_info(),
-            GpuSubcommand::Stat => gpu::monitor_gpu_stat(),
-            GpuSubcommand::Capabilities => match overclocking::get_gpu_capabilities() {
-                Ok(caps) => {
-                    println!("GPU Overclocking Capabilities:");
-                    println!(
-                        "  GPU Clock Offset: {} to {} MHz",
-                        caps.min_gpu_clock_offset, caps.max_gpu_clock_offset
-                    );
-                    println!(
-                        "  Memory Clock Offset: {} to {} MHz",
-                        caps.min_memory_clock_offset, caps.max_memory_clock_offset
-                    );
-                    println!(
-                        "  Power Limit: {}% to {}%",
-                        caps.min_power_limit, caps.max_power_limit
-                    );
-                    println!(
-                        "  Voltage Control: {}",
-                        if caps.supports_voltage_control {
-                            "Yes"
-                        } else {
-                            "No"
-                        }
-                    );
+            GpuSubcommand::Stat => {
+                // Launch the new advanced TUI dashboard
+                println!("🚀 Launching nvcontrol TUI Dashboard...");
+                match nvcontrol::tui::TuiApp::new().run() {
+                    Ok(()) => {},
+                    Err(e) => eprintln!("❌ TUI error: {}", e),
                 }
+            },
+            GpuSubcommand::Capabilities => match overclocking::get_gpu_capabilities() {
+                Ok(_caps) => println!("✅ GPU overclocking capabilities detected"),
                 Err(e) => eprintln!("Error getting capabilities: {e}"),
+            },
+            GpuSubcommand::Benchmark { duration, test_type, intensity, log } => {
+                match monitoring::run_gpu_benchmark(*duration, test_type, intensity, *log) {
+                    Ok(()) => println!("✅ Benchmark completed"),
+                    Err(e) => eprintln!("❌ Benchmark failed: {}", e),
+                }
+            },
+            GpuSubcommand::Watch { interval, count } => {
+                match monitoring::live_gpu_watch(*interval, *count) {
+                    Ok(()) => {},
+                    Err(e) => eprintln!("❌ Watch failed: {}", e),
+                }
+            },
+            GpuSubcommand::Export { format, output, duration } => {
+                match monitoring::export_gpu_metrics(format, output.as_deref(), *duration) {
+                    Ok(()) => println!("✅ Export completed"),
+                    Err(e) => eprintln!("❌ Export failed: {}", e),
+                }
+            },
+            GpuSubcommand::Stress { duration, intensity, log } => {
+                match monitoring::run_gpu_benchmark(duration * 60, "all", intensity, *log) {
+                    Ok(()) => println!("✅ Stress test completed"),
+                    Err(e) => eprintln!("❌ Stress test failed: {}", e),
+                }
             },
         },
         Command::Display { subcommand } => match subcommand {
@@ -217,10 +334,96 @@ fn main() {
                     println!("  Display {i}");
                 }
             }
-            DisplaySubcommand::Vibrance { levels } => {
-                if let Err(e) = vibrance::set_vibrance(&levels) {
-                    eprintln!("Error: {e}");
-                    std::process::exit(1);
+            DisplaySubcommand::Vibrance { subcommand } => {
+                use nvcontrol::vibrance;
+                
+                match subcommand {
+                    VibranceSubcommand::Get => {
+                        match vibrance::get_displays() {
+                            Ok(displays) => {
+                                println!("Connected Displays:");
+                                for (i, display) in displays.iter().enumerate() {
+                                    match vibrance::get_display_vibrance(i) {
+                                        Ok(vibrance_val) => {
+                                            let percentage = vibrance::vibrance_to_percentage(vibrance_val);
+                                            println!("  {}: {}% vibrance", display, percentage);
+                                        }
+                                        Err(e) => println!("  {}: Error - {}", display, e),
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("Error getting displays: {}", e);
+                                if !vibrance::is_available() {
+                                    eprintln!("Note: nvibrant may not be installed or NVIDIA drivers not available");
+                                }
+                            }
+                        }
+                    }
+                    VibranceSubcommand::Set { percentage } => {
+                        let vibrance_val = vibrance::percentage_to_vibrance(*percentage);
+                        match vibrance::set_vibrance_all(vibrance_val) {
+                            Ok(()) => println!("Set all displays to {}% vibrance", percentage),
+                            Err(e) => eprintln!("Failed to set vibrance: {}", e),
+                        }
+                    }
+                    VibranceSubcommand::SetDisplay { display, percentage } => {
+                        let vibrance_val = vibrance::percentage_to_vibrance(*percentage);
+                        let display_values = vec![(*display, vibrance_val)];
+                        match vibrance::set_vibrance(&display_values) {
+                            Ok(()) => println!("Set display {} to {}% vibrance", display, percentage),
+                            Err(e) => eprintln!("Failed to set vibrance for display {}: {}", display, e),
+                        }
+                    }
+                    VibranceSubcommand::SetRaw { levels } => {
+                        // Convert i16 to (usize, i32) format
+                        let display_values: Vec<(usize, i32)> = levels
+                            .iter()
+                            .enumerate()
+                            .map(|(idx, &level)| (idx, level as i32))
+                            .collect();
+                        
+                        match vibrance::set_vibrance(&display_values) {
+                            Ok(()) => {
+                                println!("Applied raw vibrance values: {:?}", levels);
+                            }
+                            Err(e) => eprintln!("Failed to set raw vibrance: {}", e),
+                        }
+                    }
+                    VibranceSubcommand::List => {
+                        match vibrance::get_displays() {
+                            Ok(displays) => {
+                                println!("Available Displays:");
+                                for (i, display) in displays.iter().enumerate() {
+                                    println!("  [{}] {}", i, display);
+                                }
+                            }
+                            Err(e) => eprintln!("Failed to list displays: {}", e),
+                        }
+                    }
+                    VibranceSubcommand::Reset => {
+                        match vibrance::set_vibrance_all(0) {
+                            Ok(()) => println!("Reset all displays to default vibrance (100%)"),
+                            Err(e) => eprintln!("Failed to reset vibrance: {}", e),
+                        }
+                    }
+                    VibranceSubcommand::Info => {
+                        match vibrance::get_driver_info() {
+                            Ok(info) => {
+                                println!("Vibrance Support Information:");
+                                println!("  {}", info);
+                                println!("  nvibrant available: {}", if vibrance::is_available() { "Yes" } else { "No" });
+                                
+                                if !vibrance::is_available() {
+                                    println!("\nTo install nvibrant:");
+                                    println!("  pip install nvibrant");
+                                    println!("  # OR");
+                                    println!("  uvx nvibrant");
+                                }
+                            }
+                            Err(e) => eprintln!("Failed to get driver info: {}", e),
+                        }
+                    }
                 }
             }
             DisplaySubcommand::Hdr { subcommand } => match subcommand {
@@ -361,7 +564,6 @@ fn main() {
                             display.min_refresh, display.max_refresh
                         );
                     }
-                }
                 Err(e) => eprintln!("Failed to detect VRR displays: {e}"),
             },
             VrrSubcommand::Enable { display } => {
@@ -502,7 +704,6 @@ fn main() {
                             println!("  {}", game);
                         }
                     }
-                }
                 Err(e) => eprintln!("Failed to detect running games: {e}"),
             },
         },
@@ -545,6 +746,71 @@ fn main() {
                     Err(e) => eprintln!("Failed to generate completions: {e}"),
                 }
             }
+        },
+        Command::Power { subcommand } => match subcommand {
+            PowerSubcommand::Info => {
+                match power::get_power_info() {
+                    Ok(power_infos) => {
+                        println!("💡 Power Information:");
+                        println!("{}", "=".repeat(40));
+                        
+                        for (gpu_id, info) in power_infos.iter().enumerate() {
+                            println!("GPU {}:", gpu_id);
+                            
+                            if let Some(power_draw) = info.power_draw {
+                                println!("  Current Power: {:.1}W", power_draw);
+                            }
+                            
+                            if let Some(power_limit) = info.power_limit {
+                                println!("  Power Limit: {:.1}W", power_limit);
+                            }
+                            
+                            if let Some(temp) = info.temperature {
+                                println!("  Temperature: {:.0}°C", temp);
+                            }
+                            
+                            if let Some(fan_speed) = info.fan_speed {
+                                println!("  Fan Speed: {}%", fan_speed);
+                            }
+                            
+                            println!("  Persistence Mode: {}", if info.persistence_mode { "Enabled" } else { "Disabled" });
+                            println!();
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Failed to get power info: {}", e),
+                }
+            },
+            PowerSubcommand::Profile { profile } => {
+                match power::set_power_profile(profile) {
+                    Ok(()) => println!("✅ Power profile applied successfully"),
+                    Err(e) => eprintln!("❌ Failed to set power profile: {}", e),
+                }
+            },
+            PowerSubcommand::Limit { percentage } => {
+                let percentage = (*percentage).min(120).max(50);
+                match power::set_power_limit_percentage(percentage) {
+                    Ok(()) => println!("✅ Power limit set to {}%", percentage),
+                    Err(e) => eprintln!("❌ Failed to set power limit: {}", e),
+                }
+            },
+            PowerSubcommand::Persistence { enabled } => {
+                match power::set_persistence_mode(*enabled) {
+                    Ok(()) => println!("✅ Persistence mode {}", if *enabled { "enabled" } else { "disabled" }),
+                    Err(e) => eprintln!("❌ Failed to set persistence mode: {}", e),
+                }
+            },
+            PowerSubcommand::Monitor { duration } => {
+                match power::monitor_power_consumption(*duration) {
+                    Ok(()) => {},
+                    Err(e) => eprintln!("❌ Power monitoring failed: {}", e),
+                }
+            },
+            PowerSubcommand::Automate => {
+                match power::create_power_automation() {
+                    Ok(()) => println!("✅ Power automation configured"),
+                    Err(e) => eprintln!("❌ Failed to setup automation: {}", e),
+                }
+            },
         },
     }
 }

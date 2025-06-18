@@ -1,16 +1,26 @@
 [package]
 name = "nvcontrol"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
+authors = ["CK Technology LLC"]
+license = "MIT"
+description = "Modern NVIDIA Settings Manager for Linux + Wayland"
+homepage = "https://github.com/ghostkellz/nvcontrol"
+repository = "https://github.com/ghostkellz/nvcontrol"
+keywords = ["nvidia", "gpu", "wayland", "linux", "graphics"]
+categories = ["command-line-utilities", "graphics", "hardware-support"]
 
 [lib]
 name = "nvcontrol"
 path = "src/lib.rs"
 
+# GUI Application
 [[bin]]
 name = "nvcontrol"
 path = "src/bin/nvcontrol.rs"
+required-features = ["gui"]
 
+# CLI Tool
 [[bin]]
 name = "nvctl"
 path = "src/bin/nvctl.rs"
@@ -34,6 +44,9 @@ regex = "1.10"
 chrono = { version = "0.4", features = ["serde"] }
 sysinfo = "0.30"
 notify = "6.1"
+num_cpus = "1.16"
+sys-info = "0.9"
+serde_json = "1.0"
 
 [features]
 default = ["gui", "tray"]
