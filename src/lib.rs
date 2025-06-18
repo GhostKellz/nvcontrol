@@ -13,6 +13,8 @@ pub enum NvControlError {
     FanControlNotSupported,
     #[error("Power management failed: {0}")]
     PowerManagementFailed(String),
+    #[error("Latency optimization failed: {0}")]
+    LatencyOptimizationFailed(String),
 }
 
 pub type NvResult<T> = Result<T, NvControlError>;

@@ -1,7 +1,7 @@
 use crate::NvResult;
-use std::process::Command;
-use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+use std::process::Command;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CudaInfo {
@@ -78,7 +78,7 @@ fn extract_cuda_version(version_line: &str) -> Option<String> {
     if let Some(start) = version_line.find("release ") {
         let start = start + 8;
         if let Some(end) = version_line[start..].find(',') {
-            return Some(version_line[start..start+end].to_string());
+            return Some(version_line[start..start + end].to_string());
         }
     }
     None
@@ -114,10 +114,10 @@ fn parse_device_line(line: &str) -> Option<CudaDevice> {
         let name = parts[1].to_string();
         let memory_total = parts[2].parse::<u64>().ok()? * 1024 * 1024; // MB to bytes
         let memory_free = parts[3].parse::<u64>().ok()? * 1024 * 1024; // MB to bytes
-        
+
         // Estimate compute capability based on GPU name (simplified)
         let compute_capability = estimate_compute_capability(&name);
-        
+
         Some(CudaDevice {
             id,
             name: name.clone(),
@@ -137,9 +137,7 @@ fn estimate_compute_capability(gpu_name: &str) -> String {
         "8.9".to_string()
     } else if gpu_name.contains("RTX 30") {
         "8.6".to_string()
-    } else if gpu_name.contains("RTX 20") {
-        "7.5".to_string()
-    } else if gpu_name.contains("GTX 16") {
+    } else if gpu_name.contains("RTX 20") || gpu_name.contains("GTX 16") {
         "7.5".to_string()
     } else if gpu_name.contains("GTX 10") {
         "6.1".to_string()
@@ -166,11 +164,7 @@ fn estimate_cuda_cores(gpu_name: &str) -> Option<u32> {
 }
 
 fn find_cuda_toolkit_path() -> Option<PathBuf> {
-    let possible_paths = vec![
-        "/usr/local/cuda",
-        "/opt/cuda",
-        "/usr/lib/cuda",
-    ];
+    let possible_paths = vec!["/usr/local/cuda", "/opt/cuda", "/usr/lib/cuda"];
 
     for path in possible_paths {
         let path = PathBuf::from(path);
@@ -188,10 +182,10 @@ pub fn get_cuda_dev_info() -> NvResult<()> {
     println!("============================");
 
     let info = get_cuda_info()?;
-    
+
     println!("CUDA Toolkit Version: {}", info.version);
     println!("Driver Version: {}", info.driver_version);
-    
+
     if let Some(toolkit_path) = info.toolkit_path {
         println!("Toolkit Path: {}", toolkit_path.display());
     } else {
@@ -202,9 +196,11 @@ pub fn get_cuda_dev_info() -> NvResult<()> {
     for device in info.devices {
         println!("  Device {}: {}", device.id, device.name);
         println!("    Compute Capability: {}", device.compute_capability);
-        println!("    Memory: {:.1} GB total, {:.1} GB free", 
-                 device.memory_total as f64 / (1024.0 * 1024.0 * 1024.0),
-                 device.memory_free as f64 / (1024.0 * 1024.0 * 1024.0));
+        println!(
+            "    Memory: {:.1} GB total, {:.1} GB free",
+            device.memory_total as f64 / (1024.0 * 1024.0 * 1024.0),
+            device.memory_free as f64 / (1024.0 * 1024.0 * 1024.0)
+        );
         if let Some(cores) = device.cuda_cores {
             println!("    CUDA Cores: {}", cores);
         }
@@ -228,15 +224,19 @@ fn check_cuda_tool(tool: &str, description: &str) {
         .output()
         .map(|output| output.status.success())
         .unwrap_or(false);
-    
-    let status = if available { "✓ Available" } else { "✗ Not found" };
+
+    let status = if available {
+        "✓ Available"
+    } else {
+        "✗ Not found"
+    };
     println!("  {}: {}", description, status);
 }
 
 /// Install CUDA development tools
 pub fn install_cuda_toolkit() -> NvResult<()> {
     println!("Installing CUDA Toolkit...");
-    
+
     // This would need to be implemented per-distro
     println!("Please install CUDA Toolkit manually:");
     println!("  • Download from https://developer.nvidia.com/cuda-downloads");
@@ -244,7 +244,7 @@ pub fn install_cuda_toolkit() -> NvResult<()> {
     println!("    - Ubuntu: sudo apt install nvidia-cuda-toolkit");
     println!("    - Arch: sudo pacman -S cuda");
     println!("    - Fedora: sudo dnf install cuda");
-    
+
     Ok(())
 }
 

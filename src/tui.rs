@@ -2,18 +2,15 @@ use crate::NvResult;
 use crossterm::{
     event::{self, Event, KeyCode, KeyModifiers},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use nvml_wrapper::{Nvml, Device};
+use nvml_wrapper::{Device, Nvml};
 use ratatui::{
+    Frame, Terminal,
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style},
-    widgets::{
-        Block, Borders, Clear, Gauge, List, ListItem, 
-        Paragraph, Sparkline, Tabs
-    },
-    Frame, Terminal,
+    widgets::{Block, Borders, Clear, Gauge, List, ListItem, Paragraph, Sparkline, Tabs},
 };
 use std::collections::VecDeque;
 use std::io;
@@ -58,9 +55,16 @@ enum Tab {
 
 impl Tab {
     fn titles() -> Vec<&'static str> {
-        vec!["Overview", "Performance", "Memory", "Temperature", "Power", "Processes"]
+        vec![
+            "Overview",
+            "Performance",
+            "Memory",
+            "Temperature",
+            "Power",
+            "Processes",
+        ]
     }
-    
+
     fn from_index(index: usize) -> Self {
         match index {
             0 => Tab::Overview,
@@ -74,6 +78,12 @@ impl Tab {
     }
 }
 
+impl Default for TuiApp {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TuiApp {
     pub fn new() -> Self {
         let nvml = Nvml::init().ok();
@@ -82,7 +92,7 @@ impl TuiApp {
         } else {
             0
         };
-        
+
         let metrics_history = (0..device_count)
             .map(|_| VecDeque::with_capacity(MAX_HISTORY))
             .collect();
@@ -109,14 +119,16 @@ impl TuiApp {
         let mut terminal = Terminal::new(backend)?;
 
         let mut last_update = Instant::now();
-        
+
         loop {
             // Handle input events
             if event::poll(Duration::from_millis(100))? {
                 if let Event::Key(key) = event::read()? {
                     match key.code {
                         KeyCode::Char('q') => break,
-                        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => break,
+                        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            break;
+                        }
                         KeyCode::Tab => self.next_tab(),
                         KeyCode::BackTab => self.prev_tab(),
                         KeyCode::Left => self.prev_gpu(),
@@ -166,23 +178,27 @@ impl TuiApp {
     }
 
     fn get_device_metrics(&self, device: &Device) -> NvResult<GpuMetrics> {
-        let temperature = device.temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
+        let temperature = device
+            .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
             .unwrap_or(0) as f64;
-        
-        let utilization = device.utilization_rates()
+
+        let utilization = device
+            .utilization_rates()
             .map(|u| (u.gpu as f64, u.memory as f64))
             .unwrap_or((0.0, 0.0));
-        
-        let power_draw = device.power_usage()
+
+        let power_draw = device
+            .power_usage()
             .map(|p| p as f64 / 1000.0) // mW to W
             .unwrap_or(0.0);
-        
-        let fan_speed = device.fan_speed(0)
-            .unwrap_or(0) as f64;
-        
-        let clocks = device.clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics)
+
+        let fan_speed = device.fan_speed(0).unwrap_or(0) as f64;
+
+        let clocks = device
+            .clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics)
             .map(|g| {
-                let mem = device.clock_info(nvml_wrapper::enum_wrappers::device::Clock::Memory)
+                let mem = device
+                    .clock_info(nvml_wrapper::enum_wrappers::device::Clock::Memory)
                     .unwrap_or(0);
                 (g as f64, mem as f64)
             })
@@ -228,10 +244,10 @@ impl TuiApp {
 
         // Header
         self.draw_header(f, chunks[0]);
-        
+
         // Tabs
         self.draw_tabs(f, chunks[1]);
-        
+
         // Content based on current tab
         match Tab::from_index(self.current_tab) {
             Tab::Overview => self.draw_overview(f, chunks[2]),
@@ -241,7 +257,7 @@ impl TuiApp {
             Tab::Power => self.draw_power(f, chunks[2]),
             Tab::Processes => self.draw_processes(f, chunks[2]),
         }
-        
+
         // Status bar
         self.draw_status_bar(f, chunks[3]);
     }
@@ -250,7 +266,7 @@ impl TuiApp {
         let gpu_count = self.device_count;
         let uptime = self.start_time.elapsed().as_secs();
         let status = if self.paused { "PAUSED" } else { "LIVE" };
-        
+
         let title = format!(
             "nvcontrol GPU Monitor - {} GPU(s) | {} | Uptime: {}s",
             gpu_count, status, uptime
@@ -260,15 +276,12 @@ impl TuiApp {
             .block(Block::default().borders(Borders::ALL))
             .alignment(Alignment::Center)
             .style(Style::default().fg(Color::Cyan));
-        
+
         f.render_widget(header, area);
     }
 
     fn draw_tabs(&self, f: &mut Frame, area: Rect) {
-        let titles: Vec<String> = Tab::titles()
-            .into_iter()
-            .map(|s| s.to_string())
-            .collect();
+        let titles: Vec<String> = Tab::titles().into_iter().map(|s| s.to_string()).collect();
 
         let tabs = Tabs::new(titles)
             .block(Block::default().borders(Borders::ALL).title("Tabs"))
@@ -289,15 +302,18 @@ impl TuiApp {
 
         if let Some(ref nvml) = self.nvml {
             if let Ok(device) = nvml.device_by_index(self.selected_gpu as u32) {
-                let metrics = self.metrics_history.get(self.selected_gpu).and_then(|h| h.back());
+                let metrics = self
+                    .metrics_history
+                    .get(self.selected_gpu)
+                    .and_then(|h| h.back());
 
                 // Split into sections
                 let chunks = Layout::default()
                     .direction(Direction::Vertical)
                     .constraints([
-                        Constraint::Length(6),  // GPU info
-                        Constraint::Length(8),  // Quick stats
-                        Constraint::Min(0),     // Mini graphs
+                        Constraint::Length(6), // GPU info
+                        Constraint::Length(8), // Quick stats
+                        Constraint::Min(0),    // Mini graphs
                     ])
                     .split(area);
 
@@ -319,19 +335,23 @@ impl TuiApp {
         let name = device.name().unwrap_or("Unknown GPU".to_string());
         let memory = device.memory_info().ok();
         let power_limit = device.power_management_limit_default().ok();
-        
+
         let info = vec![
             format!("Name: {}", name),
-            format!("Memory: {}", 
+            format!(
+                "Memory: {}",
                 if let Some(mem) = memory {
-                    format!("{:.1} GB ({:.1} GB used)", 
+                    format!(
+                        "{:.1} GB ({:.1} GB used)",
                         mem.total as f64 / 1e9,
-                        mem.used as f64 / 1e9)
+                        mem.used as f64 / 1e9
+                    )
                 } else {
                     "Unknown".to_string()
                 }
             ),
-            format!("Power Limit: {}", 
+            format!(
+                "Power Limit: {}",
                 if let Some(limit) = power_limit {
                     format!("{:.0} W", limit as f64 / 1000.0)
                 } else {
@@ -340,13 +360,13 @@ impl TuiApp {
             ),
         ];
 
-        let list = List::new(
-            info.into_iter()
-                .map(|line| ListItem::new(line))
-                .collect::<Vec<_>>()
-        )
-        .block(Block::default().borders(Borders::ALL).title("GPU Information"))
-        .style(Style::default().fg(Color::White));
+        let list = List::new(info.into_iter().map(ListItem::new).collect::<Vec<_>>())
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("GPU Information"),
+            )
+            .style(Style::default().fg(Color::White));
 
         f.render_widget(list, area);
     }
@@ -410,23 +430,27 @@ impl TuiApp {
 
         // GPU Utilization sparkline
         if let Some(history) = self.metrics_history.get(self.selected_gpu) {
-            let gpu_data: Vec<u64> = history.iter()
-                .map(|m| m.gpu_utilization as u64)
-                .collect();
-            
+            let gpu_data: Vec<u64> = history.iter().map(|m| m.gpu_utilization as u64).collect();
+
             let gpu_sparkline = Sparkline::default()
-                .block(Block::default().borders(Borders::ALL).title("GPU Utilization History"))
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title("GPU Utilization History"),
+                )
                 .data(&gpu_data)
                 .style(Style::default().fg(Color::Green));
             f.render_widget(gpu_sparkline, chunks[0]);
 
             // Temperature sparkline
-            let temp_data: Vec<u64> = history.iter()
-                .map(|m| m.temperature as u64)
-                .collect();
-            
+            let temp_data: Vec<u64> = history.iter().map(|m| m.temperature as u64).collect();
+
             let temp_sparkline = Sparkline::default()
-                .block(Block::default().borders(Borders::ALL).title("Temperature History"))
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title("Temperature History"),
+                )
                 .data(&temp_data)
                 .style(Style::default().fg(Color::Red));
             f.render_widget(temp_sparkline, chunks[1]);

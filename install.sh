@@ -260,7 +260,7 @@ main() {
     verify_installation
     
     echo ""
-    echo -e "${GREEN}🎉 nvcontrol installation complete!${NC}"
+    echo "✅ nvcontrol installation complete!"
     echo ""
     echo -e "${BLUE}Usage:${NC}"
     echo -e "  ${YELLOW}nvctl gpu info${NC}              # Show GPU information"

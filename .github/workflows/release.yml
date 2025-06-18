@@ -11,11 +11,11 @@ jobs:
     name: Build Release on nv-palladium
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install system dependencies
         run: |
-          sudo apt-get update
+          sudo apt-get update -qq
           sudo apt-get install -y \
             libgtk-3-dev \
             libglib2.0-dev \
@@ -25,13 +25,16 @@ jobs:
             libcairo-gobject2 \
             libcairo2-dev \
             pkg-config \
-            build-essential
+            build-essential \
+            libssl-dev
 
       - name: Set up Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
         with:
-          toolchain: stable
-          override: true
+          key: release-cache
 
       - name: Build Release (all features)
         run: cargo build --release --all-features
@@ -45,10 +48,11 @@ jobs:
           tar -czf nvcontrol-${{ github.ref_name }}-linux-x86_64.tar.gz nvcontrol-${{ github.ref_name }}
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: nvcontrol-${{ github.ref_name }}-linux-x86_64.tar.gz
           draft: false
           prerelease: false
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

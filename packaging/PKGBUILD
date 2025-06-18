@@ -1,6 +1,6 @@
 # Maintainer: ghostkellz <your-email@example.com>
 pkgname=nvcontrol
-pkgver=0.1.0
+pkgver=0.5.0
 pkgrel=1
 pkgdesc="Modern NVIDIA settings manager for Linux and Wayland"
 arch=('x86_64')
@@ -37,6 +37,5 @@ package() {
     install -Dm644 DOCS.md "$pkgdir/usr/share/doc/$pkgname/DOCS.md"
     install -Dm644 COMMANDS.md "$pkgdir/usr/share/doc/$pkgname/COMMANDS.md"
     
-    # Install license
     install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }
