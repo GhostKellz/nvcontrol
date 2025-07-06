@@ -1,7 +1,7 @@
 # nvcontrol
 
 <div align="center">
-  <img src="assets/logos/nvctl_logo.png" alt="nvcontrol Logo" width="128" height="128">
+  <img src="assets/icons/nvctl_logo.png" alt="nvcontrol Logo" width="128" height="128">
   
   **Modern NVIDIA Settings Manager for Linux + Wayland**
   
