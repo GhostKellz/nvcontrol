@@ -1,12 +1,16 @@
 # nvcontrol
 
-**Modern NVIDIA Settings Manager for Linux + Wayland**
-
-A feature-rich, native Linux application for NVIDIA GPU management with full Wayland support, advanced overclocking, VRR control, and DLSS/FSR management.
-
-![nvcontrol Screenshot](https://img.shields.io/badge/Status-In%20Development-yellow)
-![License](https://img.shields.io/badge/License-MIT-blue)
-![Platform](https://img.shields.io/badge/Platform-Linux-green)
+<div align="center">
+  <img src="assets/logos/nvctl_logo.png" alt="nvcontrol Logo" width="128" height="128">
+  
+  **Modern NVIDIA Settings Manager for Linux + Wayland**
+  
+  A feature-rich, native Linux application for NVIDIA GPU management with full Wayland support, advanced overclocking, VRR control, and DLSS/FSR management.
+  
+  ![nvcontrol Screenshot](https://img.shields.io/badge/Status-In%20Development-yellow)
+  ![License](https://img.shields.io/badge/License-MIT-blue)
+  ![Platform](https://img.shields.io/badge/Platform-Linux-green)
+</div>
 
 ## ✨ Features
 

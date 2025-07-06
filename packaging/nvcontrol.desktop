@@ -2,8 +2,9 @@
 Name=nvcontrol
 Comment=NVIDIA Settings Manager for Wayland
 Exec=nvcontrol
-Icon=nvidia
+Icon=nvcontrol
 Terminal=false
 Type=Application
-Categories=System;Settings;
-Keywords=nvidia;gpu;graphics;wayland;
+Categories=System;Settings;HardwareSettings;
+Keywords=nvidia;gpu;graphics;wayland;overclocking;fan;temperature;
+StartupNotify=true

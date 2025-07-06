@@ -1,4 +1,4 @@
-# Maintainer: ghostkellz <your-email@example.com>
+# Maintainer: Christopher Kelley <ckelley@ghostkellz.sh>
 pkgname=nvcontrol
 pkgver=0.5.0
 pkgrel=1
@@ -31,6 +31,18 @@ package() {
     
     # Install desktop file
     install -Dm644 packaging/nvcontrol.desktop "$pkgdir/usr/share/applications/nvcontrol.desktop"
+    
+    # Install icons from assets/logos directory (multiple sizes for better desktop integration)
+    for size in 16 32 48 64 128 256; do
+        if [ -f "assets/logos/nvctl_logo_${size}x${size}.png" ]; then
+            install -Dm644 "assets/logos/nvctl_logo_${size}x${size}.png" "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/nvcontrol.png"
+        fi
+    done
+    
+    # Fallback to main logo if specific sizes aren't available
+    if [ -f "assets/logos/nvctl_logo.png" ]; then
+        install -Dm644 "assets/logos/nvctl_logo.png" "$pkgdir/usr/share/pixmaps/nvcontrol.png"
+    fi
     
     # Install documentation
     install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
