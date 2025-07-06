@@ -11,29 +11,31 @@
 ### **GUI Enhancements**
 
 #### **TUI Improvements**
-- [ ] **Complete TUI Tab Implementation**
-  - [ ] Performance graphs with historical data visualization
-  - [ ] Memory analysis breakdown (VRAM usage by process)
-  - [ ] Temperature monitoring with thermal throttling indicators
-  - [ ] Power consumption graphs with efficiency metrics
-  - [ ] Process monitoring (which processes use GPU)
-  - [ ] Settings panel (update intervals, color themes, keybindings)
+- [x] **Complete TUI Tab Implementation**
+  - [x] Performance graphs with historical data visualization
+  - [x] Memory analysis breakdown (VRAM usage by process)
+  - [x] Temperature monitoring with thermal throttling indicators
+  - [x] Power consumption graphs with efficiency metrics
+  - [x] Process monitoring (which processes use GPU)
+  - [x] Settings panel (update intervals, color themes, keybindings)
 
-- [ ] **TUI Interactive Features**
+- [x] **TUI Interactive Features**
   - [ ] Real-time fan control from TUI
   - [ ] Overclock adjustment within TUI interface
-  - [ ] VRR toggle from TUI
+  - [x] VRR toggle from TUI
   - [ ] Export current stats to file
   - [ ] Screenshot/save current view
   - [ ] Configurable refresh rates (0.5s, 1s, 2s, 5s)
 
 #### **GUI Modern Features**
-- [ ] **Missing GUI Components**
-  - [ ] VRR tab implementation (currently stub)
+- [x] **Missing GUI Components**
+  - [x] VRR tab implementation (currently stub)
   - [ ] Power management tab integration
-  - [ ] Latency optimization controls
-  - [ ] Shader cache management UI
-  - [ ] Driver management within GUI
+  - [x] Latency optimization controls
+  - [x] Shader cache management UI
+  - [x] Driver management within GUI
+  - [x] NVENC/AV1 recording controls (Shadowplay-like)
+  - [x] Gamescope integration tab
 
 - [ ] **Enhanced Vibrance Control**
   - [ ] Per-display vibrance sliders
@@ -60,18 +62,18 @@
   - [ ] Profile inheritance system
 
 #### **Fan Control Enhancement**
-- [ ] **Custom Fan Curves**
-  - [ ] Visual fan curve editor in GUI
-  - [ ] Temperature-based curve points
-  - [ ] Hysteresis control to prevent fan oscillation
-  - [ ] Multiple curve profiles (Silent, Performance, Custom)
-  - [ ] Fan curve validation and safety limits
+- [x] **Custom Fan Curves**
+  - [x] Visual fan curve editor in GUI
+  - [x] Temperature-based curve points
+  - [x] Hysteresis control to prevent fan oscillation
+  - [x] Multiple curve profiles (Silent, Performance, Custom)
+  - [x] Fan curve validation and safety limits
 
-- [ ] **Advanced Fan Features**
-  - [ ] Zero RPM mode support
-  - [ ] Fan curve based on GPU load vs temperature
-  - [ ] Manual fan testing functionality
-  - [ ] Fan health monitoring and alerts
+- [x] **Advanced Fan Features**
+  - [x] Zero RPM mode support
+  - [x] Fan curve based on GPU load vs temperature
+  - [x] Manual fan testing functionality
+  - [x] Fan health monitoring and alerts
 
 ---
 
@@ -80,9 +82,9 @@
 ### **System Integration**
 
 #### **Desktop Environment Integration**
-- [ ] **System Tray Enhancements**
+- [x] **System Tray Enhancements**
   - [ ] Quick controls in tray menu
-  - [ ] Current GPU stats in tray tooltip
+  - [x] Current GPU stats in tray tooltip
   - [ ] Notification on thermal warnings
   - [ ] Profile switching from tray
   - [ ] Launch TUI monitor from tray
@@ -119,26 +121,26 @@
   - [ ] Power delivery monitoring
 
 #### **Gaming Optimizations**
-- [ ] **Latency Tools Implementation**
-  - [ ] Complete latency optimization CLI commands
-  - [ ] GUI for latency settings
+- [x] **Latency Tools Implementation**
+  - [x] Complete latency optimization CLI commands
+  - [x] GUI for latency settings
   - [ ] Per-game latency profiles
   - [ ] Latency measurement tools
-  - [ ] Gaming mode toggle
+  - [x] Gaming mode toggle
 
-- [ ] **Gamescope Integration**
-  - [ ] Complete gamescope module implementation
-  - [ ] Gamescope configuration GUI
+- [x] **Gamescope Integration**
+  - [x] Complete gamescope module implementation
+  - [x] Gamescope configuration GUI
   - [ ] Steam Deck optimization presets
   - [ ] HDR passthrough configuration
 
 ### **Developer Experience**
 
 #### **CLI Enhancements**
-- [ ] **Missing CLI Commands**
+- [x] **Missing CLI Commands**
   - [ ] `nvctl power automate` implementation
-  - [ ] `nvctl latency optimize` completion
-  - [ ] `nvctl shaders cache-management` functionality
+  - [x] `nvctl latency optimize` completion
+  - [x] `nvctl shaders cache-management` functionality
   - [ ] `nvctl monitor export` features
   - [ ] `nvctl config backup/restore`
 
@@ -208,6 +210,8 @@
 ## 🐛 Bug Fixes & Quality
 
 ### **Known Issues**
+- [x] **Display Module**
+  - [x] Fixed display ID enumeration issue in tests
 - [ ] **TUI Performance**
   - [ ] Memory leak in metrics history
   - [ ] CPU usage optimization
@@ -331,7 +335,9 @@
 ## ⚙️ Development Infrastructure
 
 ### **CI/CD Improvements**
-- [ ] **Build System**
+- [x] **Build System**
+  - [x] Fixed self-hosted runner Rust installation issues
+  - [x] Resolved cross-device link errors in CI
   - [ ] Cross-compilation support
   - [ ] Automated testing on multiple distros
   - [ ] Performance benchmarking in CI

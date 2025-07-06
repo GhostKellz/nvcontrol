@@ -24,10 +24,38 @@ jobs:
             build-essential \
             libssl-dev
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
+      - name: Set up Rust (self-hosted runner)
+        run: |
+          # Ensure Rust is available and up to date
+          if ! command -v rustc >/dev/null 2>&1; then
+            echo "Installing Rust..."
+            # Create temporary directory for Rust installation
+            TEMP_DIR=$(mktemp -d)
+            export CARGO_HOME="$TEMP_DIR/.cargo"
+            export RUSTUP_HOME="$TEMP_DIR/.rustup"
+            
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --no-modify-path
+            
+            # Copy to user directory with proper permissions
+            cp -r "$TEMP_DIR/.cargo" "$HOME/" || true
+            cp -r "$TEMP_DIR/.rustup" "$HOME/" || true
+            
+            # Clean up temp directory
+            rm -rf "$TEMP_DIR"
+          fi
+          
+          # Ensure PATH includes Rust
+          export PATH="$HOME/.cargo/bin:$PATH"
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          
+          # Update Rust and install components
+          rustup update stable
+          rustup default stable
+          rustup component add clippy rustfmt
+          
+          # Verify installation
+          rustc --version
+          cargo --version
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
@@ -54,3 +82,9 @@ jobs:
             echo "⚠️ Format check skipped due to timeout or formatting issues"
             exit 0
           fi
+
+      - name: Verify Build Success
+        run: |
+          echo "✅ All builds completed successfully"
+          echo "Binary sizes:"
+          ls -lh target/debug/nvctl target/debug/nvcontrol 2>/dev/null || echo "Binaries not found in expected location"

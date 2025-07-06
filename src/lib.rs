@@ -37,6 +37,7 @@ pub mod gamescope;
 pub mod latency;
 pub mod overclocking;
 pub mod power;
+pub mod recording;
 pub mod shaders;
 pub mod theme;
 pub mod upscaling;

@@ -71,7 +71,8 @@ pub fn list_displays() -> Vec<DisplayInfo> {
     if let Ok(output) = std::process::Command::new("wlr-randr").output() {
         if output.status.success() {
             let output_str = String::from_utf8_lossy(&output.stdout);
-            for (id, line) in output_str.lines().enumerate() {
+            let mut display_id = 0;
+            for line in output_str.lines() {
                 if !line.starts_with(' ') && !line.is_empty() {
                     let name = line
                         .split_whitespace()
@@ -93,13 +94,14 @@ pub fn list_displays() -> Vec<DisplayInfo> {
                     };
                     let color_depth = if hdr_capable { 10 } else { 8 }; // Assume 10-bit for HDR displays
                     displays.push(DisplayInfo {
-                        id,
+                        id: display_id,
                         name,
                         kind: kind.to_string(),
                         hdr_capable,
                         hdr_enabled,
                         color_depth,
                     });
+                    display_id += 1;
                 }
             }
             return displays;
@@ -110,7 +112,8 @@ pub fn list_displays() -> Vec<DisplayInfo> {
     if let Ok(output) = std::process::Command::new("xrandr").arg("--query").output() {
         if output.status.success() {
             let output_str = String::from_utf8_lossy(&output.stdout);
-            for (id, line) in output_str.lines().enumerate() {
+            let mut display_id = 0;
+            for line in output_str.lines() {
                 if line.contains(" connected") {
                     let name = line
                         .split_whitespace()
@@ -132,13 +135,14 @@ pub fn list_displays() -> Vec<DisplayInfo> {
                     };
                     let color_depth = if hdr_capable { 10 } else { 8 };
                     displays.push(DisplayInfo {
-                        id,
+                        id: display_id,
                         name,
                         kind: kind.to_string(),
                         hdr_capable,
                         hdr_enabled,
                         color_depth,
                     });
+                    display_id += 1;
                 }
             }
             return displays;
