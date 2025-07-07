@@ -20,20 +20,20 @@ pub struct RecordingSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum EncoderType {
-    NvencH264,      // Hardware H.264 (most compatible)
-    NvencH265,      // Hardware H.265/HEVC (better quality/size)
-    NvencAv1,       // Hardware AV1 (latest, best quality) - RTX 40 series+
-    SoftwareX264,   // Software fallback
-    SoftwareX265,   // Software fallback
+    NvencH264,    // Hardware H.264 (most compatible)
+    NvencH265,    // Hardware H.265/HEVC (better quality/size)
+    NvencAv1,     // Hardware AV1 (latest, best quality) - RTX 40 series+
+    SoftwareX264, // Software fallback
+    SoftwareX265, // Software fallback
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum QualityPreset {
-    Lossless,       // For perfect quality recordings
-    HighQuality,    // Near-lossless, good for content creation
-    Balanced,       // Good quality/size ratio
-    Performance,    // Lower quality, better performance
-    Streaming,      // Optimized for live streaming
+    Lossless,    // For perfect quality recordings
+    HighQuality, // Near-lossless, good for content creation
+    Balanced,    // Good quality/size ratio
+    Performance, // Lower quality, better performance
+    Streaming,   // Optimized for live streaming
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -77,7 +77,7 @@ pub fn get_nvenc_capabilities() -> NvResult<NvencCapabilities> {
         if let Ok(device) = nvml.device_by_index(0) {
             if let Ok(name) = device.name() {
                 capabilities.gpu_name = name.clone();
-                
+
                 // Determine encoding capabilities based on GPU generation
                 if name.contains("RTX 40") || name.contains("RTX 50") {
                     // Ada Lovelace architecture - supports all modern codecs
@@ -154,7 +154,7 @@ pub fn create_lossless_preset() -> RecordingSettings {
         resolution: (1920, 1080),
         framerate: 60,
         audio_enabled: true,
-        audio_bitrate_kbps: 320, // Higher audio quality
+        audio_bitrate_kbps: 320,          // Higher audio quality
         output_format: OutputFormat::Mkv, // Better container for lossless
         lossless_mode: true,
         instant_replay_duration: 180, // Shorter due to large file sizes
@@ -195,28 +195,32 @@ pub fn create_content_creation_preset() -> RecordingSettings {
 pub fn start_recording(settings: &RecordingSettings, output_path: &str) -> NvResult<()> {
     // Check if we have the necessary capabilities
     let capabilities = get_nvenc_capabilities()?;
-    
+
     if !is_encoder_supported(&settings.encoder, &capabilities) {
-        return Err(NvControlError::DisplayDetectionFailed(
-            format!("Encoder {:?} not supported on this GPU", settings.encoder)
-        ));
+        return Err(NvControlError::DisplayDetectionFailed(format!(
+            "Encoder {:?} not supported on this GPU",
+            settings.encoder
+        )));
     }
 
     // Build FFmpeg command for recording
     let mut cmd = Command::new("ffmpeg");
-    
+
     // Input: capture display
     cmd.args(&["-f", "x11grab"]);
     cmd.args(&["-r", &settings.framerate.to_string()]);
-    cmd.args(&["-s", &format!("{}x{}", settings.resolution.0, settings.resolution.1)]);
+    cmd.args(&[
+        "-s",
+        &format!("{}x{}", settings.resolution.0, settings.resolution.1),
+    ]);
     cmd.args(&["-i", ":0.0"]);
-    
+
     // Audio input if enabled
     if settings.audio_enabled {
         cmd.args(&["-f", "pulse"]);
         cmd.args(&["-i", "default"]);
     }
-    
+
     // Video encoding settings
     match settings.encoder {
         EncoderType::NvencH264 => {
@@ -235,7 +239,7 @@ pub fn start_recording(settings: &RecordingSettings, output_path: &str) -> NvRes
             cmd.args(&["-c:v", "libx265"]);
         }
     }
-    
+
     // Quality settings
     match settings.quality_preset {
         QualityPreset::Lossless => {
@@ -262,13 +266,13 @@ pub fn start_recording(settings: &RecordingSettings, output_path: &str) -> NvRes
             cmd.args(&["-b:v", &format!("{}M", settings.bitrate_mbps)]);
         }
     }
-    
+
     // Audio encoding
     if settings.audio_enabled {
         cmd.args(&["-c:a", "aac"]);
         cmd.args(&["-b:a", &format!("{}k", settings.audio_bitrate_kbps)]);
     }
-    
+
     // Output format
     let extension = match settings.output_format {
         OutputFormat::Mp4 => "mp4",
@@ -276,25 +280,29 @@ pub fn start_recording(settings: &RecordingSettings, output_path: &str) -> NvRes
         OutputFormat::Mov => "mov",
         OutputFormat::Avi => "avi",
     };
-    
+
     let full_output_path = if output_path.ends_with(&format!(".{}", extension)) {
         output_path.to_string()
     } else {
         format!("{}.{}", output_path, extension)
     };
-    
+
     cmd.arg(&full_output_path);
-    
+
     // Start recording
     println!("Starting recording with command: {:?}", cmd);
-    
-    let child = cmd.spawn()
-        .map_err(|e| NvControlError::DisplayDetectionFailed(format!("Failed to start recording: {}", e)))?;
-    
+
+    let child = cmd.spawn().map_err(|e| {
+        NvControlError::DisplayDetectionFailed(format!("Failed to start recording: {}", e))
+    })?;
+
     // Store process ID for later termination
     save_recording_pid(child.id())?;
-    
-    println!("Recording started successfully. Output: {}", full_output_path);
+
+    println!(
+        "Recording started successfully. Output: {}",
+        full_output_path
+    );
     Ok(())
 }
 
@@ -305,15 +313,19 @@ pub fn stop_recording() -> NvResult<()> {
         Command::new("kill")
             .args(&["-TERM", &pid.to_string()])
             .output()
-            .map_err(|e| NvControlError::DisplayDetectionFailed(format!("Failed to stop recording: {}", e)))?;
-        
+            .map_err(|e| {
+                NvControlError::DisplayDetectionFailed(format!("Failed to stop recording: {}", e))
+            })?;
+
         // Clear stored PID
         clear_recording_pid()?;
-        
+
         println!("Recording stopped successfully");
         Ok(())
     } else {
-        Err(NvControlError::DisplayDetectionFailed("No active recording found".to_string()))
+        Err(NvControlError::DisplayDetectionFailed(
+            "No active recording found".to_string(),
+        ))
     }
 }
 
@@ -327,42 +339,47 @@ pub fn start_instant_replay(settings: &RecordingSettings) -> NvResult<()> {
     // Create a circular buffer recording that keeps only the last N seconds
     let temp_dir = get_recording_temp_dir();
     let segment_duration = 30; // 30 second segments
-    let total_segments = (settings.instant_replay_duration + segment_duration - 1) / segment_duration;
-    
+    let total_segments =
+        (settings.instant_replay_duration + segment_duration - 1) / segment_duration;
+
     let mut cmd = Command::new("ffmpeg");
-    
+
     // Input: capture display
     cmd.args(&["-f", "x11grab"]);
     cmd.args(&["-r", &settings.framerate.to_string()]);
-    cmd.args(&["-s", &format!("{}x{}", settings.resolution.0, settings.resolution.1)]);
+    cmd.args(&[
+        "-s",
+        &format!("{}x{}", settings.resolution.0, settings.resolution.1),
+    ]);
     cmd.args(&["-i", ":0.0"]);
-    
+
     // Segmented output for circular buffer
     cmd.args(&["-f", "segment"]);
     cmd.args(&["-segment_time", &segment_duration.to_string()]);
     cmd.args(&["-segment_wrap", &total_segments.to_string()]);
     cmd.args(&["-reset_timestamps", "1"]);
-    
+
     // Video encoding (use fast preset for instant replay)
     match settings.encoder {
         EncoderType::NvencH264 => cmd.args(&["-c:v", "h264_nvenc"]),
         EncoderType::NvencH265 => cmd.args(&["-c:v", "hevc_nvenc"]),
         _ => cmd.args(&["-c:v", "h264_nvenc"]), // Fallback to H.264
     };
-    
+
     cmd.args(&["-preset", "fast"]);
     cmd.args(&["-b:v", &format!("{}M", settings.bitrate_mbps)]);
-    
+
     let output_pattern = temp_dir.join("replay_%03d.mp4");
     cmd.arg(output_pattern.to_string_lossy().as_ref());
-    
+
     println!("Starting instant replay with command: {:?}", cmd);
-    
-    let child = cmd.spawn()
-        .map_err(|e| NvControlError::DisplayDetectionFailed(format!("Failed to start instant replay: {}", e)))?;
-    
+
+    let child = cmd.spawn().map_err(|e| {
+        NvControlError::DisplayDetectionFailed(format!("Failed to start instant replay: {}", e))
+    })?;
+
     save_instant_replay_pid(child.id())?;
-    
+
     println!("Instant replay started successfully");
     Ok(())
 }
@@ -370,7 +387,7 @@ pub fn start_instant_replay(settings: &RecordingSettings) -> NvResult<()> {
 /// Save the current instant replay buffer
 pub fn save_instant_replay(output_path: &str) -> NvResult<()> {
     let temp_dir = get_recording_temp_dir();
-    
+
     // Find all replay segments
     let mut segments = Vec::new();
     for i in 0..100 {
@@ -379,63 +396,90 @@ pub fn save_instant_replay(output_path: &str) -> NvResult<()> {
             segments.push(segment_path);
         }
     }
-    
+
     if segments.is_empty() {
-        return Err(NvControlError::DisplayDetectionFailed("No replay segments found".to_string()));
+        return Err(NvControlError::DisplayDetectionFailed(
+            "No replay segments found".to_string(),
+        ));
     }
-    
+
     // Sort by modification time to get correct order
-    segments.sort_by_key(|p| fs::metadata(p).and_then(|m| m.modified()).unwrap_or(std::time::SystemTime::UNIX_EPOCH));
-    
+    segments.sort_by_key(|p| {
+        fs::metadata(p)
+            .and_then(|m| m.modified())
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+    });
+
     // Concatenate segments into final video
     let mut cmd = Command::new("ffmpeg");
-    
+
     // Create input list
     let input_list = temp_dir.join("replay_list.txt");
-    let list_content = segments.iter()
+    let list_content = segments
+        .iter()
         .map(|p| format!("file '{}'", p.to_string_lossy()))
         .collect::<Vec<_>>()
         .join("\n");
-    
-    fs::write(&input_list, list_content)
-        .map_err(|e| NvControlError::DisplayDetectionFailed(format!("Failed to create input list: {}", e)))?;
-    
+
+    fs::write(&input_list, list_content).map_err(|e| {
+        NvControlError::DisplayDetectionFailed(format!("Failed to create input list: {}", e))
+    })?;
+
     cmd.args(&["-f", "concat"]);
     cmd.args(&["-safe", "0"]);
     cmd.args(&["-i", input_list.to_string_lossy().as_ref()]);
     cmd.args(&["-c", "copy"]); // Copy without re-encoding
     cmd.arg(output_path);
-    
-    cmd.output()
-        .map_err(|e| NvControlError::DisplayDetectionFailed(format!("Failed to save instant replay: {}", e)))?;
-    
+
+    cmd.output().map_err(|e| {
+        NvControlError::DisplayDetectionFailed(format!("Failed to save instant replay: {}", e))
+    })?;
+
     println!("Instant replay saved to: {}", output_path);
     Ok(())
+}
+
+/// Get recording status as a formatted string
+pub fn get_recording_status() -> NvResult<String> {
+    match get_recording_pid()? {
+        Some(pid) => Ok(format!("Recording active (PID: {})", pid)),
+        None => Ok("No active recording".to_string()),
+    }
+}
+
+/// Get recording presets as a list (alias for load_recording_presets)
+pub fn get_recording_presets() -> NvResult<Vec<RecordingSettings>> {
+    load_recording_presets()
 }
 
 // Helper functions for process management
 fn save_recording_pid(pid: u32) -> NvResult<()> {
     let config_dir = get_config_dir();
-    fs::create_dir_all(&config_dir)
-        .map_err(|e| NvControlError::DisplayDetectionFailed(format!("Failed to create config dir: {}", e)))?;
-    
+    fs::create_dir_all(&config_dir).map_err(|e| {
+        NvControlError::DisplayDetectionFailed(format!("Failed to create config dir: {}", e))
+    })?;
+
     let pid_file = config_dir.join("recording.pid");
-    fs::write(pid_file, pid.to_string())
-        .map_err(|e| NvControlError::DisplayDetectionFailed(format!("Failed to save PID: {}", e)))?;
-    
+    fs::write(pid_file, pid.to_string()).map_err(|e| {
+        NvControlError::DisplayDetectionFailed(format!("Failed to save PID: {}", e))
+    })?;
+
     Ok(())
 }
 
-fn get_recording_pid() -> NvResult<Option<u32>> {
+pub fn get_recording_pid() -> NvResult<Option<u32>> {
     let pid_file = get_config_dir().join("recording.pid");
-    
+
     if pid_file.exists() {
-        let content = fs::read_to_string(pid_file)
-            .map_err(|e| NvControlError::DisplayDetectionFailed(format!("Failed to read PID: {}", e)))?;
-        
-        let pid: u32 = content.trim().parse()
+        let content = fs::read_to_string(pid_file).map_err(|e| {
+            NvControlError::DisplayDetectionFailed(format!("Failed to read PID: {}", e))
+        })?;
+
+        let pid: u32 = content
+            .trim()
+            .parse()
             .map_err(|e| NvControlError::DisplayDetectionFailed(format!("Invalid PID: {}", e)))?;
-        
+
         // Check if process is still running
         if process_exists(pid) {
             Ok(Some(pid))
@@ -451,8 +495,9 @@ fn get_recording_pid() -> NvResult<Option<u32>> {
 fn clear_recording_pid() -> NvResult<()> {
     let pid_file = get_config_dir().join("recording.pid");
     if pid_file.exists() {
-        fs::remove_file(pid_file)
-            .map_err(|e| NvControlError::DisplayDetectionFailed(format!("Failed to clear PID: {}", e)))?;
+        fs::remove_file(pid_file).map_err(|e| {
+            NvControlError::DisplayDetectionFailed(format!("Failed to clear PID: {}", e))
+        })?;
     }
     Ok(())
 }
@@ -460,8 +505,9 @@ fn clear_recording_pid() -> NvResult<()> {
 fn save_instant_replay_pid(pid: u32) -> NvResult<()> {
     let config_dir = get_config_dir();
     let pid_file = config_dir.join("instant_replay.pid");
-    fs::write(pid_file, pid.to_string())
-        .map_err(|e| NvControlError::DisplayDetectionFailed(format!("Failed to save instant replay PID: {}", e)))?;
+    fs::write(pid_file, pid.to_string()).map_err(|e| {
+        NvControlError::DisplayDetectionFailed(format!("Failed to save instant replay PID: {}", e))
+    })?;
     Ok(())
 }
 
@@ -497,14 +543,22 @@ fn get_recording_temp_dir() -> PathBuf {
 /// Load recording presets from configuration
 pub fn load_recording_presets() -> NvResult<Vec<RecordingSettings>> {
     let config_path = get_config_dir().join("recording_presets.json");
-    
+
     if config_path.exists() {
-        let content = fs::read_to_string(&config_path)
-            .map_err(|e| NvControlError::DisplayDetectionFailed(format!("Failed to read recording config: {}", e)))?;
-        
-        let presets: Vec<RecordingSettings> = serde_json::from_str(&content)
-            .map_err(|e| NvControlError::DisplayDetectionFailed(format!("Failed to parse recording config: {}", e)))?;
-        
+        let content = fs::read_to_string(&config_path).map_err(|e| {
+            NvControlError::DisplayDetectionFailed(format!(
+                "Failed to read recording config: {}",
+                e
+            ))
+        })?;
+
+        let presets: Vec<RecordingSettings> = serde_json::from_str(&content).map_err(|e| {
+            NvControlError::DisplayDetectionFailed(format!(
+                "Failed to parse recording config: {}",
+                e
+            ))
+        })?;
+
         Ok(presets)
     } else {
         // Return default presets
@@ -520,13 +574,15 @@ pub fn load_recording_presets() -> NvResult<Vec<RecordingSettings>> {
 /// Save recording presets to configuration
 pub fn save_recording_presets(presets: &[RecordingSettings]) -> NvResult<()> {
     let config_path = get_config_dir().join("recording_presets.json");
-    
-    let content = serde_json::to_string_pretty(presets)
-        .map_err(|e| NvControlError::DisplayDetectionFailed(format!("Failed to serialize presets: {}", e)))?;
-    
-    fs::write(&config_path, content)
-        .map_err(|e| NvControlError::DisplayDetectionFailed(format!("Failed to save recording config: {}", e)))?;
-    
+
+    let content = serde_json::to_string_pretty(presets).map_err(|e| {
+        NvControlError::DisplayDetectionFailed(format!("Failed to serialize presets: {}", e))
+    })?;
+
+    fs::write(&config_path, content).map_err(|e| {
+        NvControlError::DisplayDetectionFailed(format!("Failed to save recording config: {}", e))
+    })?;
+
     println!("Saved {} recording presets", presets.len());
     Ok(())
 }

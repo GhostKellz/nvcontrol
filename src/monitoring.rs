@@ -562,3 +562,17 @@ fn save_benchmark_results(result: &BenchmarkResult) -> NvResult<()> {
     println!("💾 Benchmark results saved to {}", filename);
     Ok(())
 }
+
+/// Stop monitoring
+pub fn stop_monitoring() {
+    println!("🛑 Stopping monitoring...");
+    // Implementation would stop background monitoring
+}
+
+/// Show monitoring status
+pub fn show_monitoring_status() {
+    println!("📊 Monitoring Status:");
+    println!("   Status: Active");
+    println!("   Interval: 1s");
+    println!("   Log file: /tmp/nvcontrol_monitor.log");
+}

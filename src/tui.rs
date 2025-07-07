@@ -4,8 +4,8 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use nvml_wrapper::{Device, Nvml};
 use nvml_wrapper::enums::device::UsedGpuMemory;
+use nvml_wrapper::{Device, Nvml};
 use ratatui::{
     Frame, Terminal,
     backend::CrosstermBackend,
@@ -164,13 +164,13 @@ impl TuiApp {
                         // Future features (planned)
                         KeyCode::Char('e') => {
                             // TODO: Export data functionality
-                        },
+                        }
                         KeyCode::Char('f') => {
                             // TODO: Fan control
-                        },
+                        }
                         KeyCode::Char('o') => {
                             // TODO: Overclocking controls
-                        },
+                        }
                         KeyCode::Char('v') => {
                             // VRR toggle
                             self.toggle_vrr();
@@ -178,7 +178,7 @@ impl TuiApp {
                         KeyCode::Char('g') => {
                             // Gaming mode toggle
                             self.toggle_gaming_mode();
-                        },
+                        }
                         _ => {}
                     }
                 }
@@ -503,10 +503,7 @@ impl TuiApp {
     fn draw_performance(&self, f: &mut Frame, area: Rect) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(3),
-                Constraint::Min(0),
-            ])
+            .constraints([Constraint::Length(3), Constraint::Min(0)])
             .split(area);
 
         // Header
@@ -522,10 +519,7 @@ impl TuiApp {
                 if let Some(latest) = history.back() {
                     let perf_chunks = Layout::default()
                         .direction(Direction::Horizontal)
-                        .constraints([
-                            Constraint::Percentage(50),
-                            Constraint::Percentage(50),
-                        ])
+                        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
                         .split(chunks[1]);
 
                     // Left side - Current stats
@@ -539,26 +533,38 @@ impl TuiApp {
                         format!("Fan Speed: {}%", latest.fan_speed),
                     ];
 
-                    let stats_list: Vec<ListItem> = current_stats.into_iter().map(ListItem::new).collect();
+                    let stats_list: Vec<ListItem> =
+                        current_stats.into_iter().map(ListItem::new).collect();
                     let stats_widget = List::new(stats_list)
-                        .block(Block::default().borders(Borders::ALL).title("Current Stats"))
+                        .block(
+                            Block::default()
+                                .borders(Borders::ALL)
+                                .title("Current Stats"),
+                        )
                         .style(Style::default().fg(Color::White));
                     f.render_widget(stats_widget, perf_chunks[0]);
 
                     // Right side - Mini graph
                     if history.len() > 1 {
-                        let gpu_data: Vec<u64> = history.iter()
-                            .map(|m| m.gpu_utilization as u64)
-                            .collect();
-                        
+                        let gpu_data: Vec<u64> =
+                            history.iter().map(|m| m.gpu_utilization as u64).collect();
+
                         let sparkline = Sparkline::default()
-                            .block(Block::default().borders(Borders::ALL).title("GPU Usage History"))
+                            .block(
+                                Block::default()
+                                    .borders(Borders::ALL)
+                                    .title("GPU Usage History"),
+                            )
                             .data(&gpu_data)
                             .style(Style::default().fg(Color::Yellow));
                         f.render_widget(sparkline, perf_chunks[1]);
                     } else {
                         let placeholder = Paragraph::new("Collecting data...")
-                            .block(Block::default().borders(Borders::ALL).title("GPU Usage History"))
+                            .block(
+                                Block::default()
+                                    .borders(Borders::ALL)
+                                    .title("GPU Usage History"),
+                            )
                             .alignment(Alignment::Center);
                         f.render_widget(placeholder, perf_chunks[1]);
                     }
@@ -581,10 +587,7 @@ impl TuiApp {
     fn draw_memory(&self, f: &mut Frame, area: Rect) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(3),
-                Constraint::Min(0),
-            ])
+            .constraints([Constraint::Length(3), Constraint::Min(0)])
             .split(area);
 
         // Header
@@ -599,15 +602,12 @@ impl TuiApp {
                 if let Ok(device) = nvml.device_by_index(self.selected_gpu as u32) {
                     let memory_chunks = Layout::default()
                         .direction(Direction::Horizontal)
-                        .constraints([
-                            Constraint::Percentage(60),
-                            Constraint::Percentage(40),
-                        ])
+                        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
                         .split(chunks[1]);
 
                     // Left side - Memory stats
                     let mut memory_info = Vec::new();
-                    
+
                     if let Ok(mem_info) = device.memory_info() {
                         let used_gb = mem_info.used as f64 / 1024.0 / 1024.0 / 1024.0;
                         let total_gb = mem_info.total as f64 / 1024.0 / 1024.0 / 1024.0;
@@ -615,14 +615,17 @@ impl TuiApp {
                         let usage_percent = (used_gb / total_gb) * 100.0;
 
                         memory_info.push(format!("Total VRAM: {:.2} GB", total_gb));
-                        memory_info.push(format!("Used VRAM: {:.2} GB ({:.1}%)", used_gb, usage_percent));
+                        memory_info.push(format!(
+                            "Used VRAM: {:.2} GB ({:.1}%)",
+                            used_gb, usage_percent
+                        ));
                         memory_info.push(format!("Free VRAM: {:.2} GB", free_gb));
                     }
 
                     if let Ok(processes) = device.running_graphics_processes() {
                         memory_info.push(String::new());
                         memory_info.push(format!("Active Processes: {}", processes.len()));
-                        
+
                         for (i, process) in processes.iter().take(5).enumerate() {
                             let mem_mb = match process.used_gpu_memory {
                                 UsedGpuMemory::Used(bytes) => bytes as f64 / 1024.0 / 1024.0,
@@ -630,7 +633,7 @@ impl TuiApp {
                             };
                             memory_info.push(format!("  Process {}: {:.1} MB", i + 1, mem_mb));
                         }
-                        
+
                         if processes.len() > 5 {
                             memory_info.push(format!("  ... and {} more", processes.len() - 5));
                         }
@@ -641,13 +644,21 @@ impl TuiApp {
                         if let Some(latest) = history.back() {
                             memory_info.push(String::new());
                             memory_info.push(format!("Memory Clock: {} MHz", latest.memory_clock));
-                            memory_info.push(format!("Memory Utilization: {:.1}%", latest.memory_utilization));
+                            memory_info.push(format!(
+                                "Memory Utilization: {:.1}%",
+                                latest.memory_utilization
+                            ));
                         }
                     }
 
-                    let memory_list: Vec<ListItem> = memory_info.into_iter().map(ListItem::new).collect();
+                    let memory_list: Vec<ListItem> =
+                        memory_info.into_iter().map(ListItem::new).collect();
                     let memory_widget = List::new(memory_list)
-                        .block(Block::default().borders(Borders::ALL).title("Memory Statistics"))
+                        .block(
+                            Block::default()
+                                .borders(Borders::ALL)
+                                .title("Memory Statistics"),
+                        )
                         .style(Style::default().fg(Color::White));
                     f.render_widget(memory_widget, memory_chunks[0]);
 
@@ -656,12 +667,13 @@ impl TuiApp {
                         let usage_ratio = mem_info.used as f64 / mem_info.total as f64;
                         let gauge = Gauge::default()
                             .block(Block::default().borders(Borders::ALL).title("VRAM Usage"))
-                            .gauge_style(
-                                Style::default()
-                                    .fg(if usage_ratio > 0.9 { Color::Red } 
-                                        else if usage_ratio > 0.7 { Color::Yellow } 
-                                        else { Color::Green })
-                            )
+                            .gauge_style(Style::default().fg(if usage_ratio > 0.9 {
+                                Color::Red
+                            } else if usage_ratio > 0.7 {
+                                Color::Yellow
+                            } else {
+                                Color::Green
+                            }))
                             .ratio(usage_ratio)
                             .label(format!("{:.1}%", usage_ratio * 100.0));
                         f.render_widget(gauge, memory_chunks[1]);
@@ -695,9 +707,9 @@ impl TuiApp {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(8),   // Current temps
-                Constraint::Length(8),   // Temperature history
-                Constraint::Min(6),      // Temperature details
+                Constraint::Length(8), // Current temps
+                Constraint::Length(8), // Temperature history
+                Constraint::Min(6),    // Temperature details
             ])
             .split(area);
 
@@ -709,7 +721,7 @@ impl TuiApp {
                 } else {
                     0.0
                 };
-                
+
                 let color = if temp > 80.0 {
                     Color::Red
                 } else if temp > 70.0 {
@@ -717,27 +729,29 @@ impl TuiApp {
                 } else {
                     Color::Green
                 };
-                
-                ListItem::new(format!("GPU {}: {:.1}°C", i, temp))
-                    .style(Style::default().fg(color))
+
+                ListItem::new(format!("GPU {}: {:.1}°C", i, temp)).style(Style::default().fg(color))
             })
             .collect();
 
-        let current_temps_list = List::new(current_temps)
-            .block(Block::default().borders(Borders::ALL).title("Current Temperatures"));
+        let current_temps_list = List::new(current_temps).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Current Temperatures"),
+        );
         f.render_widget(current_temps_list, chunks[0]);
 
         // Temperature history sparkline for selected GPU
         if let Some(metrics) = self.metrics_history.get(self.selected_gpu) {
-            let temps: Vec<u64> = metrics
-                .iter()
-                .map(|m| m.temperature as u64)
-                .collect();
-            
+            let temps: Vec<u64> = metrics.iter().map(|m| m.temperature as u64).collect();
+
             let max_temp = temps.iter().max().copied().unwrap_or(100).max(100);
             let sparkline = Sparkline::default()
-                .block(Block::default().borders(Borders::ALL)
-                    .title(format!("GPU {} Temperature History", self.selected_gpu)))
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title(format!("GPU {} Temperature History", self.selected_gpu)),
+                )
                 .data(&temps)
                 .max(max_temp)
                 .style(Style::default().fg(Color::Cyan));
@@ -745,7 +759,11 @@ impl TuiApp {
         }
 
         // Temperature details and thresholds
-        if let Some(latest) = self.metrics_history.get(self.selected_gpu).and_then(|h| h.back()) {
+        if let Some(latest) = self
+            .metrics_history
+            .get(self.selected_gpu)
+            .and_then(|h| h.back())
+        {
             let temp = latest.temperature;
             let temp_info = format!(
                 "GPU {} Temperature Details:\n\n\
@@ -762,21 +780,33 @@ impl TuiApp {
                 • > 90°C: Critical (throttling may occur)",
                 self.selected_gpu,
                 temp,
-                if temp < 60.0 { "Excellent" }
-                else if temp < 70.0 { "Good" }
-                else if temp < 80.0 { "Warm" }
-                else if temp < 90.0 { "Hot" }
-                else { "Critical" },
+                if temp < 60.0 {
+                    "Excellent"
+                } else if temp < 70.0 {
+                    "Good"
+                } else if temp < 80.0 {
+                    "Warm"
+                } else if temp < 90.0 {
+                    "Hot"
+                } else {
+                    "Critical"
+                },
                 if temp > 83.0 { "Possible" } else { "None" }
             );
 
             let temp_details = Paragraph::new(temp_info)
-                .block(Block::default().borders(Borders::ALL).title("Temperature Analysis"))
-                .style(Style::default().fg(
-                    if temp > 80.0 { Color::Red }
-                    else if temp > 70.0 { Color::Yellow }
-                    else { Color::Green }
-                ));
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title("Temperature Analysis"),
+                )
+                .style(Style::default().fg(if temp > 80.0 {
+                    Color::Red
+                } else if temp > 70.0 {
+                    Color::Yellow
+                } else {
+                    Color::Green
+                }));
             f.render_widget(temp_details, chunks[2]);
         }
     }
@@ -793,9 +823,9 @@ impl TuiApp {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(8),   // Current power usage
-                Constraint::Length(8),   // Power history
-                Constraint::Min(6),      // Power details
+                Constraint::Length(8), // Current power usage
+                Constraint::Length(8), // Power history
+                Constraint::Min(6),    // Power details
             ])
             .split(area);
 
@@ -807,7 +837,7 @@ impl TuiApp {
                 } else {
                     (0.0, 300.0)
                 };
-                
+
                 let percentage = (power / max_power * 100.0).min(100.0);
                 let color = if percentage > 90.0 {
                     Color::Red
@@ -816,27 +846,30 @@ impl TuiApp {
                 } else {
                     Color::Green
                 };
-                
+
                 ListItem::new(format!("GPU {}: {:.1}W ({:.1}%)", i, power, percentage))
                     .style(Style::default().fg(color))
             })
             .collect();
 
-        let power_list = List::new(power_items)
-            .block(Block::default().borders(Borders::ALL).title("Current Power Usage"));
+        let power_list = List::new(power_items).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Current Power Usage"),
+        );
         f.render_widget(power_list, chunks[0]);
 
         // Power history sparkline for selected GPU
         if let Some(metrics) = self.metrics_history.get(self.selected_gpu) {
-            let power_data: Vec<u64> = metrics
-                .iter()
-                .map(|m| m.power_draw as u64)
-                .collect();
-            
+            let power_data: Vec<u64> = metrics.iter().map(|m| m.power_draw as u64).collect();
+
             let max_power = power_data.iter().max().copied().unwrap_or(300).max(100);
             let sparkline = Sparkline::default()
-                .block(Block::default().borders(Borders::ALL)
-                    .title(format!("GPU {} Power History", self.selected_gpu)))
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title(format!("GPU {} Power History", self.selected_gpu)),
+                )
                 .data(&power_data)
                 .max(max_power)
                 .style(Style::default().fg(Color::Yellow));
@@ -844,18 +877,27 @@ impl TuiApp {
         }
 
         // Power details and efficiency
-        if let Some(latest) = self.metrics_history.get(self.selected_gpu).and_then(|h| h.back()) {
+        if let Some(latest) = self
+            .metrics_history
+            .get(self.selected_gpu)
+            .and_then(|h| h.back())
+        {
             let power = latest.power_draw;
             let gpu_util = latest.gpu_utilization;
-            let efficiency = if power > 0.0 { gpu_util / power * 100.0 } else { 0.0 };
-            
+            let efficiency = if power > 0.0 {
+                gpu_util / power * 100.0
+            } else {
+                0.0
+            };
+
             // Calculate average power over last minute
             let recent_power: f64 = self.metrics_history[self.selected_gpu]
                 .iter()
                 .rev()
                 .take(60)
                 .map(|m| m.power_draw)
-                .sum::<f64>() / (60.0_f64).min(self.metrics_history[self.selected_gpu].len() as f64);
+                .sum::<f64>()
+                / (60.0_f64).min(self.metrics_history[self.selected_gpu].len() as f64);
 
             let power_info = format!(
                 "GPU {} Power Analysis:\n\n\
@@ -876,14 +918,23 @@ impl TuiApp {
                 power,
                 recent_power,
                 efficiency,
-                if power < 50.0 { "Idle" }
-                else if power < 150.0 { "Light Load" }
-                else if power < 250.0 { "Gaming" }
-                else { "Heavy Compute" }
+                if power < 50.0 {
+                    "Idle"
+                } else if power < 150.0 {
+                    "Light Load"
+                } else if power < 250.0 {
+                    "Gaming"
+                } else {
+                    "Heavy Compute"
+                }
             );
 
             let power_details = Paragraph::new(power_info)
-                .block(Block::default().borders(Borders::ALL).title("Power Management"))
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title("Power Management"),
+                )
                 .style(Style::default());
             f.render_widget(power_details, chunks[2]);
         }
@@ -901,9 +952,9 @@ impl TuiApp {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),   // Header
-                Constraint::Min(8),      // Process list
-                Constraint::Length(5),   // Summary
+                Constraint::Length(3), // Header
+                Constraint::Min(8),    // Process list
+                Constraint::Length(5), // Summary
             ])
             .split(area);
 
@@ -920,7 +971,7 @@ impl TuiApp {
                     match device.running_graphics_processes() {
                         Ok(graphics_procs) => {
                             let mut all_processes = Vec::new();
-                            
+
                             // Add graphics processes
                             for proc in graphics_procs {
                                 let memory_mb = match proc.used_gpu_memory {
@@ -934,7 +985,7 @@ impl TuiApp {
                                     format!("Process {}", proc.pid) // We could enhance this with actual process names
                                 ));
                             }
-                            
+
                             // Try to add compute processes
                             if let Ok(compute_procs) = device.running_compute_processes() {
                                 for proc in compute_procs {
@@ -950,10 +1001,12 @@ impl TuiApp {
                                     ));
                                 }
                             }
-                            
+
                             all_processes
                         }
-                        Err(_) => vec!["No graphics processes found or permission denied".to_string()],
+                        Err(_) => {
+                            vec!["No graphics processes found or permission denied".to_string()]
+                        }
                     }
                 }
                 Err(_) => vec!["Failed to access GPU device".to_string()],
@@ -963,22 +1016,32 @@ impl TuiApp {
         };
 
         // Process list
-        let process_items: Vec<ListItem> = if processes.is_empty() || processes[0].contains("No graphics processes") {
-            vec![ListItem::new("No active GPU processes detected")]
-        } else {
-            processes.into_iter().map(ListItem::new).collect()
-        };
+        let process_items: Vec<ListItem> =
+            if processes.is_empty() || processes[0].contains("No graphics processes") {
+                vec![ListItem::new("No active GPU processes detected")]
+            } else {
+                processes.into_iter().map(ListItem::new).collect()
+            };
 
-        let process_list = List::new(process_items)
-            .block(Block::default().borders(Borders::ALL).title("Active Processes"));
+        let process_list = List::new(process_items).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Active Processes"),
+        );
         f.render_widget(process_list, chunks[1]);
 
         // Summary
         let total_procs = if let Some(ref nvml) = self.nvml {
             match nvml.device_by_index(self.selected_gpu as u32) {
                 Ok(device) => {
-                    let graphics_count = device.running_graphics_processes().map(|p| p.len()).unwrap_or(0);
-                    let compute_count = device.running_compute_processes().map(|p| p.len()).unwrap_or(0);
+                    let graphics_count = device
+                        .running_graphics_processes()
+                        .map(|p| p.len())
+                        .unwrap_or(0);
+                    let compute_count = device
+                        .running_compute_processes()
+                        .map(|p| p.len())
+                        .unwrap_or(0);
                     graphics_count + compute_count
                 }
                 Err(_) => 0,
@@ -1046,7 +1109,11 @@ impl TuiApp {
         ];
 
         let help = Paragraph::new(help_text.join("\n"))
-            .block(Block::default().borders(Borders::ALL).title("Help & Keybindings"))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Help & Keybindings"),
+            )
             .style(Style::default().fg(Color::White))
             .alignment(Alignment::Left);
 
@@ -1060,9 +1127,9 @@ impl TuiApp {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),   // Title
-                Constraint::Min(10),     // Settings content
-                Constraint::Length(3),   // Controls
+                Constraint::Length(3), // Title
+                Constraint::Min(10),   // Settings content
+                Constraint::Length(3), // Controls
             ])
             .split(area);
 
@@ -1108,16 +1175,21 @@ impl TuiApp {
         );
 
         let settings_content = Paragraph::new(settings_text)
-            .block(Block::default().borders(Borders::ALL).title("Configuration Details"))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Configuration Details"),
+            )
             .style(Style::default())
             .wrap(ratatui::widgets::Wrap { trim: true });
         f.render_widget(settings_content, chunks[1]);
 
         // Controls
-        let controls = Paragraph::new("Press 's' again to close settings, 'r' to reset to defaults")
-            .block(Block::default().borders(Borders::ALL))
-            .style(Style::default().fg(Color::Yellow))
-            .alignment(Alignment::Center);
+        let controls =
+            Paragraph::new("Press 's' again to close settings, 'r' to reset to defaults")
+                .block(Block::default().borders(Borders::ALL))
+                .style(Style::default().fg(Color::Yellow))
+                .alignment(Alignment::Center);
         f.render_widget(controls, chunks[2]);
     }
 
@@ -1147,16 +1219,26 @@ impl TuiApp {
         f.render_widget(status_bar, chunks[0]);
 
         // Middle section: feature status
-        let vrr_status = if self.vrr_enabled { "VRR: ON" } else { "VRR: OFF" };
-        let gaming_status = if self.gaming_mode_enabled { "Gaming: ON" } else { "Gaming: OFF" };
+        let vrr_status = if self.vrr_enabled {
+            "VRR: ON"
+        } else {
+            "VRR: OFF"
+        };
+        let gaming_status = if self.gaming_mode_enabled {
+            "Gaming: ON"
+        } else {
+            "Gaming: OFF"
+        };
         let feature_status = format!("{} | {}", vrr_status, gaming_status);
-        
+
         let feature_bar = Paragraph::new(feature_status)
-            .style(Style::default().fg(if self.vrr_enabled || self.gaming_mode_enabled {
-                Color::Green
-            } else {
-                Color::Gray
-            }))
+            .style(
+                Style::default().fg(if self.vrr_enabled || self.gaming_mode_enabled {
+                    Color::Green
+                } else {
+                    Color::Gray
+                }),
+            )
             .alignment(Alignment::Center);
         f.render_widget(feature_bar, chunks[1]);
 
@@ -1166,7 +1248,7 @@ impl TuiApp {
         } else {
             "GPU 1/1".to_string()
         };
-        
+
         let gpu_bar = Paragraph::new(gpu_info)
             .style(Style::default().fg(Color::Cyan))
             .alignment(Alignment::Right);
@@ -1209,7 +1291,7 @@ impl TuiApp {
             history.clear();
         }
     }
-    
+
     fn toggle_vrr(&mut self) {
         match vrr::detect_vrr_displays() {
             Ok(displays) => {
@@ -1218,7 +1300,7 @@ impl TuiApp {
                         enabled: !self.vrr_enabled,
                         ..display.current_settings.clone()
                     };
-                    
+
                     match vrr::apply_vrr_settings(&display.display_name, &new_settings) {
                         Ok(()) => {
                             self.vrr_enabled = !self.vrr_enabled;
@@ -1242,10 +1324,10 @@ impl TuiApp {
             }
         }
     }
-    
+
     fn toggle_gaming_mode(&mut self) {
         self.gaming_mode_enabled = !self.gaming_mode_enabled;
-        
+
         if self.gaming_mode_enabled {
             // Apply gaming optimizations
             match self.apply_gaming_optimizations() {
@@ -1261,11 +1343,11 @@ impl TuiApp {
             self.set_status_message("Gaming mode disabled".to_string());
         }
     }
-    
+
     fn apply_gaming_optimizations(&self) -> NvResult<()> {
         // Apply latency optimizations
         crate::latency::optimize_latency()?;
-        
+
         // Enable performance fan profile if available
         let profiles = crate::fan::load_fan_profiles()?;
         if let Some(perf_profile) = profiles.iter().find(|p| p.name == "Performance") {
@@ -1274,22 +1356,24 @@ impl TuiApp {
                 // Get current temperature for fan curve application
                 if let Some(ref nvml) = self.nvml {
                     if let Ok(device) = nvml.device_by_index(0) {
-                        if let Ok(temp) = device.temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu) {
+                        if let Ok(temp) = device.temperature(
+                            nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu,
+                        ) {
                             let _ = crate::fan::apply_fan_curve(*fan_id, curve, temp as u8, None);
                         }
                     }
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
     fn set_status_message(&mut self, message: String) {
         self.status_message = Some(message);
         self.status_message_time = Some(Instant::now());
     }
-    
+
     fn get_status_message(&self) -> Option<&str> {
         if let Some(ref time) = self.status_message_time {
             if time.elapsed() < Duration::from_secs(3) {

@@ -15,6 +15,14 @@ pub enum NvControlError {
     PowerManagementFailed(String),
     #[error("Latency optimization failed: {0}")]
     LatencyOptimizationFailed(String),
+    #[error("Container operation failed: {0}")]
+    ContainerOperationFailed(String),
+    #[error("GPU query failed: {0}")]
+    GpuQueryFailed(String),
+    #[error("Command execution failed: {0}")]
+    CommandFailed(String),
+    #[error("Configuration error: {0}")]
+    ConfigError(String),
 }
 
 pub type NvResult<T> = Result<T, NvControlError>;
@@ -32,6 +40,7 @@ pub mod tray;
 pub mod vibrance;
 
 // New advanced modules
+pub mod container;
 pub mod drivers;
 pub mod gamescope;
 pub mod latency;

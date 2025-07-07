@@ -1,7 +1,10 @@
 #[cfg(feature = "gui")]
 use eframe::egui;
 #[cfg(feature = "gui")]
-use nvcontrol::{config, display, fan, overclocking, theme, vibrance, vrr, latency, gamescope, recording, shaders, drivers};
+use nvcontrol::{
+    config, display, drivers, fan, gamescope, latency, overclocking, recording, shaders, theme,
+    vibrance, vrr,
+};
 
 #[cfg(feature = "gui")]
 enum Tab {
@@ -729,7 +732,7 @@ impl eframe::App for NvControlApp {
                                 for display in displays {
                                     ui.horizontal(|ui| {
                                         ui.label(format!("📺 {}", display.display_name));
-                                        
+
                                         if display.supports_vrr {
                                             let mut enabled = display.current_settings.enabled;
                                             if ui.checkbox(&mut enabled, "VRR Enabled").changed() {
@@ -737,19 +740,28 @@ impl eframe::App for NvControlApp {
                                                     enabled,
                                                     ..display.current_settings
                                                 };
-                                                if let Err(e) = vrr::apply_vrr_settings(&display.display_name, &new_settings) {
+                                                if let Err(e) = vrr::apply_vrr_settings(
+                                                    &display.display_name,
+                                                    &new_settings,
+                                                ) {
                                                     eprintln!("Failed to toggle VRR: {}", e);
                                                 }
                                             }
                                         } else {
-                                            ui.colored_label(egui::Color32::RED, "❌ VRR Not Supported");
+                                            ui.colored_label(
+                                                egui::Color32::RED,
+                                                "❌ VRR Not Supported",
+                                            );
                                         }
                                     });
-                                    
+
                                     ui.horizontal(|ui| {
                                         ui.label("Refresh Range:");
-                                        ui.label(format!("{}-{}Hz", display.min_refresh, display.max_refresh));
-                                        
+                                        ui.label(format!(
+                                            "{}-{}Hz",
+                                            display.min_refresh, display.max_refresh
+                                        ));
+
                                         if display.supports_gsync {
                                             ui.colored_label(egui::Color32::GREEN, "✅ G-Sync");
                                         }
@@ -757,12 +769,15 @@ impl eframe::App for NvControlApp {
                                             ui.colored_label(egui::Color32::GREEN, "✅ FreeSync");
                                         }
                                     });
-                                    
+
                                     ui.separator();
                                 }
                             }
                             Err(e) => {
-                                ui.colored_label(egui::Color32::RED, format!("Error detecting VRR displays: {}", e));
+                                ui.colored_label(
+                                    egui::Color32::RED,
+                                    format!("Error detecting VRR displays: {}", e),
+                                );
                             }
                         }
                     });
@@ -770,17 +785,17 @@ impl eframe::App for NvControlApp {
                     ui.group(|ui| {
                         ui.label("⚙️ Advanced VRR Settings");
                         ui.separator();
-                        
+
                         ui.horizontal(|ui| {
                             ui.label("Low Framerate Compensation:");
                             ui.checkbox(&mut true, "Enable LFC");
                         });
-                        
+
                         ui.horizontal(|ui| {
                             ui.label("Adaptive Sync Mode:");
                             ui.checkbox(&mut true, "Adaptive");
                         });
-                        
+
                         ui.label("💡 Tips:");
                         ui.label("• VRR works best with framerates below max refresh rate");
                         ui.label("• Enable G-Sync in NVIDIA Control Panel for full functionality");
@@ -795,46 +810,69 @@ impl eframe::App for NvControlApp {
                     ui.group(|ui| {
                         ui.label("🎯 Current Latency Status");
                         ui.separator();
-                        
+
                         match latency::get_latency_info() {
                             Ok(info) => {
                                 ui.horizontal(|ui| {
                                     ui.label("NVIDIA Reflex:");
                                     if info.nvidia_reflex_available {
                                         ui.colored_label(
-                                            if info.nvidia_reflex_enabled { egui::Color32::GREEN } else { egui::Color32::YELLOW },
-                                            if info.nvidia_reflex_enabled { "✅ Enabled" } else { "⚠️ Available" }
+                                            if info.nvidia_reflex_enabled {
+                                                egui::Color32::GREEN
+                                            } else {
+                                                egui::Color32::YELLOW
+                                            },
+                                            if info.nvidia_reflex_enabled {
+                                                "✅ Enabled"
+                                            } else {
+                                                "⚠️ Available"
+                                            },
                                         );
                                     } else {
                                         ui.colored_label(egui::Color32::RED, "❌ Not Available");
                                     }
                                 });
-                                
+
                                 ui.horizontal(|ui| {
                                     ui.label("GPU Scheduling:");
                                     ui.colored_label(
-                                        if info.gpu_scheduling_enabled { egui::Color32::GREEN } else { egui::Color32::YELLOW },
-                                        if info.gpu_scheduling_enabled { "✅ Enabled" } else { "❌ Disabled" }
+                                        if info.gpu_scheduling_enabled {
+                                            egui::Color32::GREEN
+                                        } else {
+                                            egui::Color32::YELLOW
+                                        },
+                                        if info.gpu_scheduling_enabled {
+                                            "✅ Enabled"
+                                        } else {
+                                            "❌ Disabled"
+                                        },
                                     );
                                 });
-                                
+
                                 ui.horizontal(|ui| {
                                     ui.label("CPU Scheduler:");
                                     ui.label(&info.current_cpu_scheduler);
                                 });
-                                
+
                                 ui.horizontal(|ui| {
                                     ui.label("Estimated Input Lag:");
                                     ui.colored_label(
-                                        if info.estimated_input_lag_ms < 10.0 { egui::Color32::GREEN }
-                                        else if info.estimated_input_lag_ms < 20.0 { egui::Color32::YELLOW }
-                                        else { egui::Color32::RED },
-                                        format!("{:.1}ms", info.estimated_input_lag_ms)
+                                        if info.estimated_input_lag_ms < 10.0 {
+                                            egui::Color32::GREEN
+                                        } else if info.estimated_input_lag_ms < 20.0 {
+                                            egui::Color32::YELLOW
+                                        } else {
+                                            egui::Color32::RED
+                                        },
+                                        format!("{:.1}ms", info.estimated_input_lag_ms),
                                     );
                                 });
                             }
                             Err(e) => {
-                                ui.colored_label(egui::Color32::RED, format!("Error getting latency info: {}", e));
+                                ui.colored_label(
+                                    egui::Color32::RED,
+                                    format!("Error getting latency info: {}", e),
+                                );
                             }
                         }
                     });
@@ -842,37 +880,45 @@ impl eframe::App for NvControlApp {
                     ui.group(|ui| {
                         ui.label("🚀 Latency Optimization Modes");
                         ui.separator();
-                        
+
                         ui.horizontal(|ui| {
                             if ui.button("🏆 Competitive Mode").clicked() {
-                                if let Err(e) = latency::set_latency_mode(latency::LatencyMode::Competitive) {
+                                if let Err(e) =
+                                    latency::set_latency_mode(latency::LatencyMode::Competitive)
+                                {
                                     eprintln!("Failed to set competitive mode: {}", e);
                                 }
                             }
                             ui.label("Ultra-low latency, maximum performance");
                         });
-                        
+
                         ui.horizontal(|ui| {
                             if ui.button("⚖️ Balanced Mode").clicked() {
-                                if let Err(e) = latency::set_latency_mode(latency::LatencyMode::Balanced) {
+                                if let Err(e) =
+                                    latency::set_latency_mode(latency::LatencyMode::Balanced)
+                                {
                                     eprintln!("Failed to set balanced mode: {}", e);
                                 }
                             }
                             ui.label("Good latency with system stability");
                         });
-                        
+
                         ui.horizontal(|ui| {
                             if ui.button("🔋 Power Saver").clicked() {
-                                if let Err(e) = latency::set_latency_mode(latency::LatencyMode::PowerSaver) {
+                                if let Err(e) =
+                                    latency::set_latency_mode(latency::LatencyMode::PowerSaver)
+                                {
                                     eprintln!("Failed to set power saver mode: {}", e);
                                 }
                             }
                             ui.label("Higher latency but lower power usage");
                         });
-                        
+
                         ui.horizontal(|ui| {
                             if ui.button("🔄 Reset to Default").clicked() {
-                                if let Err(e) = latency::set_latency_mode(latency::LatencyMode::Default) {
+                                if let Err(e) =
+                                    latency::set_latency_mode(latency::LatencyMode::Default)
+                                {
                                     eprintln!("Failed to reset latency mode: {}", e);
                                 }
                             }
@@ -883,13 +929,13 @@ impl eframe::App for NvControlApp {
                     ui.group(|ui| {
                         ui.label("🎮 Gaming-Specific Optimizations");
                         ui.separator();
-                        
+
                         if ui.button("🎯 Apply Full Latency Optimization").clicked() {
                             if let Err(e) = latency::optimize_latency() {
                                 eprintln!("Failed to apply latency optimizations: {}", e);
                             }
                         }
-                        
+
                         ui.label("💡 Optimization Tips:");
                         ui.label("• Use exclusive fullscreen mode in games");
                         ui.label("• Enable VRR/G-Sync for consistent frame times");
@@ -906,45 +952,72 @@ impl eframe::App for NvControlApp {
                     ui.group(|ui| {
                         ui.label("🎬 NVENC Capabilities");
                         ui.separator();
-                        
+
                         match recording::get_nvenc_capabilities() {
                             Ok(caps) => {
                                 ui.horizontal(|ui| {
                                     ui.label("GPU:");
                                     ui.label(&caps.gpu_name);
                                 });
-                                
+
                                 ui.horizontal(|ui| {
                                     ui.label("H.264 NVENC:");
                                     ui.colored_label(
-                                        if caps.h264_available { egui::Color32::GREEN } else { egui::Color32::RED },
-                                        if caps.h264_available { "✅ Available" } else { "❌ Not Available" }
+                                        if caps.h264_available {
+                                            egui::Color32::GREEN
+                                        } else {
+                                            egui::Color32::RED
+                                        },
+                                        if caps.h264_available {
+                                            "✅ Available"
+                                        } else {
+                                            "❌ Not Available"
+                                        },
                                     );
                                 });
-                                
+
                                 ui.horizontal(|ui| {
                                     ui.label("H.265 NVENC:");
                                     ui.colored_label(
-                                        if caps.h265_available { egui::Color32::GREEN } else { egui::Color32::RED },
-                                        if caps.h265_available { "✅ Available" } else { "❌ Not Available" }
+                                        if caps.h265_available {
+                                            egui::Color32::GREEN
+                                        } else {
+                                            egui::Color32::RED
+                                        },
+                                        if caps.h265_available {
+                                            "✅ Available"
+                                        } else {
+                                            "❌ Not Available"
+                                        },
                                     );
                                 });
-                                
+
                                 ui.horizontal(|ui| {
                                     ui.label("AV1 NVENC:");
                                     ui.colored_label(
-                                        if caps.av1_available { egui::Color32::GREEN } else { egui::Color32::RED },
-                                        if caps.av1_available { "✅ Available (RTX 40+ Series)" } else { "❌ Not Available" }
+                                        if caps.av1_available {
+                                            egui::Color32::GREEN
+                                        } else {
+                                            egui::Color32::RED
+                                        },
+                                        if caps.av1_available {
+                                            "✅ Available (RTX 40+ Series)"
+                                        } else {
+                                            "❌ Not Available"
+                                        },
                                     );
                                 });
-                                
+
                                 ui.horizontal(|ui| {
                                     ui.label("Max Encoding Sessions:");
                                     ui.label(caps.max_encoding_sessions.to_string());
                                 });
                             }
                             Err(e) => {
-                                ui.colored_label(egui::Color32::RED, format!("Error detecting NVENC: {}", e));
+                                ui.colored_label(
+                                    egui::Color32::RED,
+                                    format!("Error detecting NVENC: {}", e),
+                                );
                             }
                         }
                     });
@@ -952,7 +1025,7 @@ impl eframe::App for NvControlApp {
                     ui.group(|ui| {
                         ui.label("🚀 Quick Recording Presets");
                         ui.separator();
-                        
+
                         ui.horizontal(|ui| {
                             if ui.button("🎮 Shadowplay Mode").clicked() {
                                 let settings = recording::create_shadowplay_preset();
@@ -960,7 +1033,7 @@ impl eframe::App for NvControlApp {
                             }
                             ui.label("High-quality H.265 recording, like NVIDIA Shadowplay");
                         });
-                        
+
                         ui.horizontal(|ui| {
                             if ui.button("💎 AV1 Lossless").clicked() {
                                 let settings = recording::create_lossless_preset();
@@ -968,7 +1041,7 @@ impl eframe::App for NvControlApp {
                             }
                             ui.label("Ultra-high quality AV1 encoding for content creation");
                         });
-                        
+
                         ui.horizontal(|ui| {
                             if ui.button("📺 Streaming Optimized").clicked() {
                                 let settings = recording::create_streaming_preset();
@@ -976,7 +1049,7 @@ impl eframe::App for NvControlApp {
                             }
                             ui.label("Low-latency H.264 for live streaming");
                         });
-                        
+
                         ui.horizontal(|ui| {
                             if ui.button("🎬 Content Creation").clicked() {
                                 let settings = recording::create_content_creation_preset();
@@ -989,32 +1062,41 @@ impl eframe::App for NvControlApp {
                     ui.group(|ui| {
                         ui.label("🎯 Recording Controls");
                         ui.separator();
-                        
+
                         ui.horizontal(|ui| {
                             if ui.button("🔴 Start Recording").clicked() {
                                 let settings = recording::create_shadowplay_preset();
                                 let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
                                 let output_path = format!("nvcontrol_recording_{}.mp4", timestamp);
-                                
-                                if let Err(e) = recording::start_recording(&settings, &output_path) {
+
+                                if let Err(e) = recording::start_recording(&settings, &output_path)
+                                {
                                     eprintln!("Failed to start recording: {}", e);
                                 }
                             }
-                            
+
                             if ui.button("⏹️ Stop Recording").clicked() {
                                 if let Err(e) = recording::stop_recording() {
                                     eprintln!("Failed to stop recording: {}", e);
                                 }
                             }
-                            
+
                             ui.colored_label(
-                                if recording::is_recording() { egui::Color32::RED } else { egui::Color32::GRAY },
-                                if recording::is_recording() { "🔴 Recording..." } else { "⚫ Stopped" }
+                                if recording::is_recording() {
+                                    egui::Color32::RED
+                                } else {
+                                    egui::Color32::GRAY
+                                },
+                                if recording::is_recording() {
+                                    "🔴 Recording..."
+                                } else {
+                                    "⚫ Stopped"
+                                },
                             );
                         });
-                        
+
                         ui.separator();
-                        
+
                         ui.horizontal(|ui| {
                             if ui.button("⏪ Start Instant Replay").clicked() {
                                 let settings = recording::create_shadowplay_preset();
@@ -1022,11 +1104,11 @@ impl eframe::App for NvControlApp {
                                     eprintln!("Failed to start instant replay: {}", e);
                                 }
                             }
-                            
+
                             if ui.button("💾 Save Last 5 Minutes").clicked() {
                                 let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
                                 let output_path = format!("instant_replay_{}.mp4", timestamp);
-                                
+
                                 if let Err(e) = recording::save_instant_replay(&output_path) {
                                     eprintln!("Failed to save instant replay: {}", e);
                                 }
@@ -1037,43 +1119,71 @@ impl eframe::App for NvControlApp {
                     ui.group(|ui| {
                         ui.label("⚙️ Recording Settings");
                         ui.separator();
-                        
+
                         let mut resolution_idx = 0;
                         ui.horizontal(|ui| {
                             ui.label("Resolution:");
                             egui::ComboBox::from_label("")
                                 .selected_text("1920x1080")
                                 .show_ui(ui, |ui| {
-                                    ui.selectable_value(&mut resolution_idx, 0, "1920x1080 (Full HD)");
-                                    ui.selectable_value(&mut resolution_idx, 1, "2560x1440 (1440p)");
+                                    ui.selectable_value(
+                                        &mut resolution_idx,
+                                        0,
+                                        "1920x1080 (Full HD)",
+                                    );
+                                    ui.selectable_value(
+                                        &mut resolution_idx,
+                                        1,
+                                        "2560x1440 (1440p)",
+                                    );
                                     ui.selectable_value(&mut resolution_idx, 2, "3840x2160 (4K)");
                                 });
                         });
-                        
+
                         let mut encoder_idx = 0;
                         ui.horizontal(|ui| {
                             ui.label("Encoder:");
                             egui::ComboBox::from_label("")
                                 .selected_text("H.265 NVENC")
                                 .show_ui(ui, |ui| {
-                                    ui.selectable_value(&mut encoder_idx, 0, "H.264 NVENC (Most Compatible)");
-                                    ui.selectable_value(&mut encoder_idx, 1, "H.265 NVENC (Better Quality)");
-                                    ui.selectable_value(&mut encoder_idx, 2, "AV1 NVENC (Best Quality - RTX 40+)");
+                                    ui.selectable_value(
+                                        &mut encoder_idx,
+                                        0,
+                                        "H.264 NVENC (Most Compatible)",
+                                    );
+                                    ui.selectable_value(
+                                        &mut encoder_idx,
+                                        1,
+                                        "H.265 NVENC (Better Quality)",
+                                    );
+                                    ui.selectable_value(
+                                        &mut encoder_idx,
+                                        2,
+                                        "AV1 NVENC (Best Quality - RTX 40+)",
+                                    );
                                 });
                         });
-                        
+
                         let mut bitrate = 50;
                         ui.horizontal(|ui| {
                             ui.label("Bitrate:");
-                            ui.add(egui::DragValue::new(&mut bitrate).clamp_range(5.0..=200.0).suffix(" Mbps"));
+                            ui.add(
+                                egui::DragValue::new(&mut bitrate)
+                                    .clamp_range(5.0..=200.0)
+                                    .suffix(" Mbps"),
+                            );
                         });
-                        
+
                         let mut framerate = 60;
                         ui.horizontal(|ui| {
                             ui.label("Framerate:");
-                            ui.add(egui::DragValue::new(&mut framerate).clamp_range(30.0..=120.0).suffix(" fps"));
+                            ui.add(
+                                egui::DragValue::new(&mut framerate)
+                                    .clamp_range(30.0..=120.0)
+                                    .suffix(" fps"),
+                            );
                         });
-                        
+
                         ui.horizontal(|ui| {
                             ui.checkbox(&mut true, "Include Audio");
                             ui.checkbox(&mut false, "Lossless Mode");
@@ -1083,28 +1193,28 @@ impl eframe::App for NvControlApp {
                     ui.group(|ui| {
                         ui.label("💡 Tips & Information");
                         ui.separator();
-                        
+
                         ui.label("🎯 For Shadowplay-like Experience:");
                         ui.label("• Use H.265 NVENC for best quality/size ratio");
                         ui.label("• Enable instant replay for capturing highlights");
                         ui.label("• 50 Mbps bitrate provides excellent quality");
-                        
+
                         ui.separator();
-                        
+
                         ui.label("🚀 For Content Creation:");
                         ui.label("• Use AV1 NVENC on RTX 40+ series for best compression");
                         ui.label("• Record at 1440p or 4K for future-proofing");
                         ui.label("• Consider lossless mode for editing workflows");
-                        
+
                         ui.separator();
-                        
+
                         ui.label("📺 For Streaming:");
                         ui.label("• Use H.264 NVENC for maximum compatibility");
                         ui.label("• Lower bitrates (6-8 Mbps) for most platforms");
                         ui.label("• Enable hardware scheduling for lowest latency");
-                        
+
                         ui.separator();
-                        
+
                         ui.label("⚠️ Requirements:");
                         ui.label("• FFmpeg must be installed and in PATH");
                         ui.label("• NVIDIA GPU with NVENC support");
@@ -1119,7 +1229,7 @@ impl eframe::App for NvControlApp {
                     ui.group(|ui| {
                         ui.label("🚀 Quick Launch Presets");
                         ui.separator();
-                        
+
                         ui.horizontal(|ui| {
                             if ui.button("🎮 Steam Deck (800p)").clicked() {
                                 let config = gamescope::GamescopePreset::SteamDeck.to_config();
@@ -1131,7 +1241,7 @@ impl eframe::App for NvControlApp {
                                 println!("Applying Handheld 1080p preset: {:?}", config);
                             }
                         });
-                        
+
                         ui.horizontal(|ui| {
                             if ui.button("🖥️ Desktop Gaming").clicked() {
                                 let config = gamescope::GamescopePreset::Desktop.to_config();
@@ -1147,23 +1257,35 @@ impl eframe::App for NvControlApp {
                     ui.group(|ui| {
                         ui.label("⚙️ Custom Gamescope Configuration");
                         ui.separator();
-                        
+
                         let mut width = 1920u32;
                         let mut height = 1080u32;
                         let mut refresh_rate = 60u32;
-                        
+
                         ui.horizontal(|ui| {
                             ui.label("Resolution:");
-                            ui.add(egui::DragValue::new(&mut width).clamp_range(800.0..=3840.0).prefix("W: "));
+                            ui.add(
+                                egui::DragValue::new(&mut width)
+                                    .clamp_range(800.0..=3840.0)
+                                    .prefix("W: "),
+                            );
                             ui.label("×");
-                            ui.add(egui::DragValue::new(&mut height).clamp_range(600.0..=2160.0).prefix("H: "));
+                            ui.add(
+                                egui::DragValue::new(&mut height)
+                                    .clamp_range(600.0..=2160.0)
+                                    .prefix("H: "),
+                            );
                         });
-                        
+
                         ui.horizontal(|ui| {
                             ui.label("Refresh Rate:");
-                            ui.add(egui::DragValue::new(&mut refresh_rate).clamp_range(30.0..=240.0).suffix("Hz"));
+                            ui.add(
+                                egui::DragValue::new(&mut refresh_rate)
+                                    .clamp_range(30.0..=240.0)
+                                    .suffix("Hz"),
+                            );
                         });
-                        
+
                         ui.horizontal(|ui| {
                             ui.label("Upscaling:");
                             egui::ComboBox::from_label("")
@@ -1175,13 +1297,13 @@ impl eframe::App for NvControlApp {
                                     ui.selectable_value(&mut 3, 3, "NIS");
                                 });
                         });
-                        
+
                         ui.horizontal(|ui| {
                             ui.checkbox(&mut true, "HDR");
                             ui.checkbox(&mut true, "Adaptive Sync");
                             ui.checkbox(&mut false, "Borderless");
                         });
-                        
+
                         if ui.button("🚀 Apply Custom Configuration").clicked() {
                             // TODO: Create and apply custom gamescope config
                             println!("Applying custom gamescope configuration");
@@ -1191,22 +1313,22 @@ impl eframe::App for NvControlApp {
                     ui.group(|ui| {
                         ui.label("🔧 NVIDIA Optimizations for Gamescope");
                         ui.separator();
-                        
+
                         ui.horizontal(|ui| {
                             ui.checkbox(&mut true, "__GL_THREADED_OPTIMIZATIONS");
                             ui.label("Enable threaded optimizations");
                         });
-                        
+
                         ui.horizontal(|ui| {
                             ui.checkbox(&mut false, "__GL_SYNC_TO_VBLANK");
                             ui.label("Disable VSync (for VRR)");
                         });
-                        
+
                         ui.horizontal(|ui| {
                             ui.checkbox(&mut true, "NVIDIA Prime Render Offload");
                             ui.label("Force NVIDIA GPU usage");
                         });
-                        
+
                         ui.label("💡 Gamescope Tips:");
                         ui.label("• Use --adaptive-sync for VRR displays");
                         ui.label("• Enable FSR for better performance on lower resolutions");
@@ -1218,77 +1340,79 @@ impl eframe::App for NvControlApp {
             Tab::ShaderCache => {
                 egui::CentralPanel::default().show(ctx, |ui| {
                     ui.heading("🎨 Shader Cache Management");
-                    
+
                     ui.group(|ui| {
                         ui.label("📊 Shader Cache Status");
                         ui.separator();
-                        
+
                         // Shader cache size and location info
                         ui.horizontal(|ui| {
                             ui.label("Cache Location:");
                             ui.code("~/.nv/GLCache");
                         });
-                        
+
                         ui.horizontal(|ui| {
                             ui.label("Cache Size:");
                             ui.code("~500MB"); // This would be dynamically calculated
                         });
-                        
+
                         ui.horizontal(|ui| {
                             ui.label("Cached Shaders:");
                             ui.code("1,234 files"); // This would be dynamically calculated
                         });
                     });
-                    
+
                     ui.group(|ui| {
                         ui.label("🛠️ Cache Management");
                         ui.separator();
-                        
+
                         ui.horizontal(|ui| {
                             if ui.button("🗑️ Clear Cache").clicked() {
                                 // TODO: Implement shader cache clearing
                                 println!("Clearing shader cache...");
                             }
-                            
+
                             if ui.button("🔄 Rebuild Cache").clicked() {
                                 // TODO: Implement shader cache rebuilding
                                 println!("Rebuilding shader cache...");
                             }
-                            
+
                             if ui.button("📁 Open Cache Folder").clicked() {
                                 // TODO: Open cache folder in file manager
                                 println!("Opening cache folder...");
                             }
                         });
-                        
+
                         ui.checkbox(&mut false, "Auto-clear cache on startup");
                         ui.checkbox(&mut false, "Compress shader cache");
                         ui.checkbox(&mut true, "Enable shader caching");
                     });
-                    
+
                     ui.group(|ui| {
                         ui.label("📈 Cache Statistics");
                         ui.separator();
-                        
-                        egui::Grid::new("shader_cache_stats").num_columns(2).show(ui, |ui| {
-                            ui.label("Cache Hit Rate:");
-                            ui.label("94.2%");
-                            ui.end_row();
-                            
-                            ui.label("Average Compilation Time:");
-                            ui.label("12.3ms");
-                            ui.end_row();
-                            
-                            ui.label("Most Used Shader:");
-                            ui.label("vertex_main.glsl");
-                            ui.end_row();
-                            
-                            ui.label("Last Cleared:");
-                            ui.label("Never");
-                            ui.end_row();
-                        });
+
+                        egui::Grid::new("shader_cache_stats")
+                            .num_columns(2)
+                            .show(ui, |ui| {
+                                ui.label("Cache Hit Rate:");
+                                ui.label("94.2%");
+                                ui.end_row();
+
+                                ui.label("Average Compilation Time:");
+                                ui.label("12.3ms");
+                                ui.end_row();
+
+                                ui.label("Most Used Shader:");
+                                ui.label("vertex_main.glsl");
+                                ui.end_row();
+
+                                ui.label("Last Cleared:");
+                                ui.label("Never");
+                                ui.end_row();
+                            });
                     });
-                    
+
                     ui.group(|ui| {
                         ui.label("💡 Shader Cache Tips:");
                         ui.label("• Clearing cache may cause temporary stuttering in games");
@@ -1301,114 +1425,126 @@ impl eframe::App for NvControlApp {
             Tab::Drivers => {
                 egui::CentralPanel::default().show(ctx, |ui| {
                     ui.heading("🔧 Driver Management");
-                    
+
                     ui.group(|ui| {
                         ui.label("📋 Current Driver Information");
                         ui.separator();
-                        
-                        egui::Grid::new("driver_info").num_columns(2).show(ui, |ui| {
-                            ui.label("Driver Version:");
-                            ui.label("525.147.05"); // This would be dynamically detected
-                            ui.end_row();
-                            
-                            ui.label("CUDA Version:");
-                            ui.label("12.0");
-                            ui.end_row();
-                            
-                            ui.label("Installation Date:");
-                            ui.label("2024-12-15");
-                            ui.end_row();
-                            
-                            ui.label("Driver Type:");
-                            ui.label("Production Branch");
-                            ui.end_row();
-                            
-                            ui.label("Architecture:");
-                            ui.label("x86_64");
-                            ui.end_row();
-                        });
+
+                        egui::Grid::new("driver_info")
+                            .num_columns(2)
+                            .show(ui, |ui| {
+                                ui.label("Driver Version:");
+                                ui.label("525.147.05"); // This would be dynamically detected
+                                ui.end_row();
+
+                                ui.label("CUDA Version:");
+                                ui.label("12.0");
+                                ui.end_row();
+
+                                ui.label("Installation Date:");
+                                ui.label("2024-12-15");
+                                ui.end_row();
+
+                                ui.label("Driver Type:");
+                                ui.label("Production Branch");
+                                ui.end_row();
+
+                                ui.label("Architecture:");
+                                ui.label("x86_64");
+                                ui.end_row();
+                            });
                     });
-                    
+
                     ui.group(|ui| {
                         ui.label("🔄 Driver Actions");
                         ui.separator();
-                        
+
                         ui.horizontal(|ui| {
                             if ui.button("📥 Check for Updates").clicked() {
                                 // TODO: Implement driver update checking
                                 println!("Checking for driver updates...");
                             }
-                            
+
                             if ui.button("🔧 Reinstall Driver").clicked() {
                                 // TODO: Implement driver reinstallation
                                 println!("Reinstalling driver...");
                             }
-                            
+
                             if ui.button("📊 Driver Validation").clicked() {
                                 // TODO: Implement driver validation
                                 println!("Validating driver installation...");
                             }
                         });
-                        
+
                         ui.horizontal(|ui| {
                             if ui.button("📜 View Logs").clicked() {
                                 // TODO: Open driver logs
                                 println!("Opening driver logs...");
                             }
-                            
+
                             if ui.button("🧹 Clean Install").clicked() {
                                 // TODO: Implement clean driver installation
                                 println!("Performing clean driver install...");
                             }
                         });
                     });
-                    
+
                     ui.group(|ui| {
                         ui.label("⚙️ Driver Settings");
                         ui.separator();
-                        
+
                         ui.checkbox(&mut true, "Enable automatic driver updates");
                         ui.checkbox(&mut false, "Use beta/development drivers");
                         ui.checkbox(&mut true, "Install GeForce Experience (if available)");
                         ui.checkbox(&mut false, "Enable driver telemetry");
-                        
+
                         ui.horizontal(|ui| {
                             ui.label("Update Channel:");
                             egui::ComboBox::from_label("")
                                 .selected_text("Production")
                                 .show_ui(ui, |ui| {
-                                    ui.selectable_value(&mut "Production", "Production", "Production");
+                                    ui.selectable_value(
+                                        &mut "Production",
+                                        "Production",
+                                        "Production",
+                                    );
                                     ui.selectable_value(&mut "Production", "Beta", "Beta");
-                                    ui.selectable_value(&mut "Production", "Developer", "Developer");
+                                    ui.selectable_value(
+                                        &mut "Production",
+                                        "Developer",
+                                        "Developer",
+                                    );
                                 });
                         });
                     });
-                    
+
                     ui.group(|ui| {
                         ui.label("🚨 Driver Status");
                         ui.separator();
-                        
+
                         ui.horizontal(|ui| {
                             ui.label("Status:");
                             ui.colored_label(egui::Color32::GREEN, "✅ Working Properly");
                         });
-                        
+
                         ui.horizontal(|ui| {
                             ui.label("Last Update:");
                             ui.label("No updates available");
                         });
-                        
+
                         ui.horizontal(|ui| {
                             ui.label("Compatibility:");
                             ui.colored_label(egui::Color32::GREEN, "✅ Compatible");
                         });
                     });
-                    
+
                     ui.group(|ui| {
                         ui.label("💡 Driver Tips:");
                         ui.label("• Always backup important data before driver updates");
                         ui.label("• Clean installs can resolve stability issues");
-                        ui.label("• Beta drivers may have performance improvements but less stability");
+                        ui.label(
+                            "• Beta drivers may have performance improvements but less stability",
+                        );
                         ui.label("• Check release notes before updating for game compatibility");
                     });
                 });

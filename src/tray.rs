@@ -1,3 +1,6 @@
+use crate::fan;
+use nvml_wrapper::Nvml;
+use nvml_wrapper::struct_wrappers::device::MemoryInfo;
 #[cfg(feature = "tray")]
 use std::sync::mpsc;
 #[cfg(feature = "tray")]
@@ -7,9 +10,6 @@ use tray_icon::{
     TrayIcon, TrayIconBuilder,
     menu::{Menu, MenuItem},
 };
-use crate::fan;
-use nvml_wrapper::Nvml;
-use nvml_wrapper::struct_wrappers::device::MemoryInfo;
 
 #[derive(Debug, Clone)]
 pub enum TrayEvent {
@@ -77,7 +77,7 @@ impl SystemTray {
     pub fn try_recv(&self) -> Option<TrayEvent> {
         self.event_receiver.try_recv().ok()
     }
-    
+
     /// Update tooltip with current GPU stats (call periodically)
     pub fn update_tooltip(&mut self) {
         // Update every 5 seconds to avoid excessive polling
@@ -87,7 +87,7 @@ impl SystemTray {
             self.last_update = Instant::now();
         }
     }
-    
+
     /// Generate rich tooltip with current GPU stats
     fn generate_tooltip() -> String {
         match get_gpu_stats() {
@@ -118,20 +118,19 @@ impl SystemTray {
                     if false { "ON" } else { "OFF" }  // TODO: Get actual VRR state
                 )
             }
-            Err(_) => {
-                "nvcontrol - NVIDIA GPU Control\n\
+            Err(_) => "nvcontrol - NVIDIA GPU Control\n\
                 \n\
                 ⚠️  Unable to get GPU stats\n\
                 \n\
-                Right-click for controls".to_string()
-            }
+                Right-click for controls"
+                .to_string(),
         }
     }
-    
+
     pub fn set_gaming_mode(&mut self, enabled: bool) {
         self.gaming_mode_enabled = enabled;
     }
-    
+
     pub fn set_vrr_enabled(&mut self, enabled: bool) {
         self.vrr_enabled = enabled;
     }
@@ -149,15 +148,15 @@ impl SystemTray {
     pub fn try_recv(&self) -> Option<TrayEvent> {
         None
     }
-    
+
     pub fn update_tooltip(&mut self) {
         // No-op for non-tray builds
     }
-    
+
     pub fn set_gaming_mode(&mut self, _enabled: bool) {
         // No-op for non-tray builds
     }
-    
+
     pub fn set_vrr_enabled(&mut self, _enabled: bool) {
         // No-op for non-tray builds
     }
@@ -167,26 +166,24 @@ impl SystemTray {
 fn get_gpu_stats() -> Result<GpuStats, Box<dyn std::error::Error>> {
     let nvml = Nvml::init()?;
     let device = nvml.device_by_index(0)?;
-    
+
     let name = device.name().unwrap_or_else(|_| "Unknown GPU".to_string());
-    let temperature = device.temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
+    let temperature = device
+        .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
         .unwrap_or(0);
-    let utilization = device.utilization_rates()
-        .map(|u| u.gpu)
-        .unwrap_or(0);
-    let memory_info = device.memory_info().unwrap_or_else(|_| {
-        MemoryInfo {
-            total: 0,
-            free: 0,
-            used: 0,
-            reserved: 0,
-            version: 0,
-        }
+    let utilization = device.utilization_rates().map(|u| u.gpu).unwrap_or(0);
+    let memory_info = device.memory_info().unwrap_or_else(|_| MemoryInfo {
+        total: 0,
+        free: 0,
+        used: 0,
+        reserved: 0,
+        version: 0,
     });
-    let power_draw = device.power_usage()
+    let power_draw = device
+        .power_usage()
         .map(|p| p as f32 / 1000.0)
         .unwrap_or(0.0);
-    
+
     // Get fan info
     let fans = fan::list_fans();
     let (fan_speed, fan_health) = if let Some(fan) = fans.first() {
@@ -194,7 +191,7 @@ fn get_gpu_stats() -> Result<GpuStats, Box<dyn std::error::Error>> {
     } else {
         (0, fan::FanHealthStatus::Unknown)
     };
-    
+
     Ok(GpuStats {
         name,
         temperature,

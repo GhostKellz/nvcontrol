@@ -23,8 +23,8 @@ pub struct FanInfo {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum FanHealthStatus {
     Healthy,
-    Warning,   // RPM irregularities or high noise
-    Critical,  // Fan failure or dangerous temperatures
+    Warning,  // RPM irregularities or high noise
+    Critical, // Fan failure or dangerous temperatures
     Unknown,
 }
 
@@ -33,7 +33,7 @@ pub enum FanHealthStatus {
 pub struct FanCurve {
     pub name: String,
     pub points: Vec<FanCurvePoint>,
-    pub hysteresis: u8, // Temperature difference for up/down changes
+    pub hysteresis: u8,     // Temperature difference for up/down changes
     pub min_duty_cycle: u8, // Minimum fan speed percentage
     pub max_duty_cycle: u8, // Maximum fan speed percentage
     pub zero_rpm_threshold: Option<u8>, // Temperature below which fan stops
@@ -61,13 +61,34 @@ impl Default for FanCurve {
         Self {
             name: "Default".to_string(),
             points: vec![
-                FanCurvePoint { temperature: 30, duty_cycle: 0 },
-                FanCurvePoint { temperature: 40, duty_cycle: 20 },
-                FanCurvePoint { temperature: 50, duty_cycle: 30 },
-                FanCurvePoint { temperature: 60, duty_cycle: 50 },
-                FanCurvePoint { temperature: 70, duty_cycle: 70 },
-                FanCurvePoint { temperature: 80, duty_cycle: 90 },
-                FanCurvePoint { temperature: 90, duty_cycle: 100 },
+                FanCurvePoint {
+                    temperature: 30,
+                    duty_cycle: 0,
+                },
+                FanCurvePoint {
+                    temperature: 40,
+                    duty_cycle: 20,
+                },
+                FanCurvePoint {
+                    temperature: 50,
+                    duty_cycle: 30,
+                },
+                FanCurvePoint {
+                    temperature: 60,
+                    duty_cycle: 50,
+                },
+                FanCurvePoint {
+                    temperature: 70,
+                    duty_cycle: 70,
+                },
+                FanCurvePoint {
+                    temperature: 80,
+                    duty_cycle: 90,
+                },
+                FanCurvePoint {
+                    temperature: 90,
+                    duty_cycle: 100,
+                },
             ],
             hysteresis: 2,
             min_duty_cycle: 0,
@@ -81,7 +102,7 @@ impl Default for FanProfile {
     fn default() -> Self {
         let mut curves = HashMap::new();
         curves.insert(0, FanCurve::default());
-        
+
         Self {
             name: "Balanced".to_string(),
             description: "Balanced performance and noise".to_string(),
@@ -105,23 +126,47 @@ pub fn get_predefined_profiles() -> Vec<FanProfile> {
 
 fn create_silent_profile() -> FanProfile {
     let mut curves = HashMap::new();
-    curves.insert(0, FanCurve {
-        name: "Silent".to_string(),
-        points: vec![
-            FanCurvePoint { temperature: 30, duty_cycle: 0 },
-            FanCurvePoint { temperature: 45, duty_cycle: 15 },
-            FanCurvePoint { temperature: 55, duty_cycle: 25 },
-            FanCurvePoint { temperature: 65, duty_cycle: 40 },
-            FanCurvePoint { temperature: 75, duty_cycle: 60 },
-            FanCurvePoint { temperature: 85, duty_cycle: 80 },
-            FanCurvePoint { temperature: 95, duty_cycle: 100 },
-        ],
-        hysteresis: 3,
-        min_duty_cycle: 0,
-        max_duty_cycle: 80, // Cap at 80% for noise reduction
-        zero_rpm_threshold: Some(40),
-    });
-    
+    curves.insert(
+        0,
+        FanCurve {
+            name: "Silent".to_string(),
+            points: vec![
+                FanCurvePoint {
+                    temperature: 30,
+                    duty_cycle: 0,
+                },
+                FanCurvePoint {
+                    temperature: 45,
+                    duty_cycle: 15,
+                },
+                FanCurvePoint {
+                    temperature: 55,
+                    duty_cycle: 25,
+                },
+                FanCurvePoint {
+                    temperature: 65,
+                    duty_cycle: 40,
+                },
+                FanCurvePoint {
+                    temperature: 75,
+                    duty_cycle: 60,
+                },
+                FanCurvePoint {
+                    temperature: 85,
+                    duty_cycle: 80,
+                },
+                FanCurvePoint {
+                    temperature: 95,
+                    duty_cycle: 100,
+                },
+            ],
+            hysteresis: 3,
+            min_duty_cycle: 0,
+            max_duty_cycle: 80, // Cap at 80% for noise reduction
+            zero_rpm_threshold: Some(40),
+        },
+    );
+
     FanProfile {
         name: "Silent".to_string(),
         description: "Prioritizes low noise over performance".to_string(),
@@ -134,23 +179,47 @@ fn create_silent_profile() -> FanProfile {
 
 fn create_performance_profile() -> FanProfile {
     let mut curves = HashMap::new();
-    curves.insert(0, FanCurve {
-        name: "Performance".to_string(),
-        points: vec![
-            FanCurvePoint { temperature: 25, duty_cycle: 30 },
-            FanCurvePoint { temperature: 35, duty_cycle: 40 },
-            FanCurvePoint { temperature: 45, duty_cycle: 50 },
-            FanCurvePoint { temperature: 55, duty_cycle: 65 },
-            FanCurvePoint { temperature: 65, duty_cycle: 80 },
-            FanCurvePoint { temperature: 75, duty_cycle: 95 },
-            FanCurvePoint { temperature: 85, duty_cycle: 100 },
-        ],
-        hysteresis: 1,
-        min_duty_cycle: 30,
-        max_duty_cycle: 100,
-        zero_rpm_threshold: None, // Always spinning
-    });
-    
+    curves.insert(
+        0,
+        FanCurve {
+            name: "Performance".to_string(),
+            points: vec![
+                FanCurvePoint {
+                    temperature: 25,
+                    duty_cycle: 30,
+                },
+                FanCurvePoint {
+                    temperature: 35,
+                    duty_cycle: 40,
+                },
+                FanCurvePoint {
+                    temperature: 45,
+                    duty_cycle: 50,
+                },
+                FanCurvePoint {
+                    temperature: 55,
+                    duty_cycle: 65,
+                },
+                FanCurvePoint {
+                    temperature: 65,
+                    duty_cycle: 80,
+                },
+                FanCurvePoint {
+                    temperature: 75,
+                    duty_cycle: 95,
+                },
+                FanCurvePoint {
+                    temperature: 85,
+                    duty_cycle: 100,
+                },
+            ],
+            hysteresis: 1,
+            min_duty_cycle: 30,
+            max_duty_cycle: 100,
+            zero_rpm_threshold: None, // Always spinning
+        },
+    );
+
     FanProfile {
         name: "Performance".to_string(),
         description: "Aggressive cooling for maximum performance".to_string(),
@@ -163,22 +232,43 @@ fn create_performance_profile() -> FanProfile {
 
 fn create_aggressive_profile() -> FanProfile {
     let mut curves = HashMap::new();
-    curves.insert(0, FanCurve {
-        name: "Aggressive".to_string(),
-        points: vec![
-            FanCurvePoint { temperature: 20, duty_cycle: 50 },
-            FanCurvePoint { temperature: 30, duty_cycle: 60 },
-            FanCurvePoint { temperature: 40, duty_cycle: 70 },
-            FanCurvePoint { temperature: 50, duty_cycle: 80 },
-            FanCurvePoint { temperature: 60, duty_cycle: 90 },
-            FanCurvePoint { temperature: 70, duty_cycle: 100 },
-        ],
-        hysteresis: 0,
-        min_duty_cycle: 50,
-        max_duty_cycle: 100,
-        zero_rpm_threshold: None,
-    });
-    
+    curves.insert(
+        0,
+        FanCurve {
+            name: "Aggressive".to_string(),
+            points: vec![
+                FanCurvePoint {
+                    temperature: 20,
+                    duty_cycle: 50,
+                },
+                FanCurvePoint {
+                    temperature: 30,
+                    duty_cycle: 60,
+                },
+                FanCurvePoint {
+                    temperature: 40,
+                    duty_cycle: 70,
+                },
+                FanCurvePoint {
+                    temperature: 50,
+                    duty_cycle: 80,
+                },
+                FanCurvePoint {
+                    temperature: 60,
+                    duty_cycle: 90,
+                },
+                FanCurvePoint {
+                    temperature: 70,
+                    duty_cycle: 100,
+                },
+            ],
+            hysteresis: 0,
+            min_duty_cycle: 50,
+            max_duty_cycle: 100,
+            zero_rpm_threshold: None,
+        },
+    );
+
     FanProfile {
         name: "Aggressive".to_string(),
         description: "Maximum cooling regardless of noise".to_string(),
@@ -268,11 +358,16 @@ fn can_control_fan(device: &nvml_wrapper::Device, fan_id: u32) -> bool {
 }
 
 /// Assess fan health based on RPM and temperature data
-fn assess_fan_health(device: &nvml_wrapper::Device, _fan_id: u32, rpm: Option<u32>) -> FanHealthStatus {
+fn assess_fan_health(
+    device: &nvml_wrapper::Device,
+    _fan_id: u32,
+    rpm: Option<u32>,
+) -> FanHealthStatus {
     // Get temperature for context
-    let temp = device.temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
+    let temp = device
+        .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
         .unwrap_or(0);
-    
+
     match rpm {
         Some(current_rpm) => {
             // Check for concerning patterns
@@ -509,23 +604,28 @@ pub fn reset_fan_to_auto(fan_id: usize) -> NvResult<()> {
 }
 
 /// Apply a custom fan curve with intelligent temperature tracking
-pub fn apply_fan_curve(fan_id: usize, curve: &FanCurve, current_temp: u8, previous_speed: Option<u8>) -> NvResult<u8> {
+pub fn apply_fan_curve(
+    fan_id: usize,
+    curve: &FanCurve,
+    current_temp: u8,
+    previous_speed: Option<u8>,
+) -> NvResult<u8> {
     // Sort curve points by temperature
     let mut sorted_points = curve.points.clone();
     sorted_points.sort_by_key(|p| p.temperature);
-    
+
     // Check zero RPM threshold
     if let Some(zero_threshold) = curve.zero_rpm_threshold {
         if current_temp < zero_threshold {
             return Ok(0);
         }
     }
-    
+
     // Handle empty curves
     if sorted_points.is_empty() {
         return Ok(curve.min_duty_cycle);
     }
-    
+
     // Find the appropriate speed using linear interpolation
     let target_speed = if current_temp <= sorted_points[0].temperature {
         sorted_points[0].duty_cycle
@@ -537,37 +637,37 @@ pub fn apply_fan_curve(fan_id: usize, curve: &FanCurve, current_temp: u8, previo
         for i in 0..sorted_points.len() - 1 {
             let p1 = &sorted_points[i];
             let p2 = &sorted_points[i + 1];
-            
+
             if current_temp >= p1.temperature && current_temp <= p2.temperature {
                 let temp_range = p2.temperature - p1.temperature;
                 let speed_range = p2.duty_cycle as i16 - p1.duty_cycle as i16;
                 let temp_offset = current_temp - p1.temperature;
-                
-                let interpolated_speed = p1.duty_cycle as i16 + 
-                    (speed_range * temp_offset as i16) / temp_range as i16;
-                
+
+                let interpolated_speed =
+                    p1.duty_cycle as i16 + (speed_range * temp_offset as i16) / temp_range as i16;
+
                 result = interpolated_speed.max(0).min(100) as u8;
                 break;
             }
         }
         result
     };
-    
+
     // Apply hysteresis to prevent oscillation
     let final_speed = if let Some(prev_speed) = previous_speed {
         apply_hysteresis(target_speed, prev_speed, curve.hysteresis, current_temp)
     } else {
         target_speed
     };
-    
+
     // Clamp to min/max duty cycle
     let clamped_speed = final_speed
         .max(curve.min_duty_cycle)
         .min(curve.max_duty_cycle);
-    
+
     // Apply the fan speed
     set_fan_speed(fan_id, clamped_speed)?;
-    
+
     Ok(clamped_speed)
 }
 
@@ -578,7 +678,7 @@ fn apply_hysteresis(target_speed: u8, previous_speed: u8, hysteresis: u8, _curre
     } else {
         previous_speed - target_speed
     };
-    
+
     // Only change speed if the difference exceeds hysteresis threshold
     if speed_diff > hysteresis {
         target_speed
@@ -590,13 +690,13 @@ fn apply_hysteresis(target_speed: u8, previous_speed: u8, hysteresis: u8, _curre
 /// Test fan functionality and measure response
 pub fn test_fan(fan_id: usize) -> NvResult<FanTestResult> {
     println!("Testing fan {} functionality...", fan_id);
-    
+
     let initial_info = get_fan_info(fan_id)
         .ok_or_else(|| NvControlError::DisplayDetectionFailed("Fan not found".to_string()))?;
-    
+
     let initial_rpm = initial_info.rpm.unwrap_or(0);
     let initial_speed = initial_info.percent.unwrap_or(0);
-    
+
     let mut test_result = FanTestResult {
         fan_id,
         initial_rpm,
@@ -608,21 +708,21 @@ pub fn test_fan(fan_id: usize) -> NvResult<FanTestResult> {
         controllable: initial_info.controllable,
         test_successful: false,
     };
-    
+
     if !initial_info.controllable {
         test_result.test_successful = false;
         return Ok(test_result);
     }
-    
+
     let test_start = Instant::now();
-    
+
     // Test different speed levels
     let test_speeds = [25, 50, 75, 100, 0]; // Including 0 for zero RPM test
-    
+
     for &speed in &test_speeds {
         if set_fan_speed(fan_id, speed).is_ok() {
             std::thread::sleep(Duration::from_millis(2000)); // Wait for fan response
-            
+
             if let Some(current_info) = get_fan_info(fan_id) {
                 if let Some(rpm) = current_info.rpm {
                     test_result.max_rpm_achieved = test_result.max_rpm_achieved.max(rpm);
@@ -631,13 +731,13 @@ pub fn test_fan(fan_id: usize) -> NvResult<FanTestResult> {
             }
         }
     }
-    
+
     // Restore original speed
     let _ = set_fan_speed(fan_id, initial_speed);
-    
+
     test_result.response_time_ms = test_start.elapsed().as_millis() as u32;
     test_result.test_successful = true;
-    
+
     // Assess noise level based on max RPM
     test_result.noise_level = if test_result.max_rpm_achieved > 3500 {
         NoiseLevel::Loud
@@ -648,21 +748,26 @@ pub fn test_fan(fan_id: usize) -> NvResult<FanTestResult> {
     } else {
         NoiseLevel::Silent
     };
-    
+
     Ok(test_result)
 }
 
 /// Enable zero RPM mode (fan stops at low temperatures)
 pub fn enable_zero_rpm_mode(fan_id: usize, threshold_temp: u8) -> NvResult<()> {
-    println!("Enabling zero RPM mode for fan {} at {}°C threshold", fan_id, threshold_temp);
-    
+    println!(
+        "Enabling zero RPM mode for fan {} at {}°C threshold",
+        fan_id, threshold_temp
+    );
+
     // This would typically involve setting fan curves with zero RPM points
     // For now, we'll set a very low speed when temperature is below threshold
-    
+
     if let Ok(nvml) = Nvml::init() {
         let gpu_id = fan_id / 10;
         if let Ok(device) = nvml.device_by_index(gpu_id as u32) {
-            if let Ok(temp) = device.temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu) {
+            if let Ok(temp) =
+                device.temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
+            {
                 if temp < threshold_temp as u32 {
                     set_fan_speed(fan_id, 0)?;
                     println!("Fan {} stopped (zero RPM mode active)", fan_id);
@@ -670,14 +775,17 @@ pub fn enable_zero_rpm_mode(fan_id: usize, threshold_temp: u8) -> NvResult<()> {
             }
         }
     }
-    
+
     Ok(())
 }
 
 /// Monitor fan health over time
 pub fn monitor_fan_health(fan_id: usize, duration_minutes: u32) -> NvResult<FanHealthReport> {
-    println!("Monitoring fan {} health for {} minutes...", fan_id, duration_minutes);
-    
+    println!(
+        "Monitoring fan {} health for {} minutes...",
+        fan_id, duration_minutes
+    );
+
     let mut report = FanHealthReport {
         fan_id,
         monitoring_duration_minutes: duration_minutes,
@@ -688,50 +796,58 @@ pub fn monitor_fan_health(fan_id: usize, duration_minutes: u32) -> NvResult<FanH
         health_events: Vec::new(),
         overall_health: FanHealthStatus::Healthy,
     };
-    
+
     let start_time = Instant::now();
     let sample_interval = Duration::from_secs(30); // Sample every 30 seconds
     let total_duration = Duration::from_secs(duration_minutes as u64 * 60);
-    
+
     while start_time.elapsed() < total_duration {
         if let Some(fan_info) = get_fan_info(fan_id) {
             if let Some(rpm) = fan_info.rpm {
                 report.rpm_samples.push(rpm);
-                
+
                 // Check for concerning patterns
                 if rpm == 0 {
                     report.health_events.push("Fan stopped".to_string());
                 } else if rpm > 4500 {
-                    report.health_events.push(format!("High RPM detected: {}", rpm));
+                    report
+                        .health_events
+                        .push(format!("High RPM detected: {}", rpm));
                 }
             }
-            
+
             // Get temperature if available
             if let Ok(nvml) = Nvml::init() {
                 let gpu_id = fan_id / 10;
                 if let Ok(device) = nvml.device_by_index(gpu_id as u32) {
-                    if let Ok(temp) = device.temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu) {
+                    if let Ok(temp) = device
+                        .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
+                    {
                         report.temperature_samples.push(temp);
                     }
                 }
             }
         }
-        
+
         std::thread::sleep(sample_interval);
     }
-    
+
     // Calculate statistics
     if !report.rpm_samples.is_empty() {
-        report.average_rpm = report.rpm_samples.iter().map(|&x| x as f64).sum::<f64>() / report.rpm_samples.len() as f64;
-        
+        report.average_rpm = report.rpm_samples.iter().map(|&x| x as f64).sum::<f64>()
+            / report.rpm_samples.len() as f64;
+
         // Calculate RPM stability (coefficient of variation)
-        let variance = report.rpm_samples.iter()
+        let variance = report
+            .rpm_samples
+            .iter()
             .map(|&x| (x as f64 - report.average_rpm).powi(2))
-            .sum::<f64>() / report.rpm_samples.len() as f64;
+            .sum::<f64>()
+            / report.rpm_samples.len() as f64;
         let std_dev = variance.sqrt();
         report.rpm_stability = (std_dev / report.average_rpm) * 100.0; // CV percentage
     }
-    
+
     // Assess overall health
     report.overall_health = if report.health_events.len() > 5 {
         FanHealthStatus::Critical
@@ -740,21 +856,23 @@ pub fn monitor_fan_health(fan_id: usize, duration_minutes: u32) -> NvResult<FanH
     } else {
         FanHealthStatus::Healthy
     };
-    
+
     Ok(report)
 }
 
 /// Load fan profiles from configuration
 pub fn load_fan_profiles() -> NvResult<Vec<FanProfile>> {
     let config_path = get_fan_config_path();
-    
+
     if config_path.exists() {
-        let content = fs::read_to_string(&config_path)
-            .map_err(|e| NvControlError::DisplayDetectionFailed(format!("Failed to read fan config: {}", e)))?;
-        
-        let profiles: Vec<FanProfile> = serde_json::from_str(&content)
-            .map_err(|e| NvControlError::DisplayDetectionFailed(format!("Failed to parse fan config: {}", e)))?;
-        
+        let content = fs::read_to_string(&config_path).map_err(|e| {
+            NvControlError::DisplayDetectionFailed(format!("Failed to read fan config: {}", e))
+        })?;
+
+        let profiles: Vec<FanProfile> = serde_json::from_str(&content).map_err(|e| {
+            NvControlError::DisplayDetectionFailed(format!("Failed to parse fan config: {}", e))
+        })?;
+
         Ok(profiles)
     } else {
         // Return predefined profiles if no custom config exists
@@ -765,19 +883,22 @@ pub fn load_fan_profiles() -> NvResult<Vec<FanProfile>> {
 /// Save fan profiles to configuration
 pub fn save_fan_profiles(profiles: &[FanProfile]) -> NvResult<()> {
     let config_path = get_fan_config_path();
-    
+
     // Ensure config directory exists
     if let Some(parent) = config_path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| NvControlError::DisplayDetectionFailed(format!("Failed to create config dir: {}", e)))?;
+        fs::create_dir_all(parent).map_err(|e| {
+            NvControlError::DisplayDetectionFailed(format!("Failed to create config dir: {}", e))
+        })?;
     }
-    
-    let content = serde_json::to_string_pretty(profiles)
-        .map_err(|e| NvControlError::DisplayDetectionFailed(format!("Failed to serialize profiles: {}", e)))?;
-    
-    fs::write(&config_path, content)
-        .map_err(|e| NvControlError::DisplayDetectionFailed(format!("Failed to save fan config: {}", e)))?;
-    
+
+    let content = serde_json::to_string_pretty(profiles).map_err(|e| {
+        NvControlError::DisplayDetectionFailed(format!("Failed to serialize profiles: {}", e))
+    })?;
+
+    fs::write(&config_path, content).map_err(|e| {
+        NvControlError::DisplayDetectionFailed(format!("Failed to save fan config: {}", e))
+    })?;
+
     println!("Saved {} fan profiles to {:?}", profiles.len(), config_path);
     Ok(())
 }

@@ -1,9 +1,6 @@
-use crate::{NvControlError, NvResult};
+use crate::NvResult;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GamescopeConfig {
@@ -17,6 +14,11 @@ pub struct GamescopeConfig {
     pub fullscreen: bool,
     pub borderless: bool,
     pub nvidia_optimizations: bool,
+    pub steam_deck_mode: bool,
+    pub hdr_metadata: HdrMetadata,
+    pub color_management: ColorManagement,
+    pub performance_profile: PerformanceProfile,
+    pub filter_settings: FilterSettings,
     pub environment_variables: HashMap<String, String>,
 }
 
@@ -28,6 +30,126 @@ pub enum GamescopeUpscaling {
     Fsr, // AMD FidelityFX Super Resolution
     Nis, // NVIDIA Image Scaling
     Integer,
+    FsrSharpness(f32), // FSR with custom sharpness
+    Custom(String),    // Custom upscaling algorithm
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum GamescopePreset {
+    Performance,
+    Quality,
+    Balanced,
+    PowerSaving,
+    SteamDeck,
+    SteamDeckDocked,
+    SteamDeckHandheld,
+    Handheld1080p,
+    Desktop,
+    Competitive,
+    Cinematic,
+    Custom(GamescopeConfig),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HdrMetadata {
+    pub enabled: bool,
+    pub color_space: ColorSpace,
+    pub max_luminance: u32, // nits
+    pub min_luminance: f32, // nits
+    pub mastering_display: Option<MasteringDisplay>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ColorSpace {
+    Srgb,
+    Rec2020,
+    DciP3,
+    Rec709,
+    Custom(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MasteringDisplay {
+    pub red_x: f32,
+    pub red_y: f32,
+    pub green_x: f32,
+    pub green_y: f32,
+    pub blue_x: f32,
+    pub blue_y: f32,
+    pub white_x: f32,
+    pub white_y: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ColorManagement {
+    pub enabled: bool,
+    pub gamma_correction: f32,
+    pub saturation: f32,
+    pub brightness: f32,
+    pub contrast: f32,
+    pub color_temperature: u32, // Kelvin
+    pub night_mode: bool,
+    pub custom_lut: Option<String>, // Path to custom LUT file
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PerformanceProfile {
+    pub name: String,
+    pub cpu_governor: Option<String>,
+    pub gpu_performance_level: Option<String>,
+    pub frame_pacing: bool,
+    pub power_management: PowerManagement,
+    pub thermal_throttling: bool,
+    pub async_compute: bool,
+    pub shader_cache_precompile: bool,
+    pub memory_pool_size: Option<u64>,
+    pub thread_priority: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FilterSettings {
+    pub sharpening: f32,      // 0.0-2.0
+    pub noise_reduction: f32, // 0.0-1.0
+    pub color_vibrance: f32,  // 0.0-2.0
+    pub tonemapping: bool,
+    pub anti_aliasing: AntiAliasing,
+    pub motion_blur_reduction: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AntiAliasing {
+    None,
+    Fxaa,
+    Smaa,
+    Taa,
+    Msaa2x,
+    Msaa4x,
+    Msaa8x,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PowerManagement {
+    Performance,
+    Balanced,
+    PowerSaver,
+    Custom(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SteamDeckPreset {
+    pub name: String,
+    pub description: String,
+    pub config: GamescopeConfig,
+    pub optimizations: SteamDeckOptimizations,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SteamDeckOptimizations {
+    pub battery_saver: bool,
+    pub thermal_throttling: bool,
+    pub aggressive_power_saving: bool,
+    pub dock_mode: bool,
+    pub external_display_config: Option<GamescopeConfig>,
 }
 
 impl GamescopeUpscaling {
@@ -39,6 +161,72 @@ impl GamescopeUpscaling {
             GamescopeUpscaling::Fsr => "fsr",
             GamescopeUpscaling::Nis => "nis",
             GamescopeUpscaling::Integer => "integer",
+            GamescopeUpscaling::FsrSharpness(_) => "fsr",
+            GamescopeUpscaling::Custom(_) => "auto",
+        }
+    }
+
+    pub fn get_sharpness(&self) -> Option<f32> {
+        match self {
+            GamescopeUpscaling::FsrSharpness(sharpness) => Some(*sharpness),
+            _ => None,
+        }
+    }
+}
+
+impl Default for HdrMetadata {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            color_space: ColorSpace::Srgb,
+            max_luminance: 1000,
+            min_luminance: 0.1,
+            mastering_display: None,
+        }
+    }
+}
+
+impl Default for ColorManagement {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            gamma_correction: 2.2,
+            saturation: 1.0,
+            brightness: 1.0,
+            contrast: 1.0,
+            color_temperature: 6500,
+            night_mode: false,
+            custom_lut: None,
+        }
+    }
+}
+
+impl Default for PerformanceProfile {
+    fn default() -> Self {
+        Self {
+            name: "Balanced".to_string(),
+            cpu_governor: Some("performance".to_string()),
+            gpu_performance_level: Some("auto".to_string()),
+            frame_pacing: true,
+            power_management: PowerManagement::Balanced,
+            thermal_throttling: true,
+            async_compute: true,
+            shader_cache_precompile: true,
+            memory_pool_size: None,
+            thread_priority: None,
+        }
+    }
+}
+
+impl Default for FilterSettings {
+    fn default() -> Self {
+        Self {
+            sharpening: 0.5,
+            noise_reduction: 0.2,
+            color_vibrance: 1.0,
+            tonemapping: false,
+            anti_aliasing: AntiAliasing::Fxaa,
+            motion_blur_reduction: false,
         }
     }
 }
@@ -49,12 +237,10 @@ impl Default for GamescopeConfig {
 
         // NVIDIA-specific optimizations
         env_vars.insert("__GL_THREADED_OPTIMIZATIONS".to_string(), "1".to_string());
-        env_vars.insert("__GL_SYNC_TO_VBLANK".to_string(), "0".to_string());
-        env_vars.insert("NVIDIA_PRIME_RENDER_OFFLOAD".to_string(), "1".to_string());
-        env_vars.insert("__NV_PRIME_RENDER_OFFLOAD".to_string(), "1".to_string());
+        env_vars.insert("__GL_SHADER_DISK_CACHE".to_string(), "1".to_string());
         env_vars.insert(
-            "__GLX_VENDOR_LIBRARY_NAME".to_string(),
-            "nvidia".to_string(),
+            "__GL_SHADER_DISK_CACHE_SKIP_CLEANUP".to_string(),
+            "1".to_string(),
         );
 
         Self {
@@ -68,493 +254,367 @@ impl Default for GamescopeConfig {
             fullscreen: true,
             borderless: false,
             nvidia_optimizations: true,
+            steam_deck_mode: false,
+            hdr_metadata: HdrMetadata::default(),
+            color_management: ColorManagement::default(),
+            performance_profile: PerformanceProfile::default(),
+            filter_settings: FilterSettings::default(),
             environment_variables: env_vars,
         }
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum GamescopePreset {
-    SteamDeck,     // Steam Deck optimized (800p, FSR)
-    Handheld1080p, // Handheld 1080p (ROG Ally, etc.)
-    Desktop,       // Desktop gaming
-    Performance,   // Maximum performance
-    Quality,       // Maximum quality
-    Battery,       // Battery optimized
-}
-
 impl GamescopePreset {
+    /// Convert preset to GamescopeConfig
     pub fn to_config(&self) -> GamescopeConfig {
         match self {
-            GamescopePreset::SteamDeck => GamescopeConfig {
-                width: 1280,
-                height: 800,
-                refresh_rate: Some(60),
-                upscaling: GamescopeUpscaling::Fsr,
-                frame_limiter: Some(60),
-                ..Default::default()
-            },
-            GamescopePreset::Handheld1080p => GamescopeConfig {
-                width: 1920,
-                height: 1080,
-                refresh_rate: Some(120),
-                upscaling: GamescopeUpscaling::Fsr,
-                frame_limiter: Some(90),
-                ..Default::default()
-            },
-            GamescopePreset::Desktop => GamescopeConfig {
-                width: 2560,
-                height: 1440,
-                refresh_rate: Some(144),
-                upscaling: GamescopeUpscaling::Nis,
-                adaptive_sync: true,
-                hdr_enabled: true,
-                ..Default::default()
-            },
             GamescopePreset::Performance => GamescopeConfig {
                 width: 1920,
                 height: 1080,
-                refresh_rate: Some(240),
+                refresh_rate: Some(144),
                 upscaling: GamescopeUpscaling::Nis,
+                hdr_enabled: false,
                 frame_limiter: None,
+                adaptive_sync: true,
                 fullscreen: true,
-                ..Default::default()
+                borderless: false,
+                nvidia_optimizations: true,
+                steam_deck_mode: false,
+                hdr_metadata: Default::default(),
+                color_management: ColorManagement {
+                    enabled: false,
+                    gamma_correction: 1.0,
+                    saturation: 1.0,
+                    brightness: 1.0,
+                    contrast: 1.0,
+                    color_temperature: 6500,
+                    night_mode: false,
+                    custom_lut: None,
+                },
+                performance_profile: PerformanceProfile {
+                    name: "Performance".to_string(),
+                    cpu_governor: Some("performance".to_string()),
+                    gpu_performance_level: Some("max".to_string()),
+                    frame_pacing: false,
+                    power_management: PowerManagement::Performance,
+                    thermal_throttling: false,
+                    async_compute: true,
+                    shader_cache_precompile: true,
+                    memory_pool_size: Some(2 * 1024 * 1024 * 1024), // 2GB
+                    thread_priority: Some(-10),
+                },
+                filter_settings: Default::default(),
+                environment_variables: HashMap::new(),
             },
             GamescopePreset::Quality => GamescopeConfig {
                 width: 3840,
                 height: 2160,
                 refresh_rate: Some(60),
-                upscaling: GamescopeUpscaling::None,
+                upscaling: GamescopeUpscaling::Fsr,
                 hdr_enabled: true,
                 frame_limiter: Some(60),
-                ..Default::default()
+                adaptive_sync: true,
+                fullscreen: true,
+                borderless: false,
+                nvidia_optimizations: true,
+                steam_deck_mode: false,
+                hdr_metadata: HdrMetadata {
+                    enabled: true,
+                    color_space: ColorSpace::Rec2020,
+                    max_luminance: 1000,
+                    min_luminance: 0.01,
+                    mastering_display: None,
+                },
+                color_management: ColorManagement {
+                    enabled: true,
+                    gamma_correction: 2.2,
+                    saturation: 1.1,
+                    brightness: 1.0,
+                    contrast: 1.0,
+                    color_temperature: 6500,
+                    night_mode: false,
+                    custom_lut: None,
+                },
+                performance_profile: PerformanceProfile {
+                    name: "Quality".to_string(),
+                    cpu_governor: Some("powersave".to_string()),
+                    gpu_performance_level: Some("auto".to_string()),
+                    frame_pacing: true,
+                    power_management: PowerManagement::Balanced,
+                    thermal_throttling: true,
+                    async_compute: true,
+                    shader_cache_precompile: true,
+                    memory_pool_size: Some(1 * 1024 * 1024 * 1024), // 1GB
+                    thread_priority: Some(-5),
+                },
+                filter_settings: Default::default(),
+                environment_variables: HashMap::new(),
             },
-            GamescopePreset::Battery => GamescopeConfig {
-                width: 1280,
-                height: 720,
-                refresh_rate: Some(30),
+            GamescopePreset::Balanced => GamescopeConfig {
+                width: 2560,
+                height: 1440,
+                refresh_rate: Some(120),
                 upscaling: GamescopeUpscaling::Fsr,
-                frame_limiter: Some(30),
-                nvidia_optimizations: false, // Power saving
-                ..Default::default()
+                hdr_enabled: false,
+                frame_limiter: Some(120),
+                adaptive_sync: true,
+                fullscreen: true,
+                borderless: false,
+                nvidia_optimizations: true,
+                steam_deck_mode: false,
+                hdr_metadata: Default::default(),
+                color_management: ColorManagement {
+                    enabled: false,
+                    gamma_correction: 1.0,
+                    saturation: 1.0,
+                    brightness: 1.0,
+                    contrast: 1.0,
+                    color_temperature: 6500,
+                    night_mode: false,
+                    custom_lut: None,
+                },
+                performance_profile: PerformanceProfile {
+                    name: "Balanced".to_string(),
+                    cpu_governor: Some("schedutil".to_string()),
+                    gpu_performance_level: Some("auto".to_string()),
+                    frame_pacing: true,
+                    power_management: PowerManagement::Balanced,
+                    thermal_throttling: true,
+                    async_compute: true,
+                    shader_cache_precompile: true,
+                    memory_pool_size: Some(512 * 1024 * 1024), // 512MB
+                    thread_priority: Some(0),
+                },
+                filter_settings: Default::default(),
+                environment_variables: HashMap::new(),
             },
+            GamescopePreset::SteamDeckDocked => GamescopeConfig {
+                width: 1920,
+                height: 1080,
+                refresh_rate: Some(60),
+                upscaling: GamescopeUpscaling::Fsr,
+                hdr_enabled: false,
+                frame_limiter: Some(60),
+                adaptive_sync: true,
+                fullscreen: true,
+                borderless: false,
+                nvidia_optimizations: false,
+                steam_deck_mode: true,
+                hdr_metadata: Default::default(),
+                color_management: Default::default(),
+                performance_profile: PerformanceProfile {
+                    name: "Steam Deck Docked".to_string(),
+                    cpu_governor: Some("schedutil".to_string()),
+                    gpu_performance_level: Some("auto".to_string()),
+                    frame_pacing: true,
+                    power_management: PowerManagement::Balanced,
+                    thermal_throttling: true,
+                    async_compute: true,
+                    shader_cache_precompile: true,
+                    memory_pool_size: Some(512 * 1024 * 1024), // 512MB
+                    thread_priority: Some(0),
+                },
+                filter_settings: Default::default(),
+                environment_variables: HashMap::new(),
+            },
+            GamescopePreset::SteamDeckHandheld => GamescopeConfig {
+                width: 1280,
+                height: 800,
+                refresh_rate: Some(60),
+                upscaling: GamescopeUpscaling::Linear,
+                hdr_enabled: false,
+                frame_limiter: Some(40),
+                adaptive_sync: false,
+                fullscreen: true,
+                borderless: false,
+                nvidia_optimizations: false,
+                steam_deck_mode: true,
+                hdr_metadata: Default::default(),
+                color_management: Default::default(),
+                performance_profile: PerformanceProfile {
+                    name: "Steam Deck Handheld".to_string(),
+                    cpu_governor: Some("powersave".to_string()),
+                    gpu_performance_level: Some("min".to_string()),
+                    frame_pacing: true,
+                    power_management: PowerManagement::PowerSaver,
+                    thermal_throttling: true,
+                    async_compute: true,
+                    shader_cache_precompile: true,
+                    memory_pool_size: Some(256 * 1024 * 1024), // 256MB
+                    thread_priority: Some(0),
+                },
+                filter_settings: Default::default(),
+                environment_variables: HashMap::new(),
+            },
+            GamescopePreset::SteamDeck => GamescopeConfig {
+                width: 1280,
+                height: 800,
+                refresh_rate: Some(60),
+                upscaling: GamescopeUpscaling::Fsr,
+                hdr_enabled: false,
+                frame_limiter: Some(60),
+                adaptive_sync: true,
+                fullscreen: true,
+                borderless: false,
+                nvidia_optimizations: false,
+                steam_deck_mode: true,
+                hdr_metadata: Default::default(),
+                color_management: Default::default(),
+                performance_profile: PerformanceProfile {
+                    name: "Steam Deck".to_string(),
+                    cpu_governor: Some("schedutil".to_string()),
+                    gpu_performance_level: Some("auto".to_string()),
+                    frame_pacing: true,
+                    power_management: PowerManagement::Balanced,
+                    thermal_throttling: true,
+                    async_compute: true,
+                    shader_cache_precompile: true,
+                    memory_pool_size: Some(512 * 1024 * 1024), // 512MB
+                    thread_priority: Some(0),
+                },
+                filter_settings: Default::default(),
+                environment_variables: HashMap::new(),
+            },
+            GamescopePreset::Handheld1080p => GamescopeConfig {
+                width: 1920,
+                height: 1080,
+                refresh_rate: Some(60),
+                upscaling: GamescopeUpscaling::Fsr,
+                hdr_enabled: false,
+                frame_limiter: Some(60),
+                adaptive_sync: true,
+                fullscreen: true,
+                borderless: false,
+                nvidia_optimizations: true,
+                steam_deck_mode: false,
+                hdr_metadata: Default::default(),
+                color_management: Default::default(),
+                performance_profile: PerformanceProfile {
+                    name: "Handheld 1080p".to_string(),
+                    cpu_governor: Some("schedutil".to_string()),
+                    gpu_performance_level: Some("auto".to_string()),
+                    frame_pacing: true,
+                    power_management: PowerManagement::Balanced,
+                    thermal_throttling: true,
+                    async_compute: true,
+                    shader_cache_precompile: true,
+                    memory_pool_size: Some(512 * 1024 * 1024), // 512MB
+                    thread_priority: Some(0),
+                },
+                filter_settings: Default::default(),
+                environment_variables: HashMap::new(),
+            },
+            GamescopePreset::Desktop => GamescopeConfig {
+                width: 1920,
+                height: 1080,
+                refresh_rate: Some(144),
+                upscaling: GamescopeUpscaling::Nis,
+                hdr_enabled: false,
+                frame_limiter: None,
+                adaptive_sync: true,
+                fullscreen: true,
+                borderless: false,
+                nvidia_optimizations: true,
+                steam_deck_mode: false,
+                hdr_metadata: Default::default(),
+                color_management: Default::default(),
+                performance_profile: PerformanceProfile {
+                    name: "Desktop".to_string(),
+                    cpu_governor: Some("performance".to_string()),
+                    gpu_performance_level: Some("max".to_string()),
+                    frame_pacing: false,
+                    power_management: PowerManagement::Performance,
+                    thermal_throttling: false,
+                    async_compute: true,
+                    shader_cache_precompile: true,
+                    memory_pool_size: Some(1024 * 1024 * 1024), // 1GB
+                    thread_priority: Some(-10),
+                },
+                filter_settings: Default::default(),
+                environment_variables: HashMap::new(),
+            },
+            GamescopePreset::Custom(config) => config.clone(),
+            // Add other presets with similar configs...
+            _ => self.get_default_config(),
+        }
+    }
+
+    fn get_default_config(&self) -> GamescopeConfig {
+        GamescopeConfig {
+            width: 1920,
+            height: 1080,
+            refresh_rate: Some(60),
+            upscaling: GamescopeUpscaling::Linear,
+            hdr_enabled: false,
+            frame_limiter: Some(60),
+            adaptive_sync: false,
+            fullscreen: true,
+            borderless: false,
+            nvidia_optimizations: true,
+            steam_deck_mode: false,
+            hdr_metadata: Default::default(),
+            color_management: Default::default(),
+            performance_profile: Default::default(),
+            filter_settings: Default::default(),
+            environment_variables: HashMap::new(),
         }
     }
 }
 
-/// Check if Gamescope is available on the system
-pub fn is_gamescope_available() -> bool {
-    which::which("gamescope").is_ok()
-}
+/// Generate advanced command arguments
+pub fn generate_advanced_command(config: &GamescopeConfig, command: &str) -> Vec<String> {
+    let mut args = vec![];
 
-/// Get current Gamescope version
-pub fn get_gamescope_version() -> NvResult<String> {
-    let output = Command::new("gamescope")
-        .arg("--version")
-        .output()
-        .map_err(|e| {
-            NvControlError::DisplayDetectionFailed(format!(
-                "Failed to get Gamescope version: {}",
-                e
-            ))
-        })?;
+    // Basic settings
+    args.push("-w".to_string());
+    args.push(config.width.to_string());
+    args.push("-h".to_string());
+    args.push(config.height.to_string());
 
-    if output.status.success() {
-        let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        Ok(version)
-    } else {
-        Err(NvControlError::DisplayDetectionFailed(
-            "Gamescope not available".to_string(),
-        ))
-    }
-}
-
-/// Detect if currently running inside Gamescope
-pub fn is_running_in_gamescope() -> bool {
-    // Check for Gamescope-specific environment variables
-    std::env::var("GAMESCOPE_WAYLAND_DISPLAY").is_ok()
-        || std::env::var("GAMESCOPE").is_ok()
-        || std::env::var("STEAM_GAMESCOPE").is_ok()
-}
-
-/// Configure Gamescope with optimization preset
-pub fn configure_gamescope() -> NvResult<()> {
-    if !is_gamescope_available() {
-        return Err(NvControlError::DisplayDetectionFailed(
-            "Gamescope not installed. Install with: sudo pacman -S gamescope".to_string(),
-        ));
+    if let Some(refresh) = config.refresh_rate {
+        args.push("-r".to_string());
+        args.push(refresh.to_string());
     }
 
-    let version = get_gamescope_version()?;
-    println!("Gamescope version: {}", version);
+    // Upscaling
+    args.push("-F".to_string());
+    args.push(config.upscaling.as_str().to_string());
 
-    if is_running_in_gamescope() {
-        println!("Currently running inside Gamescope session");
-        apply_runtime_optimizations()?;
-    } else {
-        println!("Gamescope available but not currently active");
-        print_gamescope_usage();
+    // HDR
+    if config.hdr_enabled {
+        args.push("--hdr-enabled".to_string());
     }
-
-    Ok(())
-}
-
-/// Apply runtime optimizations when running inside Gamescope
-fn apply_runtime_optimizations() -> NvResult<()> {
-    println!("Applying Gamescope runtime optimizations...");
-
-    // Set NVIDIA-specific environment variables
-    let nvidia_env_vars = vec![
-        ("__GL_THREADED_OPTIMIZATIONS", "1"),
-        ("__GL_SYNC_TO_VBLANK", "0"),
-        ("__GL_MaxFramesAllowed", "1"),
-        ("NVIDIA_PRIME_RENDER_OFFLOAD", "1"),
-        ("__NV_PRIME_RENDER_OFFLOAD", "1"),
-        ("__GLX_VENDOR_LIBRARY_NAME", "nvidia"),
-    ];
-
-    for (key, value) in nvidia_env_vars {
-        unsafe {
-            std::env::set_var(key, value);
-        }
-        println!("  Set {}={}", key, value);
-    }
-
-    // Apply CPU governor optimization for gaming
-    let _ = crate::latency::optimize_latency();
-
-    println!("Gamescope optimizations applied");
-    Ok(())
-}
-
-/// Launch a game with Gamescope using specified configuration
-pub fn launch_with_gamescope(game_path: &str) -> NvResult<()> {
-    launch_with_gamescope_config(game_path, &GamescopeConfig::default())
-}
-
-/// Launch a game with Gamescope using a preset
-pub fn launch_with_gamescope_preset(game_path: &str, preset: GamescopePreset) -> NvResult<()> {
-    let config = preset.to_config();
-    launch_with_gamescope_config(game_path, &config)
-}
-
-/// Launch a game with Gamescope using custom configuration
-pub fn launch_with_gamescope_config(game_path: &str, config: &GamescopeConfig) -> NvResult<()> {
-    if !is_gamescope_available() {
-        return Err(NvControlError::DisplayDetectionFailed(
-            "Gamescope not available. Install with your package manager.".to_string(),
-        ));
-    }
-
-    if !Path::new(game_path).exists() {
-        return Err(NvControlError::DisplayDetectionFailed(format!(
-            "Game not found: {}",
-            game_path
-        )));
-    }
-
-    println!("Launching {} with Gamescope...", game_path);
-
-    let mut cmd = Command::new("gamescope");
-
-    // Basic resolution and display settings
-    cmd.args(&[
-        "-w",
-        &config.width.to_string(),
-        "-h",
-        &config.height.to_string(),
-    ]);
-
-    // Refresh rate
-    if let Some(refresh_rate) = config.refresh_rate {
-        cmd.args(&["-r", &refresh_rate.to_string()]);
-    }
-
-    // Upscaling method
-    cmd.args(&["-U", config.upscaling.as_str()]);
 
     // Frame limiter
-    if let Some(fps_limit) = config.frame_limiter {
-        cmd.args(&["-o", &fps_limit.to_string()]);
+    if let Some(limit) = config.frame_limiter {
+        args.push("--fps-limit".to_string());
+        args.push(limit.to_string());
     }
 
-    // HDR support
-    if config.hdr_enabled {
-        cmd.arg("--hdr-enabled");
-    }
+    // Add the command to execute
+    args.push("--".to_string());
+    args.extend(command.split_whitespace().map(|s| s.to_string()));
 
-    // Adaptive sync
-    if config.adaptive_sync {
-        cmd.arg("--adaptive-sync");
-    }
-
-    // Fullscreen mode
-    if config.fullscreen {
-        cmd.arg("-f");
-    }
-
-    // Borderless mode
-    if config.borderless {
-        cmd.arg("-b");
-    }
-
-    // NVIDIA-specific optimizations
-    if config.nvidia_optimizations {
-        cmd.args(&["--backend", "sdl"]);
-        cmd.arg("--immediate-flips");
-        cmd.arg("--force-grab-cursor");
-    }
-
-    // Add environment variables
-    for (key, value) in &config.environment_variables {
-        cmd.env(key, value);
-    }
-
-    // Add the game command
-    cmd.arg("--");
-    cmd.arg(game_path);
-
-    println!("Gamescope command: {:?}", cmd);
-
-    // Launch Gamescope
-    let mut child = cmd
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| {
-            NvControlError::DisplayDetectionFailed(format!("Failed to launch Gamescope: {}", e))
-        })?;
-
-    println!("Gamescope launched with PID: {}", child.id());
-
-    // Wait for the process to complete
-    let exit_status = child.wait().map_err(|e| {
-        NvControlError::DisplayDetectionFailed(format!("Error waiting for Gamescope: {}", e))
-    })?;
-
-    if exit_status.success() {
-        println!("Gamescope session completed successfully");
-    } else {
-        println!("Gamescope session ended with errors");
-    }
-
-    Ok(())
+    args
 }
 
-/// Create a Steam integration for Gamescope
-pub fn create_steam_gamescope_wrapper(
-    game_name: &str,
-    game_path: &str,
-    preset: GamescopePreset,
-) -> NvResult<PathBuf> {
-    let config = preset.to_config();
-
-    // Create wrapper script
-    let script_content = generate_steam_wrapper_script(game_path, &config)?;
-
-    // Save to user's local bin directory
-    let user_dirs = directories::UserDirs::new().ok_or_else(|| {
-        NvControlError::DisplayDetectionFailed("Could not find home directory".to_string())
-    })?;
-    let home_dir = user_dirs.home_dir();
-
-    let local_bin = home_dir.join(".local/bin");
-    fs::create_dir_all(&local_bin).map_err(|e| {
-        NvControlError::DisplayDetectionFailed(format!(
-            "Failed to create local bin directory: {}",
-            e
-        ))
-    })?;
-
-    let script_path = local_bin.join(format!(
-        "gamescope-{}.sh",
-        game_name.to_lowercase().replace(' ', "-")
-    ));
-
-    fs::write(&script_path, script_content).map_err(|e| {
-        NvControlError::DisplayDetectionFailed(format!("Failed to write script: {}", e))
-    })?;
-
-    // Make executable
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(&script_path)?.permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&script_path, perms)?;
-    }
-
-    println!("Created Gamescope wrapper: {}", script_path.display());
-    println!("Add this to Steam as a non-Steam game to use Gamescope integration");
-
-    Ok(script_path)
+/// Create Steam Deck presets
+pub fn create_steam_deck_presets() -> Vec<GamescopePreset> {
+    vec![
+        GamescopePreset::SteamDeckHandheld,
+        GamescopePreset::SteamDeckDocked,
+    ]
 }
 
-/// Generate a wrapper script for Steam integration
-fn generate_steam_wrapper_script(game_path: &str, config: &GamescopeConfig) -> NvResult<String> {
-    let mut script = String::new();
-
-    script.push_str("#!/bin/bash\n");
-    script.push_str("# Generated by nvcontrol - Gamescope wrapper\n\n");
-
-    // Add environment variables
-    script.push_str("# NVIDIA optimizations\n");
-    for (key, value) in &config.environment_variables {
-        script.push_str(&format!("export {}=\"{}\"\n", key, value));
+/// Get recording status as a formatted string
+pub fn get_recording_status() -> NvResult<String> {
+    match crate::recording::get_recording_pid()? {
+        Some(pid) => Ok(format!("Recording active (PID: {})", pid)),
+        None => Ok("No active recording".to_string()),
     }
-    script.push('\n');
-
-    // Build Gamescope command
-    script.push_str("# Launch with Gamescope\n");
-    script.push_str("exec gamescope");
-
-    script.push_str(&format!(" -w {} -h {}", config.width, config.height));
-
-    if let Some(refresh_rate) = config.refresh_rate {
-        script.push_str(&format!(" -r {}", refresh_rate));
-    }
-
-    script.push_str(&format!(" -U {}", config.upscaling.as_str()));
-
-    if let Some(fps_limit) = config.frame_limiter {
-        script.push_str(&format!(" -o {}", fps_limit));
-    }
-
-    if config.hdr_enabled {
-        script.push_str(" --hdr-enabled");
-    }
-
-    if config.adaptive_sync {
-        script.push_str(" --adaptive-sync");
-    }
-
-    if config.fullscreen {
-        script.push_str(" -f");
-    }
-
-    if config.borderless {
-        script.push_str(" -b");
-    }
-
-    if config.nvidia_optimizations {
-        script.push_str(" --backend sdl --immediate-flips --force-grab-cursor");
-    }
-
-    script.push_str(&format!(" -- \"{}\" \"$@\"\n", game_path));
-
-    Ok(script)
 }
 
-/// Optimize Gamescope for NVIDIA + Wayland
-pub fn optimize_gamescope_nvidia_wayland() -> NvResult<()> {
-    println!("Optimizing Gamescope for NVIDIA + Wayland...");
-
-    // Check prerequisites
-    if !is_gamescope_available() {
-        return Err(NvControlError::DisplayDetectionFailed(
-            "Gamescope not available".to_string(),
-        ));
-    }
-
-    // Set optimal environment variables for NVIDIA + Wayland + Gamescope
-    let optimizations = vec![
-        ("GBM_BACKEND", "nvidia-drm"),
-        ("__GLX_VENDOR_LIBRARY_NAME", "nvidia"),
-        ("WLR_NO_HARDWARE_CURSORS", "1"),
-        ("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0"),
-        ("SDL_VIDEODRIVER", "wayland"),
-        ("QT_QPA_PLATFORM", "wayland"),
-        ("GDK_BACKEND", "wayland"),
-        ("CLUTTER_BACKEND", "wayland"),
-        ("__GL_GSYNC_ALLOWED", "1"),
-        ("__GL_VRR_ALLOWED", "1"),
-    ];
-
-    println!("Applied optimizations:");
-    for (key, value) in optimizations {
-        unsafe {
-            std::env::set_var(key, value);
-        }
-        println!("  {}={}", key, value);
-    }
-
-    // Create user configuration file
-    create_gamescope_config_file()?;
-
-    println!("\nGamescope optimization complete!");
-    println!("Restart your session for all changes to take effect.");
-
-    Ok(())
-}
-
-/// Create user configuration file for Gamescope
-fn create_gamescope_config_file() -> NvResult<()> {
-    let user_dirs = directories::UserDirs::new().ok_or_else(|| {
-        crate::NvControlError::DisplayDetectionFailed("Could not find home directory".to_string())
-    })?;
-    let config_dir = user_dirs.home_dir().join(".config/gamescope");
-
-    let config_content = r#"# Gamescope configuration generated by nvcontrol
-# NVIDIA + Wayland optimizations
-
-# Environment variables
-export GBM_BACKEND=nvidia-drm
-export __GLX_VENDOR_LIBRARY_NAME=nvidia
-export WLR_NO_HARDWARE_CURSORS=1
-export __GL_GSYNC_ALLOWED=1
-export __GL_VRR_ALLOWED=1
-
-# Default Gamescope options for NVIDIA
-GAMESCOPE_NVIDIA_ARGS="--backend sdl --immediate-flips --force-grab-cursor"
-"#;
-
-    std::fs::create_dir_all(&config_dir).map_err(|e| {
-        crate::NvControlError::DisplayDetectionFailed(format!(
-            "Failed to create config directory: {}",
-            e
-        ))
-    })?;
-
-    let config_file = config_dir.join("nvcontrol-gamescope.conf");
-    std::fs::write(&config_file, config_content).map_err(|e| {
-        crate::NvControlError::DisplayDetectionFailed(format!("Failed to write config file: {}", e))
-    })?;
-
-    println!("Created Gamescope config at: {}", config_file.display());
-    Ok(())
-}
-
-/// Print usage information for Gamescope
-fn print_gamescope_usage() {
-    println!("Gamescope Usage:");
-    println!("===============");
-    println!("Basic usage:");
-    println!("  gamescope -w 1920 -h 1080 -r 144 -- your-game");
-    println!("Performance mode:");
-    println!("  gamescope -w 1920 -h 1080 -r 144 -U -- your-game");
-    println!("With FSR:");
-    println!("  gamescope -w 1920 -h 1080 -W 2560 -H 1440 -U -- your-game");
-}
-
-/// Get Gamescope status and information
-pub fn get_gamescope_info() -> NvResult<()> {
-    println!("Gamescope Information:");
-    println!("=====================");
-
-    if is_gamescope_available() {
-        let version = get_gamescope_version()?;
-        println!("Version: {}", version);
-
-        if is_running_in_gamescope() {
-            println!("Status: Running inside Gamescope");
-        } else {
-            println!("Status: Gamescope available but not currently running");
-        }
-    } else {
-        println!("Status: Gamescope not found");
-        println!("Install with: sudo apt install gamescope  # or your package manager");
-    }
-
-    print_gamescope_usage();
-    Ok(())
+/// Get recording presets as a list
+pub fn get_recording_presets() -> NvResult<Vec<crate::recording::RecordingSettings>> {
+    crate::recording::load_recording_presets()
 }

@@ -1,3 +1,5 @@
+use crate::{NvControlError, NvResult};
+use clap::ValueEnum;
 use crossterm::{
     event::{self, Event, KeyCode},
     execute,
@@ -11,7 +13,21 @@ use ratatui::{
     style::{Color, Style},
     widgets::{Block, Borders, Paragraph, Row, Table},
 };
+use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GpuInfo {
+    pub name: String,
+    pub driver_version: String,
+    pub memory_total: u64,
+    pub memory_used: u64,
+    pub temperature: u32,
+    pub power_draw: f32,
+    pub fan_speed: u32,
+    pub gpu_utilization: u32,
+    pub memory_utilization: u32,
+}
 
 /// Check if NVIDIA GPU is available on the system
 pub fn is_nvidia_available() -> bool {
@@ -24,74 +40,64 @@ pub fn is_nvidia_available() -> bool {
     }
 }
 
-pub fn get_gpu_info() {
+pub fn get_gpu_info() -> NvResult<GpuInfo> {
     match Nvml::init() {
         Ok(nvml) => match nvml.device_count() {
             Ok(count) => {
-                println!("Found {count} NVIDIA GPU(s):");
-                for idx in 0..count {
-                    if let Ok(device) = nvml.device_by_index(idx) {
-                        let name = device.name().unwrap_or("Unknown".to_string());
-                        let driver = nvml.sys_driver_version().unwrap_or("Unknown".to_string());
-                        let mem = device.memory_info().ok();
-                        let mem_str = if let Some(m) = mem {
-                            format!("{:.1} GB", m.total as f64 / 1e9)
-                        } else {
-                            "Unknown".to_string()
-                        };
-                        let temp = device
-                            .temperature(
-                                nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu,
-                            )
-                            .unwrap_or(0);
-                        let power_state = device
-                            .performance_state()
-                            .map(|p| format!("{p:?}"))
-                            .unwrap_or("Unknown".to_string());
-
-                        println!("  GPU {idx}: {name}");
-                        println!("    Driver: {driver}");
-                        println!("    VRAM: {mem_str}");
-                        println!("    Temperature: {temp}°C");
-                        println!("    Power State: {power_state}");
-                        println!();
-                    }
+                if count == 0 {
+                    return Err(NvControlError::GpuQueryFailed(
+                        "No NVIDIA GPUs found".to_string(),
+                    ));
                 }
-            }
-            Err(e) => eprintln!("Failed to get GPU count: {e}"),
-        },
-        Err(e) => {
-            eprintln!("NVML not available: {e}");
-            eprintln!("Falling back to nvidia-smi...");
 
-            // Fallback to nvidia-smi
-            match std::process::Command::new("nvidia-smi")
-                .arg("--query-gpu=name,driver_version,memory.total,temperature.gpu,power.state")
-                .arg("--format=csv,noheader,nounits")
-                .output()
-            {
-                Ok(output) => {
-                    if output.status.success() {
-                        let output_str = String::from_utf8_lossy(&output.stdout);
-                        println!("GPU Information (via nvidia-smi):");
-                        for (idx, line) in output_str.lines().enumerate() {
-                            let fields: Vec<&str> = line.split(',').map(|s| s.trim()).collect();
-                            if fields.len() >= 5 {
-                                println!("  GPU {}: {}", idx, fields[0]);
-                                println!("    Driver: {}", fields[1]);
-                                println!("    VRAM: {} MB", fields[2]);
-                                println!("    Temperature: {}°C", fields[3]);
-                                println!("    Power State: {}", fields[4]);
-                                println!();
-                            }
+                // Get info for first GPU
+                if let Ok(device) = nvml.device_by_index(0) {
+                    let name = device.name().unwrap_or("Unknown".to_string());
+                    let driver = nvml.sys_driver_version().unwrap_or("Unknown".to_string());
+                    let mem = device.memory_info().unwrap_or_else(|_| {
+                        nvml_wrapper::struct_wrappers::device::MemoryInfo {
+                            total: 0,
+                            free: 0,
+                            used: 0,
+                            reserved: 0,
+                            version: 0,
                         }
-                    } else {
-                        eprintln!("nvidia-smi failed");
-                    }
+                    });
+                    let temp = device
+                        .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
+                        .unwrap_or(0);
+
+                    // Get utilization if available
+                    let utilization = device.utilization_rates().unwrap_or_else(|_| {
+                        nvml_wrapper::struct_wrappers::device::Utilization { gpu: 0, memory: 0 }
+                    });
+
+                    Ok(GpuInfo {
+                        name,
+                        driver_version: driver,
+                        memory_total: mem.total / (1024 * 1024), // Convert to MB
+                        memory_used: mem.used / (1024 * 1024),
+                        temperature: temp,
+                        power_draw: device.power_usage().unwrap_or(0) as f32 / 1000.0, // Convert to watts
+                        fan_speed: device.fan_speed(0).unwrap_or(0),
+                        gpu_utilization: utilization.gpu,
+                        memory_utilization: utilization.memory,
+                    })
+                } else {
+                    Err(NvControlError::GpuQueryFailed(
+                        "Failed to access GPU".to_string(),
+                    ))
                 }
-                Err(_) => eprintln!("nvidia-smi not found. Please install NVIDIA drivers."),
             }
-        }
+            Err(e) => Err(NvControlError::GpuQueryFailed(format!(
+                "Failed to get device count: {}",
+                e
+            ))),
+        },
+        Err(e) => Err(NvControlError::GpuQueryFailed(format!(
+            "Failed to initialize NVML: {}",
+            e
+        ))),
     }
 }
 
@@ -212,4 +218,67 @@ pub fn monitor_gpu_stat() {
     disable_raw_mode().unwrap();
     execute!(terminal.backend_mut(), LeaveAlternateScreen).unwrap();
     terminal.show_cursor().unwrap();
+}
+
+/// Get GPU info with specified format
+pub fn get_gpu_info_with_format(format: OutputFormat) -> NvResult<()> {
+    let gpu_info = get_gpu_info()?;
+
+    match format {
+        OutputFormat::Human => {
+            println!("🖥️  GPU Information:");
+            println!("   Name: {}", gpu_info.name);
+            println!("   Driver: {}", gpu_info.driver_version);
+            println!("   Memory: {} MB", gpu_info.memory_total);
+            println!("   Temperature: {}°C", gpu_info.temperature);
+            println!("   Power Draw: {} W", gpu_info.power_draw);
+            println!("   Fan Speed: {}%", gpu_info.fan_speed);
+            println!("   GPU Utilization: {}%", gpu_info.gpu_utilization);
+            println!("   Memory Utilization: {}%", gpu_info.memory_utilization);
+        }
+        OutputFormat::Json => {
+            println!("{}", serde_json::to_string_pretty(&gpu_info).unwrap());
+        }
+        OutputFormat::Table => {
+            println!("┌─────────────────────┬─────────────────────────┐");
+            println!("│ Property            │ Value                   │");
+            println!("├─────────────────────┼─────────────────────────┤");
+            println!("│ Name                │ {:<23} │", gpu_info.name);
+            println!("│ Driver              │ {:<23} │", gpu_info.driver_version);
+            println!(
+                "│ Memory              │ {:<23} │",
+                format!("{} MB", gpu_info.memory_total)
+            );
+            println!(
+                "│ Temperature         │ {:<23} │",
+                format!("{}°C", gpu_info.temperature)
+            );
+            println!(
+                "│ Power Draw          │ {:<23} │",
+                format!("{} W", gpu_info.power_draw)
+            );
+            println!(
+                "│ Fan Speed           │ {:<23} │",
+                format!("{}%", gpu_info.fan_speed)
+            );
+            println!(
+                "│ GPU Utilization     │ {:<23} │",
+                format!("{}%", gpu_info.gpu_utilization)
+            );
+            println!(
+                "│ Memory Utilization  │ {:<23} │",
+                format!("{}%", gpu_info.memory_utilization)
+            );
+            println!("└─────────────────────┴─────────────────────────┘");
+        }
+    }
+
+    Ok(())
+}
+
+#[derive(Debug, Clone, ValueEnum)]
+pub enum OutputFormat {
+    Human,
+    Json,
+    Table,
 }

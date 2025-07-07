@@ -4,13 +4,29 @@ use std::collections::HashMap;
 use std::env;
 use std::path::PathBuf;
 use std::process::Command;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VibranceProfile {
     pub name: String,
-    pub display_settings: HashMap<usize, i32>, // display_id -> vibrance_value
-    pub auto_apply_games: Vec<String>,         // List of game executables
     pub description: String,
+    pub display_settings: HashMap<usize, EnhancedVibranceSettings>, // display_id -> settings
+    pub auto_apply_games: Vec<String>,                              // List of game executables
+    pub quick_preset_hotkey: Option<String>,                        // Keyboard shortcut
+    pub created_at: u64,                                            // Unix timestamp
+    pub last_used: u64,                                             // Unix timestamp
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnhancedVibranceSettings {
+    pub vibrance: i32,          // -1024 to 1023
+    pub saturation: f32,        // 0.0 to 2.0
+    pub contrast: f32,          // 0.0 to 2.0
+    pub brightness: f32,        // 0.0 to 2.0
+    pub gamma: f32,             // 0.5 to 3.0
+    pub hue_shift: f32,         // -180.0 to 180.0 degrees
+    pub color_temperature: i32, // 1000K to 10000K
+    pub enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,21 +36,84 @@ pub struct GameVibranceConfig {
     pub vibrance_profile: String,
     pub auto_detect: bool,
     pub process_names: Vec<String>, // Alternative process names to detect
+    pub window_class: Option<String>, // X11 window class detection
+    pub steam_app_id: Option<u32>,  // Steam app ID for detection
 }
 
-#[derive(Debug, Clone)]
-pub struct VibranceSettings {
-    pub display_name: String,
-    pub vibrance: i32, // -1024 to 1023 (nvibrant range)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VibranceSchedule {
+    pub name: String,
     pub enabled: bool,
+    pub time_slots: Vec<TimeSlot>,
 }
 
-impl Default for VibranceSettings {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimeSlot {
+    pub start_hour: u8,   // 0-23
+    pub start_minute: u8, // 0-59
+    pub end_hour: u8,     // 0-23
+    pub end_minute: u8,   // 0-59
+    pub profile_name: String,
+    pub days_of_week: Vec<u8>, // 0=Sunday, 1=Monday, etc.
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuickPreset {
+    pub name: String,
+    pub hotkey: String,
+    pub profile_name: String,
+    pub icon: Option<String>,
+    pub color: Option<String>, // Hex color for UI
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DisplayInfo {
+    pub id: usize,
+    pub name: String,
+    pub connected: bool,
+    pub primary: bool,
+    pub resolution: (u32, u32),
+    pub refresh_rate: Option<f32>,
+    pub color_depth: Option<u8>,
+    pub current_settings: EnhancedVibranceSettings,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VibranceSettings {
+    pub vibrance: i32,
+    pub display_id: usize,
+}
+
+impl Default for EnhancedVibranceSettings {
     fn default() -> Self {
         Self {
-            display_name: String::new(),
-            vibrance: 0, // 0 = default/no effect
+            vibrance: 0,
+            saturation: 1.0,
+            contrast: 1.0,
+            brightness: 1.0,
+            gamma: 2.2,
+            hue_shift: 0.0,
+            color_temperature: 6500,
             enabled: true,
+        }
+    }
+}
+
+impl Default for VibranceProfile {
+    fn default() -> Self {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or(Duration::from_secs(0))
+            .as_secs();
+
+        Self {
+            name: "Default".to_string(),
+            description: "Default vibrance profile".to_string(),
+            display_settings: HashMap::new(),
+            auto_apply_games: Vec::new(),
+            quick_preset_hotkey: None,
+            created_at: now,
+            last_used: now,
         }
     }
 }
@@ -245,321 +324,145 @@ pub fn vibrance_to_percentage(vibrance: i32) -> u32 {
     }
 }
 
-/// Check if nvibrant is available on the system
-pub fn is_available() -> bool {
-    let nvibrant_path = get_nvibrant_path();
-    Command::new(&nvibrant_path)
-        .arg("--help")
-        .output()
-        .map(|output| output.status.success())
-        .unwrap_or(false)
+/// Set vibrance for a specific display by ID
+pub fn set_display_vibrance(display_id: usize, vibrance: i32) -> NvResult<()> {
+    set_vibrance(&[(display_id, vibrance)])
 }
 
-/// Get driver version compatibility info
+/// Get display name for a specific display ID
+pub fn get_display_name(display_id: usize) -> NvResult<String> {
+    let displays = get_displays()?;
+    if display_id < displays.len() {
+        Ok(displays[display_id].clone())
+    } else {
+        Err(NvControlError::VibranceControlFailed(format!(
+            "Display ID {} not found (available: 0-{})",
+            display_id,
+            displays.len().saturating_sub(1)
+        )))
+    }
+}
+
+/// Check if vibrance control is available
+pub fn is_available() -> bool {
+    let nvibrant_path = get_nvibrant_path();
+    std::path::Path::new(&nvibrant_path).exists()
+}
+
+/// Get driver information
 pub fn get_driver_info() -> NvResult<String> {
-    // Try to get nvidia driver version
-    if let Ok(output) = Command::new("nvidia-smi")
+    use std::process::Command;
+
+    let output = Command::new("nvidia-smi")
         .arg("--query-gpu=driver_version")
         .arg("--format=csv,noheader,nounits")
         .output()
-    {
-        if output.status.success() {
-            let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            return Ok(format!("NVIDIA Driver: {} (nvibrant compatible)", version));
-        }
-    }
+        .map_err(|e| {
+            NvControlError::VibranceControlFailed(format!("Failed to get driver info: {}", e))
+        })?;
 
-    Ok("Driver version unknown - nvibrant may not work".to_string())
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    } else {
+        Err(NvControlError::VibranceControlFailed(
+            "Failed to get driver version".to_string(),
+        ))
+    }
 }
 
-/// Initialize nvibrant submodule and verify installation
+/// Initialize nvibrant
 pub fn initialize_nvibrant() -> NvResult<()> {
-    println!("🔧 Initializing nvibrant integration...");
-
-    // Check if nvibrant is already available
     if is_available() {
-        println!("✅ nvibrant already available");
-        return Ok(());
-    }
-
-    // Try to run setup script
-    let setup_result = std::process::Command::new("./scripts/setup-nvibrant.sh").output();
-
-    match setup_result {
-        Ok(output) => {
-            if output.status.success() {
-                println!("✅ nvibrant setup completed successfully");
-                Ok(())
-            } else {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                Err(NvControlError::VibranceControlFailed(format!(
-                    "nvibrant setup failed: {}",
-                    stderr
-                )))
-            }
-        }
-        Err(e) => {
-            eprintln!("⚠️ Automatic setup failed: {}", e);
-            eprintln!("Please run manually: ./scripts/setup-nvibrant.sh");
-            Err(NvControlError::VibranceControlFailed(
-                "Manual nvibrant setup required".to_string(),
-            ))
-        }
-    }
-}
-
-/// Set vibrance for each display using the integrated nVibrant.
-/// `levels` should be a vector of values (-1024 to 1023) for each display in physical port order.
-/// This is the legacy function for backward compatibility
-pub fn set_vibrance_legacy(levels: &[i16]) -> NvResult<()> {
-    // Convert i16 to (usize, i32) format for new function
-    let display_values: Vec<(usize, i32)> = levels
-        .iter()
-        .enumerate()
-        .map(|(idx, &level)| (idx, level as i32))
-        .collect();
-
-    set_vibrance(&display_values)
-}
-
-/// Advanced vibrance profile management
-impl VibranceProfile {
-    pub fn new(name: String) -> Self {
-        Self {
-            name,
-            display_settings: HashMap::new(),
-            auto_apply_games: Vec::new(),
-            description: String::new(),
-        }
-    }
-
-    pub fn set_display_vibrance(&mut self, display_id: usize, vibrance: i32) {
-        self.display_settings
-            .insert(display_id, vibrance.clamp(-1024, 1023));
-    }
-
-    pub fn add_game(&mut self, game_executable: String) {
-        if !self.auto_apply_games.contains(&game_executable) {
-            self.auto_apply_games.push(game_executable);
-        }
-    }
-
-    pub fn apply_profile(&self) -> NvResult<()> {
-        let display_values: Vec<(usize, i32)> = self
-            .display_settings
-            .iter()
-            .map(|(&display_id, &vibrance)| (display_id, vibrance))
-            .collect();
-
-        if !display_values.is_empty() {
-            set_vibrance(&display_values)?;
-            println!("Applied vibrance profile: {}", self.name);
-        }
         Ok(())
+    } else {
+        Err(NvControlError::VibranceControlFailed(
+            "nvibrant not available".to_string(),
+        ))
     }
 }
 
-/// Game detection and vibrance management
-impl GameVibranceConfig {
-    pub fn new(game_executable: String, vibrance_profile: String) -> Self {
-        Self {
-            game_executable: game_executable.clone(),
-            game_name: game_executable,
-            vibrance_profile,
-            auto_detect: true,
-            process_names: Vec::new(),
-        }
-    }
-
-    pub fn add_process_name(&mut self, process_name: String) {
-        if !self.process_names.contains(&process_name) {
-            self.process_names.push(process_name);
-        }
-    }
-
-    pub fn is_game_running(&self) -> bool {
-        // Check main game executable
-        if is_process_running(&self.game_executable) {
-            return true;
-        }
-
-        // Check alternative process names
-        for process_name in &self.process_names {
-            if is_process_running(process_name) {
-                return true;
-            }
-        }
-
-        false
-    }
-}
-
-/// Check if a process is currently running
-fn is_process_running(process_name: &str) -> bool {
-    if let Ok(output) = Command::new("pgrep").arg("-f").arg(process_name).output() {
-        return output.status.success() && !output.stdout.is_empty();
-    }
-    false
-}
-
-/// Vibrance profile manager
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct VibranceProfileManager {
-    pub profiles: HashMap<String, VibranceProfile>,
-    pub game_configs: HashMap<String, GameVibranceConfig>,
-    pub active_profile: Option<String>,
-    pub monitoring_enabled: bool,
-}
-
-impl VibranceProfileManager {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn add_profile(&mut self, profile: VibranceProfile) {
-        self.profiles.insert(profile.name.clone(), profile);
-    }
-
-    pub fn add_game_config(&mut self, config: GameVibranceConfig) {
-        self.game_configs
-            .insert(config.game_executable.clone(), config);
-    }
-
-    pub fn set_active_profile(&mut self, profile_name: String) -> NvResult<()> {
-        if let Some(profile) = self.profiles.get(&profile_name) {
-            profile.apply_profile()?;
-            self.active_profile = Some(profile_name);
-            Ok(())
-        } else {
-            Err(NvControlError::VibranceControlFailed(format!(
-                "Profile '{}' not found",
-                profile_name
-            )))
-        }
-    }
-
-    pub fn check_running_games(&mut self) -> NvResult<Option<String>> {
-        if !self.monitoring_enabled {
-            return Ok(None);
-        }
-
-        for config in self.game_configs.values() {
-            if config.auto_detect && config.is_game_running() {
-                if let Some(profile) = self.profiles.get(&config.vibrance_profile) {
-                    // Only apply if not already active
-                    if self.active_profile.as_ref() != Some(&config.vibrance_profile) {
-                        profile.apply_profile()?;
-                        self.active_profile = Some(config.vibrance_profile.clone());
-                        return Ok(Some(format!(
-                            "Auto-applied profile '{}' for game '{}'",
-                            config.vibrance_profile, config.game_name
-                        )));
-                    }
-                }
-            }
-        }
-        Ok(None)
-    }
-
-    pub fn enable_monitoring(&mut self) {
-        self.monitoring_enabled = true;
-    }
-
-    pub fn disable_monitoring(&mut self) {
-        self.monitoring_enabled = false;
-    }
-
-    pub fn create_gaming_profile(&mut self, name: String, vibrance_level: i32) -> NvResult<()> {
-        let displays = get_displays()?;
-        let mut profile = VibranceProfile::new(name.clone());
-        profile.description = format!("Gaming profile with vibrance level {}", vibrance_level);
-
-        // Apply vibrance to all detected displays
-        for i in 0..displays.len() {
-            profile.set_display_vibrance(i, vibrance_level);
-        }
-
-        self.add_profile(profile);
-        Ok(())
-    }
-
-    pub fn create_default_profiles(&mut self) -> NvResult<()> {
-        // Create standard profiles
-        self.create_gaming_profile("Gaming High".to_string(), 800)?;
-        self.create_gaming_profile("Gaming Medium".to_string(), 400)?;
-        self.create_gaming_profile("Standard".to_string(), 0)?;
-        self.create_gaming_profile("Cinematic".to_string(), -200)?;
-
-        // Gaming profile for CS2
-        let mut cs2_config = GameVibranceConfig::new("cs2.exe".to_string(), "Gaming".to_string());
-        cs2_config.add_process_name("cs2".to_string());
-
-        self.add_game_config(cs2_config);
-
-        let mut valorant_config =
-            GameVibranceConfig::new("VALORANT.exe".to_string(), "Gaming".to_string());
-        valorant_config.add_process_name("VALORANT".to_string());
-        self.add_game_config(valorant_config);
-
-        Ok(())
-    }
-
-    pub fn save_to_file(&self, path: &std::path::Path) -> NvResult<()> {
-        let json = serde_json::to_string_pretty(self).map_err(|e| {
-            NvControlError::VibranceControlFailed(format!("Serialization failed: {}", e))
-        })?;
-
-        std::fs::write(path, json).map_err(|e| {
-            NvControlError::VibranceControlFailed(format!("Failed to save profile: {}", e))
-        })?;
-
-        Ok(())
-    }
-
-    pub fn load_from_file(path: &std::path::Path) -> NvResult<Self> {
-        let content = std::fs::read_to_string(path).map_err(|e| {
-            NvControlError::VibranceControlFailed(format!("Failed to read profile: {}", e))
-        })?;
-
-        let manager = serde_json::from_str(&content).map_err(|e| {
-            NvControlError::VibranceControlFailed(format!("Deserialization failed: {}", e))
-        })?;
-
-        Ok(manager)
-    }
-
-    pub fn list_profiles(&self) -> Vec<&VibranceProfile> {
-        self.profiles.values().collect()
-    }
-
-    pub fn list_game_configs(&self) -> Vec<&GameVibranceConfig> {
-        self.game_configs.values().collect()
-    }
-}
-
-/// Verify nvibrant works with current system
+/// Test nvibrant functionality
 pub fn test_nvibrant() -> NvResult<()> {
-    if !is_available() {
-        return Err(NvControlError::VibranceControlFailed(
-            "nvibrant not available - run initialization first".to_string(),
-        ));
-    }
+    use std::process::Command;
 
-    // Test basic functionality
-    match get_displays() {
-        Ok(displays) => {
-            println!(
-                "✅ nvibrant test successful - found {} displays",
-                displays.len()
-            );
-            for (i, display) in displays.iter().enumerate() {
-                println!("  Display {}: {}", i, display);
-            }
-            Ok(())
-        }
-        Err(e) => Err(NvControlError::VibranceControlFailed(format!(
-            "nvibrant test failed: {}",
-            e
-        ))),
+    let nvibrant_path = get_nvibrant_path();
+    let output = Command::new(&nvibrant_path)
+        .arg("--help")
+        .output()
+        .map_err(|e| {
+            NvControlError::VibranceControlFailed(format!("Failed to test nvibrant: {}", e))
+        })?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(NvControlError::VibranceControlFailed(
+            "nvibrant test failed".to_string(),
+        ))
     }
+}
+
+/// Detect enhanced displays
+pub fn detect_enhanced_displays() -> NvResult<Vec<(usize, String)>> {
+    let displays = get_displays()?;
+    let enhanced_displays: Vec<(usize, String)> = displays.into_iter().enumerate().collect();
+    Ok(enhanced_displays)
+}
+
+/// Load enhanced profiles
+pub fn load_enhanced_profiles() -> NvResult<Vec<VibranceProfile>> {
+    // Return some default profiles for now
+    Ok(vec![
+        VibranceProfile {
+            name: "Gaming".to_string(),
+            description: "Enhanced vibrance for gaming".to_string(),
+            display_settings: std::collections::HashMap::new(),
+            auto_apply_games: vec![],
+            quick_preset_hotkey: None,
+            created_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            last_used: 0,
+        },
+        VibranceProfile {
+            name: "Work".to_string(),
+            description: "Comfortable vibrance for work".to_string(),
+            display_settings: std::collections::HashMap::new(),
+            auto_apply_games: vec![],
+            quick_preset_hotkey: None,
+            created_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            last_used: 0,
+        },
+    ])
+}
+
+/// Apply enhanced vibrance
+pub fn apply_enhanced_vibrance(display_id: usize, settings: &VibranceSettings) -> NvResult<()> {
+    set_display_vibrance(display_id, settings.vibrance)
+}
+
+/// Preview vibrance changes
+pub fn preview_vibrance_changes(
+    display_id: usize,
+    settings: &VibranceSettings,
+    duration_ms: u64,
+) -> NvResult<()> {
+    use std::thread;
+    use std::time::Duration;
+
+    // Get current vibrance
+    let original_vibrance = get_display_vibrance(display_id)?;
+
+    // Apply new vibrance
+    set_display_vibrance(display_id, settings.vibrance)?;
+
+    // Wait for specified duration
+    thread::sleep(Duration::from_millis(duration_ms));
+
+    // Restore original vibrance
+    set_display_vibrance(display_id, original_vibrance)
 }

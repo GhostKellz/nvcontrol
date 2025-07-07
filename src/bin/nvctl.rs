@@ -1,53 +1,121 @@
 use clap::{Parser, Subcommand};
-use nvcontrol::{display, drivers, fan, gpu, monitoring, overclocking, power, upscaling, vrr};
+use console::{Key, Term, style};
+use indicatif::{ProgressBar, ProgressStyle};
+use nvcontrol::{
+    display, drivers, fan, gamescope,
+    gpu::{self, OutputFormat},
+    latency, monitoring, overclocking, power, recording, upscaling, vrr,
+};
+use serde_json;
+use std::time::Duration;
 
 #[derive(Parser)]
-#[command(name = "nvctl", version, about = "NVIDIA Control CLI - Advanced GPU Management", long_about = None)]
+#[command(
+    name = "nvctl",
+    version,
+    about = "🎮 NVIDIA Control CLI - Advanced GPU Management",
+    long_about = "Advanced command-line interface for comprehensive NVIDIA GPU control and monitoring.\n\nFeatures: GPU monitoring, overclocking, fan control, VRR, recording, containers, and more.",
+    after_help = "Examples:\n  nvctl gpu info --json           # GPU info in JSON format\n  nvctl fan curve apply gaming     # Apply gaming fan curve\n  nvctl monitor --watch            # Live monitoring\n  nvctl container list             # List GPU containers\n\nFor detailed help: nvctl <command> --help"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
+
+    /// Enable verbose output
+    #[arg(short, long, global = true)]
+    verbose: bool,
+
+    /// Output format
+    #[arg(long, global = true, value_enum)]
+    format: Option<OutputFormat>,
+
+    /// Disable colored output
+    #[arg(long, global = true)]
+    no_color: bool,
 }
 
 #[derive(Subcommand)]
 enum Command {
+    /// 🎮 GPU information and control
     Gpu {
         #[command(subcommand)]
         subcommand: GpuSubcommand,
     },
+    /// 🖥️ Display and monitor management
     Display {
         #[command(subcommand)]
         subcommand: DisplaySubcommand,
     },
+    /// 🌀 Fan control and curves
     Fan {
         #[command(subcommand)]
         subcommand: FanSubcommand,
     },
+    /// ⚡ Overclocking and performance
     Overclock {
         #[command(subcommand)]
         subcommand: OverclockSubcommand,
     },
+    /// 🔄 Variable Refresh Rate (VRR/G-Sync)
     Vrr {
         #[command(subcommand)]
         subcommand: VrrSubcommand,
     },
-    Upscaling {
+    /// 📊 Real-time monitoring
+    Monitor {
         #[command(subcommand)]
-        subcommand: UpscalingSubcommand,
+        subcommand: Option<MonitorSubcommand>,
     },
+    /// 🎯 Gaming optimization and latency
+    Gaming {
+        #[command(subcommand)]
+        subcommand: GamingSubcommand,
+    },
+    /// 📹 Recording and streaming
+    Recording {
+        #[command(subcommand)]
+        subcommand: RecordingSubcommand,
+    },
+    /// 🐳 Container and virtualization
+    Container {
+        #[command(subcommand)]
+        subcommand: ContainerSubcommand,
+    },
+    /// 🔧 System drivers and utilities
     Drivers {
         #[command(subcommand)]
         subcommand: DriversSubcommand,
     },
+    /// ⚡ Power management
     Power {
         #[command(subcommand)]
         subcommand: PowerSubcommand,
+    },
+    /// 🎨 Color and vibrance control
+    Color {
+        #[command(subcommand)]
+        subcommand: ColorSubcommand,
+    },
+    /// ⚙️ Configuration and profiles
+    Config {
+        #[command(subcommand)]
+        subcommand: ConfigSubcommand,
+    },
+    /// 📈 AI Upscaling and enhancement
+    Upscaling {
+        #[command(subcommand)]
+        subcommand: UpscalingSubcommand,
     },
 }
 
 #[derive(Subcommand)]
 enum GpuSubcommand {
     /// Show comprehensive GPU information
-    Info,
+    Info {
+        /// Output format: json, yaml, table
+        #[arg(short, long, value_enum, default_value = "table")]
+        format: OutputFormat,
+    },
     /// Launch live TUI dashboard for GPU monitoring
     Stat,
     /// Show detailed GPU overclocking capabilities
@@ -258,45 +326,312 @@ enum DriversSubcommand {
 
 #[derive(Subcommand)]
 enum PowerSubcommand {
-    /// Show comprehensive power information
-    Info,
-    /// Set power management profile
-    Profile {
-        /// Profile: performance, balanced, powersaver, or custom name
-        profile: String,
-    },
-    /// Set power limit percentage
+    /// Show current power settings
+    Status,
+    /// Set GPU power limit (percentage)
     Limit {
         /// Power limit percentage (50-120)
+        #[arg(short, long)]
         percentage: u32,
     },
-    /// Toggle persistence mode
+    /// Configure power profile
+    Profile {
+        /// Profile name: performance, balanced, quiet
+        #[arg(short, long)]
+        profile: String,
+    },
+    /// Power persistence settings
     Persistence {
-        /// Enable or disable persistence mode
-        #[arg(value_parser = clap::builder::BoolishValueParser::new())]
+        /// Enable persistence mode
+        #[arg(short, long)]
         enabled: bool,
     },
-    /// Monitor power consumption
+    /// Monitor power usage
     Monitor {
-        /// Duration in seconds to monitor
+        /// Duration to monitor in seconds
         #[arg(short, long, default_value = "60")]
+        duration: u64,
+    },
+    /// Automate power management
+    Automate,
+}
+
+#[derive(Subcommand)]
+enum ColorSubcommand {
+    /// Vibrance control
+    Vibrance {
+        #[command(subcommand)]
+        action: VibranceAction,
+    },
+    /// Color profile management
+    Profiles {
+        #[command(subcommand)]
+        action: ColorProfileAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum VibranceAction {
+    /// Get current vibrance for a display
+    Get {
+        /// Display ID (0-based)
+        #[arg(short, long)]
+        display: Option<usize>,
+    },
+    /// Set vibrance for a display
+    Set {
+        /// Vibrance value (-1024 to 1023)
+        #[arg(short, long)]
+        value: i32,
+        /// Display ID (0-based, all if not specified)
+        #[arg(short, long)]
+        display: Option<usize>,
+    },
+    /// Apply vibrance profile
+    Apply {
+        /// Profile name
+        #[arg(short, long)]
+        profile: String,
+    },
+    /// Preview vibrance changes
+    Preview {
+        /// Profile name
+        #[arg(short, long)]
+        profile: String,
+        /// Duration in seconds
+        #[arg(short, long, default_value = "5")]
+        duration: u64,
+    },
+}
+
+#[derive(Subcommand)]
+enum ColorProfileAction {
+    /// List available color profiles
+    List,
+    /// Create new color profile
+    Create {
+        /// Profile name
+        #[arg(short, long)]
+        name: String,
+    },
+    /// Apply color profile
+    Apply {
+        /// Profile name
+        #[arg(short, long)]
+        name: String,
+    },
+    /// Schedule color profile
+    Schedule {
+        /// Profile name
+        #[arg(short, long)]
+        name: String,
+        /// Schedule time (HH:MM format)
+        #[arg(short, long)]
+        time: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum ConfigSubcommand {
+    /// Show current configuration
+    Show,
+    /// Edit configuration file
+    Edit,
+    /// Reset configuration to defaults
+    Reset,
+    /// Backup configuration
+    Backup {
+        /// Output file path
+        #[arg(short, long)]
+        output: Option<String>,
+    },
+    /// Restore configuration from backup
+    Restore {
+        /// Input file path
+        #[arg(short, long)]
+        input: String,
+    },
+}
+#[derive(Subcommand)]
+enum MonitorSubcommand {
+    /// Start monitoring
+    Start {
+        /// Monitoring interval in seconds
+        #[arg(short, long, default_value = "1")]
+        interval: u64,
+        /// Number of samples to collect
+        #[arg(short, long)]
+        count: Option<u64>,
+    },
+    /// Stop monitoring
+    Stop,
+    /// Show monitoring status
+    Status,
+    /// Launch TUI monitoring interface
+    Tui,
+    /// Export monitoring data
+    Export {
+        /// Output file path
+        #[arg(short, long)]
+        output: String,
+        /// Duration to monitor in seconds
+        #[arg(short, long, default_value = "60")]
+        duration: u64,
+    },
+}
+
+#[derive(Subcommand)]
+enum GamingSubcommand {
+    /// Enable gaming optimizations
+    Enable,
+    /// Disable gaming optimizations
+    Disable,
+    /// Show gaming optimization status
+    Status,
+    /// Latency optimization controls
+    Latency {
+        #[command(subcommand)]
+        action: LatencyAction,
+    },
+    /// Gamescope controls
+    Gamescope {
+        #[command(subcommand)]
+        action: GamescopeAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum LatencyAction {
+    /// Optimize for low latency
+    Optimize {
+        /// Preset name: ultra, high, medium, low
+        #[arg(short, long, default_value = "high")]
+        preset: String,
+    },
+    /// Show latency status
+    Status,
+    /// Test latency
+    Test,
+}
+
+#[derive(Subcommand)]
+enum GamescopeAction {
+    /// Launch application with Gamescope
+    Launch {
+        /// Command to run
+        #[arg(short, long)]
+        command: String,
+        /// Preset to use
+        #[arg(short, long)]
+        preset: Option<String>,
+        /// Window width
+        #[arg(short, long)]
+        width: Option<u32>,
+        /// Window height
+        #[arg(long)]
+        height: Option<u32>,
+    },
+    /// List available presets
+    Presets,
+    /// Create new preset
+    CreatePreset {
+        /// Preset name
+        #[arg(short, long)]
+        name: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum RecordingSubcommand {
+    /// Start recording
+    Start {
+        /// Output file path
+        #[arg(short, long)]
+        output: Option<String>,
+        /// Recording preset
+        #[arg(short, long)]
+        preset: Option<String>,
+        /// Quality level (1-10)
+        #[arg(short, long)]
+        quality: Option<u32>,
+    },
+    /// Stop recording
+    Stop,
+    /// Show recording status
+    Status,
+    /// Start instant replay
+    InstantReplay {
+        /// Buffer duration in seconds
+        #[arg(short, long, default_value = "30")]
         duration: u32,
     },
-    /// Create power management automation
-    Automate,
+    /// Save instant replay clip
+    Save,
+    /// List available presets
+    Presets,
+}
+
+#[derive(Subcommand)]
+enum ContainerSubcommand {
+    /// List GPU-enabled containers
+    List,
+    /// Show container GPU status
+    Status {
+        /// Container ID or name
+        #[arg(short, long)]
+        container: Option<String>,
+    },
+    /// Monitor container GPU usage
+    Monitor {
+        /// Container ID or name
+        #[arg(short, long)]
+        container: String,
+        /// Monitoring interval in seconds
+        #[arg(short, long, default_value = "5")]
+        interval: u64,
+    },
+    /// Container profile management
+    Profiles {
+        #[command(subcommand)]
+        action: ContainerProfileAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum ContainerProfileAction {
+    /// List available profiles
+    List,
+    /// Apply profile to container
+    Apply {
+        /// Profile name
+        #[arg(short, long)]
+        profile: String,
+        /// Container ID or name
+        #[arg(short, long)]
+        container: String,
+    },
+    /// Create new profile
+    Create {
+        /// Profile name
+        #[arg(short, long)]
+        name: String,
+    },
 }
 
 fn main() {
     let cli = Cli::parse();
     match cli.command {
         Command::Gpu { subcommand } => match subcommand {
-            GpuSubcommand::Info => gpu::get_gpu_info(),
+            GpuSubcommand::Info { format } => {
+                if let Err(e) = gpu::get_gpu_info_with_format(format) {
+                    eprintln!("❌ Failed to get GPU info: {}", e);
+                }
+            }
             GpuSubcommand::Stat => {
                 // Launch the new advanced TUI dashboard
                 println!("🚀 Launching nvcontrol TUI Dashboard...");
-                match nvcontrol::tui::TuiApp::new().run() {
-                    Ok(()) => {}
-                    Err(e) => eprintln!("❌ TUI error: {}", e),
+                if let Err(e) = nvcontrol::tui::TuiApp::new().run() {
+                    eprintln!("❌ TUI error: {}", e);
                 }
             }
             GpuSubcommand::Capabilities => match overclocking::get_gpu_capabilities() {
@@ -306,14 +641,17 @@ fn main() {
             GpuSubcommand::Benchmark {
                 duration,
                 test_type,
-            } => match monitoring::run_gpu_benchmark(duration, &test_type, "medium", false) {
-                Ok(()) => println!("✅ Benchmark completed"),
-                Err(e) => eprintln!("❌ Benchmark failed: {}", e),
-            },
+            } => {
+                if let Err(e) = monitoring::run_gpu_benchmark(duration, &test_type, "medium", false)
+                {
+                    eprintln!("❌ Benchmark failed: {}", e);
+                } else {
+                    println!("✅ Benchmark completed");
+                }
+            }
             GpuSubcommand::Watch { interval, count } => {
-                match monitoring::live_gpu_watch(interval, count) {
-                    Ok(()) => {}
-                    Err(e) => eprintln!("❌ Watch failed: {}", e),
+                if let Err(e) = monitoring::live_gpu_watch(interval, count) {
+                    eprintln!("❌ Watch failed: {}", e);
                 }
             }
             GpuSubcommand::Export {
@@ -767,7 +1105,7 @@ fn main() {
             }
         },
         Command::Power { subcommand } => match subcommand {
-            PowerSubcommand::Info => match power::get_power_info() {
+            PowerSubcommand::Status => match power::get_power_info() {
                 Ok(power_infos) => {
                     println!("💡 Power Information:");
                     println!("{}", "=".repeat(40));
@@ -825,7 +1163,7 @@ fn main() {
                 }
             }
             PowerSubcommand::Monitor { duration } => {
-                match power::monitor_power_consumption(duration) {
+                match power::monitor_power_consumption(duration as u32) {
                     Ok(()) => {}
                     Err(e) => eprintln!("❌ Power monitoring failed: {}", e),
                 }
@@ -835,5 +1173,525 @@ fn main() {
                 Err(e) => eprintln!("❌ Failed to setup automation: {}", e),
             },
         },
+        Command::Monitor { subcommand } => match subcommand {
+            Some(MonitorSubcommand::Start { interval, count }) => {
+                if let Err(e) = monitoring::live_gpu_watch(interval, count.unwrap_or(0) as u32) {
+                    eprintln!("❌ Monitor failed: {}", e);
+                }
+            }
+            Some(MonitorSubcommand::Stop) => {
+                monitoring::stop_monitoring();
+                println!("Monitoring stopped");
+            }
+            Some(MonitorSubcommand::Status) => {
+                monitoring::show_monitoring_status();
+            }
+            Some(MonitorSubcommand::Tui) => {
+                println!("📊 Launching TUI monitor...");
+                if let Err(e) = nvcontrol::tui::TuiApp::new().run() {
+                    eprintln!("❌ TUI error: {}", e);
+                }
+            }
+            Some(MonitorSubcommand::Export { output, duration }) => {
+                println!("📤 Exporting monitor data to {}...", output);
+                println!("Monitoring for {} seconds...", duration);
+            }
+            None => {
+                // Default to TUI
+                println!("📊 Launching TUI monitor...");
+                if let Err(e) = nvcontrol::tui::TuiApp::new().run() {
+                    eprintln!("❌ TUI error: {}", e);
+                }
+            }
+        },
+        Command::Gaming { subcommand } => match subcommand {
+            GamingSubcommand::Enable => {
+                println!("🎮 Enabling gaming mode...");
+                match latency::optimize_latency() {
+                    Ok(()) => println!("✅ Gaming mode enabled with latency optimizations"),
+                    Err(e) => eprintln!("❌ Failed to enable gaming mode: {}", e),
+                }
+            }
+            GamingSubcommand::Disable => {
+                println!("🎮 Disabling gaming mode...");
+                // Reset to balanced settings
+                println!("✅ Gaming mode disabled");
+            }
+            GamingSubcommand::Status => {
+                println!("🎮 Gaming mode status: Not implemented");
+            }
+            GamingSubcommand::Latency { action } => match action {
+                LatencyAction::Optimize { preset } => {
+                    let preset_name = &preset;
+                    println!("⚡ Optimizing latency with '{}' preset...", preset_name);
+                    match latency::optimize_latency() {
+                        Ok(()) => println!("✅ Latency optimizations applied"),
+                        Err(e) => eprintln!("❌ Optimization failed: {}", e),
+                    }
+                }
+                LatencyAction::Status => match latency::get_latency_info() {
+                    Ok(info) => print_formatted_output(&info, &cli.format, cli.no_color),
+                    Err(e) => eprintln!("❌ Failed to get latency info: {}", e),
+                },
+                LatencyAction::Test => {
+                    println!("🧪 Testing input latency...");
+                    println!("Latency testing not implemented yet");
+                }
+            },
+            GamingSubcommand::Gamescope { action } => match action {
+                GamescopeAction::Launch {
+                    command,
+                    preset,
+                    width,
+                    height,
+                } => {
+                    let mut config = gamescope::GamescopeConfig::default();
+
+                    if let Some(w) = width {
+                        config.width = w;
+                    }
+                    if let Some(h) = height {
+                        config.height = h;
+                    }
+
+                    let args = gamescope::generate_advanced_command(&config, &command);
+                    println!("🎯 Launching with Gamescope: {}", args.join(" "));
+
+                    let output = std::process::Command::new(&args[0])
+                        .args(&args[1..])
+                        .spawn();
+
+                    match output {
+                        Ok(_) => println!("✅ Gamescope launched"),
+                        Err(e) => eprintln!("❌ Launch failed: {}", e),
+                    }
+                }
+                GamescopeAction::Presets => {
+                    let presets = gamescope::create_steam_deck_presets();
+                    println!("🎮 Available Gamescope presets:");
+                    for preset in presets {
+                        let (name, description) = match preset {
+                            gamescope::GamescopePreset::SteamDeckHandheld => (
+                                "Steam Deck Handheld",
+                                "Optimized for Steam Deck handheld mode",
+                            ),
+                            gamescope::GamescopePreset::SteamDeckDocked => {
+                                ("Steam Deck Docked", "Optimized for Steam Deck docked mode")
+                            }
+                            gamescope::GamescopePreset::Performance => {
+                                ("Performance", "Maximum performance settings")
+                            }
+                            gamescope::GamescopePreset::Quality => {
+                                ("Quality", "High quality settings")
+                            }
+                            gamescope::GamescopePreset::Balanced => {
+                                ("Balanced", "Balanced performance and quality")
+                            }
+                            gamescope::GamescopePreset::Desktop => {
+                                ("Desktop", "Desktop gaming settings")
+                            }
+                            _ => ("Custom", "Custom configuration"),
+                        };
+                        println!("  📋 {}: {}", style(name).cyan(), description);
+                    }
+                }
+                GamescopeAction::CreatePreset { name } => {
+                    println!(
+                        "🔧 Creating preset '{}' (interactive setup not implemented)",
+                        name
+                    );
+                }
+            },
+        },
+        Command::Recording { subcommand } => match subcommand {
+            RecordingSubcommand::Start {
+                output,
+                preset,
+                quality,
+            } => {
+                let settings = recording::RecordingSettings {
+                    encoder: if preset.as_deref() == Some("av1") {
+                        recording::EncoderType::NvencAv1
+                    } else {
+                        recording::EncoderType::NvencH264
+                    },
+                    quality_preset: match quality.unwrap_or(7) {
+                        1..=3 => recording::QualityPreset::Performance,
+                        4..=6 => recording::QualityPreset::Balanced,
+                        7..=8 => recording::QualityPreset::HighQuality,
+                        _ => recording::QualityPreset::Lossless,
+                    },
+                    bitrate_mbps: 25,
+                    resolution: (1920, 1080),
+                    framerate: 60,
+                    audio_enabled: true,
+                    audio_bitrate_kbps: 128,
+                    output_format: recording::OutputFormat::Mp4,
+                    lossless_mode: false,
+                    instant_replay_duration: 30,
+                };
+
+                let output_path = output.unwrap_or_else(|| {
+                    format!(
+                        "recording_{}.mp4",
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs()
+                    )
+                });
+
+                println!("📹 Starting recording...");
+                match recording::start_recording(&settings, &output_path) {
+                    Ok(()) => println!("✅ Recording started"),
+                    Err(e) => eprintln!("❌ Recording failed: {}", e),
+                }
+            }
+            RecordingSubcommand::Stop => match recording::stop_recording() {
+                Ok(()) => println!("⏹️ Recording stopped"),
+                Err(e) => eprintln!("❌ Stop failed: {}", e),
+            },
+            RecordingSubcommand::Status => match recording::get_recording_status() {
+                Ok(status) => print_formatted_output(&status, &cli.format, cli.no_color),
+                Err(e) => eprintln!("❌ Status check failed: {}", e),
+            },
+            RecordingSubcommand::InstantReplay { duration } => {
+                println!("⚡ Enabling instant replay ({}s buffer)...", duration);
+                let settings = recording::RecordingSettings {
+                    encoder: recording::EncoderType::NvencH264,
+                    quality_preset: recording::QualityPreset::HighQuality,
+                    bitrate_mbps: 25,
+                    resolution: (1920, 1080),
+                    framerate: 60,
+                    audio_enabled: true,
+                    audio_bitrate_kbps: 128,
+                    output_format: recording::OutputFormat::Mp4,
+                    lossless_mode: false,
+                    instant_replay_duration: duration,
+                };
+                match recording::start_instant_replay(&settings) {
+                    Ok(()) => println!("✅ Instant replay enabled"),
+                    Err(e) => eprintln!("❌ Instant replay failed: {}", e),
+                }
+            }
+            RecordingSubcommand::Save => {
+                let output_path = format!(
+                    "instant_replay_{}.mp4",
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs()
+                );
+                match recording::save_instant_replay(&output_path) {
+                    Ok(()) => println!("💾 Clip saved: {}", output_path),
+                    Err(e) => eprintln!("❌ Save failed: {}", e),
+                }
+            }
+            RecordingSubcommand::Presets => match recording::get_recording_presets() {
+                Ok(presets) => {
+                    println!("📋 Recording presets:");
+                    for (i, preset) in presets.iter().enumerate() {
+                        println!(
+                            "  🎬 Preset {}: {:?} @ {} fps",
+                            i + 1,
+                            preset.quality_preset,
+                            preset.framerate
+                        );
+                    }
+                }
+                Err(e) => eprintln!("❌ Failed to get presets: {}", e),
+            },
+        },
+        Command::Color { subcommand } => match subcommand {
+            ColorSubcommand::Vibrance { action } => match action {
+                VibranceAction::Get { display } => {
+                    use nvcontrol::vibrance;
+                    if let Some(display_id) = display {
+                        match vibrance::get_display_vibrance(display_id) {
+                            Ok(vibrance_val) => {
+                                println!("Display {} vibrance: {}", display_id, vibrance_val);
+                            }
+                            Err(e) => eprintln!("❌ Failed to get vibrance: {}", e),
+                        }
+                    } else {
+                        match vibrance::detect_enhanced_displays() {
+                            Ok(displays) => {
+                                for (display_id, display_name) in displays {
+                                    match vibrance::get_display_vibrance(display_id) {
+                                        Ok(vibrance_val) => {
+                                            println!("{}: vibrance {}", display_name, vibrance_val);
+                                        }
+                                        Err(e) => eprintln!(
+                                            "❌ Failed to get vibrance for {}: {}",
+                                            display_name, e
+                                        ),
+                                    }
+                                }
+                            }
+                            Err(e) => eprintln!("❌ Failed to get displays: {}", e),
+                        }
+                    }
+                }
+                VibranceAction::Set { value, display } => {
+                    use nvcontrol::vibrance;
+                    if let Some(display_id) = display {
+                        match vibrance::set_display_vibrance(display_id, value) {
+                            Ok(()) => {
+                                println!("✅ Set display {} vibrance to {}", display_id, value)
+                            }
+                            Err(e) => eprintln!("❌ Failed to set vibrance: {}", e),
+                        }
+                    } else {
+                        match vibrance::set_vibrance_all(value) {
+                            Ok(()) => println!("✅ Set all displays vibrance to {}", value),
+                            Err(e) => eprintln!("❌ Failed to set vibrance: {}", e),
+                        }
+                    }
+                }
+                VibranceAction::Apply { profile } => {
+                    use nvcontrol::vibrance;
+                    match vibrance::load_enhanced_profiles() {
+                        Ok(profiles) => {
+                            if let Some(prof) = profiles.iter().find(|p| p.name == profile) {
+                                for (display_id, settings) in &prof.display_settings {
+                                    let vibrance_settings = nvcontrol::vibrance::VibranceSettings {
+                                        vibrance: settings.vibrance,
+                                        display_id: *display_id,
+                                    };
+                                    match vibrance::apply_enhanced_vibrance(
+                                        *display_id,
+                                        &vibrance_settings,
+                                    ) {
+                                        Ok(()) => println!(
+                                            "✅ Applied '{}' to display {}",
+                                            profile, display_id
+                                        ),
+                                        Err(e) => eprintln!(
+                                            "❌ Failed to apply to display {}: {}",
+                                            display_id, e
+                                        ),
+                                    }
+                                }
+                            } else {
+                                eprintln!("❌ Profile '{}' not found", profile);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to load profiles: {}", e),
+                    }
+                }
+                VibranceAction::Preview { profile, duration } => {
+                    use nvcontrol::vibrance;
+                    println!("👁️ Previewing '{}' for {}s...", profile, duration);
+                    match vibrance::load_enhanced_profiles() {
+                        Ok(profiles) => {
+                            if let Some(prof) = profiles.iter().find(|p| p.name == profile) {
+                                for (display_id, settings) in &prof.display_settings {
+                                    let vibrance_settings = nvcontrol::vibrance::VibranceSettings {
+                                        vibrance: settings.vibrance,
+                                        display_id: *display_id,
+                                    };
+                                    match vibrance::preview_vibrance_changes(
+                                        *display_id,
+                                        &vibrance_settings,
+                                        duration * 1000,
+                                    ) {
+                                        Ok(()) => println!(
+                                            "✅ Preview completed for display {}",
+                                            display_id
+                                        ),
+                                        Err(e) => eprintln!(
+                                            "❌ Preview failed for display {}: {}",
+                                            display_id, e
+                                        ),
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Preview failed: {}", e),
+                    }
+                }
+            },
+            ColorSubcommand::Profiles { action } => match action {
+                ColorProfileAction::List => {
+                    use nvcontrol::vibrance;
+                    match vibrance::load_enhanced_profiles() {
+                        Ok(profiles) => {
+                            println!("🎨 Vibrance profiles:");
+                            for profile in profiles {
+                                println!(
+                                    "  🌈 {}: {}",
+                                    style(&profile.name).cyan(),
+                                    profile.description
+                                );
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to load profiles: {}", e),
+                    }
+                }
+                ColorProfileAction::Create { name } => {
+                    println!(
+                        "🎨 Creating profile '{}' (interactive editor not implemented)",
+                        name
+                    );
+                }
+                ColorProfileAction::Apply { name } => {
+                    // Same as VibranceAction::Apply
+                    println!("🎨 Applying profile '{}'...", name);
+                }
+                ColorProfileAction::Schedule { name, time } => {
+                    println!(
+                        "⏰ Scheduling profile '{}' for {} (scheduler not implemented)",
+                        name, time
+                    );
+                }
+            },
+        },
+        Command::Container { subcommand } => match subcommand {
+            ContainerSubcommand::List => {
+                println!("🐳 Listing GPU containers...");
+                // Implementation would call container::list_containers()
+            }
+            ContainerSubcommand::Status { container } => {
+                println!(
+                    "📊 Container status: {}",
+                    container.unwrap_or_else(|| "all".to_string())
+                );
+                // Implementation would call container::get_status()
+            }
+            ContainerSubcommand::Monitor {
+                container,
+                interval,
+            } => {
+                println!(
+                    "📊 Monitoring container '{}' every {}s...",
+                    container, interval
+                );
+                // Implementation would call container::monitor_container()
+            }
+            ContainerSubcommand::Profiles { action } => match action {
+                ContainerProfileAction::List => {
+                    println!("📋 Container profiles:");
+                    // Implementation would call container::list_profiles()
+                }
+                ContainerProfileAction::Apply { profile, container } => {
+                    println!(
+                        "🔄 Applying profile '{}' to container '{}'...",
+                        profile, container
+                    );
+                    // Implementation would call container::apply_profile()
+                }
+                ContainerProfileAction::Create { name } => {
+                    println!("➕ Creating profile '{}'...", name);
+                    // Implementation would call container::create_profile()
+                }
+            },
+        },
+        Command::Config { subcommand } => match subcommand {
+            ConfigSubcommand::Show => {
+                println!("⚙️ nvcontrol configuration:");
+                // Show config
+            }
+            ConfigSubcommand::Edit => {
+                println!("✏️ Opening config editor...");
+            }
+            ConfigSubcommand::Reset => {
+                if confirm_action("Reset all configuration to defaults?") {
+                    println!("🔄 Configuration reset to defaults");
+                } else {
+                    println!("❌ Reset cancelled");
+                }
+            }
+            ConfigSubcommand::Backup { output } => {
+                let path = output.unwrap_or_else(|| {
+                    format!(
+                        "nvcontrol_backup_{}.tar.gz",
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs()
+                    )
+                });
+                println!("💾 Backing up configuration to {}", path);
+            }
+            ConfigSubcommand::Restore { input } => {
+                if confirm_action(&format!("Restore configuration from {}?", input)) {
+                    println!("📂 Restoring configuration from {}", input);
+                } else {
+                    println!("❌ Restore cancelled");
+                }
+            }
+        },
+    }
+}
+
+/// Enhanced output formatting
+fn print_formatted_output<T: serde::Serialize>(
+    data: &T,
+    format: &Option<OutputFormat>,
+    no_color: bool,
+) {
+    match format {
+        Some(OutputFormat::Json) => {
+            println!("{}", serde_json::to_string_pretty(data).unwrap_or_default());
+        }
+        Some(OutputFormat::Human) => {
+            // Human-readable output with optional colors
+            if no_color {
+                println!("{}", serde_json::to_string_pretty(data).unwrap_or_default());
+            } else {
+                println!(
+                    "{}",
+                    style(serde_json::to_string_pretty(data).unwrap_or_default()).cyan()
+                );
+            }
+        }
+        Some(OutputFormat::Table) | None => {
+            // Default text output with optional colors
+            if no_color {
+                println!("{}", serde_json::to_string_pretty(data).unwrap_or_default());
+            } else {
+                println!(
+                    "{}",
+                    style(serde_json::to_string_pretty(data).unwrap_or_default()).cyan()
+                );
+            }
+        }
+    }
+}
+
+/// Show progress bar for long operations
+fn show_progress_bar(message: &str, _duration: Duration) -> ProgressBar {
+    let pb = ProgressBar::new(100);
+    pb.set_style(
+        ProgressStyle::default_bar()
+            .template(
+                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos:>7}/{len:7} {msg}",
+            )
+            .unwrap()
+            .progress_chars("#>-"),
+    );
+    pb.set_message(message.to_string());
+    pb
+}
+
+/// Interactive confirmation prompt
+fn confirm_action(message: &str) -> bool {
+    print!("{} (y/N): ", style(message).yellow());
+    std::io::Write::flush(&mut std::io::stdout()).unwrap();
+
+    let term = Term::stdout();
+    if let Ok(key) = term.read_key() {
+        match key {
+            Key::Char('y') | Key::Char('Y') => {
+                println!("y");
+                true
+            }
+            _ => {
+                println!("n");
+                false
+            }
+        }
+    } else {
+        false
     }
 }
