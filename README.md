@@ -1,5 +1,9 @@
 # nvcontrol 🎮
 
+<div align="center">
+  <img src="assets/icons/nvctl_logo.png" alt="nvcontrol Logo" width="128" height="128">
+</div>
+
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![NVIDIA](https://img.shields.io/badge/NVIDIA-Open%20Drivers%20580+-76B900.svg)](https://github.com/NVIDIA/open-gpu-kernel-modules)
