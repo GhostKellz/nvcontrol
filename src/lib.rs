@@ -23,6 +23,8 @@ pub enum NvControlError {
     CommandFailed(String),
     #[error("Configuration error: {0}")]
     ConfigError(String),
+    #[error("Unsupported feature: {0}")]
+    UnsupportedFeature(String),
 }
 
 pub type NvResult<T> = Result<T, NvControlError>;
@@ -38,9 +40,11 @@ pub mod gpu;
 pub mod profiles;
 pub mod tray;
 pub mod vibrance;
+pub mod vibrance_native;
 
 // New advanced modules
 pub mod container;
+pub mod container_runtime;
 pub mod drivers;
 pub mod gamescope;
 pub mod latency;

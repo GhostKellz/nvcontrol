@@ -1,31 +1,34 @@
-# nvcontrol
+# nvcontrol 🎮
 
-<div align="center">
-  <img src="assets/icons/nvctl_logo.png" alt="nvcontrol Logo" width="128" height="128">
-  
-  **Modern NVIDIA Settings Manager for Linux + Wayland**
-  
-  A feature-rich, native Linux application for NVIDIA GPU management with full Wayland support, advanced overclocking, VRR control, and DLSS/FSR management.
-  
-  ![nvcontrol Screenshot](https://img.shields.io/badge/Status-In%20Development-yellow)
-  ![License](https://img.shields.io/badge/License-MIT-blue)
-  ![Platform](https://img.shields.io/badge/Platform-Linux-green)
-</div>
+[![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![NVIDIA](https://img.shields.io/badge/NVIDIA-Open%20Drivers%20580+-76B900.svg)](https://github.com/NVIDIA/open-gpu-kernel-modules)
+[![Wayland](https://img.shields.io/badge/Wayland-Native-brightgreen.svg)](https://wayland.freedesktop.org/)
 
-## ✨ Features
+**The Ultimate NVIDIA GPU Control Tool for Linux**
 
-### 🎮 **GPU Management**
-- **Real-time monitoring** with live temperature, power, VRAM usage
-- **Advanced overclocking** with safety limits and stress testing
-- **Memory timing editor** for enthusiasts
-- **Power management** with Performance/Balanced/PowerSaver profiles
-- **Power monitoring** with real-time draw, limits, and thermal data
+nvcontrol is the most advanced NVIDIA GPU management solution for Linux, featuring pure Rust digital vibrance, comprehensive container GPU passthrough, and cutting-edge Wayland support.
 
-### 🖥️ **Display & VRR**
-- **Smart VRR management** across all major Wayland compositors
-- **Per-application VRR settings** for optimal gaming
-- **HDR toggle** with proper color space handling
-- **Digital vibrance** control with integrated nvibrant for enhanced visuals
+## 🚀 Revolutionary Features
+
+### 🌈 **Pure Rust Digital Vibrance**
+- **Zero Dependencies**: Built-in vibrance control - no external tools needed
+- **NVIDIA Open Drivers**: Direct integration with NVIDIA Open Drivers 580+
+- **Simple Commands**: `nvctl vibe 150` - instant vibrance control
+- **Per-Display Control**: Individual settings for multi-monitor setups
+- **Wayland & X11**: Works on all display servers
+
+### 🐳 **Container GPU Passthrough**
+- **Built-in Container Runtime**: Pure Rust Docker/Podman/NixOS support
+- **PhantomLink Integration**: Audio container with RTX Voice in one command
+- **GPU Profiles**: Optimized profiles for ML, gaming, inference workloads
+- **Multi-Runtime**: Docker, Podman, containerd, NixOS containers
+
+### 🎮 **Advanced GPU Control**
+- **Real-time Monitoring**: Live TUI dashboard with performance graphs
+- **Smart Overclocking**: Safe limits with automatic stress testing
+- **Fan Control**: Custom curves with thermal protection
+- **Power Management**: Advanced profiles and thermal monitoring
 
 ### ⚡ **Upscaling Technologies**
 - **DLSS/FSR/XeSS toggle** with per-game profiles
@@ -58,27 +61,50 @@
 - **Live GPU stats** with real-time graphs
 - **Intuitive controls** with safety warnings
 
-### **CLI Power Tools**
+### **Essential Commands**
+
+#### Pure Rust Digital Vibrance
 ```bash
-# GPU monitoring
-nvctl gpu stat                    # Live TUI dashboard
-nvctl gpu capabilities           # Show overclocking limits
+# Simple vibrance control (0-200%)
+nvctl vibe 100        # Default vibrance
+nvctl vibe 150        # Enhanced colors
+nvctl vibe 200        # Maximum saturation
+nvctl vibe 80         # Reduced saturation
 
-# VRR management  
-nvctl vrr enable DP-1            # Enable for specific display
-nvctl vrr configure DP-1 --min-refresh 48 --max-refresh 144
+# Advanced vibrance control
+nvctl display vibrance get          # Current status
+nvctl display vibrance reset        # Reset to default
+nvctl display vibrance info         # Show capabilities
+```
 
-# Upscaling control
-nvctl upscaling enable cyberpunk2077 --tech dlss --quality balanced
-nvctl upscaling auto-detect      # Find running games
+#### Container GPU Control (nvctl ct / nvctl ctr)
+```bash
+# Launch GPU containers
+nvctl ct launch --image nvidia/cuda:12.0-runtime-ubuntu20.04 --gpu all -i
+nvctl ctr launch --image tensorflow/tensorflow:latest-gpu --name ml-training
+
+# PhantomLink audio container with RTX Voice
+nvctl ct phantomlink --rtx-voice --mode prod
+
+# Container management
+nvctl ct list                       # List GPU containers
+nvctl ct runtime info              # Runtime information
+nvctl ct runtime test              # Test GPU passthrough
+```
+
+#### GPU Monitoring & Control
+```bash
+# Live monitoring
+nvctl gpu stat                      # Interactive TUI dashboard
+nvctl gpu info                      # GPU information
 
 # Overclocking
-nvctl overclock apply --gpu-offset 150 --memory-offset 800 --power-limit 115
-nvctl overclock stress-test 10   # 10-minute stability test
+nvctl overclock apply --gpu-offset 150 --memory-offset 500
+nvctl overclock stress-test 10      # Stability test
 
-# Driver management
-nvctl drivers install open       # Install open-source drivers
-nvctl drivers status            # Check current driver info
+# Power & thermal
+nvctl power limit 90                # Power limit percentage
+nvctl fan set 0 75                  # Fan speed control
 ```
 
 ## 🎯 **What Makes nvcontrol Special**

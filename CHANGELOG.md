@@ -40,7 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 🔧 **Interactive Prompts**: Confirmation dialogs and user guidance
 
 #### **🐳 NVIDIA Container Runtime Integration**
-- **Complete Docker/Kubernetes Support**
+- **Complete Docker Support**
   - Container GPU resource monitoring and management
   - Runtime configuration and validation checks
   - Container-specific GPU performance profiles

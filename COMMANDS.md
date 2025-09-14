@@ -1,6 +1,90 @@
-# nvcontrol COMMANDS
+# nvcontrol Command Reference
 
-This document lists all CLI commands and options for nvcontrol (nvctl).
+Complete CLI command reference for nvcontrol with pure Rust digital vibrance and container GPU passthrough.
+
+## 🌈 Pure Rust Digital Vibrance (Zero Dependencies)
+
+### Simple Vibrance Commands
+```bash
+# Essential vibrance control (0-200% range)
+nvctl vibe 100        # Default vibrance (100%)
+nvctl vibe 150        # Enhanced colors (150%)
+nvctl vibe 200        # Maximum saturation (200%)
+nvctl vibe 80         # Reduced saturation (80%)
+nvctl vibe 0          # Grayscale (0%)
+```
+
+### Advanced Vibrance Commands
+```bash
+# Current vibrance status
+nvctl display vibrance get          # Show current vibrance levels
+nvctl display vibrance info         # Driver capabilities & requirements
+
+# Per-display control
+nvctl display vibrance set 120      # Set all displays to 120%
+nvctl display vibrance set-display 0 150  # Set specific display
+nvctl display vibrance reset        # Reset to default (100%)
+nvctl display vibrance list         # List available displays
+
+# Raw vibrance values (-1024 to 1023)
+nvctl display vibrance set-raw 512 -200 800  # Raw values per display
+```
+
+### Vibrance Features
+- **Pure Rust Implementation**: No external dependencies (no nvibrant required)
+- **NVIDIA Open Drivers**: Direct integration with 580+ drivers
+- **Wayland & X11 Support**: Works on all display servers
+- **Per-Display Control**: Individual settings for multi-monitor
+- **Real-time Adjustment**: Instant color changes
+
+## 🐳 Container GPU Control (nvctl ct / nvctl ctr)
+
+### Container Launch & Management
+```bash
+# Basic container launch with GPU
+nvctl ct launch --image nvidia/cuda:12.0-runtime-ubuntu20.04 --gpu all -i
+nvctl ct launch --image tensorflow/tensorflow:latest-gpu --name ml-training
+
+# Advanced launch options
+nvctl ct launch \
+  --image pytorch/pytorch:latest \
+  --name pytorch-dev \
+  --gpu "0,1" \
+  --interactive \
+  --rm \
+  --runtime podman
+
+# Container management
+nvctl ct list                       # List GPU-enabled containers
+nvctl ct status                     # Container GPU status
+nvctl ct monitor --container ml-training --interval 5
+```
+
+### PhantomLink Audio Container
+```bash
+# PhantomLink Rust wavelink XLR alternative
+nvctl ct phantomlink                # Launch with defaults
+nvctl ct phantomlink --mode prod    # Production mode
+nvctl ct phantomlink --mode dev     # Development mode
+nvctl ct phantomlink --mode minimal # Minimal resources
+nvctl ct phantomlink --rtx-voice    # Enable RTX Voice noise suppression
+nvctl ct phantomlink --audio-device hw:0  # Specific audio device
+```
+
+### Container Profiles & Runtime
+```bash
+# Profile management
+nvctl ct profiles list              # List available profiles
+nvctl ct profiles create --name custom-ml --workload ml-training
+nvctl ct profiles create --name gaming --workload gaming
+nvctl ct profiles apply --profile ml-training --container ml-container
+
+# Runtime management
+nvctl ct runtime info              # Container runtime information
+nvctl ct runtime test              # Test GPU passthrough capabilities
+nvctl ct runtime setup --runtime docker  # Setup runtime
+nvctl ct runtime configure         # Configure NVIDIA Container Runtime
+```
 
 ## 🎮 GPU Commands
 

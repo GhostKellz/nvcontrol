@@ -1,381 +1,219 @@
-# nvcontrol TODO - v0.6.0 Development
+# nvcontrol TODO - v0.7.0 "Production Excellence"
 
-> **Current Version**: v0.5.0  
-> **Target Version**: v0.6.0 - Enhanced User Experience  
-> **Timeline**: Q2 2025
+**Focus**: Free & Open Source • Arch Linux Native • MSI Afterburner-like Excellence
 
 ---
 
-## 🎯 High Priority (Must Have)
+## 🔥 **HIGH PRIORITY - Core MSI Afterburner Features**
 
-### **GUI Enhancements**
+### **Real-time On-Screen Display (OSD)**
+- [ ] **In-game overlay system** - FPS, temps, utilization, memory usage
+- [ ] **Customizable OSD layout** - Drag & drop positioning, color themes
+- [ ] **OSD hotkeys** - Toggle overlay, screenshot, quick profile switch
+- [ ] **Game detection** - Auto-enable OSD when games launch
+- [ ] **Streaming-safe mode** - Hide sensitive info during broadcasts
 
-#### **TUI Improvements**
-- [x] **Complete TUI Tab Implementation**
-  - [x] Performance graphs with historical data visualization
-  - [x] Memory analysis breakdown (VRAM usage by process)
-  - [x] Temperature monitoring with thermal throttling indicators
-  - [x] Power consumption graphs with efficiency metrics
-  - [x] Process monitoring (which processes use GPU)
-  - [x] Settings panel (update intervals, color themes, keybindings)
+### **Advanced GPU Monitoring & Visualization**
+- [ ] **Real-time monitoring graphs** - Beautiful scrolling charts like Afterburner
+- [ ] **Multi-metric dashboard** - Temperature, voltage, clocks, power, utilization
+- [ ] **Historical data logging** - Save monitoring sessions, export to CSV
+- [ ] **Alert system** - Temperature/power thresholds with desktop notifications
+- [ ] **Benchmark comparison** - Before/after overclocking results
 
-- [x] **TUI Interactive Features**
-  - [ ] Real-time fan control from TUI
-  - [ ] Overclock adjustment within TUI interface
-  - [x] VRR toggle from TUI
-  - [ ] Export current stats to file
-  - [ ] Screenshot/save current view
-  - [ ] Configurable refresh rates (0.5s, 1s, 2s, 5s)
+### **Visual Overclocking Interface**
+- [ ] **Interactive fan curve editor** - Visual curve with drag-drop points
+- [ ] **Voltage curve editor** - Core/memory voltage adjustment interface  
+- [ ] **Clock offset sliders** - Real-time GPU/memory clock adjustment
+- [ ] **Power limit control** - TDP adjustment with safety limits
+- [ ] **Memory timing editor** - Advanced GDDR6X timing tweaks
 
-#### **GUI Modern Features**
-- [x] **Missing GUI Components**
-  - [x] VRR tab implementation (currently stub)
-  - [ ] Power management tab integration
-  - [x] Latency optimization controls
-  - [x] Shader cache management UI
-  - [x] Driver management within GUI
-  - [x] NVENC/AV1 recording controls (Shadowplay-like)
-  - [x] Gamescope integration tab
-
-- [ ] **Enhanced Vibrance Control**
-  - [ ] Per-display vibrance sliders
-  - [ ] Real-time preview of vibrance changes
-  - [ ] Game-specific vibrance profiles GUI
-  - [ ] Quick preset buttons with custom names
-  - [ ] Vibrance scheduler (time-based auto adjustment)
-
-### **Core Functionality**
-
-#### **Profile System Completion**
-- [ ] **Save/Load Overclock Profiles**
-  - [ ] GUI profile management interface
-  - [ ] Profile import/export functionality
-  - [ ] Profile validation and safety checks
-  - [ ] Auto-backup before applying profiles
-  - [ ] Profile metadata (name, description, created date)
-
-- [ ] **Game-Specific Profiles**
-  - [ ] Automatic game detection improvement
-  - [ ] Per-game settings database
-  - [ ] Steam integration for game library
-  - [ ] Lutris/Heroic Games Launcher integration
-  - [ ] Profile inheritance system
-
-#### **Fan Control Enhancement**
-- [x] **Custom Fan Curves**
-  - [x] Visual fan curve editor in GUI
-  - [x] Temperature-based curve points
-  - [x] Hysteresis control to prevent fan oscillation
-  - [x] Multiple curve profiles (Silent, Performance, Custom)
-  - [x] Fan curve validation and safety limits
-
-- [x] **Advanced Fan Features**
-  - [x] Zero RPM mode support
-  - [x] Fan curve based on GPU load vs temperature
-  - [x] Manual fan testing functionality
-  - [x] Fan health monitoring and alerts
+### **GPU Stress Testing Suite**
+- [ ] **Built-in stress tests** - GPU, VRAM, thermal testing
+- [ ] **Stability validation** - Artifact detection, crash monitoring
+- [ ] **Thermal testing** - Heat soak tests, thermal throttling detection
+- [ ] **Power testing** - Peak power draw measurement, efficiency curves
+- [ ] **Custom test scenarios** - Gaming workloads, compute workloads
 
 ---
 
-## 🚀 Medium Priority (Should Have)
+## 🚀 **MEDIUM PRIORITY - Performance & Polish**
 
-### **System Integration**
+### **Async Architecture Overhaul**
+- [ ] **Non-blocking NVML operations** - Prevent UI freezing during hardware queries
+- [ ] **Background monitoring service** - Continuous data collection daemon
+- [ ] **Threaded operations** - Parallel GPU queries for multi-GPU systems
+- [ ] **Smart data caching** - Reduce hardware polling frequency
+- [ ] **Progress indicators** - Visual feedback for long operations
 
-#### **Desktop Environment Integration**
-- [x] **System Tray Enhancements**
-  - [ ] Quick controls in tray menu
-  - [x] Current GPU stats in tray tooltip
-  - [ ] Notification on thermal warnings
-  - [ ] Profile switching from tray
-  - [ ] Launch TUI monitor from tray
+### **Profile System 2.0**
+- [ ] **Auto-game detection** - Steam, Lutris, Heroic, Wine prefix detection
+- [ ] **Per-game profiles** - Automatic OC/fan curves per application
+- [ ] **Profile inheritance** - Base profiles with game-specific overrides
+- [ ] **Cloud backup/sync** - Git-based profile sharing (optional)
+- [ ] **Community profiles** - Share optimal settings for popular games
 
-- [ ] **Startup & Service Integration**
-  - [ ] Systemd user service for auto-startup
-  - [ ] Profile application on login
-  - [ ] Crash recovery and safe mode
-  - [ ] Update notifications
-  - [ ] Background monitoring service
+### **Advanced Overclocking**
+- [ ] **Memory subsystem tuning** - GDDR6X timing optimization
+- [ ] **Voltage curve optimization** - Custom V/F curves for efficiency
+- [ ] **LN2/extreme cooling mode** - Unlock higher limits for extreme OC
+- [ ] **Binning analysis** - Silicon quality assessment and recommendations
+- [ ] **Safety interlocks** - Temperature/voltage protection systems
 
-#### **Multi-GPU Support**
-- [ ] **Multiple GPU Management**
-  - [ ] GPU selection in GUI/CLI
-  - [ ] Per-GPU settings and profiles
-  - [ ] SLI/NVLink configuration
-  - [ ] GPU priority management
-  - [ ] Cross-GPU load balancing info
-
-### **Advanced Features**
-
-#### **Power Management Expansion**
-- [ ] **Intelligent Power Profiles**
-  - [ ] Adaptive power management based on workload
-  - [ ] Battery optimization for laptops
-  - [ ] Thermal-based power scaling
-  - [ ] Custom power automation scripts
-  - [ ] Power consumption analytics
-
-- [ ] **Laptop-Specific Features**
-  - [ ] Battery vs AC power profiles
-  - [ ] Dynamic GPU switching (when supported)
-  - [ ] Thermal management for thin laptops
-  - [ ] Power delivery monitoring
-
-#### **Gaming Optimizations**
-- [x] **Latency Tools Implementation**
-  - [x] Complete latency optimization CLI commands
-  - [x] GUI for latency settings
-  - [ ] Per-game latency profiles
-  - [ ] Latency measurement tools
-  - [x] Gaming mode toggle
-
-- [x] **Gamescope Integration**
-  - [x] Complete gamescope module implementation
-  - [x] Gamescope configuration GUI
-  - [ ] Steam Deck optimization presets
-  - [ ] HDR passthrough configuration
-
-### **Developer Experience**
-
-#### **CLI Enhancements**
-- [x] **Missing CLI Commands**
-  - [ ] `nvctl power automate` implementation
-  - [x] `nvctl latency optimize` completion
-  - [x] `nvctl shaders cache-management` functionality
-  - [ ] `nvctl monitor export` features
-  - [ ] `nvctl config backup/restore`
-
-- [ ] **CLI User Experience**
-  - [ ] Colored output with progress bars
-  - [ ] `--json` output for all commands
-  - [ ] `--watch` mode for continuous monitoring
-  - [ ] Fuzzy completion for profiles/games
-  - [ ] Command history and suggestions
-
-#### **Configuration Management**
-- [ ] **Settings System**
-  - [ ] GUI settings persistence
-  - [ ] Configuration file migration
-  - [ ] Settings validation and repair
-  - [ ] Default settings reset
-  - [ ] Settings export/import
+### **Multi-GPU Management**
+- [ ] **SLI/NVLink configuration** - Bridge detection and optimization
+- [ ] **Per-GPU profiling** - Individual settings for each card
+- [ ] **Load balancing** - Monitor workload distribution
+- [ ] **Synchronized operations** - Apply settings to all GPUs simultaneously
+- [ ] **GPU topology mapping** - Visual representation of multi-GPU setup
 
 ---
 
-## 🔧 Low Priority (Nice to Have)
+## 🎮 **GAMING-FOCUSED FEATURES**
 
-### **Advanced Features**
+### **Game Integration**
+- [ ] **Steam integration** - Game launch/exit detection, library parsing
+- [ ] **Lutris integration** - Wine game detection and optimization
+- [ ] **Heroic Games integration** - Epic/GOG game detection
+- [ ] **Process monitoring** - Automatic profile switching by executable
+- [ ] **Game library scanner** - Find games across multiple launchers
 
-#### **Monitoring & Analytics**
-- [ ] **Performance Analytics**
-  - [ ] Performance trend analysis
-  - [ ] Efficiency metrics over time
-  - [ ] Thermal history tracking
-  - [ ] Performance regression detection
-  - [ ] Automated performance reports
+### **Gaming Optimizations**
+- [ ] **Latency optimization presets** - Ultra-low latency for competitive gaming
+- [ ] **High refresh rate optimization** - 240Hz+, G-Sync optimization
+- [ ] **VR-specific profiles** - Low latency, high sustained performance
+- [ ] **Streaming optimization** - NVENC settings for OBS/streaming
+- [ ] **Frame pacing analysis** - Detect stutters and frame time issues
 
-- [ ] **Remote Monitoring**
-  - [ ] Web interface for remote access
-  - [ ] REST API for external tools
-  - [ ] Monitoring dashboards
-  - [ ] Alert system integration
-  - [ ] Multi-machine monitoring
-
-#### **Enterprise Features**
-- [ ] **Team Management**
-  - [ ] Centralized configuration management
-  - [ ] User access controls
-  - [ ] Audit logging
-  - [ ] Policy enforcement
-  - [ ] Compliance reporting
-
-### **Platform Expansion**
-
-#### **Hardware Support**
-- [ ] **Extended Hardware Support**
-  - [ ] Intel Arc GPU basic support
-  - [ ] AMD GPU monitoring (read-only)
-  - [ ] CPU thermal monitoring integration
-  - [ ] System power monitoring
-  - [ ] Multiple vendor GPU mixed systems
-
-#### **Container & Virtualization**
-- [ ] **Container Support**
-  - [ ] Docker container GPU monitoring
-  - [ ] Kubernetes GPU resource tracking
-  - [ ] VM GPU passthrough optimization
-  - [ ] Container-aware power management
+### **Content Creation Features**
+- [ ] **OBS integration** - Automatic encoder settings based on GPU load
+- [ ] **NVENC optimization** - AV1/H.265 streaming presets
+- [ ] **Render optimization** - Blender, DaVinci Resolve GPU acceleration
+- [ ] **AI workload profiles** - Stable Diffusion, LLM inference optimization
+- [ ] **Creator mode** - Prioritize quality over power efficiency
 
 ---
 
-## 🐛 Bug Fixes & Quality
+## 🏗️ **TECHNICAL EXCELLENCE**
 
-### **Known Issues**
-- [x] **Display Module**
-  - [x] Fixed display ID enumeration issue in tests
-- [ ] **TUI Performance**
-  - [ ] Memory leak in metrics history
-  - [ ] CPU usage optimization
-  - [ ] Terminal resize handling
-  - [ ] Color theme persistence
+### **Arch Linux Native Excellence**
+- [ ] **AUR package** - Official Arch User Repository packaging
+- [ ] **Pacman integration** - Proper dependency management
+- [ ] **Systemd service** - Background monitoring daemon
+- [ ] **Arch Linux testing** - Comprehensive testing on latest Arch
+- [ ] **Kernel module integration** - Work with nvidia-dkms properly
 
-- [ ] **nvibrant Integration**
-  - [ ] Better error handling for missing nvibrant
-  - [ ] Wayland compositor detection improvements
-  - [ ] Display detection robustness
-  - [ ] Multi-monitor vibrance sync issues
+### **Wayland & Modern Linux**
+- [ ] **Wayland protocol compliance** - Native Wayland support (when nvidia-drm allows)
+- [ ] **PipeWire integration** - Audio device detection for streaming
+- [ ] **Modern D-Bus interface** - System integration for desktop environments
+- [ ] **Flatpak packaging** - Sandboxed distribution option
+- [ ] **AppImage builds** - Portable executable option
 
-### **Code Quality**
-- [ ] **Test Coverage**
-  - [ ] Unit tests for all modules
-  - [ ] Integration tests for CLI commands
-  - [ ] GUI automation tests
-  - [ ] Performance regression tests
-  - [ ] Hardware mock testing framework
+### **Hardware Abstraction & Future-Proofing**
+- [ ] **RTX 50-series support** - Day-1 support for new architecture
+- [ ] **Ada Lovelace optimizations** - RTX 4000-specific features
+- [ ] **Mobile GPU support** - Laptop RTX optimization
+- [ ] **Workstation GPU support** - RTX A-series professional cards
+- [ ] **Legacy GPU support** - GTX 1000-series compatibility
 
-- [ ] **Documentation**
-  - [ ] Code documentation completion
-  - [ ] User manual with screenshots
-  - [ ] Video tutorials
-  - [ ] Troubleshooting guide expansion
-  - [ ] API documentation
-
-### **Performance Optimization**
-- [ ] **Resource Usage**
-  - [ ] Memory usage optimization
-  - [ ] CPU usage reduction
-  - [ ] NVML query batching
-  - [ ] Background thread optimization
-  - [ ] Startup time improvement
+### **Security & Reliability**
+- [ ] **Privilege separation** - Drop root privileges after hardware init
+- [ ] **Sandboxing** - Isolate GUI from hardware control logic
+- [ ] **Configuration validation** - Prevent unsafe overclocking
+- [ ] **Rollback mechanisms** - Automatic revert on instability
+- [ ] **Audit logging** - Track all hardware modifications
 
 ---
 
-## 📦 Packaging & Distribution
+## 🎨 **USER EXPERIENCE POLISH**
 
-### **Package Management**
-- [ ] **AUR Package**
-  - [ ] Complete AUR submission process
-  - [ ] Automated package updates
-  - [ ] Package maintainer guidelines
-  - [ ] Dependency management
+### **Modern UI/UX**
+- [ ] **Responsive design** - Adaptive layouts for different screen sizes
+- [ ] **Accessibility compliance** - Screen reader support, keyboard navigation
+- [ ] **Gesture support** - Touchscreen/touchpad gesture controls
+- [ ] **Customizable themes** - Dark/light modes with accent colors
+- [ ] **Animation system** - Smooth transitions and visual feedback
 
-- [ ] **Additional Distributions**
-  - [ ] Ubuntu PPA creation
-  - [ ] Fedora COPR repository
-  - [ ] openSUSE OBS packaging
-  - [ ] NixOS package submission
-  - [ ] AppImage creation
+### **Advanced Configuration**
+- [ ] **Backup/restore system** - Full configuration export/import
+- [ ] **Configuration profiles** - Multiple complete system configurations
+- [ ] **Expert mode toggle** - Hide/show advanced dangerous settings
+- [ ] **Wizard system** - Guided setup for new users
+- [ ] **Diagnostic tools** - Hardware health checking and reporting
 
-### **Installation Experience**
-- [ ] **Installer Improvements**
-  - [ ] GUI installer creation
-  - [ ] Dependency auto-detection
-  - [ ] Configuration migration
-  - [ ] Uninstaller creation
-  - [ ] Update mechanism
-
----
-
-## 🏗️ Architecture Improvements
-
-### **Code Structure**
-- [ ] **Modular Architecture**
-  - [ ] Plugin system foundation
-  - [ ] Feature flag optimization
-  - [ ] Module dependency cleanup
-  - [ ] API stabilization
-  - [ ] Error handling standardization
-
-### **Performance & Scalability**
-- [ ] **Async Operations**
-  - [ ] Async NVML operations
-  - [ ] Non-blocking UI updates
-  - [ ] Background task management
-  - [ ] Concurrent monitoring
-  - [ ] Responsive UI during heavy operations
+### **Documentation & Help**
+- [ ] **Interactive tutorials** - In-app guided learning
+- [ ] **Contextual help** - Tooltips explaining every setting
+- [ ] **Video tutorials** - Screen recordings for complex procedures
+- [ ] **Troubleshooting guide** - Common issues and solutions
+- [ ] **FAQ system** - Searchable knowledge base
 
 ---
 
-## 🎨 User Experience
+## 🌟 **NICE TO HAVE - Future Vision**
 
-### **Accessibility**
-- [ ] **UI Accessibility**
-  - [ ] Keyboard navigation completion
-  - [ ] Screen reader support
-  - [ ] High contrast themes
-  - [ ] Font size scaling
-  - [ ] Color blind friendly themes
+### **Community Features**
+- [ ] **Profile marketplace** - Share and download community profiles
+- [ ] **Benchmark leaderboards** - Compare results with other users
+- [ ] **Hardware database** - Crowdsourced GPU capabilities database
+- [ ] **Tips and tricks** - Community-contributed optimization guides
+- [ ] **Bug reporting** - Integrated issue tracking
 
-### **Internationalization**
-- [ ] **Multi-language Support**
-  - [ ] String externalization
-  - [ ] Translation infrastructure
-  - [ ] RTL language support
-  - [ ] Number/date localization
-  - [ ] Community translation system
+### **Advanced Analytics**
+- [ ] **Performance regression detection** - Detect when performance degrades
+- [ ] **Power efficiency analysis** - Performance-per-watt optimization
+- [ ] **Thermal modeling** - Predict temperatures based on workload
+- [ ] **Wear analysis** - Track GPU aging and degradation
+- [ ] **Optimization suggestions** - AI-powered improvement recommendations
 
----
-
-## 🔬 Future Research
-
-### **Experimental Features**
-- [ ] **Machine Learning**
-  - [ ] Intelligent overclocking suggestions
-  - [ ] Thermal prediction models
-  - [ ] Performance optimization recommendations
-  - [ ] Anomaly detection
-
-- [ ] **Advanced GPU Features**
-  - [ ] GPU virtualization support
-  - [ ] Advanced memory management
-  - [ ] Compute workload optimization
-  - [ ] Real-time ray tracing optimization
+### **Ecosystem Integration**
+- [ ] **MangoHud integration** - Gaming overlay collaboration
+- [ ] **GameMode integration** - Linux gaming optimization
+- [ ] **Nvidia driver integration** - Deep driver-level optimizations
+- [ ] **Hardware monitoring** - Integration with lm-sensors, hwmon
+- [ ] **System monitoring** - CPU, RAM, storage correlation
 
 ---
 
-## ⚙️ Development Infrastructure
+## 📊 **DEVELOPMENT METRICS**
 
-### **CI/CD Improvements**
-- [x] **Build System**
-  - [x] Fixed self-hosted runner Rust installation issues
-  - [x] Resolved cross-device link errors in CI
-  - [ ] Cross-compilation support
-  - [ ] Automated testing on multiple distros
-  - [ ] Performance benchmarking in CI
-  - [ ] Security scanning integration
-  - [ ] Automated dependency updates
+### **Current Status (v0.6.0)**
+- ✅ **Core GPU control** - Functional and stable
+- ✅ **CLI interface** - Feature-complete nvctl tool
+- ✅ **Basic overclocking** - Safe limits and basic controls
+- ✅ **Fan control** - Custom curves and profiles
+- ✅ **Recording system** - NVENC capture functionality
+- ✅ **Container support** - Docker/Kubernetes integration
 
-### **Development Tools**
-- [ ] **Developer Experience**
-  - [ ] Development container setup
-  - [ ] Debug mode enhancements
-  - [ ] Profiling integration
-  - [ ] Hot reload for GUI development
-  - [ ] Mock hardware for testing
+### **v0.7.0 Target Goals**
+- 🎯 **MSI Afterburner feature parity** - Match core functionality
+- 🎯 **Performance excellence** - Async, responsive, optimized
+- 🎯 **Arch Linux integration** - Native packaging and distribution
+- 🎯 **Gaming focus** - Auto-detection, per-game optimization
+- 🎯 **Professional polish** - Production-ready quality
 
----
-
-## 📈 Metrics & Success Criteria
-
-### **v0.6.0 Success Metrics**
-- [ ] Complete TUI implementation (all tabs functional)
-- [ ] Profile system fully working (save/load/auto-apply)
-- [ ] Custom fan curves implemented
-- [ ] Multi-GPU basic support
-- [ ] AUR package published
-- [ ] 90%+ feature completion rate
-- [ ] User-reported bug count < 10 critical issues
-- [ ] Documentation coverage > 80%
-
-### **User Experience Goals**
-- [ ] Installation time < 5 minutes
-- [ ] First-time setup wizard
-- [ ] Zero configuration for basic use
-- [ ] Clear upgrade path from v0.5.0
-- [ ] Comprehensive help system
+### **Success Metrics**
+- [ ] **AUR package with >1000 votes** - Community adoption
+- [ ] **<50ms UI response time** - Performance excellence
+- [ ] **>90% uptime monitoring** - Reliability achievement
+- [ ] **Zero privilege escalation** - Security compliance
+- [ ] **100% Wayland compatibility** - Future-proofing success
 
 ---
 
-**Last Updated**: January 2025  
-**Next Review**: March 2025
+## 🚀 **GET INVOLVED**
 
-> 💡 **Note**: This TODO represents an ambitious roadmap. Priorities may shift based on user feedback and technical constraints. Focus areas for v0.6.0 are the High Priority items, with Medium Priority items considered for inclusion based on development velocity.
+This is an ambitious roadmap focused on creating the best open-source GPU control tool for Linux enthusiasts. The emphasis is on:
+
+- **🆓 Forever Free** - No premium features, no subscriptions
+- **🏔️ Arch Linux Excellence** - Native integration with bleeding-edge Linux
+- **🎮 Gaming Focus** - Built by gamers, for gamers
+- **🔧 Enthusiast Grade** - MSI Afterburner-level functionality
+- **🛡️ Security First** - Safe, reliable, auditable
+
+**Ready to build the future of Linux GPU control? Let's make it happen!** 🚀
+
+---
+
+*Last Updated: July 12, 2025*
+*Target Release: v0.7.0 "Production Excellence" - Q2 2025*

@@ -46,6 +46,12 @@ enum Command {
         #[command(subcommand)]
         subcommand: DisplaySubcommand,
     },
+    /// 🌈 Pure Rust Digital Vibrance (0-200%)
+    #[command(alias = "vibe")]
+    Vibrance {
+        /// Vibrance percentage (0-200%, where 100% is default)
+        percentage: u32,
+    },
     /// 🌀 Fan control and curves
     Fan {
         #[command(subcommand)]
@@ -77,6 +83,7 @@ enum Command {
         subcommand: RecordingSubcommand,
     },
     /// 🐳 Container and virtualization
+    #[command(alias = "ct")]
     Container {
         #[command(subcommand)]
         subcommand: ContainerSubcommand,
@@ -590,10 +597,48 @@ enum ContainerSubcommand {
         #[arg(short, long, default_value = "5")]
         interval: u64,
     },
+    /// Launch container with GPU support
+    Launch {
+        /// Container image
+        #[arg(short, long)]
+        image: String,
+        /// Container name
+        #[arg(short, long)]
+        name: Option<String>,
+        /// GPU devices (all, 0, 1,2, GPU-uuid)
+        #[arg(short, long, default_value = "all")]
+        gpu: String,
+        /// Interactive mode
+        #[arg(short, long)]
+        interactive: bool,
+        /// Remove container on exit
+        #[arg(long)]
+        rm: bool,
+        /// Container runtime (docker, podman, nix)
+        #[arg(short, long, default_value = "docker")]
+        runtime: String,
+    },
+    /// Launch PhantomLink audio container
+    PhantomLink {
+        /// Launch mode (dev, prod, minimal)
+        #[arg(short, long, default_value = "prod")]
+        mode: String,
+        /// Audio device
+        #[arg(short, long)]
+        audio_device: Option<String>,
+        /// Enable RTX Voice
+        #[arg(long)]
+        rtx_voice: bool,
+    },
     /// Container profile management
     Profiles {
         #[command(subcommand)]
         action: ContainerProfileAction,
+    },
+    /// Runtime information and setup
+    Runtime {
+        #[command(subcommand)]
+        action: RuntimeAction,
     },
 }
 
@@ -615,12 +660,53 @@ enum ContainerProfileAction {
         /// Profile name
         #[arg(short, long)]
         name: String,
+        /// Workload type (ml-training, inference, gaming, default)
+        #[arg(short, long, default_value = "default")]
+        workload: String,
     },
+}
+
+#[derive(Subcommand)]
+enum RuntimeAction {
+    /// Show runtime information
+    Info,
+    /// Setup container runtime
+    Setup {
+        /// Runtime type (docker, podman, nix)
+        #[arg(short, long)]
+        runtime: String,
+    },
+    /// Test GPU passthrough
+    Test,
+    /// Configure NVIDIA Container Runtime
+    Configure,
 }
 
 fn main() {
     let cli = Cli::parse();
     match cli.command {
+        Command::Vibrance { percentage } => {
+            use nvcontrol::vibrance_native;
+
+            // Simple vibrance command - just works!
+            match vibrance_native::set_vibrance_all_native(percentage) {
+                Ok(()) => {
+                    println!("✅ Set all displays to {}% vibrance", percentage);
+                    if percentage == 100 {
+                        println!("   🎨 Default vibrance restored");
+                    } else if percentage > 100 {
+                        println!("   🌈 Enhanced colors active (+{}%)", percentage - 100);
+                    } else {
+                        println!("   🎭 Reduced saturation (-{}%)", 100 - percentage);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("❌ Vibrance failed: {}", e);
+                    eprintln!("💡 Ensure NVIDIA open drivers 580+ with nvidia_drm.modeset=1");
+                    eprintln!("   Or run with elevated permissions: sudo nvctl vibe {}", percentage);
+                }
+            }
+        }
         Command::Gpu { subcommand } => match subcommand {
             GpuSubcommand::Info { format } => {
                 if let Err(e) = gpu::get_gpu_info_with_format(format) {
@@ -681,103 +767,117 @@ fn main() {
                 }
             }
             DisplaySubcommand::Vibrance { subcommand } => {
-                use nvcontrol::vibrance;
+                use nvcontrol::vibrance_native;
 
                 match subcommand {
-                    VibranceSubcommand::Get => match vibrance::get_displays() {
-                        Ok(displays) => {
-                            println!("Connected Displays:");
-                            for (i, display) in displays.iter().enumerate() {
-                                match vibrance::get_display_vibrance(i) {
-                                    Ok(vibrance_val) => {
-                                        let percentage =
-                                            vibrance::vibrance_to_percentage(vibrance_val);
-                                        println!("  {}: {}% vibrance", display, percentage);
+                    VibranceSubcommand::Get => match vibrance_native::get_vibrance_status_native() {
+                        Ok(status) => {
+                            println!("🌈 Pure Rust Digital Vibrance Status");
+                            println!("══════════════════════════════════════════════════");
+                            if let Some(devices) = status.get("devices") {
+                                println!("{}", serde_json::to_string_pretty(devices).unwrap_or_default());
+                            }
+
+                            // List displays with current vibrance
+                            if let Ok(displays) = vibrance_native::list_displays_native() {
+                                println!("\nConnected Displays:");
+                                for (device_id, display_id, name, connected) in displays {
+                                    if connected {
+                                        // Get vibrance controller to check current vibrance
+                                        println!("  Device {}, Display {}: {} - Ready", device_id, display_id, name);
                                     }
-                                    Err(e) => println!("  {}: Error - {}", display, e),
                                 }
                             }
                         }
                         Err(e) => {
-                            eprintln!("Error getting displays: {}", e);
-                            if !vibrance::is_available() {
-                                eprintln!(
-                                    "Note: nvibrant may not be installed or NVIDIA drivers not available"
-                                );
-                            }
+                            eprintln!("❌ Pure Rust vibrance error: {}", e);
+                            eprintln!("💡 Ensure NVIDIA open drivers (580+) with nvidia_drm.modeset=1");
                         }
                     },
                     VibranceSubcommand::Set { percentage } => {
-                        let vibrance_val = vibrance::percentage_to_vibrance(percentage);
-                        match vibrance::set_vibrance_all(vibrance_val) {
-                            Ok(()) => println!("Set all displays to {}% vibrance", percentage),
-                            Err(e) => eprintln!("Failed to set vibrance: {}", e),
+                        match vibrance_native::set_vibrance_all_native(percentage) {
+                            Ok(()) => println!("✅ Set all displays to {}% vibrance using pure Rust implementation", percentage),
+                            Err(e) => eprintln!("❌ Failed to set vibrance: {}", e),
                         }
                     }
                     VibranceSubcommand::SetDisplay {
                         display,
                         percentage,
                     } => {
-                        let vibrance_val = vibrance::percentage_to_vibrance(percentage);
-                        let display_values = vec![(display, vibrance_val)];
-                        match vibrance::set_vibrance(&display_values) {
+                        // Assume device_id 0 for now - could be enhanced to specify device
+                        match vibrance_native::set_display_vibrance_native(0, display as u32, percentage) {
                             Ok(()) => {
-                                println!("Set display {} to {}% vibrance", display, percentage)
+                                println!("✅ Set display {} to {}% vibrance", display, percentage)
                             }
                             Err(e) => {
-                                eprintln!("Failed to set vibrance for display {}: {}", display, e)
+                                eprintln!("❌ Failed to set vibrance for display {}: {}", display, e)
                             }
                         }
                     }
                     VibranceSubcommand::SetRaw { levels } => {
-                        // Convert i16 to (usize, i32) format
-                        let display_values: Vec<(usize, i32)> = levels
-                            .iter()
-                            .enumerate()
-                            .map(|(idx, &level)| (idx, level as i32))
-                            .collect();
+                        println!("🔧 Setting raw vibrance values: {:?}", levels);
 
-                        match vibrance::set_vibrance(&display_values) {
-                            Ok(()) => {
-                                println!("Applied raw vibrance values: {:?}", levels);
+                        for (display_idx, &level) in levels.iter().enumerate() {
+                            // Convert percentage if needed, or use raw value
+                            let percentage = if level >= -1024 && level <= 1023 {
+                                // Raw vibrance value - convert to percentage
+                                if level <= 0 {
+                                    ((level + 1024) as f32 / 1024.0 * 100.0) as u32
+                                } else {
+                                    (100.0 + (level as f32 / 1023.0 * 100.0)) as u32
+                                }
+                            } else {
+                                level.abs() as u32 // Treat as percentage if outside raw range
+                            };
+
+                            match vibrance_native::set_display_vibrance_native(0, display_idx as u32, percentage) {
+                                Ok(()) => println!("✅ Display {}: set to {}% (raw: {})", display_idx, percentage, level),
+                                Err(e) => eprintln!("❌ Display {}: failed - {}", display_idx, e),
                             }
-                            Err(e) => eprintln!("Failed to set raw vibrance: {}", e),
                         }
                     }
-                    VibranceSubcommand::List => match vibrance::get_displays() {
+                    VibranceSubcommand::List => match vibrance_native::list_displays_native() {
                         Ok(displays) => {
-                            println!("Available Displays:");
-                            for (i, display) in displays.iter().enumerate() {
-                                println!("  [{}] {}", i, display);
+                            println!("🖥️ Available Displays (Pure Rust):");
+                            for (device_id, display_id, name, connected) in displays {
+                                let status = if connected { "✅ Connected" } else { "⭕ Disconnected" };
+                                println!("  Device {}, Display {} [{}]: {}", device_id, display_id, display_id, name);
+                                println!("    Status: {}", status);
                             }
                         }
-                        Err(e) => eprintln!("Failed to list displays: {}", e),
+                        Err(e) => eprintln!("❌ Failed to list displays: {}", e),
                     },
-                    VibranceSubcommand::Reset => match vibrance::set_vibrance_all(0) {
-                        Ok(()) => println!("Reset all displays to default vibrance (100%)"),
-                        Err(e) => eprintln!("Failed to reset vibrance: {}", e),
+                    VibranceSubcommand::Reset => match vibrance_native::reset_vibrance_native() {
+                        Ok(()) => println!("✅ Reset all displays to default vibrance (100%) using pure Rust"),
+                        Err(e) => eprintln!("❌ Failed to reset vibrance: {}", e),
                     },
-                    VibranceSubcommand::Info => match vibrance::get_driver_info() {
-                        Ok(info) => {
-                            println!("Vibrance Support Information:");
-                            println!("  {}", info);
-                            println!(
-                                "  nvibrant available: {}",
-                                if vibrance::is_available() {
-                                    "Yes"
-                                } else {
-                                    "No"
-                                }
-                            );
+                    VibranceSubcommand::Info => match vibrance_native::get_vibrance_status_native() {
+                        Ok(status) => {
+                            println!("🌈 Pure Rust Digital Vibrance Information:");
+                            println!("══════════════════════════════════════════════════");
+                            if let Some(driver_version) = status.get("driver_version") {
+                                println!("  Driver Version: {}", driver_version);
+                            }
+                            if let Some(open_driver) = status.get("open_driver") {
+                                println!("  NVIDIA Open Drivers: {}", if open_driver.as_bool().unwrap_or(false) { "✅ Yes" } else { "❌ No" });
+                            }
 
-                            if !vibrance::is_available() {
-                                println!("\nTo install nvibrant:");
-                                println!("  pip install nvibrant");
-                                println!("  # OR");
-                                println!("  uvx nvibrant");
+                            println!("\n💡 Features:");
+                            println!("  ✅ Direct driver integration (no external deps)");
+                            println!("  ✅ Works on Wayland and X11");
+                            println!("  ✅ Per-display control");
+                            println!("  ✅ Real-time adjustment");
+
+                            if let Ok(displays) = vibrance_native::list_displays_native() {
+                                println!("\n🖥️ Supported Displays: {}", displays.len());
                             }
+
+                            println!("\n🔧 Requirements:");
+                            println!("  • NVIDIA Open Drivers 580+");
+                            println!("  • nvidia_drm.modeset=1 kernel parameter");
+                            println!("  • /dev/nvidia-modeset access (or run as root)");
                         }
-                        Err(e) => eprintln!("Failed to get driver info: {}", e),
+                        Err(e) => eprintln!("❌ Failed to get driver info: {}", e),
                     },
                 }
             }
@@ -1548,41 +1648,233 @@ fn main() {
         },
         Command::Container { subcommand } => match subcommand {
             ContainerSubcommand::List => {
-                println!("🐳 Listing GPU containers...");
-                // Implementation would call container::list_containers()
+                use nvcontrol::container_runtime::NvContainerRuntime;
+
+                println!("🐳 Listing GPU-enabled containers...");
+                match NvContainerRuntime::new() {
+                    Ok(runtime) => {
+                        match runtime.monitor_gpu_containers() {
+                            Ok(containers) => {
+                                if containers.is_empty() {
+                                    println!("No GPU containers found");
+                                } else {
+                                    println!("Found {} GPU containers:", containers.len());
+                                    for container in containers {
+                                        println!("  📦 {}: {}", container.container_name, container.image);
+                                        println!("     GPU Usage: {:.1}%", container.gpu_utilization);
+                                        println!("     Power: {:.1}W", container.power_usage);
+                                        println!("     Status: {:?}", container.status);
+                                    }
+                                }
+                            }
+                            Err(e) => eprintln!("❌ Failed to list containers: {}", e),
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Container runtime initialization failed: {}", e),
+                }
+            }
+            ContainerSubcommand::Launch {
+                image,
+                name,
+                gpu,
+                interactive,
+                rm,
+                runtime,
+            } => {
+                use nvcontrol::container_runtime::{NvContainerRuntime, ContainerLaunchConfig, ContainerGpuConfig, ContainerRuntime as RT};
+                use std::collections::HashMap;
+
+                println!("🚀 Launching container: {}", image);
+
+                let container_runtime = match runtime.as_str() {
+                    "docker" => RT::Docker,
+                    "podman" => RT::Podman,
+                    "nix" => RT::NixOS,
+                    "containerd" => RT::Containerd,
+                    _ => RT::Docker,
+                };
+
+                let gpu_devices = if gpu == "all" {
+                    vec!["all".to_string()]
+                } else {
+                    gpu.split(',').map(|s| s.to_string()).collect()
+                };
+
+                let config = ContainerLaunchConfig {
+                    image: image.clone(),
+                    name: name.clone(),
+                    command: None,
+                    working_dir: None,
+                    environment: HashMap::new(),
+                    volumes: vec![],
+                    ports: vec![],
+                    gpu_config: ContainerGpuConfig {
+                        runtime: container_runtime,
+                        gpu_devices,
+                        memory_limit: None,
+                        compute_mode: "default".to_string(),
+                        driver_capabilities: vec!["compute".to_string(), "utility".to_string()],
+                        environment_vars: HashMap::new(),
+                        mount_points: vec![],
+                        device_requests: vec![],
+                    },
+                    interactive,
+                    remove_on_exit: rm,
+                };
+
+                match NvContainerRuntime::new() {
+                    Ok(rt) => {
+                        match rt.launch_container(&config) {
+                            Ok(container_id) => {
+                                println!("✅ Container launched: {}", container_id);
+                                if let Some(name) = name {
+                                    println!("   Name: {}", name);
+                                }
+                                println!("   Runtime: {}", runtime);
+                                println!("   GPU: {}", gpu);
+                            }
+                            Err(e) => eprintln!("❌ Failed to launch container: {}", e),
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Runtime initialization failed: {}", e),
+                }
+            }
+            ContainerSubcommand::PhantomLink { mode, audio_device, rtx_voice } => {
+                use nvcontrol::container_runtime::NvContainerRuntime;
+
+                println!("🎵 Launching PhantomLink audio container (mode: {})...", mode);
+
+                match NvContainerRuntime::new() {
+                    Ok(mut runtime) => {
+                        match runtime.create_phantomlink_container_config() {
+                            Ok(mut config) => {
+                                // Configure based on mode
+                                match mode.as_str() {
+                                    "dev" => {
+                                        config.environment.insert("RUST_LOG".to_string(), "debug".to_string());
+                                        config.environment.insert("PHANTOMLINK_DEV_MODE".to_string(), "true".to_string());
+                                    }
+                                    "minimal" => {
+                                        config.gpu_config.memory_limit = Some(1024 * 1024 * 1024); // 1GB
+                                    }
+                                    _ => {} // prod mode - use defaults
+                                }
+
+                                // Configure RTX Voice
+                                if rtx_voice {
+                                    config.environment.insert("RTX_VOICE_ENABLED".to_string(), "true".to_string());
+                                    config.environment.insert("RTX_VOICE_STRENGTH".to_string(), "0.8".to_string());
+                                }
+
+                                // Configure audio device
+                                if let Some(device) = audio_device {
+                                    config.environment.insert("AUDIO_DEVICE".to_string(), device);
+                                }
+
+                                match runtime.launch_container(&config) {
+                                    Ok(container_id) => {
+                                        println!("✅ PhantomLink container launched: {}", container_id);
+                                        println!("   Web UI: http://localhost:8080");
+                                        println!("   Mode: {}", mode);
+                                        println!("   RTX Voice: {}", if rtx_voice { "✅ Enabled" } else { "❌ Disabled" });
+                                    }
+                                    Err(e) => eprintln!("❌ Failed to launch PhantomLink: {}", e),
+                                }
+                            }
+                            Err(e) => eprintln!("❌ Failed to create PhantomLink config: {}", e),
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Runtime initialization failed: {}", e),
+                }
             }
             ContainerSubcommand::Status { container } => {
                 println!(
-                    "📊 Container status: {}",
-                    container.unwrap_or_else(|| "all".to_string())
+                    "📊 Container GPU status: {}",
+                    container.as_deref().unwrap_or("all")
                 );
-                // Implementation would call container::get_status()
+                // TODO: Implement status checking for specific containers
             }
-            ContainerSubcommand::Monitor {
-                container,
-                interval,
-            } => {
+            ContainerSubcommand::Monitor { container, interval } => {
                 println!(
                     "📊 Monitoring container '{}' every {}s...",
                     container, interval
                 );
-                // Implementation would call container::monitor_container()
+                // TODO: Implement real-time container monitoring
             }
             ContainerSubcommand::Profiles { action } => match action {
                 ContainerProfileAction::List => {
-                    println!("📋 Container profiles:");
-                    // Implementation would call container::list_profiles()
+                    use nvcontrol::container::load_container_profiles;
+
+                    println!("📋 Container GPU profiles:");
+                    match load_container_profiles() {
+                        Ok(profiles) => {
+                            for profile in profiles {
+                                println!("  🏷️  {}: {}", profile.name, profile.description);
+                                println!("      Power Limit: {:?}W", profile.power_limit);
+                                println!("      Compute Mode: {:?}", profile.compute_mode);
+                                println!("      Persistence: {}", profile.persistence_mode);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to load profiles: {}", e),
+                    }
                 }
                 ContainerProfileAction::Apply { profile, container } => {
                     println!(
                         "🔄 Applying profile '{}' to container '{}'...",
                         profile, container
                     );
-                    // Implementation would call container::apply_profile()
+                    // TODO: Implement profile application
                 }
-                ContainerProfileAction::Create { name } => {
+                ContainerProfileAction::Create { name, workload } => {
+                    use nvcontrol::container::{create_container_profile, save_container_profiles, load_container_profiles};
+
                     println!("➕ Creating profile '{}'...", name);
-                    // Implementation would call container::create_profile()
+                    let new_profile = create_container_profile(&name, &workload);
+
+                    match load_container_profiles() {
+                        Ok(mut profiles) => {
+                            profiles.push(new_profile);
+                            match save_container_profiles(&profiles) {
+                                Ok(()) => println!("✅ Profile '{}' created successfully", name),
+                                Err(e) => eprintln!("❌ Failed to save profile: {}", e),
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to load existing profiles: {}", e),
+                    }
+                }
+            },
+            ContainerSubcommand::Runtime { action } => match action {
+                RuntimeAction::Info => {
+                    use nvcontrol::container::get_container_runtime_info;
+
+                    println!("🔧 Container Runtime Information:");
+                    match get_container_runtime_info() {
+                        Ok(info) => {
+                            for (key, value) in info {
+                                println!("  {}: {}", key, value);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to get runtime info: {}", e),
+                    }
+                }
+                RuntimeAction::Setup { runtime } => {
+                    println!("⚙️  Setting up {} runtime...", runtime);
+                    // TODO: Implement runtime setup
+                }
+                RuntimeAction::Test => {
+                    use nvcontrol::container::is_nvidia_runtime_available;
+
+                    println!("🧪 Testing GPU passthrough...");
+                    if is_nvidia_runtime_available() {
+                        println!("✅ NVIDIA Container Runtime available");
+                    } else {
+                        println!("❌ NVIDIA Container Runtime not found");
+                        println!("💡 Install nvidia-container-toolkit or nvidia-docker2");
+                    }
+                }
+                RuntimeAction::Configure => {
+                    println!("⚙️  Configuring NVIDIA Container Runtime...");
+                    // TODO: Implement runtime configuration
                 }
             },
         },
