@@ -2,12 +2,17 @@ use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::path::PathBuf;
 
+use crate::bolt_integration::{NvControlBoltManager, GpuContainerConfig};
+use tokio::runtime::Runtime;
+use std::sync::Arc;
+use std::sync::Mutex;
+
 /// Pure Rust NVIDIA Container Runtime implementation
-/// This provides docker/podman/nix container GPU passthrough functionality
-/// built directly into nvcontrol, eliminating external dependencies
+/// This provides docker/podman/bolt/nix container GPU passthrough functionality
+/// built directly into nvcontrol, with native Bolt API integration
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NvContainerRuntime {
@@ -15,13 +20,16 @@ pub struct NvContainerRuntime {
     pub supported_runtimes: Vec<ContainerRuntime>,
     pub gpu_devices: Vec<GpuDevice>,
     pub config_path: PathBuf,
+    #[serde(skip)]
+    pub bolt_manager: Option<Arc<Mutex<NvControlBoltManager>>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ContainerRuntime {
     Docker,
     Podman,
     Containerd,
+    Bolt,
     NixOS,
     Custom(String),
 }
@@ -72,14 +80,14 @@ pub struct ContainerLaunchConfig {
     pub remove_on_exit: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct VolumeMount {
     pub source: String,
     pub target: String,
     pub read_only: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PortMapping {
     pub host_port: u16,
     pub container_port: u16,
@@ -87,7 +95,7 @@ pub struct PortMapping {
 }
 
 impl NvContainerRuntime {
-    /// Initialize the NVIDIA container runtime
+    /// Initialize the NVIDIA container runtime with Bolt integration
     pub fn new() -> NvResult<Self> {
         let version = "1.0.0-nvcontrol".to_string();
         let gpu_devices = Self::detect_gpu_devices()?;
@@ -101,11 +109,26 @@ impl NvContainerRuntime {
         fs::create_dir_all(&config_path)
             .map_err(|e| NvControlError::ConfigError(format!("Failed to create config dir: {}", e)))?;
 
+        // Initialize Bolt manager if Bolt runtime is available
+        let bolt_manager = if supported_runtimes.contains(&ContainerRuntime::Bolt) {
+            let rt = Runtime::new().map_err(|e| NvControlError::RuntimeError(format!("Tokio runtime failed: {}", e)))?;
+            match rt.block_on(NvControlBoltManager::new()) {
+                Ok(manager) => Some(Arc::new(Mutex::new(manager))),
+                Err(e) => {
+                    eprintln!("Warning: Failed to initialize Bolt manager: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         Ok(NvContainerRuntime {
             version,
             supported_runtimes,
             gpu_devices,
             config_path,
+            bolt_manager,
         })
     }
 
@@ -159,6 +182,11 @@ impl NvContainerRuntime {
             runtimes.push(ContainerRuntime::Containerd);
         }
 
+        // Check Bolt
+        if Command::new("bolt").arg("--version").output().is_ok() {
+            runtimes.push(ContainerRuntime::Bolt);
+        }
+
         // Check NixOS
         if fs::metadata("/etc/nixos").is_ok() {
             runtimes.push(ContainerRuntime::NixOS);
@@ -172,6 +200,7 @@ impl NvContainerRuntime {
         match config.gpu_config.runtime {
             ContainerRuntime::Docker => self.launch_docker_container(config),
             ContainerRuntime::Podman => self.launch_podman_container(config),
+            ContainerRuntime::Bolt => self.launch_bolt_container(config),
             ContainerRuntime::NixOS => self.launch_nix_container(config),
             ContainerRuntime::Containerd => self.launch_containerd_container(config),
             ContainerRuntime::Custom(ref name) => {
@@ -343,6 +372,173 @@ impl NvContainerRuntime {
             let error = String::from_utf8_lossy(&output.stderr);
             Err(NvControlError::CommandFailed(format!("Podman run failed: {}", error)))
         }
+    }
+
+    /// Launch Bolt container with GPU support using native API
+    fn launch_bolt_container(&self, config: &ContainerLaunchConfig) -> NvResult<String> {
+        if let Some(ref bolt_manager) = self.bolt_manager {
+            let manager = bolt_manager.lock()
+                .map_err(|e| NvControlError::RuntimeError(format!("Bolt manager lock failed: {}", e)))?;
+
+            // Convert container launch config to Bolt GPU config
+            let gpu_config = self.create_bolt_gpu_config(config)?;
+
+            let rt = Runtime::new()
+                .map_err(|e| NvControlError::RuntimeError(format!("Tokio runtime failed: {}", e)))?;
+
+            let workload_name = config.name.as_deref().unwrap_or("nvcontrol-workload");
+
+            match rt.block_on(manager.launch_gpu_workload(
+                workload_name,
+                &config.image,
+                &gpu_config,
+            )) {
+                Ok(container_name) => Ok(container_name),
+                Err(e) => Err(NvControlError::CommandFailed(format!("Bolt launch failed: {}", e)))
+            }
+        } else {
+            // Fallback to CLI approach
+            self.launch_bolt_container_cli(config)
+        }
+    }
+
+    /// Create Bolt GPU configuration from container launch config
+    fn create_bolt_gpu_config(&self, config: &ContainerLaunchConfig) -> NvResult<GpuContainerConfig> {
+        let gpu_id = if config.gpu_config.gpu_devices.is_empty() {
+            0
+        } else {
+            config.gpu_config.gpu_devices[0]
+                .parse()
+                .unwrap_or(0)
+        };
+
+        Ok(GpuContainerConfig {
+            gpu_id,
+            memory_limit: config.gpu_config.memory_limit,
+            compute_capabilities: config.gpu_config.driver_capabilities.clone(),
+            power_limit: None, // Could be extracted from environment
+            enable_dlss: config.gpu_config.driver_capabilities.contains(&"graphics".to_string()),
+            enable_raytracing: config.gpu_config.driver_capabilities.contains(&"graphics".to_string()),
+            enable_cuda: config.gpu_config.driver_capabilities.contains(&"compute".to_string()),
+        })
+    }
+
+    /// Fallback CLI launch for Bolt containers
+    fn launch_bolt_container_cli(&self, config: &ContainerLaunchConfig) -> NvResult<String> {
+        // Generate Boltfile configuration for this container
+        let boltfile_config = self.generate_boltfile_config(config)?;
+
+        // Create temporary Boltfile
+        let boltfile_path = format!("/tmp/nvcontrol-boltfile-{}.toml",
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default().as_secs());
+        fs::write(&boltfile_path, boltfile_config)
+            .map_err(|e| NvControlError::ConfigError(format!("Failed to write Boltfile: {}", e)))?;
+
+        // Use Bolt CLI
+        let output = Command::new("bolt")
+            .args(&["surge", "up", "--config", &boltfile_path])
+            .output()
+            .map_err(|e| NvControlError::CommandFailed(format!("Bolt surge up failed: {}", e)))?;
+
+        // Clean up temporary Boltfile
+        let _ = fs::remove_file(boltfile_path);
+
+        if output.status.success() {
+            let container_id = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            Ok(container_id)
+        } else {
+            let error = String::from_utf8_lossy(&output.stderr);
+            Err(NvControlError::CommandFailed(format!("Bolt surge up failed: {}", error)))
+        }
+    }
+
+    /// Generate Boltfile configuration for container launch
+    fn generate_boltfile_config(&self, config: &ContainerLaunchConfig) -> NvResult<String> {
+        let service_name = config.name.as_deref()
+            .unwrap_or_else(|| config.image.split(':').next().unwrap_or("gpu-service"));
+
+        let mut boltfile = format!(r#"project = "nvcontrol-runtime"
+
+[services.{}]
+build = "{}"
+"#, service_name, config.image);
+
+        // Add GPU configuration
+        if !config.gpu_config.gpu_devices.is_empty() {
+            boltfile.push_str("privileged = true\n");
+            boltfile.push_str("gpu.nvidia = true\n");
+
+            // Add GPU devices
+            boltfile.push_str("devices = [\n");
+            for device in &self.gpu_devices {
+                boltfile.push_str(&format!("    \"/dev/nvidia{}\",\n", device.index));
+            }
+            boltfile.push_str("    \"/dev/nvidia-uvm\",\n");
+            boltfile.push_str("    \"/dev/nvidia-modeset\",\n");
+            boltfile.push_str("    \"/dev/nvidiactl\"\n");
+            boltfile.push_str("]\n");
+
+            // Add NVIDIA library volumes
+            boltfile.push_str("volumes = [\n");
+            boltfile.push_str("    \"/usr/lib/x86_64-linux-gnu/libnvidia-ml.so:/usr/lib/x86_64-linux-gnu/libnvidia-ml.so:ro\",\n");
+            boltfile.push_str("    \"/sys/class/drm:/sys/class/drm:ro\"\n");
+            boltfile.push_str("]\n");
+
+            // Add NVIDIA environment variables
+            boltfile.push_str("env.NVIDIA_VISIBLE_DEVICES = \"all\"\n");
+            boltfile.push_str(&format!("env.NVIDIA_DRIVER_CAPABILITIES = \"{}\"\n",
+                config.gpu_config.driver_capabilities.join(",")));
+        }
+
+        // Add custom environment variables
+        for (key, value) in &config.environment {
+            boltfile.push_str(&format!("env.{} = \"{}\"\n", key, value));
+        }
+
+        // Add custom volume mounts
+        if !config.volumes.is_empty() {
+            if !boltfile.contains("volumes = [") {
+                boltfile.push_str("volumes = [\n");
+            } else {
+                // Add to existing volumes array
+                boltfile = boltfile.replace("]\n", "");
+            }
+            for volume in &config.volumes {
+                let ro_suffix = if volume.read_only { ":ro" } else { "" };
+                boltfile.push_str(&format!("    \"{}:{}{}\"", volume.source, volume.target, ro_suffix));
+                if volume != config.volumes.last().unwrap() {
+                    boltfile.push_str(",");
+                }
+                boltfile.push_str("\n");
+            }
+            boltfile.push_str("]\n");
+        }
+
+        // Add port mappings
+        if !config.ports.is_empty() {
+            boltfile.push_str("ports = [\n");
+            for port in &config.ports {
+                boltfile.push_str(&format!("    \"{}:{}\"", port.host_port, port.container_port));
+                if port != config.ports.last().unwrap() {
+                    boltfile.push_str(",");
+                }
+                boltfile.push_str("\n");
+            }
+            boltfile.push_str("]\n");
+        }
+
+        // Add working directory
+        if let Some(ref workdir) = config.working_dir {
+            boltfile.push_str(&format!("workdir = \"{}\"\n", workdir));
+        }
+
+        // Add network configuration for encrypted QUIC
+        boltfile.push_str("\n[network]\n");
+        boltfile.push_str("driver = \"quic\"\n");
+        boltfile.push_str("encryption = true\n");
+
+        Ok(boltfile)
     }
 
     /// Launch NixOS container with GPU support
@@ -541,7 +737,7 @@ impl NvContainerRuntime {
             .output()
             .map_err(|e| NvControlError::CommandFailed(format!("Podman ps failed: {}", e)))?;
 
-        let containers_json = String::from_utf8_lossy(&output.stdout);
+        let _containers_json = String::from_utf8_lossy(&output.stdout);
         // Parse JSON and filter for GPU containers
         // This would need proper JSON parsing in production
 

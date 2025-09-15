@@ -23,7 +23,7 @@ nvcontrol is the most advanced NVIDIA GPU management solution for Linux, featuri
 - **Wayland & X11**: Works on all display servers
 
 ### 🐳 **Container GPU Passthrough**
-- **Built-in Container Runtime**: Pure Rust Docker/Podman/NixOS support
+- **Built-in Container Runtime**: Pure Rust runtime with predictable memory and low overhead
 - **PhantomLink Integration**: Audio container with RTX Voice in one command
 - **GPU Profiles**: Optimized profiles for ML, gaming, inference workloads
 - **Multi-Runtime**: Docker, Podman, containerd, NixOS containers

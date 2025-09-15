@@ -25,6 +25,8 @@ pub enum NvControlError {
     ConfigError(String),
     #[error("Unsupported feature: {0}")]
     UnsupportedFeature(String),
+    #[error("Runtime error: {0}")]
+    RuntimeError(String),
 }
 
 pub type NvResult<T> = Result<T, NvControlError>;
@@ -41,6 +43,7 @@ pub mod profiles;
 pub mod tray;
 pub mod vibrance;
 pub mod vibrance_native;
+pub mod bolt_integration;
 
 // New advanced modules
 pub mod container;

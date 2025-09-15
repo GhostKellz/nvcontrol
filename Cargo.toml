@@ -54,8 +54,13 @@ indicatif = "0.17"
 # Pure Rust vibrance and container support
 libc = "0.2"
 
+# Bolt container runtime support
+bolt = { git = "https://github.com/CK-Technology/bolt", optional = true }
+tokio = { version = "1.0", features = ["full"] }
+
 [features]
-default = ["gui", "tray"]
+default = ["gui", "tray", "bolt-api"]
 gui = ["eframe", "winit"]
 tray = ["tray-icon"]
+bolt-api = ["bolt"]
 

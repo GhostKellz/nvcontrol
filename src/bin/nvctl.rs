@@ -88,6 +88,11 @@ enum Command {
         #[command(subcommand)]
         subcommand: ContainerSubcommand,
     },
+    /// ⚡ Bolt container runtime
+    Bolt {
+        #[command(subcommand)]
+        subcommand: BoltSubcommand,
+    },
     /// 🔧 System drivers and utilities
     Drivers {
         #[command(subcommand)]
@@ -579,6 +584,117 @@ enum RecordingSubcommand {
 }
 
 #[derive(Subcommand)]
+enum BoltSubcommand {
+    /// Launch GPU workload using Bolt
+    Launch {
+        /// Workload name
+        #[arg(short, long)]
+        name: String,
+        /// Container image
+        #[arg(short, long)]
+        image: String,
+        /// GPU ID to use
+        #[arg(long, default_value = "0")]
+        gpu_id: u32,
+        /// Enable DLSS support
+        #[arg(long)]
+        dlss: bool,
+        /// Enable ray tracing
+        #[arg(long)]
+        raytracing: bool,
+        /// Memory limit in GB
+        #[arg(long)]
+        memory_limit: Option<u64>,
+        /// Power limit percentage
+        #[arg(long)]
+        power_limit: Option<u32>,
+    },
+    /// List Bolt GPU containers
+    List,
+    /// Show Surge orchestration status
+    Status,
+    /// Setup gaming environment with Proton
+    Gaming {
+        /// Game name
+        #[arg(short, long)]
+        name: String,
+        /// Proton version
+        #[arg(long, default_value = "8.0")]
+        proton: String,
+        /// Windows version compatibility
+        #[arg(long, default_value = "win10")]
+        winver: String,
+    },
+    /// Launch Proton game
+    Game {
+        /// Steam App ID
+        #[arg(short, long)]
+        steam_id: String,
+        /// Additional game arguments
+        #[arg(long)]
+        args: Vec<String>,
+    },
+    /// Create GPU monitoring service
+    Monitor {
+        /// Enable web interface
+        #[arg(long)]
+        web: bool,
+        /// Monitoring port
+        #[arg(long, default_value = "8080")]
+        port: u16,
+    },
+    /// Start Surge orchestration services
+    Up {
+        /// Services to start (empty for all)
+        services: Vec<String>,
+        /// Force recreate containers
+        #[arg(long)]
+        force_recreate: bool,
+    },
+    /// Stop Surge orchestration services
+    Down {
+        /// Services to stop (empty for all)
+        services: Vec<String>,
+        /// Remove volumes
+        #[arg(long)]
+        volumes: bool,
+    },
+    /// Build GPU-optimized image
+    Build {
+        /// Dockerfile path
+        #[arg(short, long)]
+        dockerfile: String,
+        /// Image tag
+        #[arg(short, long)]
+        tag: String,
+    },
+    /// Create high-performance GPU network
+    Network {
+        /// Network name
+        #[arg(short, long)]
+        name: String,
+        /// Subnet (CIDR notation)
+        #[arg(long)]
+        subnet: Option<String>,
+    },
+    /// Stop container
+    Stop {
+        /// Container name
+        #[arg(short, long)]
+        container: String,
+    },
+    /// Remove container
+    Remove {
+        /// Container name
+        #[arg(short, long)]
+        container: String,
+        /// Force removal
+        #[arg(short, long)]
+        force: bool,
+    },
+}
+
+#[derive(Subcommand)]
 enum ContainerSubcommand {
     /// List GPU-enabled containers
     List,
@@ -614,7 +730,7 @@ enum ContainerSubcommand {
         /// Remove container on exit
         #[arg(long)]
         rm: bool,
-        /// Container runtime (docker, podman, nix)
+        /// Container runtime (docker, podman, bolt, nix)
         #[arg(short, long, default_value = "docker")]
         runtime: String,
     },
@@ -1646,6 +1762,314 @@ fn main() {
                 }
             },
         },
+        Command::Bolt { subcommand } => match subcommand {
+            BoltSubcommand::Launch {
+                name,
+                image,
+                gpu_id,
+                dlss,
+                raytracing,
+                memory_limit,
+                power_limit,
+            } => {
+                use nvcontrol::bolt_integration::{NvControlBoltManager, GpuContainerConfig};
+
+                println!("🚀 Launching Bolt GPU workload: {}", name);
+
+                match tokio::runtime::Runtime::new() {
+                    Ok(rt) => {
+                        match rt.block_on(async {
+                            let manager = NvControlBoltManager::new().await?;
+
+                            let config = GpuContainerConfig {
+                                gpu_id,
+                                memory_limit: memory_limit.map(|gb| gb * 1024 * 1024 * 1024),
+                                enable_dlss: dlss,
+                                enable_raytracing: raytracing,
+                                enable_cuda: true,
+                                power_limit,
+                                ..Default::default()
+                            };
+
+                            manager.launch_gpu_workload(&name, &image, &config).await
+                        }) {
+                            Ok(container_name) => {
+                                println!("✅ Bolt container launched: {}", container_name);
+                                println!("   Workload: {}", name);
+                                println!("   Image: {}", image);
+                                println!("   GPU: {}", gpu_id);
+                                if dlss { println!("   DLSS: ✅ Enabled"); }
+                                if raytracing { println!("   Ray Tracing: ✅ Enabled"); }
+                                if let Some(limit) = memory_limit {
+                                    println!("   Memory Limit: {}GB", limit);
+                                }
+                            }
+                            Err(e) => eprintln!("❌ Failed to launch Bolt workload: {}", e),
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Failed to create async runtime: {}", e),
+                }
+            }
+            BoltSubcommand::List => {
+                use nvcontrol::bolt_integration::NvControlBoltManager;
+
+                println!("🐳 Listing Bolt GPU containers...");
+
+                match tokio::runtime::Runtime::new() {
+                    Ok(rt) => {
+                        match rt.block_on(async {
+                            let manager = NvControlBoltManager::new().await?;
+                            manager.list_gpu_containers().await
+                        }) {
+                            Ok(containers) => {
+                                if containers.is_empty() {
+                                    println!("No Bolt GPU containers found");
+                                } else {
+                                    println!("Found {} Bolt containers:", containers.len());
+                                    for container in containers {
+                                        println!("  ⚡ {}: {}", container.name, container.image);
+                                        println!("     ID: {}", container.id);
+                                        println!("     Status: {}", container.status);
+                                        if !container.ports.is_empty() {
+                                            println!("     Ports: {:?}", container.ports);
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => eprintln!("❌ Failed to list containers: {}", e),
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Failed to create async runtime: {}", e),
+                }
+            }
+            BoltSubcommand::Status => {
+                use nvcontrol::bolt_integration::NvControlBoltManager;
+
+                println!("📊 Bolt Surge orchestration status...");
+
+                match tokio::runtime::Runtime::new() {
+                    Ok(rt) => {
+                        match rt.block_on(async {
+                            let manager = NvControlBoltManager::new().await?;
+                            manager.get_surge_status().await
+                        }) {
+                            Ok(status) => {
+                                println!("✅ Surge Status:");
+                                println!("   Services: {}", status.services.len());
+                                for service in &status.services {
+                                    println!("     📦 {}", service.name);
+                                }
+                                println!("   Networks: {}", status.networks.len());
+                                for network in &status.networks {
+                                    println!("     🌐 {} ({})", network.name, network.driver);
+                                }
+                            }
+                            Err(e) => eprintln!("❌ Failed to get status: {}", e),
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Failed to create async runtime: {}", e),
+                }
+            }
+            BoltSubcommand::Gaming { name, proton, winver } => {
+                use nvcontrol::bolt_integration::NvControlBoltManager;
+
+                println!("🎮 Setting up Bolt gaming environment for: {}", name);
+
+                match tokio::runtime::Runtime::new() {
+                    Ok(rt) => {
+                        match rt.block_on(async {
+                            let manager = NvControlBoltManager::new().await?;
+                            manager.setup_gaming_environment(&name).await
+                        }) {
+                            Ok(()) => {
+                                println!("✅ Gaming environment configured");
+                                println!("   Game: {}", name);
+                                println!("   Proton: {}", proton);
+                                println!("   Windows Version: {}", winver);
+                            }
+                            Err(e) => eprintln!("❌ Failed to setup gaming environment: {}", e),
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Failed to create async runtime: {}", e),
+                }
+            }
+            BoltSubcommand::Game { steam_id, args } => {
+                use nvcontrol::bolt_integration::NvControlBoltManager;
+
+                println!("🎮 Launching Proton game: steam://run/{}", steam_id);
+
+                match tokio::runtime::Runtime::new() {
+                    Ok(rt) => {
+                        match rt.block_on(async {
+                            let manager = NvControlBoltManager::new().await?;
+                            manager.launch_proton_game(&steam_id, &args).await
+                        }) {
+                            Ok(()) => {
+                                println!("✅ Proton game launched successfully");
+                                if !args.is_empty() {
+                                    println!("   Args: {:?}", args);
+                                }
+                            }
+                            Err(e) => eprintln!("❌ Failed to launch game: {}", e),
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Failed to create async runtime: {}", e),
+                }
+            }
+            BoltSubcommand::Monitor { web: _, port: _ } => {
+                use nvcontrol::bolt_integration::NvControlBoltManager;
+
+                println!("📊 Creating Bolt GPU monitoring service...");
+
+                match tokio::runtime::Runtime::new() {
+                    Ok(rt) => {
+                        match rt.block_on(async {
+                            let manager = NvControlBoltManager::new().await?;
+                            manager.create_gpu_monitoring_service().await
+                        }) {
+                            Ok(service_name) => {
+                                println!("✅ GPU monitoring service created: {}", service_name);
+                                println!("   Web interface: http://localhost:8080");
+                            }
+                            Err(e) => eprintln!("❌ Failed to create monitoring service: {}", e),
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Failed to create async runtime: {}", e),
+                }
+            }
+            BoltSubcommand::Up { services, force_recreate } => {
+                use nvcontrol::bolt_integration::NvControlBoltManager;
+
+                println!("⚡ Starting Bolt Surge services...");
+
+                match tokio::runtime::Runtime::new() {
+                    Ok(rt) => {
+                        match rt.block_on(async {
+                            let manager = NvControlBoltManager::new().await?;
+                            manager.surge_up(&services).await
+                        }) {
+                            Ok(()) => {
+                                println!("✅ Surge services started");
+                                if force_recreate {
+                                    println!("   Containers were recreated");
+                                }
+                            }
+                            Err(e) => eprintln!("❌ Failed to start services: {}", e),
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Failed to create async runtime: {}", e),
+                }
+            }
+            BoltSubcommand::Down { services, volumes } => {
+                use nvcontrol::bolt_integration::NvControlBoltManager;
+
+                println!("⏹️ Stopping Bolt Surge services...");
+
+                match tokio::runtime::Runtime::new() {
+                    Ok(rt) => {
+                        match rt.block_on(async {
+                            let manager = NvControlBoltManager::new().await?;
+                            manager.surge_down(&services, volumes).await
+                        }) {
+                            Ok(()) => {
+                                println!("✅ Surge services stopped");
+                                if volumes {
+                                    println!("   Volumes were removed");
+                                }
+                            }
+                            Err(e) => eprintln!("❌ Failed to stop services: {}", e),
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Failed to create async runtime: {}", e),
+                }
+            }
+            BoltSubcommand::Build { dockerfile, tag } => {
+                use nvcontrol::bolt_integration::NvControlBoltManager;
+
+                println!("🔨 Building Bolt GPU image: {}", tag);
+
+                match tokio::runtime::Runtime::new() {
+                    Ok(rt) => {
+                        match rt.block_on(async {
+                            let manager = NvControlBoltManager::new().await?;
+                            manager.build_gpu_image(&dockerfile, &tag).await
+                        }) {
+                            Ok(()) => {
+                                println!("✅ GPU image built successfully: {}", tag);
+                                println!("   Dockerfile: {}", dockerfile);
+                            }
+                            Err(e) => eprintln!("❌ Failed to build image: {}", e),
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Failed to create async runtime: {}", e),
+                }
+            }
+            BoltSubcommand::Network { name, subnet } => {
+                use nvcontrol::bolt_integration::NvControlBoltManager;
+
+                println!("🌐 Creating Bolt GPU network: {}", name);
+
+                match tokio::runtime::Runtime::new() {
+                    Ok(rt) => {
+                        match rt.block_on(async {
+                            let manager = NvControlBoltManager::new().await?;
+                            manager.create_gpu_network(&name, subnet.as_deref()).await
+                        }) {
+                            Ok(()) => {
+                                println!("✅ GPU network created: {}", name);
+                                if let Some(subnet) = subnet {
+                                    println!("   Subnet: {}", subnet);
+                                }
+                                println!("   Driver: QUIC (high-performance)");
+                            }
+                            Err(e) => eprintln!("❌ Failed to create network: {}", e),
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Failed to create async runtime: {}", e),
+                }
+            }
+            BoltSubcommand::Stop { container } => {
+                use nvcontrol::bolt_integration::NvControlBoltManager;
+
+                println!("⏹️ Stopping Bolt container: {}", container);
+
+                match tokio::runtime::Runtime::new() {
+                    Ok(rt) => {
+                        match rt.block_on(async {
+                            let manager = NvControlBoltManager::new().await?;
+                            manager.stop_container(&container).await
+                        }) {
+                            Ok(()) => println!("✅ Container stopped: {}", container),
+                            Err(e) => eprintln!("❌ Failed to stop container: {}", e),
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Failed to create async runtime: {}", e),
+                }
+            }
+            BoltSubcommand::Remove { container, force } => {
+                use nvcontrol::bolt_integration::NvControlBoltManager;
+
+                println!("🗑️ Removing Bolt container: {}", container);
+
+                match tokio::runtime::Runtime::new() {
+                    Ok(rt) => {
+                        match rt.block_on(async {
+                            let manager = NvControlBoltManager::new().await?;
+                            manager.remove_container(&container, force).await
+                        }) {
+                            Ok(()) => {
+                                println!("✅ Container removed: {}", container);
+                                if force {
+                                    println!("   Forced removal");
+                                }
+                            }
+                            Err(e) => eprintln!("❌ Failed to remove container: {}", e),
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Failed to create async runtime: {}", e),
+                }
+            }
+        },
         Command::Container { subcommand } => match subcommand {
             ContainerSubcommand::List => {
                 use nvcontrol::container_runtime::NvContainerRuntime;
@@ -1689,6 +2113,7 @@ fn main() {
                 let container_runtime = match runtime.as_str() {
                     "docker" => RT::Docker,
                     "podman" => RT::Podman,
+                    "bolt" => RT::Bolt,
                     "nix" => RT::NixOS,
                     "containerd" => RT::Containerd,
                     _ => RT::Docker,
