@@ -19,20 +19,20 @@ pub struct DlssController {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum DlssVersion {
     None,
-    Dlss2,     // Super Resolution only (RTX 20/30 series)
-    Dlss3,     // Frame Generation + Super Resolution (RTX 40 series)
-    Dlss3_5,   // Ray Reconstruction + Frame Generation + Super Resolution
+    Dlss2,   // Super Resolution only (RTX 20/30 series)
+    Dlss3,   // Frame Generation + Super Resolution (RTX 40 series)
+    Dlss3_5, // Ray Reconstruction + Frame Generation + Super Resolution
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DlssCapabilities {
     pub gpu_model: String,
     pub supports_dlss: bool,
-    pub supports_frame_generation: bool,  // RTX 40-series only
+    pub supports_frame_generation: bool,   // RTX 40-series only
     pub supports_ray_reconstruction: bool, // DLSS 3.5
-    pub supports_reflex: bool,            // NVIDIA Reflex
+    pub supports_reflex: bool,             // NVIDIA Reflex
     pub tensor_cores: u32,
-    pub optical_flow_accelerator: bool,   // Required for Frame Generation
+    pub optical_flow_accelerator: bool, // Required for Frame Generation
     pub driver_version: String,
     pub dlss_dll_version: Option<String>,
 }
@@ -43,7 +43,7 @@ pub struct DlssSettings {
     pub mode: DlssMode,
     pub quality_preset: DlssQuality,
     pub frame_generation: FrameGenerationSettings,
-    pub sharpening: f32,                  // 0.0 to 1.0
+    pub sharpening: f32, // 0.0 to 1.0
     pub auto_exposure: bool,
     pub reflex_mode: ReflexMode,
 }
@@ -51,10 +51,10 @@ pub struct DlssSettings {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum DlssMode {
     Off,
-    SuperResolution,      // DLSS 2 or DLSS 3 SR only
-    FrameGeneration,      // DLSS 3 FG only (native resolution)
+    SuperResolution,                   // DLSS 2 or DLSS 3 SR only
+    FrameGeneration,                   // DLSS 3 FG only (native resolution)
     SuperResolutionAndFrameGeneration, // Both SR + FG
-    DlaaAndFrameGeneration, // DLAA (native AA) + FG
+    DlaaAndFrameGeneration,            // DLAA (native AA) + FG
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -64,33 +64,33 @@ pub enum DlssQuality {
     Balanced,         // 1.7x upscaling
     Quality,          // 1.5x upscaling
     UltraQuality,     // 1.3x upscaling
-    DLAA,            // Native resolution Anti-Aliasing
-    Auto,            // Automatic based on performance
+    DLAA,             // Native resolution Anti-Aliasing
+    Auto,             // Automatic based on performance
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FrameGenerationSettings {
     pub enabled: bool,
     pub mode: FrameGenerationMode,
-    pub indicator: bool,              // Show FG indicator overlay
-    pub frame_pacing: bool,           // Optimize frame delivery
-    pub vsync_compensation: bool,     // Compensate for VSync latency
-    pub target_fps_multiplier: f32,   // 2.0 = double frames, 3.0 = triple
+    pub indicator: bool,            // Show FG indicator overlay
+    pub frame_pacing: bool,         // Optimize frame delivery
+    pub vsync_compensation: bool,   // Compensate for VSync latency
+    pub target_fps_multiplier: f32, // 2.0 = double frames, 3.0 = triple
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum FrameGenerationMode {
     Off,
-    Standard,     // 2x frame generation
-    Boost,        // 3x frame generation (experimental)
-    UltraBoost,   // 4x frame generation (DLSS 3.5+)
+    Standard,   // 2x frame generation
+    Boost,      // 3x frame generation (experimental)
+    UltraBoost, // 4x frame generation (DLSS 3.5+)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ReflexMode {
     Off,
     On,
-    OnPlusBoost,  // Lower latency, higher GPU usage
+    OnPlusBoost, // Lower latency, higher GPU usage
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,7 +99,7 @@ pub struct DlssGameProfile {
     pub executable: String,
     pub recommended_settings: DlssSettings,
     pub auto_apply: bool,
-    pub verified: bool,  // NVIDIA verified settings
+    pub verified: bool, // NVIDIA verified settings
     pub notes: Option<String>,
 }
 
@@ -145,7 +145,10 @@ impl DlssController {
 
         // Get GPU info via nvidia-smi
         if let Ok(output) = Command::new("nvidia-smi")
-            .args(["--query-gpu=name,driver_version", "--format=csv,noheader,nounits"])
+            .args([
+                "--query-gpu=name,driver_version",
+                "--format=csv,noheader,nounits",
+            ])
             .output()
         {
             if output.status.success() {
@@ -218,9 +221,11 @@ impl DlssController {
     fn detect_dlss_dll_version() -> Option<String> {
         // Check common Steam game paths for DLSS DLLs
         let steam_paths = vec![
-            PathBuf::from("/home").join(std::env::var("USER").unwrap_or_default())
+            PathBuf::from("/home")
+                .join(std::env::var("USER").unwrap_or_default())
                 .join(".steam/steam/steamapps/common"),
-            PathBuf::from("/home").join(std::env::var("USER").unwrap_or_default())
+            PathBuf::from("/home")
+                .join(std::env::var("USER").unwrap_or_default())
                 .join(".local/share/Steam/steamapps/common"),
         ];
 
@@ -230,10 +235,12 @@ impl DlssController {
                 if let Ok(output) = Command::new("find")
                     .args([
                         steam_path.to_str()?,
-                        "-name", "nvngx_dlss.dll",
-                        "-type", "f",
+                        "-name",
+                        "nvngx_dlss.dll",
+                        "-type",
+                        "f",
                         "-print",
-                        "-quit"
+                        "-quit",
                     ])
                     .output()
                 {
@@ -253,14 +260,15 @@ impl DlssController {
         // Validate settings based on capabilities
         if settings.frame_generation.enabled && !self.capabilities.supports_frame_generation {
             return Err(NvControlError::UnsupportedFeature(
-                "Frame Generation requires RTX 40-series or newer".to_string()
+                "Frame Generation requires RTX 40-series or newer".to_string(),
             ));
         }
 
         if settings.mode == DlssMode::SuperResolutionAndFrameGeneration
-            && !self.capabilities.supports_frame_generation {
+            && !self.capabilities.supports_frame_generation
+        {
             return Err(NvControlError::UnsupportedFeature(
-                "This mode requires RTX 40-series GPU with Frame Generation support".to_string()
+                "This mode requires RTX 40-series GPU with Frame Generation support".to_string(),
             ));
         }
 
@@ -279,42 +287,62 @@ impl DlssController {
 
         unsafe {
             // DLSS enablement
-            env::set_var("NVIDIA_DLSS_ENABLE", if settings.enabled { "1" } else { "0" });
+            env::set_var(
+                "NVIDIA_DLSS_ENABLE",
+                if settings.enabled { "1" } else { "0" },
+            );
 
             // Quality preset
-            env::set_var("NVIDIA_DLSS_PRESET", match settings.quality_preset {
-                DlssQuality::UltraPerformance => "0",
-                DlssQuality::Performance => "1",
-                DlssQuality::Balanced => "2",
-                DlssQuality::Quality => "3",
-                DlssQuality::UltraQuality => "4",
-                DlssQuality::DLAA => "5",
-                DlssQuality::Auto => "auto",
-            });
+            env::set_var(
+                "NVIDIA_DLSS_PRESET",
+                match settings.quality_preset {
+                    DlssQuality::UltraPerformance => "0",
+                    DlssQuality::Performance => "1",
+                    DlssQuality::Balanced => "2",
+                    DlssQuality::Quality => "3",
+                    DlssQuality::UltraQuality => "4",
+                    DlssQuality::DLAA => "5",
+                    DlssQuality::Auto => "auto",
+                },
+            );
 
             // Frame Generation
             if self.capabilities.supports_frame_generation {
-                env::set_var("NVIDIA_DLSS3_FG_ENABLE",
-                    if settings.frame_generation.enabled { "1" } else { "0" });
+                env::set_var(
+                    "NVIDIA_DLSS3_FG_ENABLE",
+                    if settings.frame_generation.enabled {
+                        "1"
+                    } else {
+                        "0"
+                    },
+                );
 
-                env::set_var("NVIDIA_DLSS3_FG_MODE", match settings.frame_generation.mode {
-                    FrameGenerationMode::Off => "0",
-                    FrameGenerationMode::Standard => "1",
-                    FrameGenerationMode::Boost => "2",
-                    FrameGenerationMode::UltraBoost => "3",
-                });
+                env::set_var(
+                    "NVIDIA_DLSS3_FG_MODE",
+                    match settings.frame_generation.mode {
+                        FrameGenerationMode::Off => "0",
+                        FrameGenerationMode::Standard => "1",
+                        FrameGenerationMode::Boost => "2",
+                        FrameGenerationMode::UltraBoost => "3",
+                    },
+                );
             }
 
             // NVIDIA Reflex
-            env::set_var("NVIDIA_REFLEX_MODE", match settings.reflex_mode {
-                ReflexMode::Off => "0",
-                ReflexMode::On => "1",
-                ReflexMode::OnPlusBoost => "2",
-            });
+            env::set_var(
+                "NVIDIA_REFLEX_MODE",
+                match settings.reflex_mode {
+                    ReflexMode::Off => "0",
+                    ReflexMode::On => "1",
+                    ReflexMode::OnPlusBoost => "2",
+                },
+            );
 
             // Sharpening
-            env::set_var("NVIDIA_DLSS_SHARPNESS",
-                (settings.sharpening * 100.0).round().to_string());
+            env::set_var(
+                "NVIDIA_DLSS_SHARPNESS",
+                (settings.sharpening * 100.0).round().to_string(),
+            );
         }
 
         Ok(())
@@ -325,79 +353,88 @@ impl DlssController {
         let mut profiles = HashMap::new();
 
         // Cyberpunk 2077 - Optimized for DLSS 3
-        profiles.insert("cyberpunk2077".to_string(), DlssGameProfile {
-            game_name: "Cyberpunk 2077".to_string(),
-            executable: "Cyberpunk2077.exe".to_string(),
-            recommended_settings: DlssSettings {
-                enabled: true,
-                mode: DlssMode::SuperResolutionAndFrameGeneration,
-                quality_preset: DlssQuality::Quality,
-                frame_generation: FrameGenerationSettings {
+        profiles.insert(
+            "cyberpunk2077".to_string(),
+            DlssGameProfile {
+                game_name: "Cyberpunk 2077".to_string(),
+                executable: "Cyberpunk2077.exe".to_string(),
+                recommended_settings: DlssSettings {
                     enabled: true,
-                    mode: FrameGenerationMode::Standard,
-                    indicator: false,
-                    frame_pacing: true,
-                    vsync_compensation: true,
-                    target_fps_multiplier: 2.0,
+                    mode: DlssMode::SuperResolutionAndFrameGeneration,
+                    quality_preset: DlssQuality::Quality,
+                    frame_generation: FrameGenerationSettings {
+                        enabled: true,
+                        mode: FrameGenerationMode::Standard,
+                        indicator: false,
+                        frame_pacing: true,
+                        vsync_compensation: true,
+                        target_fps_multiplier: 2.0,
+                    },
+                    sharpening: 0.5,
+                    auto_exposure: true,
+                    reflex_mode: ReflexMode::OnPlusBoost,
                 },
-                sharpening: 0.5,
-                auto_exposure: true,
-                reflex_mode: ReflexMode::OnPlusBoost,
+                auto_apply: true,
+                verified: true,
+                notes: Some("Path Tracing benefits greatly from DLSS 3".to_string()),
             },
-            auto_apply: true,
-            verified: true,
-            notes: Some("Path Tracing benefits greatly from DLSS 3".to_string()),
-        });
+        );
 
         // Counter-Strike 2 - Competitive settings
-        profiles.insert("cs2".to_string(), DlssGameProfile {
-            game_name: "Counter-Strike 2".to_string(),
-            executable: "cs2.exe".to_string(),
-            recommended_settings: DlssSettings {
-                enabled: true,
-                mode: DlssMode::SuperResolution,
-                quality_preset: DlssQuality::Performance,
-                frame_generation: FrameGenerationSettings {
-                    enabled: false, // Disabled for competitive play
-                    mode: FrameGenerationMode::Off,
-                    indicator: false,
-                    frame_pacing: false,
-                    vsync_compensation: false,
-                    target_fps_multiplier: 1.0,
+        profiles.insert(
+            "cs2".to_string(),
+            DlssGameProfile {
+                game_name: "Counter-Strike 2".to_string(),
+                executable: "cs2.exe".to_string(),
+                recommended_settings: DlssSettings {
+                    enabled: true,
+                    mode: DlssMode::SuperResolution,
+                    quality_preset: DlssQuality::Performance,
+                    frame_generation: FrameGenerationSettings {
+                        enabled: false, // Disabled for competitive play
+                        mode: FrameGenerationMode::Off,
+                        indicator: false,
+                        frame_pacing: false,
+                        vsync_compensation: false,
+                        target_fps_multiplier: 1.0,
+                    },
+                    sharpening: 0.3,
+                    auto_exposure: false,
+                    reflex_mode: ReflexMode::OnPlusBoost, // Maximum latency reduction
                 },
-                sharpening: 0.3,
-                auto_exposure: false,
-                reflex_mode: ReflexMode::OnPlusBoost, // Maximum latency reduction
+                auto_apply: true,
+                verified: true,
+                notes: Some("Competitive settings prioritize latency over visuals".to_string()),
             },
-            auto_apply: true,
-            verified: true,
-            notes: Some("Competitive settings prioritize latency over visuals".to_string()),
-        });
+        );
 
         // Alan Wake 2 - DLSS 3.5 with Ray Reconstruction
-        profiles.insert("alanwake2".to_string(), DlssGameProfile {
-            game_name: "Alan Wake 2".to_string(),
-            executable: "AlanWake2.exe".to_string(),
-            recommended_settings: DlssSettings {
-                enabled: true,
-                mode: DlssMode::SuperResolutionAndFrameGeneration,
-                quality_preset: DlssQuality::Balanced,
-                frame_generation: FrameGenerationSettings {
+        profiles.insert(
+            "alanwake2".to_string(),
+            DlssGameProfile {
+                game_name: "Alan Wake 2".to_string(),
+                executable: "AlanWake2.exe".to_string(),
+                recommended_settings: DlssSettings {
                     enabled: true,
-                    mode: FrameGenerationMode::Standard,
-                    indicator: false,
-                    frame_pacing: true,
-                    vsync_compensation: true,
-                    target_fps_multiplier: 2.0,
+                    mode: DlssMode::SuperResolutionAndFrameGeneration,
+                    quality_preset: DlssQuality::Balanced,
+                    frame_generation: FrameGenerationSettings {
+                        enabled: true,
+                        mode: FrameGenerationMode::Standard,
+                        indicator: false,
+                        frame_pacing: true,
+                        vsync_compensation: true,
+                        target_fps_multiplier: 2.0,
+                    },
+                    sharpening: 0.4,
+                    auto_exposure: true,
+                    reflex_mode: ReflexMode::On,
                 },
-                sharpening: 0.4,
-                auto_exposure: true,
-                reflex_mode: ReflexMode::On,
+                auto_apply: true,
+                verified: true,
+                notes: Some("Supports DLSS 3.5 Ray Reconstruction".to_string()),
             },
-            auto_apply: true,
-            verified: true,
-            notes: Some("Supports DLSS 3.5 Ray Reconstruction".to_string()),
-        });
+        );
 
         profiles
     }
@@ -413,17 +450,18 @@ impl DlssController {
             gpu_utilization: 85.0,
             vram_usage_mb: 8192,
             tensor_core_utilization: 75.0,
-            optical_flow_utilization: if self.capabilities.optical_flow_accelerator { 60.0 } else { 0.0 },
+            optical_flow_utilization: if self.capabilities.optical_flow_accelerator {
+                60.0
+            } else {
+                0.0
+            },
         })
     }
 
     /// Auto-detect running game and apply profile
     pub fn auto_apply_game_profile(&mut self) -> NvResult<Option<String>> {
         // Check running processes for known games
-        if let Ok(output) = Command::new("ps")
-            .args(["-eo", "comm"])
-            .output()
-        {
+        if let Ok(output) = Command::new("ps").args(["-eo", "comm"]).output() {
             if output.status.success() {
                 let processes = String::from_utf8_lossy(&output.stdout);
 
@@ -431,7 +469,8 @@ impl DlssController {
                 let mut matched_game = None;
                 for (game_id, profile) in &self.game_profiles {
                     if processes.contains(&profile.executable) && profile.auto_apply {
-                        matched_game = Some((game_id.clone(), profile.recommended_settings.clone()));
+                        matched_game =
+                            Some((game_id.clone(), profile.recommended_settings.clone()));
                         break;
                     }
                 }
@@ -481,7 +520,7 @@ pub fn enable_frame_generation(quality: DlssQuality) -> NvResult<()> {
 
     if !controller.capabilities.supports_frame_generation {
         return Err(NvControlError::UnsupportedFeature(
-            "Frame Generation requires RTX 40-series GPU or newer".to_string()
+            "Frame Generation requires RTX 40-series GPU or newer".to_string(),
         ));
     }
 
@@ -494,7 +533,8 @@ pub fn enable_frame_generation(quality: DlssQuality) -> NvResult<()> {
 
     controller.apply_settings(settings)?;
 
-    println!("✅ DLSS 3 Frame Generation enabled ({})",
+    println!(
+        "✅ DLSS 3 Frame Generation enabled ({})",
         match &quality {
             DlssQuality::Performance => "Performance",
             DlssQuality::Balanced => "Balanced",
@@ -526,10 +566,26 @@ pub fn get_dlss_status() -> NvResult<String> {
         │  ├─ Frame Generation: {}\n\
         │  ├─ Ray Reconstruction: {}\n\
         │  └─ NVIDIA Reflex: {}\n",
-        if controller.capabilities.supports_dlss { "✅" } else { "❌" },
-        if controller.capabilities.supports_frame_generation { "✅ (RTX 40+)" } else { "❌" },
-        if controller.capabilities.supports_ray_reconstruction { "✅ (DLSS 3.5)" } else { "❌" },
-        if controller.capabilities.supports_reflex { "✅" } else { "❌" }
+        if controller.capabilities.supports_dlss {
+            "✅"
+        } else {
+            "❌"
+        },
+        if controller.capabilities.supports_frame_generation {
+            "✅ (RTX 40+)"
+        } else {
+            "❌"
+        },
+        if controller.capabilities.supports_ray_reconstruction {
+            "✅ (DLSS 3.5)"
+        } else {
+            "❌"
+        },
+        if controller.capabilities.supports_reflex {
+            "✅"
+        } else {
+            "❌"
+        }
     ));
 
     if controller.capabilities.supports_frame_generation {
@@ -538,7 +594,11 @@ pub fn get_dlss_status() -> NvResult<String> {
             │  ├─ Tensor Cores: {}\n\
             │  └─ Optical Flow Accelerator: {}\n",
             controller.capabilities.tensor_cores,
-            if controller.capabilities.optical_flow_accelerator { "✅" } else { "❌" }
+            if controller.capabilities.optical_flow_accelerator {
+                "✅"
+            } else {
+                "❌"
+            }
         ));
     }
 

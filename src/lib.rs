@@ -35,6 +35,7 @@ pub fn add(left: u64, right: u64) -> u64 {
     left + right
 }
 
+pub mod bolt_integration;
 pub mod config;
 pub mod display;
 pub mod fan;
@@ -43,12 +44,11 @@ pub mod profiles;
 pub mod tray;
 pub mod vibrance;
 pub mod vibrance_native;
-pub mod bolt_integration;
 
 // New advanced modules
 pub mod container;
-pub mod dlss;
 pub mod container_runtime;
+pub mod dlss;
 pub mod drivers;
 pub mod gamescope;
 pub mod latency;

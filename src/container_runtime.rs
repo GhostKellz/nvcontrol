@@ -2,13 +2,13 @@ use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
-use std::process::Command;
 use std::path::PathBuf;
+use std::process::Command;
 
-use crate::bolt_integration::{NvControlBoltManager, GpuContainerConfig};
-use tokio::runtime::Runtime;
+use crate::bolt_integration::{GpuContainerConfig, NvControlBoltManager};
 use std::sync::Arc;
 use std::sync::Mutex;
+use tokio::runtime::Runtime;
 
 /// Pure Rust NVIDIA Container Runtime implementation
 /// This provides docker/podman/bolt/nix container GPU passthrough functionality
@@ -106,12 +106,15 @@ impl NvContainerRuntime {
             .join("nvcontrol")
             .join("container-runtime");
 
-        fs::create_dir_all(&config_path)
-            .map_err(|e| NvControlError::ConfigError(format!("Failed to create config dir: {}", e)))?;
+        fs::create_dir_all(&config_path).map_err(|e| {
+            NvControlError::ConfigError(format!("Failed to create config dir: {}", e))
+        })?;
 
         // Initialize Bolt manager if Bolt runtime is available
         let bolt_manager = if supported_runtimes.contains(&ContainerRuntime::Bolt) {
-            let rt = Runtime::new().map_err(|e| NvControlError::RuntimeError(format!("Tokio runtime failed: {}", e)))?;
+            let rt = Runtime::new().map_err(|e| {
+                NvControlError::RuntimeError(format!("Tokio runtime failed: {}", e))
+            })?;
             match rt.block_on(NvControlBoltManager::new()) {
                 Ok(manager) => Some(Arc::new(Mutex::new(manager))),
                 Err(e) => {
@@ -137,7 +140,7 @@ impl NvContainerRuntime {
         let output = Command::new("nvidia-smi")
             .args(&[
                 "--query-gpu=index,uuid,name,memory.total,pci.bus_id",
-                "--format=csv,noheader,nounits"
+                "--format=csv,noheader,nounits",
             ])
             .output()
             .map_err(|e| NvControlError::CommandFailed(format!("nvidia-smi failed: {}", e)))?;
@@ -203,9 +206,10 @@ impl NvContainerRuntime {
             ContainerRuntime::Bolt => self.launch_bolt_container(config),
             ContainerRuntime::NixOS => self.launch_nix_container(config),
             ContainerRuntime::Containerd => self.launch_containerd_container(config),
-            ContainerRuntime::Custom(ref name) => {
-                Err(NvControlError::UnsupportedFeature(format!("Custom runtime {} not implemented", name)))
-            }
+            ContainerRuntime::Custom(ref name) => Err(NvControlError::UnsupportedFeature(format!(
+                "Custom runtime {} not implemented",
+                name
+            ))),
         }
     }
 
@@ -247,7 +251,13 @@ impl NvContainerRuntime {
 
         // Add port mappings
         for port in &config.ports {
-            cmd.args(&["-p", &format!("{}:{}:{}", port.host_port, port.container_port, port.protocol)]);
+            cmd.args(&[
+                "-p",
+                &format!(
+                    "{}:{}:{}",
+                    port.host_port, port.container_port, port.protocol
+                ),
+            ]);
         }
 
         // Container name
@@ -279,7 +289,8 @@ impl NvContainerRuntime {
         }
 
         // Execute command
-        let output = cmd.output()
+        let output = cmd
+            .output()
             .map_err(|e| NvControlError::CommandFailed(format!("Docker run failed: {}", e)))?;
 
         if output.status.success() {
@@ -287,7 +298,10 @@ impl NvContainerRuntime {
             Ok(container_id)
         } else {
             let error = String::from_utf8_lossy(&output.stderr);
-            Err(NvControlError::CommandFailed(format!("Docker run failed: {}", error)))
+            Err(NvControlError::CommandFailed(format!(
+                "Docker run failed: {}",
+                error
+            )))
         }
     }
 
@@ -309,8 +323,13 @@ impl NvContainerRuntime {
 
             // Add NVIDIA environment variables
             cmd.args(&["-e", "NVIDIA_VISIBLE_DEVICES=all"]);
-            cmd.args(&["-e", &format!("NVIDIA_DRIVER_CAPABILITIES={}",
-                config.gpu_config.driver_capabilities.join(","))]);
+            cmd.args(&[
+                "-e",
+                &format!(
+                    "NVIDIA_DRIVER_CAPABILITIES={}",
+                    config.gpu_config.driver_capabilities.join(",")
+                ),
+            ]);
         }
 
         // Add environment variables
@@ -362,7 +381,8 @@ impl NvContainerRuntime {
         }
 
         // Execute command
-        let output = cmd.output()
+        let output = cmd
+            .output()
             .map_err(|e| NvControlError::CommandFailed(format!("Podman run failed: {}", e)))?;
 
         if output.status.success() {
@@ -370,21 +390,26 @@ impl NvContainerRuntime {
             Ok(container_id)
         } else {
             let error = String::from_utf8_lossy(&output.stderr);
-            Err(NvControlError::CommandFailed(format!("Podman run failed: {}", error)))
+            Err(NvControlError::CommandFailed(format!(
+                "Podman run failed: {}",
+                error
+            )))
         }
     }
 
     /// Launch Bolt container with GPU support using native API
     fn launch_bolt_container(&self, config: &ContainerLaunchConfig) -> NvResult<String> {
         if let Some(ref bolt_manager) = self.bolt_manager {
-            let manager = bolt_manager.lock()
-                .map_err(|e| NvControlError::RuntimeError(format!("Bolt manager lock failed: {}", e)))?;
+            let manager = bolt_manager.lock().map_err(|e| {
+                NvControlError::RuntimeError(format!("Bolt manager lock failed: {}", e))
+            })?;
 
             // Convert container launch config to Bolt GPU config
             let gpu_config = self.create_bolt_gpu_config(config)?;
 
-            let rt = Runtime::new()
-                .map_err(|e| NvControlError::RuntimeError(format!("Tokio runtime failed: {}", e)))?;
+            let rt = Runtime::new().map_err(|e| {
+                NvControlError::RuntimeError(format!("Tokio runtime failed: {}", e))
+            })?;
 
             let workload_name = config.name.as_deref().unwrap_or("nvcontrol-workload");
 
@@ -394,7 +419,10 @@ impl NvContainerRuntime {
                 &gpu_config,
             )) {
                 Ok(container_name) => Ok(container_name),
-                Err(e) => Err(NvControlError::CommandFailed(format!("Bolt launch failed: {}", e)))
+                Err(e) => Err(NvControlError::CommandFailed(format!(
+                    "Bolt launch failed: {}",
+                    e
+                ))),
             }
         } else {
             // Fallback to CLI approach
@@ -403,13 +431,14 @@ impl NvContainerRuntime {
     }
 
     /// Create Bolt GPU configuration from container launch config
-    fn create_bolt_gpu_config(&self, config: &ContainerLaunchConfig) -> NvResult<GpuContainerConfig> {
+    fn create_bolt_gpu_config(
+        &self,
+        config: &ContainerLaunchConfig,
+    ) -> NvResult<GpuContainerConfig> {
         let gpu_id = if config.gpu_config.gpu_devices.is_empty() {
             0
         } else {
-            config.gpu_config.gpu_devices[0]
-                .parse()
-                .unwrap_or(0)
+            config.gpu_config.gpu_devices[0].parse().unwrap_or(0)
         };
 
         Ok(GpuContainerConfig {
@@ -417,9 +446,18 @@ impl NvContainerRuntime {
             memory_limit: config.gpu_config.memory_limit,
             compute_capabilities: config.gpu_config.driver_capabilities.clone(),
             power_limit: None, // Could be extracted from environment
-            enable_dlss: config.gpu_config.driver_capabilities.contains(&"graphics".to_string()),
-            enable_raytracing: config.gpu_config.driver_capabilities.contains(&"graphics".to_string()),
-            enable_cuda: config.gpu_config.driver_capabilities.contains(&"compute".to_string()),
+            enable_dlss: config
+                .gpu_config
+                .driver_capabilities
+                .contains(&"graphics".to_string()),
+            enable_raytracing: config
+                .gpu_config
+                .driver_capabilities
+                .contains(&"graphics".to_string()),
+            enable_cuda: config
+                .gpu_config
+                .driver_capabilities
+                .contains(&"compute".to_string()),
         })
     }
 
@@ -429,9 +467,13 @@ impl NvContainerRuntime {
         let boltfile_config = self.generate_boltfile_config(config)?;
 
         // Create temporary Boltfile
-        let boltfile_path = format!("/tmp/nvcontrol-boltfile-{}.toml",
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default().as_secs());
+        let boltfile_path = format!(
+            "/tmp/nvcontrol-boltfile-{}.toml",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs()
+        );
         fs::write(&boltfile_path, boltfile_config)
             .map_err(|e| NvControlError::ConfigError(format!("Failed to write Boltfile: {}", e)))?;
 
@@ -449,20 +491,28 @@ impl NvContainerRuntime {
             Ok(container_id)
         } else {
             let error = String::from_utf8_lossy(&output.stderr);
-            Err(NvControlError::CommandFailed(format!("Bolt surge up failed: {}", error)))
+            Err(NvControlError::CommandFailed(format!(
+                "Bolt surge up failed: {}",
+                error
+            )))
         }
     }
 
     /// Generate Boltfile configuration for container launch
     fn generate_boltfile_config(&self, config: &ContainerLaunchConfig) -> NvResult<String> {
-        let service_name = config.name.as_deref()
+        let service_name = config
+            .name
+            .as_deref()
             .unwrap_or_else(|| config.image.split(':').next().unwrap_or("gpu-service"));
 
-        let mut boltfile = format!(r#"project = "nvcontrol-runtime"
+        let mut boltfile = format!(
+            r#"project = "nvcontrol-runtime"
 
 [services.{}]
 build = "{}"
-"#, service_name, config.image);
+"#,
+            service_name, config.image
+        );
 
         // Add GPU configuration
         if !config.gpu_config.gpu_devices.is_empty() {
@@ -487,8 +537,10 @@ build = "{}"
 
             // Add NVIDIA environment variables
             boltfile.push_str("env.NVIDIA_VISIBLE_DEVICES = \"all\"\n");
-            boltfile.push_str(&format!("env.NVIDIA_DRIVER_CAPABILITIES = \"{}\"\n",
-                config.gpu_config.driver_capabilities.join(",")));
+            boltfile.push_str(&format!(
+                "env.NVIDIA_DRIVER_CAPABILITIES = \"{}\"\n",
+                config.gpu_config.driver_capabilities.join(",")
+            ));
         }
 
         // Add custom environment variables
@@ -506,7 +558,10 @@ build = "{}"
             }
             for volume in &config.volumes {
                 let ro_suffix = if volume.read_only { ":ro" } else { "" };
-                boltfile.push_str(&format!("    \"{}:{}{}\"", volume.source, volume.target, ro_suffix));
+                boltfile.push_str(&format!(
+                    "    \"{}:{}{}\"",
+                    volume.source, volume.target, ro_suffix
+                ));
                 if volume != config.volumes.last().unwrap() {
                     boltfile.push_str(",");
                 }
@@ -519,7 +574,10 @@ build = "{}"
         if !config.ports.is_empty() {
             boltfile.push_str("ports = [\n");
             for port in &config.ports {
-                boltfile.push_str(&format!("    \"{}:{}\"", port.host_port, port.container_port));
+                boltfile.push_str(&format!(
+                    "    \"{}:{}\"",
+                    port.host_port, port.container_port
+                ));
                 if port != config.ports.last().unwrap() {
                     boltfile.push_str(",");
                 }
@@ -548,8 +606,9 @@ build = "{}"
 
         // Write configuration to temporary file
         let temp_config = format!("/tmp/nvcontrol-{}.nix", chrono::Utc::now().timestamp());
-        fs::write(&temp_config, nix_config)
-            .map_err(|e| NvControlError::ConfigError(format!("Failed to write Nix config: {}", e)))?;
+        fs::write(&temp_config, nix_config).map_err(|e| {
+            NvControlError::ConfigError(format!("Failed to write Nix config: {}", e))
+        })?;
 
         // Launch container using nixos-container
         let output = Command::new("nixos-container")
@@ -567,18 +626,24 @@ build = "{}"
             Command::new("nixos-container")
                 .args(&["start", &container_name])
                 .output()
-                .map_err(|e| NvControlError::CommandFailed(format!("Failed to start NixOS container: {}", e)))?;
+                .map_err(|e| {
+                    NvControlError::CommandFailed(format!("Failed to start NixOS container: {}", e))
+                })?;
 
             Ok(container_name)
         } else {
             let error = String::from_utf8_lossy(&output.stderr);
-            Err(NvControlError::CommandFailed(format!("NixOS container creation failed: {}", error)))
+            Err(NvControlError::CommandFailed(format!(
+                "NixOS container creation failed: {}",
+                error
+            )))
         }
     }
 
     /// Generate NixOS configuration for GPU container
     fn generate_nix_gpu_config(&self, config: &ContainerLaunchConfig) -> NvResult<String> {
-        let mut nix_config = String::from(r#"
+        let mut nix_config = String::from(
+            r#"
 { config, pkgs, ... }:
 {
   # NVIDIA GPU support in NixOS container
@@ -604,7 +669,8 @@ build = "{}"
     docker
     git
   ];
-"#);
+"#,
+        );
 
         // Add environment variables
         if !config.environment.is_empty() {
@@ -617,7 +683,8 @@ build = "{}"
 
         // Add GPU-specific configuration
         if !config.gpu_config.gpu_devices.is_empty() {
-            nix_config.push_str(r#"
+            nix_config.push_str(
+                r#"
 
   # GPU device access
   boot.extraModprobeConfig = ''
@@ -629,7 +696,8 @@ build = "{}"
     enable = true;
     enableNvidia = true;
   };
-"#);
+"#,
+            );
         }
 
         nix_config.push_str("\n}\n");
@@ -640,22 +708,29 @@ build = "{}"
     fn launch_containerd_container(&self, config: &ContainerLaunchConfig) -> NvResult<String> {
         // Generate container configuration
         let container_config = self.generate_containerd_config(config)?;
-        let config_path = format!("/tmp/nvcontrol-container-{}.json", chrono::Utc::now().timestamp());
+        let config_path = format!(
+            "/tmp/nvcontrol-container-{}.json",
+            chrono::Utc::now().timestamp()
+        );
 
-        fs::write(&config_path, container_config)
-            .map_err(|e| NvControlError::ConfigError(format!("Failed to write container config: {}", e)))?;
+        fs::write(&config_path, container_config).map_err(|e| {
+            NvControlError::ConfigError(format!("Failed to write container config: {}", e))
+        })?;
 
         // Use ctr (containerd CLI) to run container
         let output = Command::new("ctr")
             .args(&[
                 "containers",
                 "create",
-                "--config", &config_path,
+                "--config",
+                &config_path,
                 &config.image,
                 &config.name.as_deref().unwrap_or("nvcontrol-container"),
             ])
             .output()
-            .map_err(|e| NvControlError::CommandFailed(format!("containerd create failed: {}", e)))?;
+            .map_err(|e| {
+                NvControlError::CommandFailed(format!("containerd create failed: {}", e))
+            })?;
 
         // Clean up config file
         let _ = fs::remove_file(config_path);
@@ -665,7 +740,10 @@ build = "{}"
             Ok(container_id)
         } else {
             let error = String::from_utf8_lossy(&output.stderr);
-            Err(NvControlError::CommandFailed(format!("containerd failed: {}", error)))
+            Err(NvControlError::CommandFailed(format!(
+                "containerd failed: {}",
+                error
+            )))
         }
     }
 
@@ -684,8 +762,10 @@ build = "{}"
         // Add GPU environment variables
         if !config.gpu_config.gpu_devices.is_empty() {
             env_vars.push("NVIDIA_VISIBLE_DEVICES=all".to_string());
-            env_vars.push(format!("NVIDIA_DRIVER_CAPABILITIES={}",
-                config.gpu_config.driver_capabilities.join(",")));
+            env_vars.push(format!(
+                "NVIDIA_DRIVER_CAPABILITIES={}",
+                config.gpu_config.driver_capabilities.join(",")
+            ));
         }
 
         // Add custom environment variables
@@ -753,7 +833,10 @@ build = "{}"
             working_dir: Some("/app".to_string()),
             environment: HashMap::from([
                 ("RUST_LOG".to_string(), "info".to_string()),
-                ("PULSEAUDIO_SERVER".to_string(), "unix:/run/user/1000/pulse/native".to_string()),
+                (
+                    "PULSEAUDIO_SERVER".to_string(),
+                    "unix:/run/user/1000/pulse/native".to_string(),
+                ),
                 ("ALSA_CARD".to_string(), "0".to_string()),
                 ("RTX_VOICE_ENABLED".to_string(), "true".to_string()),
             ]),
@@ -769,13 +852,11 @@ build = "{}"
                     read_only: false,
                 },
             ],
-            ports: vec![
-                PortMapping {
-                    host_port: 8080,
-                    container_port: 8080,
-                    protocol: "tcp".to_string(),
-                },
-            ],
+            ports: vec![PortMapping {
+                host_port: 8080,
+                container_port: 8080,
+                protocol: "tcp".to_string(),
+            }],
             gpu_config: ContainerGpuConfig {
                 runtime: ContainerRuntime::Docker,
                 gpu_devices: vec!["all".to_string()],
@@ -784,20 +865,19 @@ build = "{}"
                 driver_capabilities: vec!["compute".to_string(), "utility".to_string()],
                 environment_vars: HashMap::from([
                     ("NVIDIA_VISIBLE_DEVICES".to_string(), "all".to_string()),
-                    ("NVIDIA_DRIVER_CAPABILITIES".to_string(), "compute,utility".to_string()),
+                    (
+                        "NVIDIA_DRIVER_CAPABILITIES".to_string(),
+                        "compute,utility".to_string(),
+                    ),
                 ]),
-                mount_points: vec![
-                    "/usr/local/nvidia".to_string(),
-                ],
-                device_requests: vec![
-                    DeviceRequest {
-                        driver: "nvidia".to_string(),
-                        count: Some(1),
-                        device_ids: vec!["0".to_string()],
-                        capabilities: vec![vec!["gpu".to_string()]],
-                        options: HashMap::new(),
-                    }
-                ],
+                mount_points: vec!["/usr/local/nvidia".to_string()],
+                device_requests: vec![DeviceRequest {
+                    driver: "nvidia".to_string(),
+                    count: Some(1),
+                    device_ids: vec!["0".to_string()],
+                    capabilities: vec![vec!["gpu".to_string()]],
+                    options: HashMap::new(),
+                }],
             },
             interactive: false,
             remove_on_exit: false,

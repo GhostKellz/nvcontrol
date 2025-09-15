@@ -64,7 +64,7 @@ impl NativeVibranceController {
 
         if !open_driver {
             return Err(NvControlError::UnsupportedFeature(
-                "Pure Rust vibrance requires NVIDIA open drivers (580+)".to_string()
+                "Pure Rust vibrance requires NVIDIA open drivers (580+)".to_string(),
             ));
         }
 
@@ -81,7 +81,9 @@ impl NativeVibranceController {
     /// Check if we're using NVIDIA open drivers
     fn is_open_driver(version: &str) -> NvResult<bool> {
         // NVIDIA open drivers are available from 515+ but recommended 580+
-        let version_num: u32 = version.split('.').next()
+        let version_num: u32 = version
+            .split('.')
+            .next()
             .unwrap_or("0")
             .parse()
             .unwrap_or(0);
@@ -94,17 +96,23 @@ impl NativeVibranceController {
         use std::process::Command;
 
         let output = Command::new("nvidia-smi")
-            .args(&["--query-gpu=driver_version", "--format=csv,noheader,nounits"])
+            .args(&[
+                "--query-gpu=driver_version",
+                "--format=csv,noheader,nounits",
+            ])
             .output()
-            .map_err(|e| NvControlError::VibranceControlFailed(
-                format!("Failed to get driver version: {}", e)
-            ))?;
+            .map_err(|e| {
+                NvControlError::VibranceControlFailed(format!(
+                    "Failed to get driver version: {}",
+                    e
+                ))
+            })?;
 
         if output.status.success() {
             Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
         } else {
             Err(NvControlError::VibranceControlFailed(
-                "Could not detect NVIDIA driver".to_string()
+                "Could not detect NVIDIA driver".to_string(),
             ))
         }
     }
@@ -116,7 +124,7 @@ impl NativeVibranceController {
         // Check if nvidia-modeset device exists
         if !std::path::Path::new(NVIDIA_MODESET_DEVICE).exists() {
             return Err(NvControlError::VibranceControlFailed(
-                "NVIDIA modeset device not found. Ensure nvidia_drm.modeset=1".to_string()
+                "NVIDIA modeset device not found. Ensure nvidia_drm.modeset=1".to_string(),
             ));
         }
 
@@ -144,7 +152,7 @@ impl NativeVibranceController {
         let output = Command::new("nvidia-smi")
             .args(&[
                 "--query-gpu=index,name,pci.bus_id",
-                "--format=csv,noheader,nounits"
+                "--format=csv,noheader,nounits",
             ])
             .output()
             .map_err(|e| NvControlError::CommandFailed(format!("nvidia-smi failed: {}", e)))?;
@@ -180,10 +188,7 @@ impl NativeVibranceController {
         use std::process::Command;
 
         let output = Command::new("nvidia-settings")
-            .args(&[
-                "--display-id", &format!("{}", device_id),
-                "--query", "all"
-            ])
+            .args(&["--display-id", &format!("{}", device_id), "--query", "all"])
             .output()
             .map_err(|e| NvControlError::CommandFailed(format!("nvidia-settings failed: {}", e)))?;
 
@@ -312,26 +317,38 @@ impl NativeVibranceController {
     }
 
     /// Set vibrance for a specific display
-    pub fn set_display_vibrance(&mut self, device_id: u32, display_id: u32, vibrance_percentage: u32) -> NvResult<()> {
+    pub fn set_display_vibrance(
+        &mut self,
+        device_id: u32,
+        display_id: u32,
+        vibrance_percentage: u32,
+    ) -> NvResult<()> {
         let vibrance_value = self.percentage_to_vibrance(vibrance_percentage);
 
         // Check if the display exists and supports vibrance
         {
-            let device = self.devices.iter()
+            let device = self
+                .devices
+                .iter()
                 .find(|d| d.device_id == device_id)
-                .ok_or_else(|| NvControlError::VibranceControlFailed(
-                    format!("Device {} not found", device_id)
-                ))?;
+                .ok_or_else(|| {
+                    NvControlError::VibranceControlFailed(format!("Device {} not found", device_id))
+                })?;
 
-            let display = device.displays.iter()
+            let display = device
+                .displays
+                .iter()
                 .find(|d| d.display_id == display_id)
-                .ok_or_else(|| NvControlError::VibranceControlFailed(
-                    format!("Display {} not found on device {}", display_id, device_id)
-                ))?;
+                .ok_or_else(|| {
+                    NvControlError::VibranceControlFailed(format!(
+                        "Display {} not found on device {}",
+                        display_id, device_id
+                    ))
+                })?;
 
             if !display.vibrance_supported {
                 return Err(NvControlError::VibranceControlFailed(
-                    "Vibrance not supported on this display".to_string()
+                    "Vibrance not supported on this display".to_string(),
                 ));
             }
         }
@@ -340,20 +357,32 @@ impl NativeVibranceController {
         self.set_display_vibrance_raw(device_id, display_id, vibrance_value)?;
 
         // Update the cached value
-        let device = self.devices.iter_mut()
+        let device = self
+            .devices
+            .iter_mut()
             .find(|d| d.device_id == device_id)
             .unwrap();
-        let display = device.displays.iter_mut()
+        let display = device
+            .displays
+            .iter_mut()
             .find(|d| d.display_id == display_id)
             .unwrap();
         display.current_vibrance = vibrance_value;
 
-        println!("✅ Set device {} display {} to {}% vibrance", device_id, display_id, vibrance_percentage);
+        println!(
+            "✅ Set device {} display {} to {}% vibrance",
+            device_id, display_id, vibrance_percentage
+        );
         Ok(())
     }
 
     /// Set raw vibrance value using direct driver interface
-    fn set_display_vibrance_raw(&self, device_id: u32, display_id: u32, vibrance_value: i32) -> NvResult<()> {
+    fn set_display_vibrance_raw(
+        &self,
+        device_id: u32,
+        display_id: u32,
+        vibrance_value: i32,
+    ) -> NvResult<()> {
         // Clamp vibrance value to valid range
         let clamped_value = vibrance_value.clamp(VIBRANCE_MIN, VIBRANCE_MAX);
 
@@ -367,7 +396,12 @@ impl NativeVibranceController {
     }
 
     /// Set vibrance using direct nvidia-modeset interface
-    fn set_vibrance_via_modeset(&self, device_id: u32, display_id: u32, vibrance_value: i32) -> NvResult<()> {
+    fn set_vibrance_via_modeset(
+        &self,
+        device_id: u32,
+        display_id: u32,
+        vibrance_value: i32,
+    ) -> NvResult<()> {
         // Open nvidia-modeset device
         let file = OpenOptions::new()
             .read(true)
@@ -405,7 +439,7 @@ impl NativeVibranceController {
 
         if result == -1 {
             return Err(NvControlError::VibranceControlFailed(
-                "ioctl call failed - falling back to nvidia-settings".to_string()
+                "ioctl call failed - falling back to nvidia-settings".to_string(),
             ));
         }
 
@@ -413,7 +447,12 @@ impl NativeVibranceController {
     }
 
     /// Set vibrance using nvidia-settings fallback
-    fn set_vibrance_via_nvidia_settings(&self, device_id: u32, display_id: u32, vibrance_value: i32) -> NvResult<()> {
+    fn set_vibrance_via_nvidia_settings(
+        &self,
+        device_id: u32,
+        display_id: u32,
+        vibrance_value: i32,
+    ) -> NvResult<()> {
         use std::process::Command;
 
         let output = Command::new("nvidia-settings")
@@ -428,9 +467,10 @@ impl NativeVibranceController {
 
         if !output.status.success() {
             let error = String::from_utf8_lossy(&output.stderr);
-            return Err(NvControlError::VibranceControlFailed(
-                format!("nvidia-settings vibrance failed: {}", error)
-            ));
+            return Err(NvControlError::VibranceControlFailed(format!(
+                "nvidia-settings vibrance failed: {}",
+                error
+            )));
         }
 
         Ok(())
@@ -438,23 +478,31 @@ impl NativeVibranceController {
 
     /// Get current vibrance for a display
     pub fn get_display_vibrance(&self, device_id: u32, display_id: u32) -> NvResult<i32> {
-        let device = self.devices.iter()
+        let device = self
+            .devices
+            .iter()
             .find(|d| d.device_id == device_id)
-            .ok_or_else(|| NvControlError::VibranceControlFailed(
-                format!("Device {} not found", device_id)
-            ))?;
+            .ok_or_else(|| {
+                NvControlError::VibranceControlFailed(format!("Device {} not found", device_id))
+            })?;
 
-        let display = device.displays.iter()
+        let display = device
+            .displays
+            .iter()
             .find(|d| d.display_id == display_id)
-            .ok_or_else(|| NvControlError::VibranceControlFailed(
-                format!("Display {} not found", display_id)
-            ))?;
+            .ok_or_else(|| {
+                NvControlError::VibranceControlFailed(format!("Display {} not found", display_id))
+            })?;
 
         Ok(display.current_vibrance)
     }
 
     /// Get current vibrance as percentage
-    pub fn get_display_vibrance_percentage(&self, device_id: u32, display_id: u32) -> NvResult<u32> {
+    pub fn get_display_vibrance_percentage(
+        &self,
+        device_id: u32,
+        display_id: u32,
+    ) -> NvResult<u32> {
         let vibrance_raw = self.get_display_vibrance(device_id, display_id)?;
         Ok(self.vibrance_to_percentage(vibrance_raw))
     }
@@ -512,12 +560,18 @@ impl NativeVibranceController {
     pub fn get_vibrance_status(&self) -> HashMap<String, serde_json::Value> {
         let mut status = HashMap::new();
 
-        status.insert("driver_version".to_string(),
-            serde_json::Value::String(self.driver_version.clone()));
-        status.insert("open_driver".to_string(),
-            serde_json::Value::Bool(self.open_driver));
-        status.insert("devices".to_string(),
-            serde_json::to_value(&self.devices).unwrap_or(serde_json::Value::Null));
+        status.insert(
+            "driver_version".to_string(),
+            serde_json::Value::String(self.driver_version.clone()),
+        );
+        status.insert(
+            "open_driver".to_string(),
+            serde_json::Value::Bool(self.open_driver),
+        );
+        status.insert(
+            "devices".to_string(),
+            serde_json::to_value(&self.devices).unwrap_or(serde_json::Value::Null),
+        );
 
         status
     }
@@ -536,7 +590,9 @@ pub fn get_vibrance_controller() -> NvResult<&'static mut NativeVibranceControll
         }
         #[allow(static_mut_refs)]
         VIBRANCE_CONTROLLER.as_mut().ok_or_else(|| {
-            NvControlError::VibranceControlFailed("Failed to initialize vibrance controller".to_string())
+            NvControlError::VibranceControlFailed(
+                "Failed to initialize vibrance controller".to_string(),
+            )
         })
     }
 }
@@ -547,7 +603,11 @@ pub fn set_vibrance_all_native(percentage: u32) -> NvResult<()> {
     controller.set_vibrance_all(percentage)
 }
 
-pub fn set_display_vibrance_native(device_id: u32, display_id: u32, percentage: u32) -> NvResult<()> {
+pub fn set_display_vibrance_native(
+    device_id: u32,
+    display_id: u32,
+    percentage: u32,
+) -> NvResult<()> {
     let controller = get_vibrance_controller()?;
     controller.set_display_vibrance(device_id, display_id, percentage)
 }

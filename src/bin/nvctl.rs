@@ -852,7 +852,10 @@ fn main() {
                 Err(e) => {
                     eprintln!("❌ Vibrance failed: {}", e);
                     eprintln!("💡 Ensure NVIDIA open drivers 580+ with nvidia_drm.modeset=1");
-                    eprintln!("   Or run with elevated permissions: sudo nvctl vibe {}", percentage);
+                    eprintln!(
+                        "   Or run with elevated permissions: sudo nvctl vibe {}",
+                        percentage
+                    );
                 }
             }
         }
@@ -919,33 +922,46 @@ fn main() {
                 use nvcontrol::vibrance_native;
 
                 match subcommand {
-                    VibranceSubcommand::Get => match vibrance_native::get_vibrance_status_native() {
-                        Ok(status) => {
-                            println!("🌈 Pure Rust Digital Vibrance Status");
-                            println!("══════════════════════════════════════════════════");
-                            if let Some(devices) = status.get("devices") {
-                                println!("{}", serde_json::to_string_pretty(devices).unwrap_or_default());
-                            }
+                    VibranceSubcommand::Get => {
+                        match vibrance_native::get_vibrance_status_native() {
+                            Ok(status) => {
+                                println!("🌈 Pure Rust Digital Vibrance Status");
+                                println!("══════════════════════════════════════════════════");
+                                if let Some(devices) = status.get("devices") {
+                                    println!(
+                                        "{}",
+                                        serde_json::to_string_pretty(devices).unwrap_or_default()
+                                    );
+                                }
 
-                            // List displays with current vibrance
-                            if let Ok(displays) = vibrance_native::list_displays_native() {
-                                println!("\nConnected Displays:");
-                                for (device_id, display_id, name, connected) in displays {
-                                    if connected {
-                                        // Get vibrance controller to check current vibrance
-                                        println!("  Device {}, Display {}: {} - Ready", device_id, display_id, name);
+                                // List displays with current vibrance
+                                if let Ok(displays) = vibrance_native::list_displays_native() {
+                                    println!("\nConnected Displays:");
+                                    for (device_id, display_id, name, connected) in displays {
+                                        if connected {
+                                            // Get vibrance controller to check current vibrance
+                                            println!(
+                                                "  Device {}, Display {}: {} - Ready",
+                                                device_id, display_id, name
+                                            );
+                                        }
                                     }
                                 }
                             }
+                            Err(e) => {
+                                eprintln!("❌ Pure Rust vibrance error: {}", e);
+                                eprintln!(
+                                    "💡 Ensure NVIDIA open drivers (580+) with nvidia_drm.modeset=1"
+                                );
+                            }
                         }
-                        Err(e) => {
-                            eprintln!("❌ Pure Rust vibrance error: {}", e);
-                            eprintln!("💡 Ensure NVIDIA open drivers (580+) with nvidia_drm.modeset=1");
-                        }
-                    },
+                    }
                     VibranceSubcommand::Set { percentage } => {
                         match vibrance_native::set_vibrance_all_native(percentage) {
-                            Ok(()) => println!("✅ Set all displays to {}% vibrance using pure Rust implementation", percentage),
+                            Ok(()) => println!(
+                                "✅ Set all displays to {}% vibrance using pure Rust implementation",
+                                percentage
+                            ),
                             Err(e) => eprintln!("❌ Failed to set vibrance: {}", e),
                         }
                     }
@@ -954,12 +970,19 @@ fn main() {
                         percentage,
                     } => {
                         // Assume device_id 0 for now - could be enhanced to specify device
-                        match vibrance_native::set_display_vibrance_native(0, display as u32, percentage) {
+                        match vibrance_native::set_display_vibrance_native(
+                            0,
+                            display as u32,
+                            percentage,
+                        ) {
                             Ok(()) => {
                                 println!("✅ Set display {} to {}% vibrance", display, percentage)
                             }
                             Err(e) => {
-                                eprintln!("❌ Failed to set vibrance for display {}: {}", display, e)
+                                eprintln!(
+                                    "❌ Failed to set vibrance for display {}: {}",
+                                    display, e
+                                )
                             }
                         }
                     }
@@ -979,8 +1002,15 @@ fn main() {
                                 level.abs() as u32 // Treat as percentage if outside raw range
                             };
 
-                            match vibrance_native::set_display_vibrance_native(0, display_idx as u32, percentage) {
-                                Ok(()) => println!("✅ Display {}: set to {}% (raw: {})", display_idx, percentage, level),
+                            match vibrance_native::set_display_vibrance_native(
+                                0,
+                                display_idx as u32,
+                                percentage,
+                            ) {
+                                Ok(()) => println!(
+                                    "✅ Display {}: set to {}% (raw: {})",
+                                    display_idx, percentage, level
+                                ),
                                 Err(e) => eprintln!("❌ Display {}: failed - {}", display_idx, e),
                             }
                         }
@@ -989,18 +1019,28 @@ fn main() {
                         Ok(displays) => {
                             println!("🖥️ Available Displays (Pure Rust):");
                             for (device_id, display_id, name, connected) in displays {
-                                let status = if connected { "✅ Connected" } else { "⭕ Disconnected" };
-                                println!("  Device {}, Display {} [{}]: {}", device_id, display_id, display_id, name);
+                                let status = if connected {
+                                    "✅ Connected"
+                                } else {
+                                    "⭕ Disconnected"
+                                };
+                                println!(
+                                    "  Device {}, Display {} [{}]: {}",
+                                    device_id, display_id, display_id, name
+                                );
                                 println!("    Status: {}", status);
                             }
                         }
                         Err(e) => eprintln!("❌ Failed to list displays: {}", e),
                     },
                     VibranceSubcommand::Reset => match vibrance_native::reset_vibrance_native() {
-                        Ok(()) => println!("✅ Reset all displays to default vibrance (100%) using pure Rust"),
+                        Ok(()) => println!(
+                            "✅ Reset all displays to default vibrance (100%) using pure Rust"
+                        ),
                         Err(e) => eprintln!("❌ Failed to reset vibrance: {}", e),
                     },
-                    VibranceSubcommand::Info => match vibrance_native::get_vibrance_status_native() {
+                    VibranceSubcommand::Info => match vibrance_native::get_vibrance_status_native()
+                    {
                         Ok(status) => {
                             println!("🌈 Pure Rust Digital Vibrance Information:");
                             println!("══════════════════════════════════════════════════");
@@ -1008,7 +1048,14 @@ fn main() {
                                 println!("  Driver Version: {}", driver_version);
                             }
                             if let Some(open_driver) = status.get("open_driver") {
-                                println!("  NVIDIA Open Drivers: {}", if open_driver.as_bool().unwrap_or(false) { "✅ Yes" } else { "❌ No" });
+                                println!(
+                                    "  NVIDIA Open Drivers: {}",
+                                    if open_driver.as_bool().unwrap_or(false) {
+                                        "✅ Yes"
+                                    } else {
+                                        "❌ No"
+                                    }
+                                );
                             }
 
                             println!("\n💡 Features:");
@@ -1321,7 +1368,11 @@ fn main() {
                     Ok(status) => println!("{}", status),
                     Err(e) => eprintln!("❌ Failed to get DLSS status: {}", e),
                 },
-                DlssSubcommand::Enable { quality, frame_generation, reflex } => {
+                DlssSubcommand::Enable {
+                    quality,
+                    frame_generation,
+                    reflex,
+                } => {
                     let dlss_quality = match quality.as_str() {
                         "performance" => dlss::DlssQuality::Performance,
                         "balanced" => dlss::DlssQuality::Balanced,
@@ -1348,7 +1399,9 @@ fn main() {
                             settings.frame_generation.enabled = true;
                             println!("✅ Enabling DLSS 3 with Frame Generation");
                         } else {
-                            println!("⚠️  Frame Generation not supported - using DLSS Super Resolution only");
+                            println!(
+                                "⚠️  Frame Generation not supported - using DLSS Super Resolution only"
+                            );
                             settings.mode = dlss::DlssMode::SuperResolution;
                         }
                     } else {
@@ -1364,97 +1417,108 @@ fn main() {
                         Ok(()) => println!("✅ DLSS settings applied successfully"),
                         Err(e) => eprintln!("❌ Failed to apply DLSS settings: {}", e),
                     }
-                },
-                DlssSubcommand::Disable => {
-                    match dlss::DlssController::new() {
-                        Ok(mut controller) => {
-                            let mut settings = controller.current_settings.clone();
-                            settings.enabled = false;
-                            settings.mode = dlss::DlssMode::Off;
-                            settings.frame_generation.enabled = false;
+                }
+                DlssSubcommand::Disable => match dlss::DlssController::new() {
+                    Ok(mut controller) => {
+                        let mut settings = controller.current_settings.clone();
+                        settings.enabled = false;
+                        settings.mode = dlss::DlssMode::Off;
+                        settings.frame_generation.enabled = false;
 
-                            match controller.apply_settings(settings) {
-                                Ok(()) => println!("✅ DLSS disabled"),
-                                Err(e) => eprintln!("❌ Failed to disable DLSS: {}", e),
-                            }
-                        },
-                        Err(e) => eprintln!("❌ Failed to initialize DLSS: {}", e),
+                        match controller.apply_settings(settings) {
+                            Ok(()) => println!("✅ DLSS disabled"),
+                            Err(e) => eprintln!("❌ Failed to disable DLSS: {}", e),
+                        }
                     }
+                    Err(e) => eprintln!("❌ Failed to initialize DLSS: {}", e),
                 },
-                DlssSubcommand::Profiles => {
-                    match dlss::DlssController::new() {
-                        Ok(controller) => {
-                            println!("🎮 DLSS Game Profiles:\n");
-                            for (game_id, profile) in &controller.game_profiles {
-                                println!("📦 {}", profile.game_name);
-                                println!("   ID: {}", game_id);
-                                println!("   Mode: {:?}", profile.recommended_settings.mode);
-                                println!("   Quality: {:?}", profile.recommended_settings.quality_preset);
-                                println!("   Frame Gen: {}",
-                                    if profile.recommended_settings.frame_generation.enabled { "✅" } else { "❌" });
-                                println!("   Reflex: {:?}", profile.recommended_settings.reflex_mode);
-                                if let Some(notes) = &profile.notes {
-                                    println!("   Notes: {}", notes);
+                DlssSubcommand::Profiles => match dlss::DlssController::new() {
+                    Ok(controller) => {
+                        println!("🎮 DLSS Game Profiles:\n");
+                        for (game_id, profile) in &controller.game_profiles {
+                            println!("📦 {}", profile.game_name);
+                            println!("   ID: {}", game_id);
+                            println!("   Mode: {:?}", profile.recommended_settings.mode);
+                            println!(
+                                "   Quality: {:?}",
+                                profile.recommended_settings.quality_preset
+                            );
+                            println!(
+                                "   Frame Gen: {}",
+                                if profile.recommended_settings.frame_generation.enabled {
+                                    "✅"
+                                } else {
+                                    "❌"
                                 }
-                                println!();
+                            );
+                            println!("   Reflex: {:?}", profile.recommended_settings.reflex_mode);
+                            if let Some(notes) = &profile.notes {
+                                println!("   Notes: {}", notes);
                             }
-                        },
-                        Err(e) => eprintln!("❌ Failed to load DLSS profiles: {}", e),
+                            println!();
+                        }
                     }
+                    Err(e) => eprintln!("❌ Failed to load DLSS profiles: {}", e),
                 },
-                DlssSubcommand::Auto => {
-                    match dlss::DlssController::new() {
-                        Ok(mut controller) => {
-                            match controller.auto_apply_game_profile() {
-                                Ok(Some(game_id)) => {
-                                    let profile = controller.game_profiles.get(&game_id).unwrap();
-                                    println!("✅ Auto-applied DLSS profile for: {}", profile.game_name);
-                                    println!("   Mode: {:?}", profile.recommended_settings.mode);
-                                    println!("   Quality: {:?}", profile.recommended_settings.quality_preset);
-                                },
-                                Ok(None) => {
-                                    println!("ℹ️  No supported games currently running");
-                                },
-                                Err(e) => eprintln!("❌ Failed to auto-apply DLSS settings: {}", e),
-                            }
-                        },
-                        Err(e) => eprintln!("❌ Failed to initialize DLSS: {}", e),
-                    }
+                DlssSubcommand::Auto => match dlss::DlssController::new() {
+                    Ok(mut controller) => match controller.auto_apply_game_profile() {
+                        Ok(Some(game_id)) => {
+                            let profile = controller.game_profiles.get(&game_id).unwrap();
+                            println!("✅ Auto-applied DLSS profile for: {}", profile.game_name);
+                            println!("   Mode: {:?}", profile.recommended_settings.mode);
+                            println!(
+                                "   Quality: {:?}",
+                                profile.recommended_settings.quality_preset
+                            );
+                        }
+                        Ok(None) => {
+                            println!("ℹ️  No supported games currently running");
+                        }
+                        Err(e) => eprintln!("❌ Failed to auto-apply DLSS settings: {}", e),
+                    },
+                    Err(e) => eprintln!("❌ Failed to initialize DLSS: {}", e),
                 },
-                DlssSubcommand::Metrics => {
-                    match dlss::DlssController::new() {
-                        Ok(controller) => {
-                            match controller.get_metrics() {
-                                Ok(metrics) => {
-                                    println!("📊 DLSS Performance Metrics:\n");
-                                    println!("🎯 Frame Rates:");
-                                    println!("   Native: {:.1} FPS", metrics.base_fps);
-                                    println!("   DLSS: {:.1} FPS ({:.1}x boost)",
-                                        metrics.dlss_fps, metrics.dlss_fps / metrics.base_fps);
-                                    if metrics.frame_generation_fps > metrics.dlss_fps {
-                                        println!("   Frame Gen: {:.1} FPS ({:.1}x boost)",
-                                            metrics.frame_generation_fps,
-                                            metrics.frame_generation_fps / metrics.base_fps);
-                                    }
-                                    println!("\n⚡ Performance:");
-                                    println!("   Latency: {:.1}ms", metrics.latency_ms);
-                                    println!("   GPU Util: {:.1}%", metrics.gpu_utilization);
-                                    println!("   VRAM: {}MB", metrics.vram_usage_mb);
-                                    if controller.capabilities.tensor_cores > 0 {
-                                        println!("   Tensor Cores: {:.1}%", metrics.tensor_core_utilization);
-                                    }
-                                    if controller.capabilities.optical_flow_accelerator {
-                                        println!("   Optical Flow: {:.1}%", metrics.optical_flow_utilization);
-                                    }
-                                },
-                                Err(e) => eprintln!("❌ Failed to get DLSS metrics: {}", e),
+                DlssSubcommand::Metrics => match dlss::DlssController::new() {
+                    Ok(controller) => match controller.get_metrics() {
+                        Ok(metrics) => {
+                            println!("📊 DLSS Performance Metrics:\n");
+                            println!("🎯 Frame Rates:");
+                            println!("   Native: {:.1} FPS", metrics.base_fps);
+                            println!(
+                                "   DLSS: {:.1} FPS ({:.1}x boost)",
+                                metrics.dlss_fps,
+                                metrics.dlss_fps / metrics.base_fps
+                            );
+                            if metrics.frame_generation_fps > metrics.dlss_fps {
+                                println!(
+                                    "   Frame Gen: {:.1} FPS ({:.1}x boost)",
+                                    metrics.frame_generation_fps,
+                                    metrics.frame_generation_fps / metrics.base_fps
+                                );
                             }
-                        },
-                        Err(e) => eprintln!("❌ Failed to initialize DLSS: {}", e),
-                    }
+                            println!("\n⚡ Performance:");
+                            println!("   Latency: {:.1}ms", metrics.latency_ms);
+                            println!("   GPU Util: {:.1}%", metrics.gpu_utilization);
+                            println!("   VRAM: {}MB", metrics.vram_usage_mb);
+                            if controller.capabilities.tensor_cores > 0 {
+                                println!(
+                                    "   Tensor Cores: {:.1}%",
+                                    metrics.tensor_core_utilization
+                                );
+                            }
+                            if controller.capabilities.optical_flow_accelerator {
+                                println!(
+                                    "   Optical Flow: {:.1}%",
+                                    metrics.optical_flow_utilization
+                                );
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to get DLSS metrics: {}", e),
+                    },
+                    Err(e) => eprintln!("❌ Failed to initialize DLSS: {}", e),
                 },
             }
-        },
+        }
         Command::Drivers { subcommand } => match subcommand {
             DriversSubcommand::Status => match drivers::get_driver_status() {
                 Ok(status) => {
@@ -1947,7 +2011,7 @@ fn main() {
                 memory_limit,
                 power_limit,
             } => {
-                use nvcontrol::bolt_integration::{NvControlBoltManager, GpuContainerConfig};
+                use nvcontrol::bolt_integration::{GpuContainerConfig, NvControlBoltManager};
 
                 println!("🚀 Launching Bolt GPU workload: {}", name);
 
@@ -1973,8 +2037,12 @@ fn main() {
                                 println!("   Workload: {}", name);
                                 println!("   Image: {}", image);
                                 println!("   GPU: {}", gpu_id);
-                                if dlss { println!("   DLSS: ✅ Enabled"); }
-                                if raytracing { println!("   Ray Tracing: ✅ Enabled"); }
+                                if dlss {
+                                    println!("   DLSS: ✅ Enabled");
+                                }
+                                if raytracing {
+                                    println!("   Ray Tracing: ✅ Enabled");
+                                }
                                 if let Some(limit) = memory_limit {
                                     println!("   Memory Limit: {}GB", limit);
                                 }
@@ -2045,7 +2113,11 @@ fn main() {
                     Err(e) => eprintln!("❌ Failed to create async runtime: {}", e),
                 }
             }
-            BoltSubcommand::Gaming { name, proton, winver } => {
+            BoltSubcommand::Gaming {
+                name,
+                proton,
+                winver,
+            } => {
                 use nvcontrol::bolt_integration::NvControlBoltManager;
 
                 println!("🎮 Setting up Bolt gaming environment for: {}", name);
@@ -2112,7 +2184,10 @@ fn main() {
                     Err(e) => eprintln!("❌ Failed to create async runtime: {}", e),
                 }
             }
-            BoltSubcommand::Up { services, force_recreate } => {
+            BoltSubcommand::Up {
+                services,
+                force_recreate,
+            } => {
                 use nvcontrol::bolt_integration::NvControlBoltManager;
 
                 println!("⚡ Starting Bolt Surge services...");
@@ -2251,24 +2326,25 @@ fn main() {
 
                 println!("🐳 Listing GPU-enabled containers...");
                 match NvContainerRuntime::new() {
-                    Ok(runtime) => {
-                        match runtime.monitor_gpu_containers() {
-                            Ok(containers) => {
-                                if containers.is_empty() {
-                                    println!("No GPU containers found");
-                                } else {
-                                    println!("Found {} GPU containers:", containers.len());
-                                    for container in containers {
-                                        println!("  📦 {}: {}", container.container_name, container.image);
-                                        println!("     GPU Usage: {:.1}%", container.gpu_utilization);
-                                        println!("     Power: {:.1}W", container.power_usage);
-                                        println!("     Status: {:?}", container.status);
-                                    }
+                    Ok(runtime) => match runtime.monitor_gpu_containers() {
+                        Ok(containers) => {
+                            if containers.is_empty() {
+                                println!("No GPU containers found");
+                            } else {
+                                println!("Found {} GPU containers:", containers.len());
+                                for container in containers {
+                                    println!(
+                                        "  📦 {}: {}",
+                                        container.container_name, container.image
+                                    );
+                                    println!("     GPU Usage: {:.1}%", container.gpu_utilization);
+                                    println!("     Power: {:.1}W", container.power_usage);
+                                    println!("     Status: {:?}", container.status);
                                 }
                             }
-                            Err(e) => eprintln!("❌ Failed to list containers: {}", e),
                         }
-                    }
+                        Err(e) => eprintln!("❌ Failed to list containers: {}", e),
+                    },
                     Err(e) => eprintln!("❌ Container runtime initialization failed: {}", e),
                 }
             }
@@ -2280,7 +2356,10 @@ fn main() {
                 rm,
                 runtime,
             } => {
-                use nvcontrol::container_runtime::{NvContainerRuntime, ContainerLaunchConfig, ContainerGpuConfig, ContainerRuntime as RT};
+                use nvcontrol::container_runtime::{
+                    ContainerGpuConfig, ContainerLaunchConfig, ContainerRuntime as RT,
+                    NvContainerRuntime,
+                };
                 use std::collections::HashMap;
 
                 println!("🚀 Launching container: {}", image);
@@ -2323,26 +2402,31 @@ fn main() {
                 };
 
                 match NvContainerRuntime::new() {
-                    Ok(rt) => {
-                        match rt.launch_container(&config) {
-                            Ok(container_id) => {
-                                println!("✅ Container launched: {}", container_id);
-                                if let Some(name) = name {
-                                    println!("   Name: {}", name);
-                                }
-                                println!("   Runtime: {}", runtime);
-                                println!("   GPU: {}", gpu);
+                    Ok(rt) => match rt.launch_container(&config) {
+                        Ok(container_id) => {
+                            println!("✅ Container launched: {}", container_id);
+                            if let Some(name) = name {
+                                println!("   Name: {}", name);
                             }
-                            Err(e) => eprintln!("❌ Failed to launch container: {}", e),
+                            println!("   Runtime: {}", runtime);
+                            println!("   GPU: {}", gpu);
                         }
-                    }
+                        Err(e) => eprintln!("❌ Failed to launch container: {}", e),
+                    },
                     Err(e) => eprintln!("❌ Runtime initialization failed: {}", e),
                 }
             }
-            ContainerSubcommand::PhantomLink { mode, audio_device, rtx_voice } => {
+            ContainerSubcommand::PhantomLink {
+                mode,
+                audio_device,
+                rtx_voice,
+            } => {
                 use nvcontrol::container_runtime::NvContainerRuntime;
 
-                println!("🎵 Launching PhantomLink audio container (mode: {})...", mode);
+                println!(
+                    "🎵 Launching PhantomLink audio container (mode: {})...",
+                    mode
+                );
 
                 match NvContainerRuntime::new() {
                     Ok(mut runtime) => {
@@ -2351,8 +2435,13 @@ fn main() {
                                 // Configure based on mode
                                 match mode.as_str() {
                                     "dev" => {
-                                        config.environment.insert("RUST_LOG".to_string(), "debug".to_string());
-                                        config.environment.insert("PHANTOMLINK_DEV_MODE".to_string(), "true".to_string());
+                                        config
+                                            .environment
+                                            .insert("RUST_LOG".to_string(), "debug".to_string());
+                                        config.environment.insert(
+                                            "PHANTOMLINK_DEV_MODE".to_string(),
+                                            "true".to_string(),
+                                        );
                                     }
                                     "minimal" => {
                                         config.gpu_config.memory_limit = Some(1024 * 1024 * 1024); // 1GB
@@ -2362,21 +2451,39 @@ fn main() {
 
                                 // Configure RTX Voice
                                 if rtx_voice {
-                                    config.environment.insert("RTX_VOICE_ENABLED".to_string(), "true".to_string());
-                                    config.environment.insert("RTX_VOICE_STRENGTH".to_string(), "0.8".to_string());
+                                    config.environment.insert(
+                                        "RTX_VOICE_ENABLED".to_string(),
+                                        "true".to_string(),
+                                    );
+                                    config.environment.insert(
+                                        "RTX_VOICE_STRENGTH".to_string(),
+                                        "0.8".to_string(),
+                                    );
                                 }
 
                                 // Configure audio device
                                 if let Some(device) = audio_device {
-                                    config.environment.insert("AUDIO_DEVICE".to_string(), device);
+                                    config
+                                        .environment
+                                        .insert("AUDIO_DEVICE".to_string(), device);
                                 }
 
                                 match runtime.launch_container(&config) {
                                     Ok(container_id) => {
-                                        println!("✅ PhantomLink container launched: {}", container_id);
+                                        println!(
+                                            "✅ PhantomLink container launched: {}",
+                                            container_id
+                                        );
                                         println!("   Web UI: http://localhost:8080");
                                         println!("   Mode: {}", mode);
-                                        println!("   RTX Voice: {}", if rtx_voice { "✅ Enabled" } else { "❌ Disabled" });
+                                        println!(
+                                            "   RTX Voice: {}",
+                                            if rtx_voice {
+                                                "✅ Enabled"
+                                            } else {
+                                                "❌ Disabled"
+                                            }
+                                        );
                                     }
                                     Err(e) => eprintln!("❌ Failed to launch PhantomLink: {}", e),
                                 }
@@ -2394,7 +2501,10 @@ fn main() {
                 );
                 // TODO: Implement status checking for specific containers
             }
-            ContainerSubcommand::Monitor { container, interval } => {
+            ContainerSubcommand::Monitor {
+                container,
+                interval,
+            } => {
                 println!(
                     "📊 Monitoring container '{}' every {}s...",
                     container, interval
@@ -2426,7 +2536,9 @@ fn main() {
                     // TODO: Implement profile application
                 }
                 ContainerProfileAction::Create { name, workload } => {
-                    use nvcontrol::container::{create_container_profile, save_container_profiles, load_container_profiles};
+                    use nvcontrol::container::{
+                        create_container_profile, load_container_profiles, save_container_profiles,
+                    };
 
                     println!("➕ Creating profile '{}'...", name);
                     let new_profile = create_container_profile(&name, &workload);
@@ -2533,7 +2645,10 @@ fn main() {
 
             // Check NVIDIA driver
             if let Ok(output) = std::process::Command::new("nvidia-smi")
-                .args(["--query-gpu=driver_version", "--format=csv,noheader,nounits"])
+                .args([
+                    "--query-gpu=driver_version",
+                    "--format=csv,noheader,nounits",
+                ])
                 .output()
             {
                 if output.status.success() {
@@ -2550,17 +2665,19 @@ fn main() {
             use nvcontrol::dlss;
             match dlss::DlssController::new() {
                 Ok(controller) => {
-                    println!("   DLSS Support: {} ✅",
+                    println!(
+                        "   DLSS Support: {} ✅",
                         match controller.version {
                             dlss::DlssVersion::Dlss3_5 => "DLSS 3.5",
                             dlss::DlssVersion::Dlss3 => "DLSS 3",
                             dlss::DlssVersion::Dlss2 => "DLSS 2",
                             dlss::DlssVersion::None => "None",
-                        });
+                        }
+                    );
                     if controller.capabilities.supports_frame_generation {
                         println!("   Frame Generation: ✅ Supported (RTX 40+)");
                     }
-                },
+                }
                 Err(_) => println!("   DLSS Support: ❌ Not available"),
             }
 
@@ -2570,7 +2687,7 @@ fn main() {
             println!("   nvctl gpu stat         Live GPU monitoring");
             println!("   nvcontrol              Launch GUI");
             println!("\n🔗 More info: {}", env!("CARGO_PKG_HOMEPAGE"));
-        },
+        }
     }
 }
 
