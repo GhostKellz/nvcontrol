@@ -47,6 +47,7 @@ pub mod bolt_integration;
 
 // New advanced modules
 pub mod container;
+pub mod dlss;
 pub mod container_runtime;
 pub mod drivers;
 pub mod gamescope;

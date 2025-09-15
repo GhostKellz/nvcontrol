@@ -1,14 +1,16 @@
 # Maintainer: Christopher Kelley <ckelley@ghostkellz.sh>
 pkgname=nvcontrol
-pkgver=0.5.0
+pkgver=0.6.1
 pkgrel=1
-pkgdesc="Modern NVIDIA settings manager for Linux and Wayland"
+pkgdesc="Modern NVIDIA GPU control with DLSS 3, Frame Generation, and native Wayland support"
 arch=('x86_64')
 url="https://github.com/ghostkellz/nvcontrol"
 license=('MIT')
-depends=('nvidia-utils' 'wayland')
+depends=('nvidia-utils' 'wayland' 'systemd')
 makedepends=('rust' 'cargo')
-optdepends=('nvibrant: For digital vibrance support on Wayland')
+optdepends=('gamescope: Enhanced gaming compositor support'
+          'mangohud: Gaming overlay integration'
+          'steam: Auto-detection for game profiles')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
 sha256sums=('SKIP')
 
@@ -32,16 +34,31 @@ package() {
     # Install desktop file
     install -Dm644 packaging/nvcontrol.desktop "$pkgdir/usr/share/applications/nvcontrol.desktop"
     
-    # Install icons from assets/logos directory (multiple sizes for better desktop integration)
-    for size in 16 32 48 64 128 256; do
-        if [ -f "assets/logos/nvctl_logo_${size}x${size}.png" ]; then
-            install -Dm644 "assets/logos/nvctl_logo_${size}x${size}.png" "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/nvcontrol.png"
+    # Install icons from assets/icons directory
+    for size in 16 32 48 64 128 256 512; do
+        if [ -f "assets/icons/icon-${size}x${size}.png" ]; then
+            install -Dm644 "assets/icons/icon-${size}x${size}.png" "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/nvcontrol.png"
         fi
     done
-    
-    # Fallback to main logo if specific sizes aren't available
-    if [ -f "assets/logos/nvctl_logo.png" ]; then
-        install -Dm644 "assets/logos/nvctl_logo.png" "$pkgdir/usr/share/pixmaps/nvcontrol.png"
+
+    # Install main logo as fallback
+    if [ -f "assets/icons/nvctl_logo.png" ]; then
+        install -Dm644 "assets/icons/nvctl_logo.png" "$pkgdir/usr/share/pixmaps/nvcontrol.png"
+    fi
+
+    # Install shell completions
+    install -dm755 "$pkgdir/usr/share/bash-completion/completions"
+    install -dm755 "$pkgdir/usr/share/zsh/site-functions"
+    install -dm755 "$pkgdir/usr/share/fish/vendor_completions.d"
+
+    if [ -f "completions/nvctl.bash" ]; then
+        install -Dm644 "completions/nvctl.bash" "$pkgdir/usr/share/bash-completion/completions/nvctl"
+    fi
+    if [ -f "completions/_nvctl" ]; then
+        install -Dm644 "completions/_nvctl" "$pkgdir/usr/share/zsh/site-functions/_nvctl"
+    fi
+    if [ -f "completions/nvctl.fish" ]; then
+        install -Dm644 "completions/nvctl.fish" "$pkgdir/usr/share/fish/vendor_completions.d/nvctl.fish"
     fi
     
     # Install documentation

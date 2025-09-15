@@ -1,10 +1,11 @@
 [Desktop Entry]
-Name=nvcontrol
-Comment=NVIDIA Settings Manager for Wayland
+Name=NVIDIA Control
+GenericName=GPU Settings Manager
+Comment=Modern NVIDIA GPU control with DLSS 3, Frame Generation, and Wayland support
 Exec=nvcontrol
 Icon=nvcontrol
 Terminal=false
 Type=Application
-Categories=System;Settings;HardwareSettings;
-Keywords=nvidia;gpu;graphics;wayland;overclocking;fan;temperature;
+Categories=System;Settings;HardwareSettings;Game;
+Keywords=nvidia;gpu;graphics;wayland;overclocking;fan;temperature;dlss;frame-generation;rtx;gaming;monitor;vibrance;
 StartupNotify=true

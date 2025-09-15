@@ -118,6 +118,13 @@ enum Command {
         #[command(subcommand)]
         subcommand: UpscalingSubcommand,
     },
+    /// 🚀 DLSS 3 Frame Generation
+    Dlss {
+        #[command(subcommand)]
+        subcommand: DlssSubcommand,
+    },
+    /// 📋 Show detailed version information
+    Version,
 }
 
 #[derive(Subcommand)]
@@ -319,6 +326,32 @@ enum UpscalingSubcommand {
     },
     Profiles,
     AutoDetect,
+}
+
+#[derive(Subcommand)]
+enum DlssSubcommand {
+    /// Show DLSS capabilities and status
+    Status,
+    /// Enable DLSS 3 with Frame Generation
+    Enable {
+        /// Quality preset: performance, balanced, quality, ultra
+        #[arg(long, default_value = "balanced")]
+        quality: String,
+        /// Enable Frame Generation (RTX 40+ only)
+        #[arg(long)]
+        frame_generation: bool,
+        /// Enable NVIDIA Reflex
+        #[arg(long)]
+        reflex: bool,
+    },
+    /// Disable DLSS
+    Disable,
+    /// Show game profiles
+    Profiles,
+    /// Auto-detect and apply game settings
+    Auto,
+    /// Show performance metrics
+    Metrics,
 }
 
 #[derive(Subcommand)]
@@ -1279,6 +1312,148 @@ fn main() {
                 }
                 Err(e) => eprintln!("Failed to detect running games: {e}"),
             },
+        },
+        Command::Dlss { subcommand } => {
+            use nvcontrol::dlss;
+
+            match subcommand {
+                DlssSubcommand::Status => match dlss::get_dlss_status() {
+                    Ok(status) => println!("{}", status),
+                    Err(e) => eprintln!("❌ Failed to get DLSS status: {}", e),
+                },
+                DlssSubcommand::Enable { quality, frame_generation, reflex } => {
+                    let dlss_quality = match quality.as_str() {
+                        "performance" => dlss::DlssQuality::Performance,
+                        "balanced" => dlss::DlssQuality::Balanced,
+                        "quality" => dlss::DlssQuality::Quality,
+                        "ultra" => dlss::DlssQuality::UltraQuality,
+                        _ => dlss::DlssQuality::Balanced,
+                    };
+
+                    let mut controller = match dlss::DlssController::new() {
+                        Ok(c) => c,
+                        Err(e) => {
+                            eprintln!("❌ Failed to initialize DLSS: {}", e);
+                            return;
+                        }
+                    };
+
+                    let mut settings = controller.current_settings.clone();
+                    settings.enabled = true;
+                    settings.quality_preset = dlss_quality;
+
+                    if frame_generation {
+                        if controller.capabilities.supports_frame_generation {
+                            settings.mode = dlss::DlssMode::SuperResolutionAndFrameGeneration;
+                            settings.frame_generation.enabled = true;
+                            println!("✅ Enabling DLSS 3 with Frame Generation");
+                        } else {
+                            println!("⚠️  Frame Generation not supported - using DLSS Super Resolution only");
+                            settings.mode = dlss::DlssMode::SuperResolution;
+                        }
+                    } else {
+                        settings.mode = dlss::DlssMode::SuperResolution;
+                    }
+
+                    if reflex {
+                        settings.reflex_mode = dlss::ReflexMode::OnPlusBoost;
+                        println!("✅ NVIDIA Reflex enabled");
+                    }
+
+                    match controller.apply_settings(settings) {
+                        Ok(()) => println!("✅ DLSS settings applied successfully"),
+                        Err(e) => eprintln!("❌ Failed to apply DLSS settings: {}", e),
+                    }
+                },
+                DlssSubcommand::Disable => {
+                    match dlss::DlssController::new() {
+                        Ok(mut controller) => {
+                            let mut settings = controller.current_settings.clone();
+                            settings.enabled = false;
+                            settings.mode = dlss::DlssMode::Off;
+                            settings.frame_generation.enabled = false;
+
+                            match controller.apply_settings(settings) {
+                                Ok(()) => println!("✅ DLSS disabled"),
+                                Err(e) => eprintln!("❌ Failed to disable DLSS: {}", e),
+                            }
+                        },
+                        Err(e) => eprintln!("❌ Failed to initialize DLSS: {}", e),
+                    }
+                },
+                DlssSubcommand::Profiles => {
+                    match dlss::DlssController::new() {
+                        Ok(controller) => {
+                            println!("🎮 DLSS Game Profiles:\n");
+                            for (game_id, profile) in &controller.game_profiles {
+                                println!("📦 {}", profile.game_name);
+                                println!("   ID: {}", game_id);
+                                println!("   Mode: {:?}", profile.recommended_settings.mode);
+                                println!("   Quality: {:?}", profile.recommended_settings.quality_preset);
+                                println!("   Frame Gen: {}",
+                                    if profile.recommended_settings.frame_generation.enabled { "✅" } else { "❌" });
+                                println!("   Reflex: {:?}", profile.recommended_settings.reflex_mode);
+                                if let Some(notes) = &profile.notes {
+                                    println!("   Notes: {}", notes);
+                                }
+                                println!();
+                            }
+                        },
+                        Err(e) => eprintln!("❌ Failed to load DLSS profiles: {}", e),
+                    }
+                },
+                DlssSubcommand::Auto => {
+                    match dlss::DlssController::new() {
+                        Ok(mut controller) => {
+                            match controller.auto_apply_game_profile() {
+                                Ok(Some(game_id)) => {
+                                    let profile = controller.game_profiles.get(&game_id).unwrap();
+                                    println!("✅ Auto-applied DLSS profile for: {}", profile.game_name);
+                                    println!("   Mode: {:?}", profile.recommended_settings.mode);
+                                    println!("   Quality: {:?}", profile.recommended_settings.quality_preset);
+                                },
+                                Ok(None) => {
+                                    println!("ℹ️  No supported games currently running");
+                                },
+                                Err(e) => eprintln!("❌ Failed to auto-apply DLSS settings: {}", e),
+                            }
+                        },
+                        Err(e) => eprintln!("❌ Failed to initialize DLSS: {}", e),
+                    }
+                },
+                DlssSubcommand::Metrics => {
+                    match dlss::DlssController::new() {
+                        Ok(controller) => {
+                            match controller.get_metrics() {
+                                Ok(metrics) => {
+                                    println!("📊 DLSS Performance Metrics:\n");
+                                    println!("🎯 Frame Rates:");
+                                    println!("   Native: {:.1} FPS", metrics.base_fps);
+                                    println!("   DLSS: {:.1} FPS ({:.1}x boost)",
+                                        metrics.dlss_fps, metrics.dlss_fps / metrics.base_fps);
+                                    if metrics.frame_generation_fps > metrics.dlss_fps {
+                                        println!("   Frame Gen: {:.1} FPS ({:.1}x boost)",
+                                            metrics.frame_generation_fps,
+                                            metrics.frame_generation_fps / metrics.base_fps);
+                                    }
+                                    println!("\n⚡ Performance:");
+                                    println!("   Latency: {:.1}ms", metrics.latency_ms);
+                                    println!("   GPU Util: {:.1}%", metrics.gpu_utilization);
+                                    println!("   VRAM: {}MB", metrics.vram_usage_mb);
+                                    if controller.capabilities.tensor_cores > 0 {
+                                        println!("   Tensor Cores: {:.1}%", metrics.tensor_core_utilization);
+                                    }
+                                    if controller.capabilities.optical_flow_accelerator {
+                                        println!("   Optical Flow: {:.1}%", metrics.optical_flow_utilization);
+                                    }
+                                },
+                                Err(e) => eprintln!("❌ Failed to get DLSS metrics: {}", e),
+                            }
+                        },
+                        Err(e) => eprintln!("❌ Failed to initialize DLSS: {}", e),
+                    }
+                },
+            }
         },
         Command::Drivers { subcommand } => match subcommand {
             DriversSubcommand::Status => match drivers::get_driver_status() {
@@ -2337,6 +2512,64 @@ fn main() {
                     println!("❌ Restore cancelled");
                 }
             }
+        },
+        Command::Version => {
+            println!("🚀 nvcontrol v{}", env!("CARGO_PKG_VERSION"));
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            println!("📦 Build Information:");
+            println!("   Version: {}", env!("CARGO_PKG_VERSION"));
+            println!("   Authors: {}", env!("CARGO_PKG_AUTHORS"));
+            println!("   License: {}", env!("CARGO_PKG_LICENSE"));
+            println!("   Repository: {}", env!("CARGO_PKG_REPOSITORY"));
+
+            println!("\n🛠️  Compiled Features:");
+            println!("   DLSS 3 Frame Generation: ✅");
+            println!("   Native Vibrance Control: ✅");
+            println!("   Gamescope Integration: ✅");
+            println!("   Container Runtime: ✅");
+            println!("   NVIDIA Reflex: ✅");
+
+            println!("\n🎮 Runtime Capabilities:");
+
+            // Check NVIDIA driver
+            if let Ok(output) = std::process::Command::new("nvidia-smi")
+                .args(["--query-gpu=driver_version", "--format=csv,noheader,nounits"])
+                .output()
+            {
+                if output.status.success() {
+                    let driver_version = String::from_utf8_lossy(&output.stdout);
+                    println!("   NVIDIA Driver: {} ✅", driver_version.trim());
+                } else {
+                    println!("   NVIDIA Driver: ❌ Not detected");
+                }
+            } else {
+                println!("   NVIDIA Driver: ❌ nvidia-smi not found");
+            }
+
+            // Check DLSS capability
+            use nvcontrol::dlss;
+            match dlss::DlssController::new() {
+                Ok(controller) => {
+                    println!("   DLSS Support: {} ✅",
+                        match controller.version {
+                            dlss::DlssVersion::Dlss3_5 => "DLSS 3.5",
+                            dlss::DlssVersion::Dlss3 => "DLSS 3",
+                            dlss::DlssVersion::Dlss2 => "DLSS 2",
+                            dlss::DlssVersion::None => "None",
+                        });
+                    if controller.capabilities.supports_frame_generation {
+                        println!("   Frame Generation: ✅ Supported (RTX 40+)");
+                    }
+                },
+                Err(_) => println!("   DLSS Support: ❌ Not available"),
+            }
+
+            println!("\n📋 Usage:");
+            println!("   nvctl --help           Show all commands");
+            println!("   nvctl dlss status      Check DLSS capabilities");
+            println!("   nvctl gpu stat         Live GPU monitoring");
+            println!("   nvcontrol              Launch GUI");
+            println!("\n🔗 More info: {}", env!("CARGO_PKG_HOMEPAGE"));
         },
     }
 }

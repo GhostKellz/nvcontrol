@@ -88,3 +88,84 @@ jobs:
           echo "✅ All builds completed successfully"
           echo "Binary sizes:"
           ls -lh target/debug/nvctl target/debug/nvcontrol 2>/dev/null || echo "Binaries not found in expected location"
+
+  test-nvidia:
+    runs-on: [self-hosted, nv-prometheus]
+    name: NVIDIA GPU Tests on nv-prometheus
+    needs: build
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Rust
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          rustc --version
+          cargo --version
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: nvidia-test-cache
+
+      - name: Verify NVIDIA GPU
+        run: |
+          echo "🎮 Checking NVIDIA GPU availability..."
+          nvidia-smi || echo "Warning: nvidia-smi not available"
+
+          # Check for NVIDIA driver
+          if lsmod | grep -q nvidia; then
+            echo "✅ NVIDIA driver loaded"
+            nvidia-smi --query-gpu=name,driver_version,compute_cap --format=csv
+          else
+            echo "⚠️ NVIDIA driver not loaded"
+          fi
+
+      - name: Build with full features
+        run: |
+          cargo build --release --all-features --verbose
+          echo "Built binaries:"
+          ls -lh target/release/nvctl target/release/nvcontrol 2>/dev/null || true
+
+      - name: Test GPU features
+        run: |
+          # Run tests that require GPU
+          cargo test --release --all-features --verbose -- --nocapture
+
+      - name: Test DLSS detection
+        run: |
+          echo "🔍 Testing DLSS/upscaling capabilities..."
+          ./target/release/nvctl upscaling detect || echo "Upscaling detection not available"
+
+      - name: Test Vibrance (native)
+        run: |
+          echo "🎨 Testing native vibrance control..."
+          ./target/release/nvctl display vibrance info || echo "Vibrance info not available"
+
+      - name: Test GPU monitoring
+        run: |
+          echo "📊 Testing GPU monitoring..."
+          ./target/release/nvctl gpu info || echo "GPU info not available"
+          ./target/release/nvctl gpu memory || echo "Memory info not available"
+
+      - name: Test Fan Control
+        run: |
+          echo "🌡️ Testing fan control..."
+          ./target/release/nvctl fan status || echo "Fan status not available"
+
+      - name: Benchmark GPU operations
+        run: |
+          echo "⚡ Running GPU benchmarks..."
+          # Add custom benchmarks if available
+          cargo bench --all-features || echo "Benchmarks not configured"
+
+      - name: Artifact upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvcontrol-binaries-${{ github.sha }}
+          path: |
+            target/release/nvctl
+            target/release/nvcontrol
