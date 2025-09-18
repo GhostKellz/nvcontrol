@@ -36,6 +36,7 @@ pub fn add(left: u64, right: u64) -> u64 {
 }
 
 pub mod bolt_integration;
+pub mod nvbind_integration;
 pub mod config;
 pub mod display;
 pub mod fan;

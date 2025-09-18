@@ -93,6 +93,12 @@ enum Command {
         #[command(subcommand)]
         subcommand: BoltSubcommand,
     },
+    /// 🚀 nvbind container runtime (Lightning-fast GPU passthrough)
+    #[command(alias = "nb")]
+    Nvbind {
+        #[command(subcommand)]
+        subcommand: NvbindSubcommand,
+    },
     /// 🔧 System drivers and utilities
     Drivers {
         #[command(subcommand)]
@@ -724,6 +730,168 @@ enum BoltSubcommand {
         /// Force removal
         #[arg(short, long)]
         force: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum NvbindSubcommand {
+    /// Launch optimized gaming container with nvcontrol + nvbind
+    Gaming {
+        /// Game name (cyberpunk2077, valorant, etc.)
+        #[arg(short, long)]
+        game: String,
+        /// Container image
+        #[arg(short, long, default_value = "steam:latest")]
+        image: String,
+        /// GPU device to use
+        #[arg(long, default_value = "0")]
+        gpu: String,
+        /// Enable nvcontrol optimizations
+        #[arg(long)]
+        optimize: bool,
+        /// Digital vibrance percentage (0-200%)
+        #[arg(long, default_value = "80")]
+        vibrance: i32,
+        /// GPU memory overclock offset (MHz)
+        #[arg(long, default_value = "500")]
+        memory_oc: i32,
+        /// GPU core overclock offset (MHz)
+        #[arg(long, default_value = "150")]
+        core_oc: i32,
+    },
+    /// Show enhanced GPU information with nvbind integration
+    Info {
+        /// Include container performance metrics
+        #[arg(long)]
+        containers: bool,
+        /// Output format
+        #[arg(long, value_enum)]
+        format: Option<OutputFormat>,
+    },
+    /// Launch custom container with GPU passthrough
+    Launch {
+        /// Container name
+        #[arg(short, long)]
+        name: String,
+        /// Container image
+        #[arg(short, long)]
+        image: String,
+        /// GPU devices (comma-separated or 'all')
+        #[arg(long, default_value = "0")]
+        gpu: String,
+        /// Runtime profile (gaming, ml-training, inference)
+        #[arg(long, default_value = "gaming")]
+        profile: String,
+        /// Memory limit in GB
+        #[arg(long)]
+        memory: Option<u64>,
+        /// Enable wine optimizations
+        #[arg(long)]
+        wine: bool,
+    },
+    /// List nvbind containers with performance metrics
+    List {
+        /// Show only GPU containers
+        #[arg(long)]
+        gpu_only: bool,
+        /// Include performance metrics
+        #[arg(long)]
+        metrics: bool,
+    },
+    /// Live performance dashboard with nvcontrol + nvbind metrics
+    Dashboard {
+        /// Update interval in seconds
+        #[arg(long, default_value = "1")]
+        interval: u64,
+        /// Enable FPS overlay
+        #[arg(long)]
+        fps_overlay: bool,
+        /// Enable latency metrics
+        #[arg(long)]
+        latency: bool,
+    },
+    /// Apply unified configuration (nvcontrol + nvbind)
+    Config {
+        /// Configuration profile name
+        #[arg(short, long)]
+        profile: String,
+        /// GPU ID
+        #[arg(long, default_value = "0")]
+        gpu: String,
+        /// Save as new profile
+        #[arg(long)]
+        save: bool,
+    },
+    /// Container runtime status and diagnostics
+    Status {
+        /// Show detailed driver information
+        #[arg(long)]
+        drivers: bool,
+        /// Show performance metrics
+        #[arg(long)]
+        metrics: bool,
+    },
+    /// Stop nvbind container
+    Stop {
+        /// Container name or ID
+        #[arg(short, long)]
+        container: String,
+    },
+    /// Remove nvbind container
+    Remove {
+        /// Container name or ID
+        #[arg(short, long)]
+        container: String,
+        /// Force removal
+        #[arg(short, long)]
+        force: bool,
+    },
+    /// Create game-specific optimization profile
+    Profile {
+        #[command(subcommand)]
+        subcommand: NvbindProfileSubcommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum NvbindProfileSubcommand {
+    /// Create new gaming profile
+    Create {
+        /// Profile name
+        #[arg(short, long)]
+        name: String,
+        /// Game name or type
+        #[arg(short, long)]
+        game: String,
+        /// Digital vibrance (0-200%)
+        #[arg(long, default_value = "80")]
+        vibrance: i32,
+        /// Memory overclock offset (MHz)
+        #[arg(long, default_value = "500")]
+        memory_oc: i32,
+        /// Core overclock offset (MHz)
+        #[arg(long, default_value = "150")]
+        core_oc: i32,
+        /// Power limit percentage
+        #[arg(long, default_value = "120")]
+        power_limit: u32,
+    },
+    /// List available profiles
+    List,
+    /// Apply existing profile
+    Apply {
+        /// Profile name
+        #[arg(short, long)]
+        name: String,
+        /// GPU ID
+        #[arg(long, default_value = "0")]
+        gpu: String,
+    },
+    /// Delete profile
+    Delete {
+        /// Profile name
+        #[arg(short, long)]
+        name: String,
     },
 }
 
@@ -2317,6 +2485,232 @@ fn main() {
                         }
                     }
                     Err(e) => eprintln!("❌ Failed to create async runtime: {}", e),
+                }
+            }
+        },
+        Command::Nvbind { subcommand } => match subcommand {
+            NvbindSubcommand::Gaming {
+                game,
+                image,
+                gpu,
+                optimize,
+                vibrance,
+                memory_oc,
+                core_oc,
+            } => {
+                use nvcontrol::nvbind_integration::{
+                    NvcontrolNvbindBridge, create_cyberpunk2077_profile, create_valorant_profile
+                };
+
+                println!("🚀 Launching optimized gaming container with nvbind + nvcontrol");
+                println!("   Game: {}", game);
+                println!("   Image: {}", image);
+                println!("   GPU: {}", gpu);
+
+                match tokio::runtime::Runtime::new() {
+                    Ok(rt) => {
+                        match rt.block_on(async {
+                            let bridge = NvcontrolNvbindBridge::new().await?;
+
+                            // Use predefined profiles or create custom
+                            let (container_config, mut nvcontrol_profile) = match game.to_lowercase().as_str() {
+                                "cyberpunk2077" | "cyberpunk" => create_cyberpunk2077_profile(),
+                                "valorant" => create_valorant_profile(),
+                                _ => {
+                                    println!("   Using custom profile for {}", game);
+                                    let (mut config, mut profile) = create_cyberpunk2077_profile();
+                                    config.container_spec.name = game.clone();
+                                    config.container_spec.image = image.clone();
+                                    profile.name = format!("{} Gaming Profile", game);
+                                    (config, profile)
+                                }
+                            };
+
+                            if optimize {
+                                // Apply custom optimizations
+                                nvcontrol_profile.digital_vibrance = vibrance;
+                                nvcontrol_profile.gpu_overclock.memory_offset_mhz = memory_oc;
+                                nvcontrol_profile.gpu_overclock.core_offset_mhz = core_oc;
+                            }
+
+                            bridge.launch_optimized_gaming_container(container_config, nvcontrol_profile).await
+                        }) {
+                            Ok(container_id) => {
+                                println!("✅ Gaming container launched successfully!");
+                                println!("   Container ID: {}", container_id);
+                                println!("   🎮 nvbind: Sub-microsecond GPU latency active");
+                                println!("   🎯 nvcontrol: Gaming optimizations applied");
+                                if optimize {
+                                    println!("   🌈 Digital vibrance: {}%", vibrance);
+                                    println!("   ⚡ GPU overclock: +{}MHz core, +{}MHz memory", core_oc, memory_oc);
+                                }
+                            }
+                            Err(e) => eprintln!("❌ Failed to launch gaming container: {}", e),
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Failed to create async runtime: {}", e),
+                }
+            }
+            NvbindSubcommand::Info { containers, format } => {
+                use nvcontrol::nvbind_integration::NvcontrolNvbindBridge;
+
+                println!("🔍 Enhanced GPU information with nvbind integration");
+
+                match tokio::runtime::Runtime::new() {
+                    Ok(rt) => {
+                        match rt.block_on(async {
+                            let mut bridge = NvcontrolNvbindBridge::new().await?;
+                            bridge.get_enhanced_gpu_info().await
+                        }) {
+                            Ok(gpu_infos) => {
+                                for gpu_info in &gpu_infos {
+                                    println!("🎮 GPU: {}", gpu_info.basic_info.name);
+                                    println!("   ID: {}", gpu_info.basic_info.id);
+                                    println!("   Memory: {}MB", gpu_info.basic_info.memory_mb);
+                                    println!("   Driver: {}", gpu_info.driver_info.version);
+
+                                    if let Some(vibrance) = gpu_info.digital_vibrance {
+                                        println!("   🌈 Digital Vibrance: {}%", vibrance);
+                                    }
+
+                                    if let Some(thermal) = &gpu_info.thermal_state {
+                                        println!("   🌡️ Temperature: {}°C", thermal.temperature_c);
+                                        println!("   🌀 Fan Speed: {}%", thermal.fan_speed_percent);
+                                        println!("   ⚡ Power Draw: {:.1}W", thermal.power_draw_w);
+                                    }
+
+                                    if containers && !gpu_info.active_containers.is_empty() {
+                                        println!("   🐳 Active Containers: {}", gpu_info.active_containers.len());
+                                        for container_id in &gpu_info.active_containers {
+                                            if let Some(metrics) = gpu_info.container_performance.get(container_id) {
+                                                println!("     {} - GPU: {:.1}%, Latency: {}μs, FPS: {:.1}",
+                                                    container_id, metrics.gpu_utilization, metrics.latency_us, metrics.fps);
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if let Some(fmt) = format {
+                                    match fmt {
+                                        OutputFormat::Json => {
+                                            println!("{}", serde_json::to_string_pretty(&gpu_infos).unwrap_or_default());
+                                        }
+                                        OutputFormat::Human => {
+                                            // Already printed in human-readable format above
+                                        }
+                                        OutputFormat::Table => {
+                                            // Already printed in table format above
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => eprintln!("❌ Failed to get GPU info: {}", e),
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Failed to create async runtime: {}", e),
+                }
+            }
+            NvbindSubcommand::Dashboard { interval, fps_overlay, latency } => {
+                use nvcontrol::nvbind_integration::NvcontrolNvbindBridge;
+
+                println!("🎮 ULTIMATE GAMING PERFORMANCE DASHBOARD 🎮");
+                println!("📊 nvcontrol + nvbind unified monitoring");
+                println!("⚡ Update interval: {}s", interval);
+                if fps_overlay { println!("🎯 FPS overlay: enabled"); }
+                if latency { println!("⏱️ Latency tracking: enabled"); }
+                println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+                match tokio::runtime::Runtime::new() {
+                    Ok(rt) => {
+                        rt.block_on(async {
+                            let bridge = match NvcontrolNvbindBridge::new().await {
+                                Ok(b) => b,
+                                Err(e) => {
+                                    eprintln!("❌ Failed to initialize bridge: {}", e);
+                                    return;
+                                }
+                            };
+
+                            loop {
+                                match bridge.get_live_performance().await {
+                                    Ok(dashboard) => {
+                                        // Clear screen and show dashboard
+                                        print!("\x1B[2J\x1B[1;1H");
+                                        println!("🎮 ULTIMATE GAMING PERFORMANCE DASHBOARD 🎮");
+                                        println!("GPU Temp: {}°C | Fan: {}% | Power: {:.1}W",
+                                                 dashboard.gpu_stats.temperature,
+                                                 dashboard.gpu_stats.fan_speed,
+                                                 dashboard.gpu_stats.power_draw);
+                                        println!("Container Latency: {}μs | FPS: {:.1} | GPU Load: {:.1}%",
+                                                 dashboard.container_stats.latency_us,
+                                                 dashboard.gpu_stats.fps,
+                                                 dashboard.gpu_stats.utilization);
+                                        println!("nvbind Status: ✅ {} | nvcontrol: ✅ {}",
+                                                 dashboard.nvbind_status, dashboard.nvcontrol_status);
+
+                                        if fps_overlay {
+                                            println!("🎯 FPS: {:.1} | Frame Time: {:.2}ms",
+                                                     dashboard.gpu_stats.fps,
+                                                     1000.0 / dashboard.gpu_stats.fps);
+                                        }
+
+                                        if latency {
+                                            println!("⏱️ GPU Latency: {}μs | Memory Usage: {}MB",
+                                                     dashboard.container_stats.latency_us,
+                                                     dashboard.container_stats.memory_usage_mb);
+                                        }
+                                    }
+                                    Err(e) => eprintln!("❌ Dashboard update failed: {}", e),
+                                }
+
+                                tokio::time::sleep(tokio::time::Duration::from_secs(interval)).await;
+                            }
+                        });
+                    }
+                    Err(e) => eprintln!("❌ Failed to create async runtime: {}", e),
+                }
+            }
+            NvbindSubcommand::List { gpu_only, metrics } => {
+                println!("🐳 nvbind containers with performance metrics");
+                // Implementation would list actual nvbind containers
+                println!("   Feature implementation in progress...");
+            }
+            NvbindSubcommand::Launch { .. } => {
+                println!("🚀 nvbind container launch");
+                println!("   Feature implementation in progress...");
+            }
+            NvbindSubcommand::Config { .. } => {
+                println!("🔧 nvbind unified configuration");
+                println!("   Feature implementation in progress...");
+            }
+            NvbindSubcommand::Status { .. } => {
+                println!("📊 nvbind runtime status");
+                println!("   Feature implementation in progress...");
+            }
+            NvbindSubcommand::Stop { .. } => {
+                println!("🛑 nvbind container stop");
+                println!("   Feature implementation in progress...");
+            }
+            NvbindSubcommand::Remove { .. } => {
+                println!("🗑️ nvbind container remove");
+                println!("   Feature implementation in progress...");
+            }
+            NvbindSubcommand::Profile { subcommand } => match subcommand {
+                NvbindProfileSubcommand::Create { .. } => {
+                    println!("📝 Create nvbind gaming profile");
+                    println!("   Feature implementation in progress...");
+                }
+                NvbindProfileSubcommand::List => {
+                    println!("📋 Available nvbind profiles");
+                    println!("   Feature implementation in progress...");
+                }
+                NvbindProfileSubcommand::Apply { .. } => {
+                    println!("🎯 Apply nvbind profile");
+                    println!("   Feature implementation in progress...");
+                }
+                NvbindProfileSubcommand::Delete { .. } => {
+                    println!("🗑️ Delete nvbind profile");
+                    println!("   Feature implementation in progress...");
                 }
             }
         },

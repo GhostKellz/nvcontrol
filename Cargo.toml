@@ -58,9 +58,13 @@ libc = "0.2"
 bolt = { git = "https://github.com/CK-Technology/bolt", optional = true }
 tokio = { version = "1.0", features = ["full"] }
 
+# nvbind integration - Lightning-fast GPU container runtime
+nvbind = { git = "https://github.com/ghostkellz/nvbind", optional = true }
+
 [features]
 default = ["gui", "tray", "bolt-api"]
 gui = ["eframe", "winit"]
 tray = ["tray-icon"]
 bolt-api = ["bolt"]
+nvbind-api = ["nvbind"]
 
