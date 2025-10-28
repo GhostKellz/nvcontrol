@@ -53,6 +53,7 @@ indicatif = "0.17"
 
 # Pure Rust vibrance and container support
 libc = "0.2"
+nix = { version = "0.29", features = ["ioctl"] }
 
 # Bolt container runtime support
 bolt = { git = "https://github.com/CK-Technology/bolt", optional = true }

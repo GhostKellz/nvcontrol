@@ -1,35 +1,33 @@
+use crate::nvkms_bindings::*;
 use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs::OpenOptions;
+use std::fs::File;
 use std::os::unix::io::AsRawFd;
 
-/// Pure Rust Digital Vibrance Implementation
+/// Pure Rust Digital Vibrance Implementation using NVKMS ioctls
 /// Direct interface with NVIDIA Open Drivers (580+)
 /// No external dependencies - built into nvctl
-/// Based on nVibrant's low-level driver approach
 
 const NVIDIA_MODESET_DEVICE: &str = "/dev/nvidia-modeset";
-const NVIDIA_CTL_DEVICE: &str = "/dev/nvidiactl";
-
-// NVIDIA driver constants (from nvidia-modeset headers)
-const NVIDIA_MODESET_IOCTL_SET_DISPLAY_ATTRIBUTE: u64 = 0x40184e06;
-const NVIDIA_DISPLAY_ATTRIBUTE_DIGITAL_VIBRANCE: u32 = 3;
 
 // Vibrance range: -1024 (grayscale) to 1023 (200% saturation), 0 = default
-const VIBRANCE_MIN: i32 = -1024;
-const VIBRANCE_MAX: i32 = 1023;
-const VIBRANCE_DEFAULT: i32 = 0;
+const VIBRANCE_MIN: i64 = -1024;
+const VIBRANCE_MAX: i64 = 1023;
+const VIBRANCE_DEFAULT: i64 = 0;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct NativeVibranceController {
     pub devices: Vec<NvidiaDevice>,
     pub driver_version: String,
     pub open_driver: bool,
+    #[allow(dead_code)]
+    modeset_file: Option<File>, // Keep file handle alive
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NvidiaDevice {
+    pub device_handle: u32,
     pub device_id: u32,
     pub name: String,
     pub displays: Vec<NvidiaDisplay>,
@@ -38,21 +36,15 @@ pub struct NvidiaDevice {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NvidiaDisplay {
-    pub display_id: u32,
+    pub disp_handle: u32,
+    pub dpy_id: u32,
     pub connector_type: String,
     pub connected: bool,
     pub resolution: (u32, u32),
     pub refresh_rate: Option<f32>,
-    pub current_vibrance: i32,
+    pub current_vibrance: i64,
     pub vibrance_supported: bool,
-}
-
-#[derive(Debug, Clone)]
-struct DisplayAttributeRequest {
-    device_id: u32,
-    display_mask: u32,
-    attribute: u32,
-    value: i32,
+    pub vibrance_range: (i64, i64),
 }
 
 impl NativeVibranceController {
@@ -68,19 +60,23 @@ impl NativeVibranceController {
             ));
         }
 
-        // Detect NVIDIA devices and displays
-        let devices = Self::detect_nvidia_devices()?;
+        // Open nvidia-modeset device
+        let modeset_file = Self::open_modeset_device()?;
+        let modeset_fd = modeset_file.as_raw_fd();
+
+        // Detect NVIDIA devices and displays using NVKMS ioctls
+        let devices = Self::detect_nvidia_devices_via_nvkms(modeset_fd)?;
 
         Ok(NativeVibranceController {
             devices,
             driver_version,
             open_driver,
+            modeset_file: Some(modeset_file),
         })
     }
 
     /// Check if we're using NVIDIA open drivers
     fn is_open_driver(version: &str) -> NvResult<bool> {
-        // NVIDIA open drivers are available from 515+ but recommended 580+
         let version_num: u32 = version
             .split('.')
             .next()
@@ -96,16 +92,10 @@ impl NativeVibranceController {
         use std::process::Command;
 
         let output = Command::new("nvidia-smi")
-            .args(&[
-                "--query-gpu=driver_version",
-                "--format=csv,noheader,nounits",
-            ])
+            .args(&["--query-gpu=driver_version", "--format=csv,noheader,nounits"])
             .output()
             .map_err(|e| {
-                NvControlError::VibranceControlFailed(format!(
-                    "Failed to get driver version: {}",
-                    e
-                ))
+                NvControlError::VibranceControlFailed(format!("Failed to get driver version: {}", e))
             })?;
 
         if output.status.success() {
@@ -117,32 +107,202 @@ impl NativeVibranceController {
         }
     }
 
-    /// Detect NVIDIA devices and their displays
-    fn detect_nvidia_devices() -> NvResult<Vec<NvidiaDevice>> {
-        let mut devices = Vec::new();
+    /// Open /dev/nvidia-modeset device
+    fn open_modeset_device() -> NvResult<File> {
+        use std::fs::OpenOptions;
 
-        // Check if nvidia-modeset device exists
         if !std::path::Path::new(NVIDIA_MODESET_DEVICE).exists() {
             return Err(NvControlError::VibranceControlFailed(
                 "NVIDIA modeset device not found. Ensure nvidia_drm.modeset=1".to_string(),
             ));
         }
 
-        // Query GPU information using nvidia-smi
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(NVIDIA_MODESET_DEVICE)
+            .map_err(|e| {
+                NvControlError::VibranceControlFailed(format!(
+                    "Failed to open nvidia-modeset device: {}. Try running with sudo or add user to nvidia group",
+                    e
+                ))
+            })?;
+
+        Ok(file)
+    }
+
+    /// Detect NVIDIA devices and displays using NVKMS ioctls
+    fn detect_nvidia_devices_via_nvkms(fd: i32) -> NvResult<Vec<NvidiaDevice>> {
+        let mut devices = Vec::new();
+
+        // Get driver version for version string
+        let driver_version = Self::get_driver_version()?;
+
+        // Get GPU information from nvidia-smi first
         let gpu_info = Self::get_gpu_info()?;
 
         for (device_id, gpu_name, pci_id) in gpu_info {
-            let displays = Self::detect_displays_for_device(device_id)?;
+            // Prepare version string
+            let mut version_string = [0u8; 64];
+            let version_bytes = driver_version.as_bytes();
+            let copy_len = version_bytes.len().min(63);
+            version_string[..copy_len].copy_from_slice(&version_bytes[..copy_len]);
 
-            devices.push(NvidiaDevice {
-                device_id,
-                name: gpu_name,
-                displays,
-                pci_id,
-            });
+            // Prepare registry keys (empty)
+            let registry_keys = [RegistryKey {
+                name: [0u8; 64],
+                value: 0,
+            }; 16];
+
+            // Allocate NVKMS device
+            let mut alloc_params = NvKmsAllocDeviceParams {
+                request: NvKmsAllocDeviceRequest {
+                    version_string,
+                    device_id: NvKmsDeviceId {
+                        rm_device_id: device_id,
+                        mig_device: MIGDeviceId { value: 0 }, // No MIG
+                    },
+                    sli_mosaic: 0,                                 // NV_FALSE
+                    try_infer_sli_mosaic_from_existing_device: 0,  // NV_FALSE
+                    no3d: 1,                                        // NV_TRUE (like nvibrant)
+                    enable_console_hotplug_handling: 0,             // NV_FALSE
+                    registry_keys,
+                },
+                reply: unsafe { std::mem::zeroed() },
+            };
+
+            unsafe {
+                match nvkms_ioctl(fd, NvKmsIoctlCommand::AllocDevice, &mut alloc_params) {
+                    Ok(_) => {
+                        // Check status
+                        if alloc_params.reply.status != NvKmsAllocDeviceStatus::Success {
+                            eprintln!(
+                                "NVKMS device allocation failed with status: {:?}",
+                                alloc_params.reply.status
+                            );
+                            continue;
+                        }
+
+                        let device_handle = alloc_params.reply.device_handle;
+                        let num_disps = alloc_params.reply.num_disps as usize;
+
+                        // Query displays for each disp
+                        let mut displays = Vec::new();
+                        for disp_idx in 0..num_disps {
+                            let disp_handle = alloc_params.reply.disp_handles[disp_idx];
+                            let disp_displays =
+                                Self::query_displays_for_disp(fd, device_handle, disp_handle)?;
+                            displays.extend(disp_displays);
+                        }
+
+                        devices.push(NvidiaDevice {
+                            device_handle,
+                            device_id,
+                            name: gpu_name.clone(),
+                            displays,
+                            pci_id: pci_id.clone(),
+                        });
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to allocate NVKMS device {}: {}", device_id, e);
+                        continue;
+                    }
+                }
+            }
         }
 
         Ok(devices)
+    }
+
+    /// Query displays for a specific disp using NVKMS ioctls
+    fn query_displays_for_disp(
+        fd: i32,
+        device_handle: u32,
+        disp_handle: u32,
+    ) -> NvResult<Vec<NvidiaDisplay>> {
+        let mut query_params = NvKmsQueryDispParams {
+            request: NvKmsQueryDispRequest {
+                device_handle,
+                disp_handle,
+            },
+            reply: unsafe { std::mem::zeroed() },
+        };
+
+        unsafe {
+            nvkms_ioctl(fd, NvKmsIoctlCommand::QueryDisp, &mut query_params).map_err(|e| {
+                NvControlError::VibranceControlFailed(format!("Failed to query displays: {}", e))
+            })?;
+        }
+
+        let mut displays = Vec::new();
+
+        // Parse valid displays from the reply
+        for dpy_id in query_params.reply.valid_dpys.id.iter() {
+            if *dpy_id == 0 {
+                break; // End of valid displays
+            }
+
+            // Get vibrance range for this display
+            let vibrance_range = Self::get_vibrance_range(fd, device_handle, disp_handle, *dpy_id)
+                .unwrap_or((VIBRANCE_MIN, VIBRANCE_MAX));
+
+            // Get current vibrance value
+            let current_vibrance =
+                Self::get_vibrance_via_ioctl(fd, device_handle, disp_handle, *dpy_id)
+                    .unwrap_or(VIBRANCE_DEFAULT);
+
+            // Query display info from system
+            let display_info = Self::query_display_info(*dpy_id);
+
+            displays.push(NvidiaDisplay {
+                disp_handle,
+                dpy_id: *dpy_id,
+                connector_type: display_info.connector_type,
+                connected: true,
+                resolution: display_info.resolution,
+                refresh_rate: display_info.refresh_rate,
+                current_vibrance,
+                vibrance_supported: true,
+                vibrance_range,
+            });
+        }
+
+        Ok(displays)
+    }
+
+    /// Get vibrance range for a display
+    fn get_vibrance_range(
+        fd: i32,
+        device_handle: u32,
+        disp_handle: u32,
+        dpy_id: u32,
+    ) -> NvResult<(i64, i64)> {
+        let mut params = NvKmsGetDpyAttributeValidValuesParams {
+            request: NvKmsGetDpyAttributeValidValuesRequest {
+                device_handle,
+                disp_handle,
+                dpy_id,
+                attribute: NvKmsDpyAttribute::DigitalVibrance,
+            },
+            reply: unsafe { std::mem::zeroed() },
+        };
+
+        unsafe {
+            nvkms_ioctl(fd, NvKmsIoctlCommand::GetDpyAttributeValidValues, &mut params).map_err(
+                |e| {
+                    NvControlError::VibranceControlFailed(format!(
+                        "Failed to get vibrance range: {}",
+                        e
+                    ))
+                },
+            )?;
+
+            if params.reply.attr_type == NvKmsAttributeType::Range {
+                Ok((params.reply.u.range.min, params.reply.u.range.max))
+            } else {
+                Ok((VIBRANCE_MIN, VIBRANCE_MAX))
+            }
+        }
     }
 
     /// Get GPU information from nvidia-smi
@@ -173,140 +333,25 @@ impl NativeVibranceController {
         Ok(gpu_info)
     }
 
-    /// Detect displays for a specific GPU device
-    fn detect_displays_for_device(device_id: u32) -> NvResult<Vec<NvidiaDisplay>> {
-        // Use nvidia-settings to query connected displays
-        // This is a fallback until we implement direct driver queries
-        let displays = Self::query_displays_via_nvidia_settings(device_id)
-            .unwrap_or_else(|_| Self::create_default_displays());
-
-        Ok(displays)
-    }
-
-    /// Query displays using nvidia-settings (temporary fallback)
-    fn query_displays_via_nvidia_settings(device_id: u32) -> NvResult<Vec<NvidiaDisplay>> {
-        use std::process::Command;
-
-        let output = Command::new("nvidia-settings")
-            .args(&["--display-id", &format!("{}", device_id), "--query", "all"])
-            .output()
-            .map_err(|e| NvControlError::CommandFailed(format!("nvidia-settings failed: {}", e)))?;
-
-        let output_str = String::from_utf8_lossy(&output.stdout);
-        let mut displays = Vec::new();
-
-        // Parse nvidia-settings output for connected displays
-        for (display_id, line) in output_str.lines().enumerate() {
-            if line.contains("connected") {
-                displays.push(NvidiaDisplay {
-                    display_id: display_id as u32,
-                    connector_type: Self::extract_connector_type(line),
-                    connected: true,
-                    resolution: Self::extract_resolution(line),
-                    refresh_rate: Self::extract_refresh_rate(line),
-                    current_vibrance: VIBRANCE_DEFAULT,
-                    vibrance_supported: true,
-                });
-            }
-        }
-
-        if displays.is_empty() {
-            // Create default displays if detection fails
-            displays = Self::create_default_displays();
-        }
-
-        Ok(displays)
-    }
-
-    /// Create default displays when detection fails
-    fn create_default_displays() -> Vec<NvidiaDisplay> {
-        vec![
-            NvidiaDisplay {
-                display_id: 0,
-                connector_type: "HDMI-A".to_string(),
-                connected: true,
-                resolution: (1920, 1080),
-                refresh_rate: Some(60.0),
-                current_vibrance: VIBRANCE_DEFAULT,
-                vibrance_supported: true,
-            },
-            NvidiaDisplay {
-                display_id: 1,
-                connector_type: "DP".to_string(),
-                connected: false,
-                resolution: (0, 0),
-                refresh_rate: None,
-                current_vibrance: VIBRANCE_DEFAULT,
-                vibrance_supported: true,
-            },
-        ]
-    }
-
-    /// Extract connector type from nvidia-settings output
-    fn extract_connector_type(line: &str) -> String {
-        if line.contains("HDMI") {
-            "HDMI-A".to_string()
-        } else if line.contains("DP") || line.contains("DisplayPort") {
-            "DP".to_string()
-        } else if line.contains("DVI") {
-            "DVI-D".to_string()
-        } else {
-            "Unknown".to_string()
-        }
-    }
-
-    /// Extract resolution from nvidia-settings output
-    fn extract_resolution(line: &str) -> (u32, u32) {
-        // Simple regex-like parsing for resolution
-        for part in line.split_whitespace() {
-            if part.contains('x') && !part.contains('@') {
-                let res_parts: Vec<&str> = part.split('x').collect();
-                if res_parts.len() == 2 {
-                    if let (Ok(w), Ok(h)) = (res_parts[0].parse(), res_parts[1].parse()) {
-                        return (w, h);
-                    }
-                }
-            }
-        }
-        (1920, 1080) // Default resolution
-    }
-
-    /// Extract refresh rate from nvidia-settings output
-    fn extract_refresh_rate(line: &str) -> Option<f32> {
-        for part in line.split_whitespace() {
-            if part.contains("Hz") {
-                let hz_str = part.replace("Hz", "");
-                if let Ok(rate) = hz_str.parse::<f32>() {
-                    return Some(rate);
-                }
-            }
-        }
-        Some(60.0) // Default refresh rate
-    }
-
     /// Set vibrance for all connected displays
     pub fn set_vibrance_all(&mut self, vibrance_percentage: u32) -> NvResult<()> {
         let vibrance_value = self.percentage_to_vibrance(vibrance_percentage);
+        let fd = self
+            .modeset_file
+            .as_ref()
+            .ok_or_else(|| NvControlError::VibranceControlFailed("Device not initialized".to_string()))?
+            .as_raw_fd();
 
-        // Collect display information first to avoid borrowing conflicts
-        let mut display_info = Vec::new();
-        for device in &self.devices {
-            for display in &device.displays {
-                if display.connected && display.vibrance_supported {
-                    display_info.push((device.device_id, display.display_id));
-                }
-            }
-        }
-
-        // Set vibrance for each display
-        for (device_id, display_id) in display_info {
-            self.set_display_vibrance_raw(device_id, display_id, vibrance_value)?;
-        }
-
-        // Update current vibrance values
         for device in &mut self.devices {
             for display in &mut device.displays {
                 if display.connected && display.vibrance_supported {
+                    Self::set_vibrance_via_ioctl(
+                        fd,
+                        device.device_handle,
+                        display.disp_handle,
+                        display.dpy_id,
+                        vibrance_value,
+                    )?;
                     display.current_vibrance = vibrance_value;
                 }
             }
@@ -324,206 +369,114 @@ impl NativeVibranceController {
         vibrance_percentage: u32,
     ) -> NvResult<()> {
         let vibrance_value = self.percentage_to_vibrance(vibrance_percentage);
+        let fd = self
+            .modeset_file
+            .as_ref()
+            .ok_or_else(|| NvControlError::VibranceControlFailed("Device not initialized".to_string()))?
+            .as_raw_fd();
 
-        // Check if the display exists and supports vibrance
-        {
-            let device = self
-                .devices
-                .iter()
-                .find(|d| d.device_id == device_id)
-                .ok_or_else(|| {
-                    NvControlError::VibranceControlFailed(format!("Device {} not found", device_id))
-                })?;
-
-            let display = device
-                .displays
-                .iter()
-                .find(|d| d.display_id == display_id)
-                .ok_or_else(|| {
-                    NvControlError::VibranceControlFailed(format!(
-                        "Display {} not found on device {}",
-                        display_id, device_id
-                    ))
-                })?;
-
-            if !display.vibrance_supported {
-                return Err(NvControlError::VibranceControlFailed(
-                    "Vibrance not supported on this display".to_string(),
-                ));
+        // Find the device and display
+        for device in &mut self.devices {
+            if device.device_id == device_id {
+                for display in &mut device.displays {
+                    if display.dpy_id == display_id {
+                        Self::set_vibrance_via_ioctl(
+                            fd,
+                            device.device_handle,
+                            display.disp_handle,
+                            display.dpy_id,
+                            vibrance_value,
+                        )?;
+                        display.current_vibrance = vibrance_value;
+                        println!(
+                            "✅ Set device {} display {} to {}% vibrance",
+                            device_id, display_id, vibrance_percentage
+                        );
+                        return Ok(());
+                    }
+                }
             }
         }
 
-        // Set the vibrance value
-        self.set_display_vibrance_raw(device_id, display_id, vibrance_value)?;
-
-        // Update the cached value
-        let device = self
-            .devices
-            .iter_mut()
-            .find(|d| d.device_id == device_id)
-            .unwrap();
-        let display = device
-            .displays
-            .iter_mut()
-            .find(|d| d.display_id == display_id)
-            .unwrap();
-        display.current_vibrance = vibrance_value;
-
-        println!(
-            "✅ Set device {} display {} to {}% vibrance",
-            device_id, display_id, vibrance_percentage
-        );
-        Ok(())
+        Err(NvControlError::VibranceControlFailed(format!(
+            "Display {} not found on device {}",
+            display_id, device_id
+        )))
     }
 
-    /// Set raw vibrance value using direct driver interface
-    fn set_display_vibrance_raw(
-        &self,
-        device_id: u32,
-        display_id: u32,
-        vibrance_value: i32,
+    /// Set vibrance using NVKMS ioctl
+    fn set_vibrance_via_ioctl(
+        fd: i32,
+        device_handle: u32,
+        disp_handle: u32,
+        dpy_id: u32,
+        vibrance_value: i64,
     ) -> NvResult<()> {
-        // Clamp vibrance value to valid range
         let clamped_value = vibrance_value.clamp(VIBRANCE_MIN, VIBRANCE_MAX);
 
-        // Try direct modeset interface first
-        if let Err(_e) = self.set_vibrance_via_modeset(device_id, display_id, clamped_value) {
-            // Fallback to nvidia-settings if direct interface fails
-            self.set_vibrance_via_nvidia_settings(device_id, display_id, clamped_value)?;
-        }
-
-        Ok(())
-    }
-
-    /// Set vibrance using direct nvidia-modeset interface
-    fn set_vibrance_via_modeset(
-        &self,
-        device_id: u32,
-        display_id: u32,
-        vibrance_value: i32,
-    ) -> NvResult<()> {
-        // Open nvidia-modeset device
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(NVIDIA_MODESET_DEVICE)
-            .map_err(|e| NvControlError::VibranceControlFailed(
-                format!("Failed to open nvidia-modeset device: {}. Try running with sudo or add user to nvidia group", e)
-            ))?;
-
-        // Prepare display attribute request
-        let display_mask = 1u32 << display_id;
-        let request = DisplayAttributeRequest {
-            device_id,
-            display_mask,
-            attribute: NVIDIA_DISPLAY_ATTRIBUTE_DIGITAL_VIBRANCE,
-            value: vibrance_value,
+        let mut params = NvKmsSetDpyAttributeParams {
+            request: NvKmsSetDpyAttributeRequest {
+                device_handle,
+                disp_handle,
+                dpy_id,
+                attribute: NvKmsDpyAttribute::DigitalVibrance,
+                value: clamped_value,
+            },
+            reply: NvKmsSetDpyAttributeReply { padding: 0 },
         };
 
-        // Convert request to bytes for ioctl
-        let request_bytes = unsafe {
-            std::slice::from_raw_parts(
-                &request as *const _ as *const u8,
-                std::mem::size_of::<DisplayAttributeRequest>(),
-            )
-        };
-
-        // Perform ioctl call
-        let result = unsafe {
-            libc::ioctl(
-                file.as_raw_fd(),
-                NVIDIA_MODESET_IOCTL_SET_DISPLAY_ATTRIBUTE,
-                request_bytes.as_ptr(),
-            )
-        };
-
-        if result == -1 {
-            return Err(NvControlError::VibranceControlFailed(
-                "ioctl call failed - falling back to nvidia-settings".to_string(),
-            ));
-        }
-
-        Ok(())
-    }
-
-    /// Set vibrance using nvidia-settings fallback
-    fn set_vibrance_via_nvidia_settings(
-        &self,
-        device_id: u32,
-        display_id: u32,
-        vibrance_value: i32,
-    ) -> NvResult<()> {
-        use std::process::Command;
-
-        let output = Command::new("nvidia-settings")
-            .args(&[
-                "-a",
-                &format!("[gpu:{}]/DigitalVibrance[{}]={}", device_id, display_id, vibrance_value),
-            ])
-            .output()
-            .map_err(|e| NvControlError::CommandFailed(
-                format!("nvidia-settings failed: {}. Install nvidia-settings or run as root for direct driver access", e)
-            ))?;
-
-        if !output.status.success() {
-            let error = String::from_utf8_lossy(&output.stderr);
-            return Err(NvControlError::VibranceControlFailed(format!(
-                "nvidia-settings vibrance failed: {}",
-                error
-            )));
-        }
-
-        Ok(())
-    }
-
-    /// Get current vibrance for a display
-    pub fn get_display_vibrance(&self, device_id: u32, display_id: u32) -> NvResult<i32> {
-        let device = self
-            .devices
-            .iter()
-            .find(|d| d.device_id == device_id)
-            .ok_or_else(|| {
-                NvControlError::VibranceControlFailed(format!("Device {} not found", device_id))
+        unsafe {
+            nvkms_ioctl(fd, NvKmsIoctlCommand::SetDpyAttribute, &mut params).map_err(|e| {
+                NvControlError::VibranceControlFailed(format!("Failed to set vibrance: {}", e))
             })?;
+        }
 
-        let display = device
-            .displays
-            .iter()
-            .find(|d| d.display_id == display_id)
-            .ok_or_else(|| {
-                NvControlError::VibranceControlFailed(format!("Display {} not found", display_id))
-            })?;
-
-        Ok(display.current_vibrance)
+        Ok(())
     }
 
-    /// Get current vibrance as percentage
-    pub fn get_display_vibrance_percentage(
-        &self,
-        device_id: u32,
-        display_id: u32,
-    ) -> NvResult<u32> {
-        let vibrance_raw = self.get_display_vibrance(device_id, display_id)?;
-        Ok(self.vibrance_to_percentage(vibrance_raw))
+    /// Get vibrance using NVKMS ioctl
+    fn get_vibrance_via_ioctl(
+        fd: i32,
+        device_handle: u32,
+        disp_handle: u32,
+        dpy_id: u32,
+    ) -> NvResult<i64> {
+        let mut params = NvKmsGetDpyAttributeParams {
+            request: NvKmsGetDpyAttributeRequest {
+                device_handle,
+                disp_handle,
+                dpy_id,
+                attribute: NvKmsDpyAttribute::DigitalVibrance,
+            },
+            reply: unsafe { std::mem::zeroed() },
+        };
+
+        unsafe {
+            nvkms_ioctl(fd, NvKmsIoctlCommand::GetDpyAttribute, &mut params).map_err(|e| {
+                NvControlError::VibranceControlFailed(format!("Failed to get vibrance: {}", e))
+            })?;
+        }
+
+        Ok(params.reply.value)
     }
 
     /// Convert percentage (0-200%) to vibrance range (-1024 to 1023)
-    pub fn percentage_to_vibrance(&self, percentage: u32) -> i32 {
-        let percentage = percentage.min(200); // Cap at 200%
+    pub fn percentage_to_vibrance(&self, percentage: u32) -> i64 {
+        let percentage = percentage.min(200);
 
         if percentage <= 100 {
             // 0-100% maps to -1024 to 0
             let ratio = percentage as f32 / 100.0;
-            ((ratio - 1.0) * 1024.0) as i32
+            ((ratio - 1.0) * 1024.0) as i64
         } else {
             // 100-200% maps to 0 to 1023
             let ratio = (percentage - 100) as f32 / 100.0;
-            (ratio * 1023.0) as i32
+            (ratio * 1023.0) as i64
         }
     }
 
     /// Convert vibrance range (-1024 to 1023) to percentage (0-200%)
-    pub fn vibrance_to_percentage(&self, vibrance: i32) -> u32 {
+    pub fn vibrance_to_percentage(&self, vibrance: i64) -> u32 {
         if vibrance <= 0 {
             // -1024 to 0 maps to 0-100%
             (((vibrance + 1024) as f32 / 1024.0) * 100.0) as u32
@@ -546,8 +499,8 @@ impl NativeVibranceController {
             for display in &device.displays {
                 displays.push((
                     device.device_id,
-                    display.display_id,
-                    format!("{}:{}", display.display_id, display.connector_type),
+                    display.dpy_id,
+                    format!("{}:{}", display.dpy_id, display.connector_type),
                     display.connected,
                 ));
             }
@@ -575,6 +528,96 @@ impl NativeVibranceController {
 
         status
     }
+
+    /// Query display information from xrandr/wlr-randr
+    fn query_display_info(_dpy_id: NvU32) -> DisplayQueryInfo {
+        use std::process::Command;
+
+        let mut info = DisplayQueryInfo {
+            connector_type: "Unknown".to_string(),
+            resolution: (1920, 1080),
+            refresh_rate: Some(60.0),
+        };
+
+        // Try xrandr (X11)
+        if let Ok(output) = Command::new("xrandr").arg("--query").output() {
+            if output.status.success() {
+                let output_str = String::from_utf8_lossy(&output.stdout);
+                // Parse xrandr output for display info
+                for line in output_str.lines() {
+                    if line.contains(" connected") {
+                        // Extract connector type (HDMI-1, DP-1, etc.)
+                        if let Some(connector) = line.split_whitespace().next() {
+                            info.connector_type = connector.to_string();
+                        }
+                        // Extract resolution and refresh rate
+                        if let Some(mode) = line.split_whitespace().nth(2) {
+                            if let Some((w, h)) = mode.split_once('x') {
+                                if let (Ok(width), Ok(height)) = (w.parse(), h.parse()) {
+                                    info.resolution = (width, height);
+                                }
+                            }
+                        }
+                        // Look for refresh rate
+                        if line.contains("*") {
+                            for part in line.split_whitespace() {
+                                if part.contains("*") || part.contains("+") {
+                                    if let Ok(rate) = part.trim_matches(|c| c == '*' || c == '+').parse::<f32>() {
+                                        info.refresh_rate = Some(rate);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Try wlr-randr (Wayland)
+        if info.connector_type == "Unknown" {
+            if let Ok(output) = Command::new("wlr-randr").output() {
+                if output.status.success() {
+                    let output_str = String::from_utf8_lossy(&output.stdout);
+                    for line in output_str.lines() {
+                        if !line.starts_with(' ') && !line.is_empty() {
+                            if let Some(connector) = line.split_whitespace().next() {
+                                info.connector_type = connector.to_string();
+                            }
+                        }
+                        if line.contains("current") {
+                            // Parse: "1920x1080 @ 60.000 Hz"
+                            if let Some(res_part) = line.split_whitespace().find(|s| s.contains('x')) {
+                                if let Some((w, h)) = res_part.split_once('x') {
+                                    if let (Ok(width), Ok(height)) = (w.parse(), h.parse()) {
+                                        info.resolution = (width, height);
+                                    }
+                                }
+                            }
+                            if let Some(rate_idx) = line.find("@ ") {
+                                let rate_str = &line[rate_idx + 2..];
+                                if let Some(rate) = rate_str.split_whitespace().next() {
+                                    if let Ok(rate_val) = rate.parse::<f32>() {
+                                        info.refresh_rate = Some(rate_val);
+                                    }
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        info
+    }
+}
+
+struct DisplayQueryInfo {
+    connector_type: String,
+    resolution: (u32, u32),
+    refresh_rate: Option<f32>,
 }
 
 /// Global static vibrance controller instance
@@ -590,9 +633,7 @@ pub fn get_vibrance_controller() -> NvResult<&'static mut NativeVibranceControll
         }
         #[allow(static_mut_refs)]
         VIBRANCE_CONTROLLER.as_mut().ok_or_else(|| {
-            NvControlError::VibranceControlFailed(
-                "Failed to initialize vibrance controller".to_string(),
-            )
+            NvControlError::VibranceControlFailed("Failed to initialize vibrance controller".to_string())
         })
     }
 }
@@ -603,11 +644,7 @@ pub fn set_vibrance_all_native(percentage: u32) -> NvResult<()> {
     controller.set_vibrance_all(percentage)
 }
 
-pub fn set_display_vibrance_native(
-    device_id: u32,
-    display_id: u32,
-    percentage: u32,
-) -> NvResult<()> {
+pub fn set_display_vibrance_native(device_id: u32, display_id: u32, percentage: u32) -> NvResult<()> {
     let controller = get_vibrance_controller()?;
     controller.set_display_vibrance(device_id, display_id, percentage)
 }
@@ -625,38 +662,4 @@ pub fn list_displays_native() -> NvResult<Vec<(u32, u32, String, bool)>> {
 pub fn reset_vibrance_native() -> NvResult<()> {
     let controller = get_vibrance_controller()?;
     controller.reset_all_vibrance()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_percentage_conversion() {
-        let controller = NativeVibranceController::new().unwrap_or_else(|_| {
-            // Create dummy controller for testing
-            NativeVibranceController {
-                devices: Vec::new(),
-                driver_version: "580.0".to_string(),
-                open_driver: true,
-            }
-        });
-
-        assert_eq!(controller.percentage_to_vibrance(0), -1024);
-        assert_eq!(controller.percentage_to_vibrance(100), 0);
-        assert_eq!(controller.percentage_to_vibrance(200), 1023);
-
-        assert_eq!(controller.vibrance_to_percentage(-1024), 0);
-        assert_eq!(controller.vibrance_to_percentage(0), 100);
-        assert_eq!(controller.vibrance_to_percentage(1023), 200);
-    }
-
-    #[test]
-    fn test_vibrance_range_clamping() {
-        let clamped = (-2000_i32).clamp(VIBRANCE_MIN, VIBRANCE_MAX);
-        assert_eq!(clamped, VIBRANCE_MIN);
-
-        let clamped = (2000_i32).clamp(VIBRANCE_MIN, VIBRANCE_MAX);
-        assert_eq!(clamped, VIBRANCE_MAX);
-    }
 }

@@ -46,6 +46,9 @@ pub struct TuiApp {
     gaming_mode_enabled: bool,
     status_message: Option<String>,
     status_message_time: Option<Instant>,
+    fan_control_mode: bool,
+    oc_control_mode: bool,
+    fan_speed_target: u32,
 }
 
 #[derive(Clone, Copy)]
@@ -122,6 +125,9 @@ impl TuiApp {
             gaming_mode_enabled: false,
             status_message: None,
             status_message_time: None,
+            fan_control_mode: false,
+            oc_control_mode: false,
+            fan_speed_target: 50,
         }
     }
 
@@ -161,15 +167,18 @@ impl TuiApp {
                         KeyCode::Char('4') => self.current_tab = 3,
                         KeyCode::Char('5') => self.current_tab = 4,
                         KeyCode::Char('6') => self.current_tab = 5,
-                        // Future features (planned)
+                        // Feature hotkeys
                         KeyCode::Char('e') => {
-                            // TODO: Export data functionality
+                            // Export data to JSON
+                            self.export_metrics();
                         }
                         KeyCode::Char('f') => {
-                            // TODO: Fan control
+                            // Open fan control mode
+                            self.fan_control_mode = !self.fan_control_mode;
                         }
                         KeyCode::Char('o') => {
-                            // TODO: Overclocking controls
+                            // Open overclocking controls
+                            self.oc_control_mode = !self.oc_control_mode;
                         }
                         KeyCode::Char('v') => {
                             // VRR toggle
@@ -1383,6 +1392,47 @@ impl TuiApp {
             }
         } else {
             None
+        }
+    }
+
+    /// Export metrics to JSON file
+    fn export_metrics(&self) {
+        use std::fs::File;
+        use std::io::Write;
+
+        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+        let filename = format!("nvcontrol_metrics_{}.json", timestamp);
+
+        let mut export_data = serde_json::Map::new();
+
+        // Export all GPU metrics
+        for (gpu_id, history) in self.metrics_history.iter().enumerate() {
+            let gpu_data: Vec<_> = history.iter().map(|m| {
+                serde_json::json!({
+                    "temperature": m.temperature,
+                    "gpu_utilization": m.gpu_utilization,
+                    "memory_utilization": m.memory_utilization,
+                    "power_draw": m.power_draw,
+                    "fan_speed": m.fan_speed,
+                    "gpu_clock": m.gpu_clock,
+                    "memory_clock": m.memory_clock,
+                })
+            }).collect();
+
+            export_data.insert(format!("gpu_{}", gpu_id), serde_json::Value::Array(gpu_data));
+        }
+
+        match File::create(&filename) {
+            Ok(mut file) => {
+                if let Ok(json) = serde_json::to_string_pretty(&export_data) {
+                    if file.write_all(json.as_bytes()).is_ok() {
+                        println!("✅ Metrics exported to: {}", filename);
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("❌ Failed to export metrics: {}", e);
+            }
         }
     }
 }

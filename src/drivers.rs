@@ -635,6 +635,46 @@ complete -c nvctl -f -n '__fish_seen_subcommand_from install' -a 'open' -d 'NVID
 complete -c nvctl -f -n '__fish_seen_subcommand_from install' -a 'open-beta' -d 'NVIDIA open source beta driver'"#.to_string()
 }
 
+/// Check for driver updates
+pub fn check_for_updates() -> NvResult<Option<String>> {
+    let status = get_driver_status()?;
+
+    if status.update_available {
+        Ok(status.available_version)
+    } else {
+        Ok(None)
+    }
+}
+
+/// Validate driver installation
+pub fn validate_driver_installation() -> NvResult<bool> {
+    // Check if nvidia-smi works
+    let nvidia_smi = Command::new("nvidia-smi").output();
+    if nvidia_smi.is_err() || !nvidia_smi.unwrap().status.success() {
+        return Ok(false);
+    }
+
+    // Check if kernel modules are loaded
+    let lsmod = Command::new("lsmod").output();
+    if let Ok(output) = lsmod {
+        let modules_str = String::from_utf8_lossy(&output.stdout);
+        if !modules_str.contains("nvidia") {
+            return Ok(false);
+        }
+    }
+
+    // Check DKMS status
+    let dkms = Command::new("dkms").args(&["status"]).output();
+    if let Ok(output) = dkms {
+        let dkms_str = String::from_utf8_lossy(&output.stdout);
+        if dkms_str.contains("nvidia") && !dkms_str.contains("installed") {
+            return Ok(false);
+        }
+    }
+
+    Ok(true)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

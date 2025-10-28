@@ -17,7 +17,6 @@ use nvbind::{
 #[cfg(not(feature = "nvbind-api"))]
 mod mock_nvbind {
     use super::*;
-    use std::time::Duration;
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct GpuDetector {

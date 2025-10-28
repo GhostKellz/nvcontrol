@@ -618,3 +618,158 @@ pub fn get_recording_status() -> NvResult<String> {
 pub fn get_recording_presets() -> NvResult<Vec<crate::recording::RecordingSettings>> {
     crate::recording::load_recording_presets()
 }
+
+/// Apply a Gamescope configuration (saves to config file for persistence)
+pub fn apply_gamescope_config(config: &GamescopeConfig) -> NvResult<()> {
+    use std::fs;
+    use crate::NvControlError;
+
+    // Get config directory
+    let config_dir = dirs::config_dir()
+        .ok_or_else(|| NvControlError::ConfigError("Failed to get config directory".to_string()))?
+        .join("nvcontrol");
+
+    // Create directory if it doesn't exist
+    fs::create_dir_all(&config_dir)
+        .map_err(|e| NvControlError::ConfigError(format!("Failed to create config directory: {}", e)))?;
+
+    let config_path = config_dir.join("gamescope.toml");
+
+    // Serialize config to TOML
+    let toml_string = toml::to_string_pretty(&config)
+        .map_err(|e| NvControlError::ConfigError(format!("Failed to serialize config: {}", e)))?;
+
+    // Write to file
+    fs::write(&config_path, toml_string)
+        .map_err(|e| NvControlError::ConfigError(format!("Failed to write config file: {}", e)))?;
+
+    // Also apply environment variables immediately if requested
+    if config.nvidia_optimizations {
+        for (key, value) in &config.environment_variables {
+            unsafe {
+                std::env::set_var(key, value);
+            }
+        }
+    }
+
+    println!("✅ Gamescope configuration saved to: {}", config_path.display());
+    println!("   Resolution: {}x{}@{}Hz",
+        config.width,
+        config.height,
+        config.refresh_rate.unwrap_or(60)
+    );
+    println!("   Upscaling: {:?}", config.upscaling);
+    println!("   HDR: {}", if config.hdr_enabled { "enabled" } else { "disabled" });
+    println!("   Adaptive Sync: {}", if config.adaptive_sync { "enabled" } else { "disabled" });
+
+    Ok(())
+}
+
+/// Load the saved Gamescope configuration
+pub fn load_gamescope_config() -> NvResult<GamescopeConfig> {
+    use std::fs;
+    use crate::NvControlError;
+
+    let config_path = dirs::config_dir()
+        .ok_or_else(|| NvControlError::ConfigError("Failed to get config directory".to_string()))?
+        .join("nvcontrol")
+        .join("gamescope.toml");
+
+    if !config_path.exists() {
+        return Ok(GamescopeConfig::default());
+    }
+
+    let toml_string = fs::read_to_string(&config_path)
+        .map_err(|e| NvControlError::ConfigError(format!("Failed to read config file: {}", e)))?;
+
+    let config: GamescopeConfig = toml::from_str(&toml_string)
+        .map_err(|e| NvControlError::ConfigError(format!("Failed to parse config: {}", e)))?;
+
+    Ok(config)
+}
+
+/// Launch an application with Gamescope using the current config
+pub fn launch_with_gamescope(command: &str, config: Option<&GamescopeConfig>) -> NvResult<()> {
+    use std::process::Command;
+    use crate::NvControlError;
+
+    let config = match config {
+        Some(c) => c.clone(),
+        None => load_gamescope_config()?,
+    };
+
+    // Build gamescope command
+    let mut cmd = Command::new("gamescope");
+
+    // Basic resolution and refresh rate
+    cmd.args(&["-w", &config.width.to_string()]);
+    cmd.args(&["-h", &config.height.to_string()]);
+
+    if let Some(rate) = config.refresh_rate {
+        cmd.args(&["-r", &rate.to_string()]);
+    }
+
+    // Upscaling
+    cmd.args(&["-F", config.upscaling.as_str()]);
+
+    // FSR sharpness if applicable
+    if let Some(sharpness) = config.upscaling.get_sharpness() {
+        cmd.args(&["--fsr-sharpness", &sharpness.to_string()]);
+    }
+
+    // HDR
+    if config.hdr_enabled {
+        cmd.arg("--hdr-enabled");
+    }
+
+    // Frame limiter
+    if let Some(limit) = config.frame_limiter {
+        cmd.args(&["--fps-limit", &limit.to_string()]);
+    }
+
+    // Adaptive sync / VRR
+    if config.adaptive_sync {
+        cmd.arg("--adaptive-sync");
+    }
+
+    // Fullscreen / borderless
+    if config.fullscreen {
+        cmd.arg("-f");
+    }
+    if config.borderless {
+        cmd.arg("-b");
+    }
+
+    // Steam Deck mode
+    if config.steam_deck_mode {
+        cmd.arg("--steam");
+    }
+
+    // Set environment variables
+    if config.nvidia_optimizations {
+        for (key, value) in &config.environment_variables {
+            cmd.env(key, value);
+        }
+    }
+
+    // Add the command to execute
+    cmd.arg("--");
+    cmd.args(command.split_whitespace());
+
+    println!("🚀 Launching with Gamescope: {}", command);
+    println!("   Config: {}x{}@{}Hz",
+        config.width,
+        config.height,
+        config.refresh_rate.unwrap_or(60)
+    );
+
+    // Execute
+    let status = cmd.status()
+        .map_err(|e| NvControlError::CommandFailed(format!("Failed to launch gamescope: {}", e)))?;
+
+    if !status.success() {
+        return Err(NvControlError::CommandFailed(format!("Gamescope exited with error code: {:?}", status.code())));
+    }
+
+    Ok(())
+}

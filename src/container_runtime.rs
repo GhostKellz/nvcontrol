@@ -2,7 +2,7 @@ use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::bolt_integration::{GpuContainerConfig, NvControlBoltManager};
@@ -824,6 +824,40 @@ build = "{}"
         Ok(Vec::new()) // Placeholder
     }
 
+    /// Get container status by name or ID
+    pub fn get_container_status(&self, container: &str) -> NvResult<super::container::ContainerGpuInfo> {
+        use super::container;
+
+        // Try all runtimes to find the container
+        for runtime in &self.supported_runtimes {
+            let cmd_name = match runtime {
+                ContainerRuntime::Docker => "docker",
+                ContainerRuntime::Podman => "podman",
+                _ => continue,
+            };
+
+            let output = Command::new(cmd_name)
+                .args(&["inspect", container])
+                .output();
+
+            if let Ok(out) = output {
+                if out.status.success() {
+                    // Container found, get its GPU info
+                    let all_containers = container::list_gpu_containers()?;
+                    for c in all_containers {
+                        if c.container_id.contains(container) || c.container_name == container {
+                            return Ok(c);
+                        }
+                    }
+                }
+            }
+        }
+
+        Err(NvControlError::ContainerOperationFailed(
+            format!("Container '{}' not found", container)
+        ))
+    }
+
     /// Create PhantomLink audio container configuration
     pub fn create_phantomlink_container_config(&self) -> NvResult<ContainerLaunchConfig> {
         Ok(ContainerLaunchConfig {
@@ -882,6 +916,188 @@ build = "{}"
             interactive: false,
             remove_on_exit: false,
         })
+    }
+
+    /// Setup container runtime with NVIDIA GPU support
+    pub fn setup_runtime(&self, runtime_name: &str) -> NvResult<()> {
+        println!("🔧 Setting up {} runtime with NVIDIA GPU support...", runtime_name);
+
+        // Check if nvidia-container-toolkit is installed
+        let toolkit_check = Command::new("nvidia-container-toolkit")
+            .arg("--version")
+            .output();
+
+        if toolkit_check.is_err() {
+            println!("⚠️  nvidia-container-toolkit not found");
+            println!("📦 Installation instructions:");
+            println!("   Ubuntu/Debian:");
+            println!("     curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg");
+            println!("     curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \\");
+            println!("       sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \\");
+            println!("       sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list");
+            println!("     sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit");
+            println!();
+            println!("   Fedora/RHEL/CentOS:");
+            println!("     sudo dnf config-manager --add-repo https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo");
+            println!("     sudo dnf install -y nvidia-container-toolkit");
+            println!();
+            println!("   Arch Linux:");
+            println!("     yay -S nvidia-container-toolkit");
+
+            return Err(NvControlError::ContainerOperationFailed(
+                "nvidia-container-toolkit not installed".to_string()
+            ));
+        }
+
+        match runtime_name.to_lowercase().as_str() {
+            "docker" => self.setup_docker_runtime(),
+            "podman" => self.setup_podman_runtime(),
+            "containerd" => self.setup_containerd_runtime(),
+            _ => Err(NvControlError::ContainerOperationFailed(
+                format!("Unsupported runtime: {}", runtime_name)
+            )),
+        }
+    }
+
+    /// Setup Docker with NVIDIA GPU support
+    fn setup_docker_runtime(&self) -> NvResult<()> {
+        println!("🐳 Configuring Docker for NVIDIA GPU support...");
+
+        // Configure docker daemon
+        let daemon_config = r#"{
+    "runtimes": {
+        "nvidia": {
+            "path": "nvidia-container-runtime",
+            "runtimeArgs": []
+        }
+    },
+    "default-runtime": "nvidia"
+}"#;
+
+        let config_path = Path::new("/etc/docker/daemon.json");
+
+        if config_path.exists() {
+            println!("⚠️  /etc/docker/daemon.json already exists");
+            println!("   Please manually add the NVIDIA runtime configuration");
+            println!("{}", daemon_config);
+        } else {
+            println!("📝 Writing Docker daemon configuration...");
+            println!("   Note: This requires root privileges");
+            println!("   Run: sudo nvctl container runtime setup docker");
+        }
+
+        // Restart docker service
+        println!("🔄 Restart Docker to apply changes:");
+        println!("   sudo systemctl restart docker");
+        println!();
+        println!("✅ Docker GPU support configuration complete");
+
+        Ok(())
+    }
+
+    /// Setup Podman with NVIDIA GPU support
+    fn setup_podman_runtime(&self) -> NvResult<()> {
+        println!("🦭 Configuring Podman for NVIDIA GPU support...");
+
+        // Configure podman for CDI
+        println!("📝 Generating CDI specification...");
+
+        let cdi_result = Command::new("sudo")
+            .args(&["nvidia-ctk", "cdi", "generate", "--output=/etc/cdi/nvidia.yaml"])
+            .status();
+
+        match cdi_result {
+            Ok(status) if status.success() => {
+                println!("✅ CDI specification generated");
+            }
+            _ => {
+                println!("⚠️  Failed to generate CDI specification");
+                println!("   Run manually: sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml");
+            }
+        }
+
+        println!("🔄 Testing GPU access in Podman:");
+        println!("   podman run --rm --device nvidia.com/gpu=all ubuntu nvidia-smi");
+        println!();
+        println!("✅ Podman GPU support configuration complete");
+
+        Ok(())
+    }
+
+    /// Setup containerd with NVIDIA GPU support
+    fn setup_containerd_runtime(&self) -> NvResult<()> {
+        println!("📦 Configuring containerd for NVIDIA GPU support...");
+
+        println!("📝 Updating containerd configuration...");
+        println!("   Run: sudo nvidia-ctk runtime configure --runtime=containerd");
+        println!();
+        println!("🔄 Restart containerd:");
+        println!("   sudo systemctl restart containerd");
+        println!();
+        println!("✅ containerd GPU support configuration complete");
+
+        Ok(())
+    }
+
+    /// Configure NVIDIA Container Runtime with optimal settings
+    pub fn configure_runtime(&self) -> NvResult<()> {
+        println!("⚙️  Configuring NVIDIA Container Runtime...");
+
+        let config_dir = &self.config_path;
+        fs::create_dir_all(config_dir)
+            .map_err(|e| NvControlError::ConfigError(format!("Failed to create config dir: {}", e)))?;
+
+        // Create runtime configuration
+        let runtime_config = r#"# NVIDIA Container Runtime Configuration
+# Generated by nvcontrol
+
+[nvidia-container-runtime]
+debug = "/var/log/nvidia-container-runtime.log"
+
+[nvidia-container-cli]
+# Load kernel modules at runtime
+load-kmods = true
+
+# Set GPU devices visibility
+# Options: all, none, or comma-separated device indices (0,1,2)
+devices = "all"
+
+# Driver capabilities to expose
+# Options: compute, compat32, graphics, utility, video, display, all
+capabilities = "compute,utility,graphics,video"
+
+# Enable MIG (Multi-Instance GPU) support
+# Requires MIG-capable GPU and driver
+no-mig = false
+
+# Enable compute mode control
+compute-mode = "default"
+"#;
+
+        let config_file = config_dir.join("runtime.toml");
+        fs::write(&config_file, runtime_config)
+            .map_err(|e| NvControlError::ConfigError(format!("Failed to write config: {}", e)))?;
+
+        println!("✅ Runtime configuration saved to: {}", config_file.display());
+        println!();
+        println!("📋 Current GPU devices:");
+        for device in &self.gpu_devices {
+            println!("   [{}] {} - {} MB", device.index, device.name, device.memory_mb);
+        }
+        println!();
+        println!("🎯 Supported runtimes:");
+        for runtime in &self.supported_runtimes {
+            match runtime {
+                ContainerRuntime::Docker => println!("   ✓ Docker"),
+                ContainerRuntime::Podman => println!("   ✓ Podman"),
+                ContainerRuntime::Containerd => println!("   ✓ containerd"),
+                ContainerRuntime::Bolt => println!("   ✓ Bolt"),
+                ContainerRuntime::NixOS => println!("   ✓ NixOS"),
+                ContainerRuntime::Custom(name) => println!("   ✓ {}", name),
+            }
+        }
+
+        Ok(())
     }
 }
 

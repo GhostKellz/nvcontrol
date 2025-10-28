@@ -45,6 +45,12 @@ pub mod profiles;
 pub mod tray;
 pub mod vibrance;
 pub mod vibrance_native;
+pub mod nvkms_bindings;
+pub mod display_controls;
+pub mod vrr;
+pub mod hdr;
+pub mod setup;
+pub mod display_info;
 
 // New advanced modules
 pub mod container;
@@ -59,7 +65,6 @@ pub mod recording;
 pub mod shaders;
 pub mod theme;
 pub mod upscaling;
-pub mod vrr;
 
 // CUDA development tools
 pub mod cuda;

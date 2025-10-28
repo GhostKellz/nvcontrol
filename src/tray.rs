@@ -114,8 +114,8 @@ impl SystemTray {
                     stats.power_draw,
                     stats.fan_speed,
                     format_health_status(&stats.fan_health),
-                    if false { "ON" } else { "OFF" }, // TODO: Get actual gaming mode state
-                    if false { "ON" } else { "OFF" }  // TODO: Get actual VRR state
+                    "Unknown", // Gaming mode state would require config file
+                    "Unknown"  // VRR state would require display query
                 )
             }
             Err(_) => "nvcontrol - NVIDIA GPU Control\n\

@@ -47,6 +47,38 @@ impl From<&str> for PowerProfile {
     }
 }
 
+/// Custom power profile configuration loaded from TOML
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomPowerProfileConfig {
+    pub name: String,
+    pub description: Option<String>,
+    pub power_limit_percentage: Option<u32>,
+    pub performance_level: Option<String>, // "max", "auto", "min"
+    pub cpu_governor: Option<String>,      // "performance", "schedutil", "powersave"
+    pub thermal_policy: Option<String>,    // "performance", "balanced", "quiet"
+    pub gpu_clock_boost: Option<bool>,
+    pub persistence_mode: Option<bool>,
+    pub power_gating: Option<bool>,
+    pub adaptive_power_management: Option<bool>,
+}
+
+impl Default for CustomPowerProfileConfig {
+    fn default() -> Self {
+        Self {
+            name: "custom".to_string(),
+            description: None,
+            power_limit_percentage: Some(80),
+            performance_level: Some("auto".to_string()),
+            cpu_governor: Some("schedutil".to_string()),
+            thermal_policy: Some("balanced".to_string()),
+            gpu_clock_boost: Some(false),
+            persistence_mode: Some(false),
+            power_gating: Some(true),
+            adaptive_power_management: Some(true),
+        }
+    }
+}
+
 /// Set power management profile for NVIDIA GPU
 pub fn set_power_profile(profile: &str) -> NvResult<()> {
     let profile: PowerProfile = profile.into();
@@ -534,11 +566,75 @@ pub fn apply_custom_power_profile(profile_name: &str) -> NvResult<()> {
                 println!("✅ Workstation profile applied successfully");
             }
             _ => {
-                println!("📄 Loading custom TOML profile (not yet implemented)");
-                // TODO: Parse TOML file and apply settings
-                return Err(NvControlError::PowerManagementFailed(
-                    "TOML profile parsing not yet implemented".to_string(),
-                ));
+                println!("📄 Loading custom TOML profile from file...");
+
+                // Read and parse TOML file
+                let toml_content = fs::read_to_string(&profile_path)
+                    .map_err(|e| NvControlError::PowerManagementFailed(
+                        format!("Failed to read profile file: {}", e)
+                    ))?;
+
+                let config: CustomPowerProfileConfig = toml::from_str(&toml_content)
+                    .map_err(|e| NvControlError::PowerManagementFailed(
+                        format!("Failed to parse TOML profile: {}", e)
+                    ))?;
+
+                println!("🔧 Applying custom profile: {}", config.name);
+                if let Some(desc) = &config.description {
+                    println!("   Description: {}", desc);
+                }
+
+                // Apply power limit if specified
+                if let Some(power_limit) = config.power_limit_percentage {
+                    println!("   Setting power limit: {}%", power_limit);
+                    set_power_limit_percentage(power_limit)?;
+                }
+
+                // Apply performance level if specified
+                if let Some(perf_level) = &config.performance_level {
+                    println!("   Setting performance level: {}", perf_level);
+                    set_performance_level(perf_level)?;
+                }
+
+                // Apply CPU governor if specified
+                if let Some(governor) = &config.cpu_governor {
+                    println!("   Setting CPU governor: {}", governor);
+                    set_cpu_governor(governor)?;
+                }
+
+                // Apply thermal policy if specified
+                if let Some(thermal) = &config.thermal_policy {
+                    println!("   Setting thermal policy: {}", thermal);
+                    set_thermal_policy(thermal)?;
+                }
+
+                // Apply GPU clock boost if specified
+                if let Some(boost) = config.gpu_clock_boost {
+                    println!("   Setting GPU clock boost: {}", boost);
+                    set_gpu_clock_boost(boost)?;
+                }
+
+                // Apply persistence mode if specified
+                if let Some(persistence) = config.persistence_mode {
+                    println!("   Setting persistence mode: {}", persistence);
+                    set_persistence_mode(persistence)?;
+                }
+
+                // Apply power gating if specified
+                if let Some(gating) = config.power_gating {
+                    if gating {
+                        println!("   Enabling power gating");
+                        enable_gpu_power_gating()?;
+                    }
+                }
+
+                // Apply adaptive power management if specified
+                if let Some(adaptive) = config.adaptive_power_management {
+                    println!("   Setting adaptive power management: {}", adaptive);
+                    set_adaptive_power_management(adaptive)?;
+                }
+
+                println!("✅ Custom profile '{}' applied successfully", config.name);
             }
         }
         Ok(())
@@ -644,6 +740,86 @@ fn optimize_display_power() -> NvResult<()> {
             println!("🔆 {}", description);
         }
     }
+
+    Ok(())
+}
+
+/// Create example power profile TOML files for users
+pub fn create_example_power_profiles() -> NvResult<()> {
+    println!("📝 Creating example power profile configurations...");
+
+    let config_dir =
+        directories::ProjectDirs::from("com", "ghostkellz", "nvcontrol").ok_or_else(|| {
+            NvControlError::PowerManagementFailed("Cannot access config directory".to_string())
+        })?;
+
+    let profiles_dir = config_dir.config_dir().join("power_profiles");
+    fs::create_dir_all(&profiles_dir)
+        .map_err(|e| NvControlError::PowerManagementFailed(
+            format!("Failed to create profiles directory: {}", e)
+        ))?;
+
+    // Example 1: Ultra Gaming Profile
+    let ultra_gaming = CustomPowerProfileConfig {
+        name: "ultra_gaming".to_string(),
+        description: Some("Maximum performance for competitive gaming".to_string()),
+        power_limit_percentage: Some(100),
+        performance_level: Some("max".to_string()),
+        cpu_governor: Some("performance".to_string()),
+        thermal_policy: Some("performance".to_string()),
+        gpu_clock_boost: Some(true),
+        persistence_mode: Some(true),
+        power_gating: Some(false),
+        adaptive_power_management: Some(false),
+    };
+
+    // Example 2: Silent Operation Profile
+    let silent = CustomPowerProfileConfig {
+        name: "silent".to_string(),
+        description: Some("Quiet operation with minimal fan noise".to_string()),
+        power_limit_percentage: Some(60),
+        performance_level: Some("min".to_string()),
+        cpu_governor: Some("powersave".to_string()),
+        thermal_policy: Some("quiet".to_string()),
+        gpu_clock_boost: Some(false),
+        persistence_mode: Some(false),
+        power_gating: Some(true),
+        adaptive_power_management: Some(true),
+    };
+
+    // Example 3: Balanced Creator Profile
+    let creator = CustomPowerProfileConfig {
+        name: "creator".to_string(),
+        description: Some("Optimized for content creation and rendering".to_string()),
+        power_limit_percentage: Some(85),
+        performance_level: Some("auto".to_string()),
+        cpu_governor: Some("schedutil".to_string()),
+        thermal_policy: Some("balanced".to_string()),
+        gpu_clock_boost: Some(true),
+        persistence_mode: Some(true),
+        power_gating: Some(false),
+        adaptive_power_management: Some(true),
+    };
+
+    // Write profiles to TOML files
+    for profile in &[ultra_gaming, silent, creator] {
+        let profile_path = profiles_dir.join(format!("{}.toml", profile.name));
+        let toml_content = toml::to_string_pretty(profile)
+            .map_err(|e| NvControlError::PowerManagementFailed(
+                format!("Failed to serialize profile: {}", e)
+            ))?;
+
+        fs::write(&profile_path, toml_content)
+            .map_err(|e| NvControlError::PowerManagementFailed(
+                format!("Failed to write profile file: {}", e)
+            ))?;
+
+        println!("✅ Created: {}", profile_path.display());
+    }
+
+    println!("\n📁 Profile location: {}", profiles_dir.display());
+    println!("💡 You can edit these files or create new ones!");
+    println!("   Use: nvctl power profile <profile_name>");
 
     Ok(())
 }

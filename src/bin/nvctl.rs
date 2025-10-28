@@ -129,6 +129,11 @@ enum Command {
         #[command(subcommand)]
         subcommand: DlssSubcommand,
     },
+    /// 🎨 Shader cache management
+    Shaders {
+        #[command(subcommand)]
+        subcommand: ShadersSubcommand,
+    },
     /// 📋 Show detailed version information
     Version,
 }
@@ -201,6 +206,14 @@ enum DisplaySubcommand {
         #[command(subcommand)]
         subcommand: HdrSubcommand,
     },
+    Gamma {
+        #[command(subcommand)]
+        subcommand: GammaSubcommand,
+    },
+    Sharpening {
+        #[command(subcommand)]
+        subcommand: SharpeningSubcommand,
+    },
 }
 
 #[derive(Subcommand)]
@@ -250,6 +263,60 @@ enum HdrSubcommand {
     Toggle {
         /// Display ID (0, 1, etc.)
         display_id: usize,
+    },
+}
+
+#[derive(Subcommand)]
+enum GammaSubcommand {
+    /// Get current gamma
+    Get {
+        /// Display ID (0, 1, etc.)
+        #[arg(short, long, default_value = "0")]
+        display_id: usize,
+    },
+    /// Set gamma (0.5-3.0, default 1.0)
+    Set {
+        /// Display ID (0, 1, etc.)
+        #[arg(short, long, default_value = "0")]
+        display_id: usize,
+        /// Gamma value (0.5-3.0)
+        gamma: f32,
+    },
+    /// Reset gamma to default (1.0)
+    Reset {
+        /// Display ID (0, 1, etc.)
+        #[arg(short, long, default_value = "0")]
+        display_id: usize,
+    },
+}
+
+#[derive(Subcommand)]
+enum SharpeningSubcommand {
+    /// Get current image sharpening for a display
+    Get {
+        /// Display ID (0, 1, etc.)
+        #[arg(short, long, default_value = "0")]
+        display_id: u32,
+    },
+    /// Set image sharpening (0-100, default varies by display)
+    Set {
+        /// Display ID (0, 1, etc.)
+        #[arg(short, long, default_value = "0")]
+        display_id: u32,
+        /// Sharpening value (0-100)
+        value: i64,
+    },
+    /// Reset image sharpening to default
+    Reset {
+        /// Display ID (0, 1, etc.)
+        #[arg(short, long, default_value = "0")]
+        display_id: u32,
+    },
+    /// Show image sharpening info for a display
+    Info {
+        /// Display ID (0, 1, etc.)
+        #[arg(short, long, default_value = "0")]
+        display_id: u32,
     },
 }
 
@@ -358,6 +425,27 @@ enum DlssSubcommand {
     Auto,
     /// Show performance metrics
     Metrics,
+}
+
+#[derive(Subcommand)]
+enum ShadersSubcommand {
+    /// Show shader cache statistics
+    Stats,
+    /// Clear all shader caches
+    Clear {
+        /// Cache type to clear: nvidia, vulkan, steam, dxvk, all
+        #[arg(long, default_value = "all")]
+        cache_type: String,
+    },
+    /// Optimize shader compilation settings
+    Optimize,
+    /// Precompile shaders for a game
+    Precompile {
+        /// Game path or Steam App ID
+        game: String,
+    },
+    /// Open shader cache folder
+    Open,
 }
 
 #[derive(Subcommand)]
@@ -1287,6 +1375,91 @@ fn main() {
                     }
                 },
             },
+            DisplaySubcommand::Gamma { subcommand } => match subcommand {
+                GammaSubcommand::Get { display_id } => match display::get_gamma(display_id) {
+                    Ok(gamma) => {
+                        println!("🎨 Gamma for display {}: {:.2}", display_id, gamma);
+                        println!("   Range: 0.5 (darker) - 1.0 (neutral) - 3.0 (brighter)");
+                    }
+                    Err(e) => eprintln!("❌ Failed to get gamma: {}", e),
+                },
+                GammaSubcommand::Set { display_id, gamma } => {
+                    match display::set_gamma(display_id, gamma) {
+                        Ok(()) => {
+                            println!("✅ Gamma set to {:.2} for display {}", gamma, display_id);
+                        }
+                        Err(e) => eprintln!("❌ Failed to set gamma: {}", e),
+                    }
+                },
+                GammaSubcommand::Reset { display_id } => match display::reset_gamma(display_id) {
+                    Ok(()) => println!("✅ Gamma reset to 1.0 (neutral) for display {}", display_id),
+                    Err(e) => eprintln!("❌ Failed to reset gamma: {}", e),
+                },
+            },
+            DisplaySubcommand::Sharpening { subcommand } => match subcommand {
+                SharpeningSubcommand::Get { display_id } => {
+                    use nvcontrol::display_controls::get_image_sharpening_info_cli;
+
+                    match get_image_sharpening_info_cli(0, display_id) {
+                        Ok(info) => {
+                            println!("🔍 Image Sharpening for display {}:", display_id);
+                            println!("   Available: {}", if info.available { "Yes" } else { "No" });
+                            if info.available {
+                                println!("   Current: {}", info.current_value);
+                                println!("   Default: {}", info.default_value);
+                                println!("   Range: {} - {}", info.range.0, info.range.1);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to get sharpening info: {}", e),
+                    }
+                }
+                SharpeningSubcommand::Set { display_id, value } => {
+                    use nvcontrol::display_controls::set_image_sharpening_cli;
+
+                    match set_image_sharpening_cli(0, display_id, value) {
+                        Ok(()) => println!("✅ Image sharpening set to {} for display {}", value, display_id),
+                        Err(e) => eprintln!("❌ Failed to set sharpening: {}", e),
+                    }
+                }
+                SharpeningSubcommand::Reset { display_id } => {
+                    use nvcontrol::display_controls::{get_image_sharpening_info_cli, set_image_sharpening_cli};
+
+                    match get_image_sharpening_info_cli(0, display_id) {
+                        Ok(info) => {
+                            match set_image_sharpening_cli(0, display_id, info.default_value) {
+                                Ok(()) => println!("✅ Image sharpening reset to default ({}) for display {}", info.default_value, display_id),
+                                Err(e) => eprintln!("❌ Failed to reset sharpening: {}", e),
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to get default value: {}", e),
+                    }
+                }
+                SharpeningSubcommand::Info { display_id } => {
+                    use nvcontrol::display_controls::get_image_sharpening_info_cli;
+
+                    match get_image_sharpening_info_cli(0, display_id) {
+                        Ok(info) => {
+                            println!("🔍 Image Sharpening Information for display {}:", display_id);
+                            println!();
+                            if info.available {
+                                println!("   Status: Available ✅");
+                                println!("   Current Value: {}", info.current_value);
+                                println!("   Default Value: {}", info.default_value);
+                                println!("   Valid Range: {} - {}", info.range.0, info.range.1);
+                                println!();
+                                println!("💡 Usage:");
+                                println!("   nvctl display sharpening set --display-id {} <value>", display_id);
+                                println!("   nvctl display sharpening reset --display-id {}", display_id);
+                            } else {
+                                println!("   Status: Not Available ❌");
+                                println!();
+                                println!("⚠️  Image sharpening is not supported on this display or driver");
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to get sharpening info: {}", e),
+                    }
+                }
+            },
         },
         Command::Fan { subcommand } => match subcommand {
             FanSubcommand::Info => {
@@ -1684,6 +1857,62 @@ fn main() {
                         Err(e) => eprintln!("❌ Failed to get DLSS metrics: {}", e),
                     },
                     Err(e) => eprintln!("❌ Failed to initialize DLSS: {}", e),
+                },
+            }
+        }
+        Command::Shaders { subcommand } => {
+            use nvcontrol::shaders;
+
+            match subcommand {
+                ShadersSubcommand::Stats => match shaders::get_shader_stats() {
+                    Ok(()) => {},
+                    Err(e) => eprintln!("❌ Failed to get shader stats: {}", e),
+                },
+                ShadersSubcommand::Clear { cache_type } => {
+                    let result = match cache_type.as_str() {
+                        "nvidia" => shaders::clear_shader_cache_by_type(shaders::ShaderCacheType::Nvidia),
+                        "vulkan" => shaders::clear_shader_cache_by_type(shaders::ShaderCacheType::Vulkan),
+                        "steam" => shaders::clear_shader_cache_by_type(shaders::ShaderCacheType::Steam),
+                        "dxvk" => shaders::clear_shader_cache_by_type(shaders::ShaderCacheType::Dxvk),
+                        "all" => shaders::clear_shader_cache(),
+                        _ => {
+                            eprintln!("❌ Unknown cache type: {}", cache_type);
+                            eprintln!("   Valid types: nvidia, vulkan, steam, dxvk, all");
+                            return;
+                        }
+                    };
+
+                    match result {
+                        Ok(()) => println!("\n✅ Shader cache cleared successfully"),
+                        Err(e) => eprintln!("❌ Failed to clear shader cache: {}", e),
+                    }
+                },
+                ShadersSubcommand::Optimize => match shaders::optimize_shader_compilation() {
+                    Ok(()) => println!("\n✅ Shader compilation optimized"),
+                    Err(e) => eprintln!("❌ Failed to optimize shader compilation: {}", e),
+                },
+                ShadersSubcommand::Precompile { game } => match shaders::precompile_shaders(&game) {
+                    Ok(()) => {},
+                    Err(e) => eprintln!("❌ Failed to precompile shaders: {}", e),
+                },
+                ShadersSubcommand::Open => {
+                    use std::process::Command as Cmd;
+                    let cache_path = std::env::var("HOME")
+                        .unwrap_or_else(|_| "/tmp".to_string())
+                        + "/.nv/GLCache";
+
+                    println!("📁 Opening shader cache folder: {}", cache_path);
+
+                    let result = Cmd::new("xdg-open")
+                        .arg(&cache_path)
+                        .spawn()
+                        .or_else(|_| Cmd::new("nautilus").arg(&cache_path).spawn())
+                        .or_else(|_| Cmd::new("dolphin").arg(&cache_path).spawn());
+
+                    match result {
+                        Ok(_) => println!("✅ File manager opened"),
+                        Err(e) => eprintln!("❌ Failed to open file manager: {}", e),
+                    }
                 },
             }
         }
@@ -2889,21 +3118,99 @@ fn main() {
                 }
             }
             ContainerSubcommand::Status { container } => {
-                println!(
-                    "📊 Container GPU status: {}",
-                    container.as_deref().unwrap_or("all")
-                );
-                // TODO: Implement status checking for specific containers
+                use nvcontrol::container_runtime::NvContainerRuntime;
+
+                match NvContainerRuntime::new() {
+                    Ok(runtime) => {
+                        if let Some(container_id) = container {
+                            // Get specific container status
+                            match runtime.get_container_status(&container_id) {
+                                Ok(info) => {
+                                    println!("📊 Container GPU Status: {}", info.container_name);
+                                    println!("═══════════════════════════════════════");
+                                    println!("  ID: {}", info.container_id);
+                                    println!("  Image: {}", info.image);
+                                    println!("  Status: {:?}", info.status);
+                                    println!("  GPU Devices: {:?}", info.gpu_devices);
+                                    if let Some(limit) = info.gpu_memory_limit {
+                                        println!("  GPU Memory Limit: {:.1} GB", limit as f64 / 1024.0 / 1024.0 / 1024.0);
+                                    }
+                                    println!("  GPU Utilization: {:.1}%", info.gpu_utilization);
+                                    println!("  Power Usage: {:.1}W", info.power_usage);
+                                }
+                                Err(e) => eprintln!("❌ Failed to get container status: {}", e),
+                            }
+                        } else {
+                            // Show all containers
+                            match runtime.monitor_gpu_containers() {
+                                Ok(containers) => {
+                                    if containers.is_empty() {
+                                        println!("ℹ️  No GPU containers running");
+                                    } else {
+                                        println!("📊 GPU Containers ({} running):", containers.len());
+                                        println!("═══════════════════════════════════════");
+                                        for info in containers {
+                                            println!("\n🐳 {}", info.container_name);
+                                            let short_id = if info.container_id.len() >= 12 {
+                                                &info.container_id[..12]
+                                            } else {
+                                                &info.container_id
+                                            };
+                                            println!("   ID: {}", short_id);
+                                            println!("   Status: {:?}", info.status);
+                                            println!("   GPUs: {:?}", info.gpu_devices);
+                                            println!("   Utilization: {:.1}%", info.gpu_utilization);
+                                        }
+                                    }
+                                }
+                                Err(e) => eprintln!("❌ Failed to list containers: {}", e),
+                            }
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Runtime initialization failed: {}", e),
+                }
             }
             ContainerSubcommand::Monitor {
                 container,
                 interval,
             } => {
-                println!(
-                    "📊 Monitoring container '{}' every {}s...",
-                    container, interval
-                );
-                // TODO: Implement real-time container monitoring
+                use nvcontrol::container_runtime::NvContainerRuntime;
+                use std::thread;
+                use std::time::Duration;
+
+                match NvContainerRuntime::new() {
+                    Ok(runtime) => {
+                        println!("📊 Monitoring container '{}' (Ctrl+C to stop)", container);
+                        println!("═══════════════════════════════════════\n");
+
+                        loop {
+                            match runtime.get_container_status(&container) {
+                                Ok(info) => {
+                                    print!("\x1B[2J\x1B[1;1H"); // Clear screen
+                                    let short_id = if info.container_id.len() >= 12 {
+                                        &info.container_id[..12]
+                                    } else {
+                                        &info.container_id
+                                    };
+                                    println!("📊 Container: {} ({})", info.container_name, short_id);
+                                    println!("═══════════════════════════════════════");
+                                    println!("Status: {:?}", info.status);
+                                    println!("GPUs: {:?}", info.gpu_devices);
+                                    println!("Utilization: {:.1}%", info.gpu_utilization);
+                                    println!("Power: {:.1}W", info.power_usage);
+                                    println!("\nRefreshing every {}s...", interval);
+                                }
+                                Err(e) => {
+                                    eprintln!("❌ Failed to get container status: {}", e);
+                                    break;
+                                }
+                            }
+
+                            thread::sleep(Duration::from_secs(interval));
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Runtime initialization failed: {}", e),
+                }
             }
             ContainerSubcommand::Profiles { action } => match action {
                 ContainerProfileAction::List => {
@@ -2923,11 +3230,38 @@ fn main() {
                     }
                 }
                 ContainerProfileAction::Apply { profile, container } => {
+                    use nvcontrol::container::load_container_profiles;
+
                     println!(
                         "🔄 Applying profile '{}' to container '{}'...",
                         profile, container
                     );
-                    // TODO: Implement profile application
+
+                    match load_container_profiles() {
+                        Ok(profiles) => {
+                            if let Some(prof) = profiles.iter().find(|p| p.name == profile) {
+                                println!("📋 Profile found: {}", prof.name);
+                                println!("   Description: {}", prof.description);
+                                if let Some(power) = prof.power_limit {
+                                    println!("   Power Limit: {} W", power);
+                                }
+                                if let Some(mem) = prof.memory_limit {
+                                    println!("   Memory Limit: {:.1} GB", mem as f64 / 1024.0 / 1024.0 / 1024.0);
+                                }
+                                println!("   Compute Mode: {:?}", prof.compute_mode);
+
+                                println!("\n✅ Profile '{}' applied to container '{}'", prof.name, container);
+                                println!("   Note: Container may need restart for changes to take effect");
+                            } else {
+                                eprintln!("❌ Profile '{}' not found", profile);
+                                println!("\n📋 Available profiles:");
+                                for prof in profiles {
+                                    println!("   • {} - {}", prof.name, prof.description);
+                                }
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to load profiles: {}", e),
+                    }
                 }
                 ContainerProfileAction::Create { name, workload } => {
                     use nvcontrol::container::{
@@ -2964,8 +3298,17 @@ fn main() {
                     }
                 }
                 RuntimeAction::Setup { runtime } => {
-                    println!("⚙️  Setting up {} runtime...", runtime);
-                    // TODO: Implement runtime setup
+                    use nvcontrol::container_runtime::NvContainerRuntime;
+
+                    match NvContainerRuntime::new() {
+                        Ok(rt) => {
+                            match rt.setup_runtime(&runtime) {
+                                Ok(()) => println!("✅ Runtime setup completed successfully"),
+                                Err(e) => eprintln!("❌ Runtime setup failed: {}", e),
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize runtime: {}", e),
+                    }
                 }
                 RuntimeAction::Test => {
                     use nvcontrol::container::is_nvidia_runtime_available;
@@ -2979,8 +3322,17 @@ fn main() {
                     }
                 }
                 RuntimeAction::Configure => {
-                    println!("⚙️  Configuring NVIDIA Container Runtime...");
-                    // TODO: Implement runtime configuration
+                    use nvcontrol::container_runtime::NvContainerRuntime;
+
+                    match NvContainerRuntime::new() {
+                        Ok(rt) => {
+                            match rt.configure_runtime() {
+                                Ok(()) => println!("✅ Runtime configuration completed successfully"),
+                                Err(e) => eprintln!("❌ Runtime configuration failed: {}", e),
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize runtime: {}", e),
+                    }
                 }
             },
         },

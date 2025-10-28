@@ -170,9 +170,93 @@ pub fn list_displays() -> Vec<DisplayInfo> {
     ]
 }
 
-/// Set gamma (stub)
-pub fn set_gamma(_display_id: usize, _gamma: f32) {
-    // TODO: Implement gamma adjustment
+/// Set gamma for a display
+/// Gamma values typically range from 0.5 to 3.0, with 1.0 being neutral
+pub fn set_gamma(display_id: usize, gamma: f32) -> crate::NvResult<()> {
+    use std::process::Command;
+
+    // Clamp gamma to reasonable range
+    let gamma = gamma.clamp(0.5, 3.0);
+
+    // Try nvidia-settings first (works on X11)
+    let result = Command::new("nvidia-settings")
+        .args(&[
+            "-a",
+            &format!("[gpu:0]/Gamma={}", gamma),
+        ])
+        .output();
+
+    if let Ok(output) = result {
+        if output.status.success() {
+            println!("✅ Gamma set to {:.2} via nvidia-settings", gamma);
+            return Ok(());
+        }
+    }
+
+    // Fallback: Try xrandr (works on X11)
+    let displays = list_displays();
+    if display_id < displays.len() {
+        let display_name = &displays[display_id].name;
+
+        let result = Command::new("xrandr")
+            .args(&[
+                "--output",
+                display_name,
+                "--gamma",
+                &format!("{}:{}:{}", gamma, gamma, gamma),
+            ])
+            .output();
+
+        if let Ok(output) = result {
+            if output.status.success() {
+                println!("✅ Gamma set to {:.2} via xrandr for {}", gamma, display_name);
+                return Ok(());
+            }
+        }
+    }
+
+    // Wayland: Try wlr-randr for wlroots compositors
+    let result = Command::new("wlr-randr")
+        .args(&["--output", &format!("HDMI-A-{}", display_id), "--gamma", &gamma.to_string()])
+        .output();
+
+    if let Ok(output) = result {
+        if output.status.success() {
+            println!("✅ Gamma set to {:.2} via wlr-randr", gamma);
+            return Ok(());
+        }
+    }
+
+    Err(crate::NvControlError::DisplayDetectionFailed(
+        "Failed to set gamma - no supported method available".to_string()
+    ))
+}
+
+/// Get current gamma for a display
+pub fn get_gamma(display_id: usize) -> crate::NvResult<f32> {
+    use std::process::Command;
+
+    // Try nvidia-settings
+    let result = Command::new("nvidia-settings")
+        .args(&["-q", "[gpu:0]/Gamma", "-t"])
+        .output();
+
+    if let Ok(output) = result {
+        if output.status.success() {
+            let gamma_str = String::from_utf8_lossy(&output.stdout);
+            if let Ok(gamma) = gamma_str.trim().parse::<f32>() {
+                return Ok(gamma);
+            }
+        }
+    }
+
+    // Default gamma
+    Ok(1.0)
+}
+
+/// Reset gamma to default (1.0)
+pub fn reset_gamma(display_id: usize) -> crate::NvResult<()> {
+    set_gamma(display_id, 1.0)
 }
 
 /// Check if display supports HDR
