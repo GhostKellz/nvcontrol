@@ -91,4 +91,12 @@ package() {
         [ -f "completions/_nvctl" ] && install -Dm644 "completions/_nvctl" "$pkgdir/usr/share/zsh/site-functions/_nvctl"
         [ -f "completions/nvctl.fish" ] && install -Dm644 "completions/nvctl.fish" "$pkgdir/usr/share/fish/vendor_completions.d/nvctl.fish"
     fi
+
+    # Install systemd user services
+    install -Dm644 "nvcontrol-monitor.service" "$pkgdir/usr/lib/systemd/user/nvcontrol-monitor.service"
+    install -Dm644 "nvcontrol-alerts.service" "$pkgdir/usr/lib/systemd/user/nvcontrol-alerts.service"
+    install -Dm644 "nvcontrol-gamedetect.service" "$pkgdir/usr/lib/systemd/user/nvcontrol-gamedetect.service"
+
+    # Install service installation script
+    install -Dm755 "install-services.sh" "$pkgdir/usr/share/nvcontrol/install-services.sh"
 }

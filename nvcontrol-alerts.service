@@ -1,0 +1,32 @@
+[Unit]
+Description=nvcontrol GPU Alert Service
+Documentation=https://github.com/GhostKellz/nvcontrol
+After=graphical.target
+Requires=dbus.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/nvctl alerts --daemon
+Restart=on-failure
+RestartSec=10s
+
+# Run as user service
+User=%i
+
+# Resource limits
+Nice=5
+IOSchedulingClass=idle
+
+# Security
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+NoNewPrivileges=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nvcontrol-alerts
+
+[Install]
+WantedBy=default.target

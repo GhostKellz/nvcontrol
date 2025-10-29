@@ -1,0 +1,31 @@
+[Unit]
+Description=nvcontrol Game Detection Service
+Documentation=https://github.com/GhostKellz/nvcontrol
+After=graphical.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/nvctl gamedetect --daemon --auto-apply
+Restart=on-failure
+RestartSec=10s
+
+# Run as user service
+User=%i
+
+# Resource limits
+Nice=0
+CPUQuota=5%
+
+# Security
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+NoNewPrivileges=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nvcontrol-gamedetect
+
+[Install]
+WantedBy=default.target

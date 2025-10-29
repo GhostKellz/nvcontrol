@@ -1,0 +1,32 @@
+[Unit]
+Description=nvcontrol GPU Monitoring Service
+Documentation=https://github.com/GhostKellz/nvcontrol
+After=graphical.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/nvctl monitor --daemon
+Restart=on-failure
+RestartSec=10s
+
+# Run as user service
+User=%i
+
+# Resource limits
+Nice=-10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=2
+
+# Security
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+NoNewPrivileges=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nvcontrol-monitor
+
+[Install]
+WantedBy=default.target
