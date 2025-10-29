@@ -48,6 +48,7 @@ pub struct TuiApp {
     status_message_time: Option<Instant>,
     fan_control_mode: bool,
     oc_control_mode: bool,
+    #[allow(dead_code)]
     fan_speed_target: u32,
 }
 

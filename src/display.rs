@@ -233,7 +233,7 @@ pub fn set_gamma(display_id: usize, gamma: f32) -> crate::NvResult<()> {
 }
 
 /// Get current gamma for a display
-pub fn get_gamma(display_id: usize) -> crate::NvResult<f32> {
+pub fn get_gamma(_display_id: usize) -> crate::NvResult<f32> {
     use std::process::Command;
 
     // Try nvidia-settings

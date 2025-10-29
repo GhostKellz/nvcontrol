@@ -58,6 +58,8 @@ pub mod container_runtime;
 pub mod dlss;
 pub mod drivers;
 pub mod gamescope;
+pub mod game_launcher;
+pub mod gpu_passthrough;
 pub mod latency;
 pub mod overclocking;
 pub mod power;
@@ -72,6 +74,14 @@ pub mod cuda;
 // Monitoring and TUI modules
 pub mod monitoring;
 pub mod tui;
+
+// Arch KDE Wayland optimization modules
+pub mod wayland_nvidia;
+pub mod kde_optimizer;
+pub mod power_profiles_daemon;
+pub mod arch_integration;
+pub mod gsp_firmware;
+pub mod multimonitor;
 
 // Re-export commonly used types
 pub use config::Config;

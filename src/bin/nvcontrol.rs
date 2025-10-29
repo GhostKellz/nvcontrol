@@ -2,7 +2,7 @@
 use eframe::egui;
 #[cfg(feature = "gui")]
 use nvcontrol::{
-    config, display, drivers, fan, gamescope, latency, overclocking, recording, shaders, theme,
+    config, display, fan, gamescope, latency, overclocking, recording, theme,
     vibrance, vrr,
 };
 

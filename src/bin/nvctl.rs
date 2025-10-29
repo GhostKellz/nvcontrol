@@ -5,6 +5,8 @@ use nvcontrol::{
     display, drivers, fan, gamescope,
     gpu::{self, OutputFormat},
     latency, monitoring, overclocking, power, recording, upscaling, vrr,
+    wayland_nvidia, kde_optimizer, power_profiles_daemon, arch_integration,
+    gsp_firmware, multimonitor,
 };
 use serde_json;
 use std::time::Duration;
@@ -133,6 +135,42 @@ enum Command {
     Shaders {
         #[command(subcommand)]
         subcommand: ShadersSubcommand,
+    },
+    /// 🔌 GPU Passthrough (VFIO/Containers/VMs)
+    #[command(alias = "pt")]
+    Passthrough {
+        #[command(subcommand)]
+        subcommand: PassthroughSubcommand,
+    },
+    /// 🌊 Wayland NVIDIA Optimization
+    Wayland {
+        #[command(subcommand)]
+        subcommand: WaylandSubcommand,
+    },
+    /// 🎨 KDE Plasma Compositor Optimization
+    Kde {
+        #[command(subcommand)]
+        subcommand: KdeSubcommand,
+    },
+    /// ⚡ Power Profile Management (AC/Battery, Activities)
+    PowerProfile {
+        #[command(subcommand)]
+        subcommand: PowerProfileSubcommand,
+    },
+    /// 🐧 Arch Linux Integration (Pacman hooks, DKMS)
+    Arch {
+        #[command(subcommand)]
+        subcommand: ArchSubcommand,
+    },
+    /// 🔧 GSP Firmware Management (nvidia-open)
+    Gsp {
+        #[command(subcommand)]
+        subcommand: GspSubcommand,
+    },
+    /// 🖥️ Multi-Monitor Management
+    Monitors {
+        #[command(subcommand)]
+        subcommand: MultiMonitorSubcommand,
     },
     /// 📋 Show detailed version information
     Version,
@@ -449,6 +487,213 @@ enum ShadersSubcommand {
 }
 
 #[derive(Subcommand)]
+enum PassthroughSubcommand {
+    /// Show GPU passthrough status
+    Status,
+    /// List all NVIDIA GPUs and their PCI addresses
+    List,
+    /// Show IOMMU groups
+    Iommu,
+    /// Bind GPU to VFIO driver
+    BindVfio {
+        /// PCI address (e.g., 0000:01:00.0)
+        pci_address: String,
+    },
+    /// Unbind GPU from VFIO
+    UnbindVfio {
+        /// PCI address (e.g., 0000:01:00.0)
+        pci_address: String,
+    },
+    /// Setup persistent VFIO binding
+    Persistent {
+        /// PCI address (e.g., 0000:01:00.0)
+        pci_address: String,
+    },
+    /// Test GPU passthrough to Docker container
+    TestContainer,
+    /// Generate QEMU command for GPU passthrough
+    QemuCommand {
+        /// PCI address (e.g., 0000:01:00.0)
+        pci_address: String,
+    },
+    /// Setup hugepages for VM performance
+    Hugepages {
+        /// Size in MB
+        #[arg(default_value = "8192")]
+        size_mb: u32,
+    },
+}
+
+#[derive(Subcommand)]
+enum WaylandSubcommand {
+    /// Show Wayland NVIDIA configuration status
+    Status,
+    /// Apply optimal Wayland configuration
+    Optimize {
+        /// Create backup before applying
+        #[arg(long, default_value = "true")]
+        backup: bool,
+    },
+    /// Generate environment variables script
+    ExportEnv {
+        /// Shell config file path
+        #[arg(long, default_value = "~/.bashrc")]
+        config: String,
+    },
+    /// Switch between nvidia-open and nvidia-dkms
+    SwitchDriver {
+        /// Target driver: open, dkms
+        driver: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum KdeSubcommand {
+    /// Show KDE compositor status
+    Status,
+    /// Apply gaming preset (low latency, VRR, minimal effects)
+    Gaming,
+    /// Apply productivity preset (balanced, full effects)
+    Productivity,
+    /// Apply power saving preset
+    PowerSave,
+    /// Setup NVIDIA environment variables for KDE
+    SetupEnv,
+    /// Set VRR per display
+    SetVrr {
+        /// Display connector (e.g., DP-1)
+        display: String,
+        /// Enable or disable
+        #[arg(long)]
+        enabled: bool,
+    },
+    /// Restart KWin compositor
+    Restart,
+}
+
+#[derive(Subcommand)]
+enum PowerProfileSubcommand {
+    /// Show current power profile status
+    Status,
+    /// Set system power profile
+    Set {
+        /// Profile: performance, balanced, power-saver
+        profile: String,
+    },
+    /// Create activity-based profile
+    CreateActivity {
+        /// KDE Activity name
+        activity: String,
+        /// System profile: performance, balanced, power-saver
+        #[arg(long)]
+        system_profile: String,
+        /// GPU clock offset in MHz
+        #[arg(long, default_value = "0")]
+        gpu_offset: i32,
+        /// Memory clock offset in MHz
+        #[arg(long, default_value = "0")]
+        mem_offset: i32,
+    },
+    /// Apply profile for current activity
+    Apply {
+        /// Activity name
+        activity: String,
+    },
+    /// Monitor and auto-switch on activity changes
+    Monitor,
+    /// Monitor and auto-switch on AC/Battery changes
+    AutoPower,
+    /// Enable idle detection and power reduction
+    Idle {
+        /// Idle timeout in seconds
+        #[arg(long, default_value = "300")]
+        timeout: u64,
+    },
+    /// Create default activity profiles
+    CreateDefaults,
+}
+
+#[derive(Subcommand)]
+enum ArchSubcommand {
+    /// Show Arch Linux NVIDIA integration status
+    Status,
+    /// Install all pacman hooks
+    InstallHooks,
+    /// Remove pacman hooks
+    RemoveHooks,
+    /// Rebuild DKMS modules
+    RebuildDkms,
+    /// Regenerate initramfs
+    Mkinitcpio,
+    /// Check for pending NVIDIA/kernel updates
+    CheckUpdates,
+    /// List AUR optimization suggestions
+    AurSuggestions,
+}
+
+#[derive(Subcommand)]
+enum GspSubcommand {
+    /// Show GSP firmware status
+    Status,
+    /// Enable GSP firmware
+    Enable,
+    /// Disable GSP firmware (fallback mode)
+    Disable,
+    /// Run GSP diagnostics
+    Diagnostics,
+    /// Check for firmware updates
+    CheckUpdate,
+    /// Update GSP firmware
+    Update,
+}
+
+#[derive(Subcommand)]
+enum MultiMonitorSubcommand {
+    /// Show current display configuration
+    Status,
+    /// Save current layout with a name
+    Save {
+        /// Layout name
+        name: String,
+    },
+    /// Load and apply a saved layout
+    Load {
+        /// Layout name
+        name: String,
+    },
+    /// List all saved layouts
+    List,
+    /// Set VRR for a specific display
+    SetVrr {
+        /// Display connector (e.g., DP-1)
+        connector: String,
+        /// Enable or disable
+        #[arg(long)]
+        enabled: bool,
+    },
+    /// Launch Gamescope on specific display
+    Gamescope {
+        /// Display connector
+        connector: String,
+        /// Width
+        #[arg(short, long)]
+        width: u32,
+        /// Height
+        #[arg(short, long)]
+        height: u32,
+        /// Refresh rate
+        #[arg(short, long)]
+        refresh: u32,
+        /// Command to run
+        command: String,
+    },
+    /// Auto-apply layout based on connected displays
+    Auto,
+    /// Create example layouts
+    CreateExamples,
+}
+
+#[derive(Subcommand)]
 enum DriversSubcommand {
     Status,
     Install {
@@ -637,6 +882,32 @@ enum GamingSubcommand {
         #[command(subcommand)]
         action: GamescopeAction,
     },
+    /// Game launch profiles
+    Launch {
+        #[command(subcommand)]
+        action: LaunchAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum LaunchAction {
+    /// Launch a game with a profile
+    Run {
+        /// Profile name
+        profile: String,
+        /// Additional arguments to pass to the game
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    /// List all game profiles
+    List,
+    /// Show profile details
+    Show {
+        /// Profile name
+        profile: String,
+    },
+    /// Create example game profiles
+    Examples,
 }
 
 #[derive(Subcommand)]
@@ -1916,6 +2187,543 @@ fn main() {
                 },
             }
         }
+        Command::Passthrough { subcommand } => {
+            use nvcontrol::gpu_passthrough::GpuPassthroughManager;
+
+            match subcommand {
+                PassthroughSubcommand::Status => {
+                    match GpuPassthroughManager::new() {
+                        Ok(manager) => {
+                            if let Err(e) = manager.show_status() {
+                                eprintln!("❌ Failed to show status: {}", e);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                    }
+                }
+                PassthroughSubcommand::List => {
+                    match GpuPassthroughManager::detect_nvidia_gpus() {
+                        Ok(devices) => {
+                            println!("📍 Detected NVIDIA GPUs:\n");
+                            for device in devices {
+                                println!("   PCI: {}", device.pci_address);
+                                println!("   Name: {}", device.name);
+                                println!("   IDs: {}:{}", device.vendor_id, device.device_id);
+                                if let Some(driver) = device.driver {
+                                    println!("   Driver: {}", driver);
+                                }
+                                println!();
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to detect GPUs: {}", e),
+                    }
+                }
+                PassthroughSubcommand::Iommu => {
+                    match GpuPassthroughManager::new() {
+                        Ok(manager) => {
+                            match manager.list_iommu_groups() {
+                                Ok(groups) => {
+                                    println!("🔒 IOMMU Groups:\n");
+                                    let mut sorted_groups: Vec<_> = groups.iter().collect();
+                                    sorted_groups.sort_by_key(|(k, _)| *k);
+
+                                    for (group_num, devices) in sorted_groups {
+                                        println!("   Group {}:", group_num);
+                                        for device in devices {
+                                            println!("      {}", device);
+                                        }
+                                        println!();
+                                    }
+                                }
+                                Err(e) => eprintln!("❌ {}", e),
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                    }
+                }
+                PassthroughSubcommand::BindVfio { pci_address } => {
+                    match GpuPassthroughManager::new() {
+                        Ok(manager) => {
+                            match manager.bind_to_vfio(&pci_address) {
+                                Ok(()) => println!("✅ Successfully bound {} to VFIO", pci_address),
+                                Err(e) => eprintln!("❌ Failed to bind to VFIO: {}", e),
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                    }
+                }
+                PassthroughSubcommand::UnbindVfio { pci_address } => {
+                    match GpuPassthroughManager::new() {
+                        Ok(manager) => {
+                            match manager.unbind_from_vfio(&pci_address) {
+                                Ok(()) => println!("✅ Successfully unbound {} from VFIO", pci_address),
+                                Err(e) => eprintln!("❌ Failed to unbind from VFIO: {}", e),
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                    }
+                }
+                PassthroughSubcommand::Persistent { pci_address } => {
+                    match GpuPassthroughManager::new() {
+                        Ok(manager) => {
+                            match manager.setup_persistent_vfio(&pci_address) {
+                                Ok(()) => {},
+                                Err(e) => eprintln!("❌ Failed to setup persistent VFIO: {}", e),
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                    }
+                }
+                PassthroughSubcommand::TestContainer => {
+                    match GpuPassthroughManager::new() {
+                        Ok(manager) => {
+                            if let Err(e) = manager.test_container_passthrough() {
+                                eprintln!("❌ Test failed: {}", e);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                    }
+                }
+                PassthroughSubcommand::QemuCommand { pci_address } => {
+                    match GpuPassthroughManager::new() {
+                        Ok(manager) => {
+                            match manager.generate_qemu_command(&pci_address) {
+                                Ok(cmd) => {
+                                    println!("🖥️  QEMU Command for GPU Passthrough:\n");
+                                    println!("qemu-system-x86_64 \\");
+                                    println!("{}", cmd);
+                                    println!();
+                                    println!("💡 Add your disk, network, and other device options");
+                                }
+                                Err(e) => eprintln!("❌ Failed to generate command: {}", e),
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                    }
+                }
+                PassthroughSubcommand::Hugepages { size_mb } => {
+                    match GpuPassthroughManager::new() {
+                        Ok(manager) => {
+                            if let Err(e) = manager.setup_hugepages(size_mb) {
+                                eprintln!("❌ Failed to setup hugepages: {}", e);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                    }
+                }
+            }
+        }
+        Command::Wayland { subcommand } => {
+            use wayland_nvidia::WaylandNvidiaManager;
+
+            match subcommand {
+                WaylandSubcommand::Status => {
+                    match WaylandNvidiaManager::new() {
+                        Ok(manager) => {
+                            if let Err(e) = manager.print_status() {
+                                eprintln!("❌ Failed to print status: {}", e);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                    }
+                }
+                WaylandSubcommand::Optimize { backup } => {
+                    match WaylandNvidiaManager::new() {
+                        Ok(manager) => {
+                            if let Err(e) = manager.apply_wayland_optimization(backup) {
+                                eprintln!("❌ Failed to optimize: {}", e);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                    }
+                }
+                WaylandSubcommand::ExportEnv { config } => {
+                    match WaylandNvidiaManager::new() {
+                        Ok(manager) => {
+                            let path = std::path::PathBuf::from(config);
+                            if let Err(e) = manager.export_env_vars(&path) {
+                                eprintln!("❌ Failed to export env vars: {}", e);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                    }
+                }
+                WaylandSubcommand::SwitchDriver { driver } => {
+                    match WaylandNvidiaManager::new() {
+                        Ok(manager) => {
+                            let target = match driver.as_str() {
+                                "open" => wayland_nvidia::NvidiaDriver::Open,
+                                "dkms" => wayland_nvidia::NvidiaDriver::Proprietary,
+                                _ => {
+                                    eprintln!("❌ Invalid driver type. Use 'open' or 'dkms'");
+                                    return;
+                                }
+                            };
+                            if let Err(e) = manager.switch_driver(target) {
+                                eprintln!("❌ Failed to switch driver: {}", e);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                    }
+                }
+            }
+        }
+        Command::Kde { subcommand } => {
+            use kde_optimizer::KdeOptimizer;
+
+            match subcommand {
+                KdeSubcommand::Status => {
+                    let optimizer = KdeOptimizer::new();
+                    if let Err(e) = optimizer.print_status() {
+                        eprintln!("❌ Failed to print status: {}", e);
+                    }
+                }
+                KdeSubcommand::Gaming => {
+                    let mut optimizer = KdeOptimizer::new();
+                    if let Err(e) = optimizer.apply_gaming_preset() {
+                        eprintln!("❌ Failed to apply gaming preset: {}", e);
+                    }
+                }
+                KdeSubcommand::Productivity => {
+                    let mut optimizer = KdeOptimizer::new();
+                    if let Err(e) = optimizer.apply_productivity_preset() {
+                        eprintln!("❌ Failed to apply productivity preset: {}", e);
+                    }
+                }
+                KdeSubcommand::PowerSave => {
+                    let mut optimizer = KdeOptimizer::new();
+                    if let Err(e) = optimizer.apply_powersave_preset() {
+                        eprintln!("❌ Failed to apply power save preset: {}", e);
+                    }
+                }
+                KdeSubcommand::SetupEnv => {
+                    let optimizer = KdeOptimizer::new();
+                    if let Err(e) = optimizer.setup_kde_env_vars() {
+                        eprintln!("❌ Failed to setup env vars: {}", e);
+                    }
+                }
+                KdeSubcommand::SetVrr { display, enabled } => {
+                    let optimizer = KdeOptimizer::new();
+                    if let Err(e) = optimizer.set_vrr_per_display(&display, enabled) {
+                        eprintln!("❌ Failed to set VRR: {}", e);
+                    }
+                }
+                KdeSubcommand::Restart => {
+                    let optimizer = KdeOptimizer::new();
+                    if let Err(e) = optimizer.restart_compositor() {
+                        eprintln!("❌ Failed to restart compositor: {}", e);
+                    }
+                }
+            }
+        }
+        Command::PowerProfile { subcommand } => {
+            use power_profiles_daemon::{PowerProfileManager, SystemPowerProfile, PowerProfileConfig, NvidiaPowerMode, FanMode};
+
+            match subcommand {
+                PowerProfileSubcommand::Status => {
+                    match PowerProfileManager::new() {
+                        Ok(manager) => {
+                            if let Err(e) = manager.print_status() {
+                                eprintln!("❌ Failed to print status: {}", e);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                    }
+                }
+                PowerProfileSubcommand::Set { profile } => {
+                    match PowerProfileManager::new() {
+                        Ok(mut manager) => {
+                            let sys_profile = match profile.as_str() {
+                                "performance" => SystemPowerProfile::Performance,
+                                "balanced" => SystemPowerProfile::Balanced,
+                                "power-saver" => SystemPowerProfile::PowerSaver,
+                                _ => {
+                                    eprintln!("❌ Invalid profile. Use: performance, balanced, power-saver");
+                                    return;
+                                }
+                            };
+                            if let Err(e) = manager.set_system_profile(sys_profile) {
+                                eprintln!("❌ Failed to set profile: {}", e);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                    }
+                }
+                PowerProfileSubcommand::CreateActivity { activity, system_profile, gpu_offset, mem_offset } => {
+                    match PowerProfileManager::new() {
+                        Ok(mut manager) => {
+                            let sys_prof = match system_profile.as_str() {
+                                "performance" => SystemPowerProfile::Performance,
+                                "balanced" => SystemPowerProfile::Balanced,
+                                "power-saver" => SystemPowerProfile::PowerSaver,
+                                _ => {
+                                    eprintln!("❌ Invalid profile");
+                                    return;
+                                }
+                            };
+                            let config = PowerProfileConfig {
+                                system_profile: sys_prof,
+                                nvidia_mode: NvidiaPowerMode::Adaptive,
+                                gpu_clock_offset: gpu_offset,
+                                mem_clock_offset: mem_offset,
+                                power_limit: None,
+                                fan_control: FanMode::Auto,
+                            };
+                            if let Err(e) = manager.create_activity_profile(&activity, config) {
+                                eprintln!("❌ Failed to create profile: {}", e);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                    }
+                }
+                PowerProfileSubcommand::Apply { activity } => {
+                    match PowerProfileManager::new() {
+                        Ok(mut manager) => {
+                            if let Err(e) = manager.apply_activity_profile(&activity) {
+                                eprintln!("❌ Failed to apply profile: {}", e);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                    }
+                }
+                PowerProfileSubcommand::Monitor => {
+                    match PowerProfileManager::new() {
+                        Ok(mut manager) => {
+                            if let Err(e) = manager.monitor_activity_changes() {
+                                eprintln!("❌ Monitor failed: {}", e);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                    }
+                }
+                PowerProfileSubcommand::AutoPower => {
+                    match PowerProfileManager::new() {
+                        Ok(mut manager) => {
+                            if let Err(e) = manager.auto_switch_on_power_change() {
+                                eprintln!("❌ Auto-power failed: {}", e);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                    }
+                }
+                PowerProfileSubcommand::Idle { timeout } => {
+                    match PowerProfileManager::new() {
+                        Ok(mut manager) => {
+                            if let Err(e) = manager.idle_detection(timeout) {
+                                eprintln!("❌ Idle detection failed: {}", e);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                    }
+                }
+                PowerProfileSubcommand::CreateDefaults => {
+                    match PowerProfileManager::new() {
+                        Ok(mut manager) => {
+                            if let Err(e) = manager.create_default_profiles() {
+                                eprintln!("❌ Failed to create defaults: {}", e);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                    }
+                }
+            }
+        }
+        Command::Arch { subcommand } => {
+            use arch_integration::ArchIntegration;
+
+            let arch = ArchIntegration::new();
+
+            match subcommand {
+                ArchSubcommand::Status => {
+                    if let Err(e) = arch.print_status() {
+                        eprintln!("❌ Failed to print status: {}", e);
+                    }
+                }
+                ArchSubcommand::InstallHooks => {
+                    if let Err(e) = arch.install_all_hooks() {
+                        eprintln!("❌ Failed to install hooks: {}", e);
+                    }
+                }
+                ArchSubcommand::RemoveHooks => {
+                    if let Err(e) = arch.remove_hooks() {
+                        eprintln!("❌ Failed to remove hooks: {}", e);
+                    }
+                }
+                ArchSubcommand::RebuildDkms => {
+                    if let Err(e) = arch.rebuild_dkms_modules() {
+                        eprintln!("❌ Failed to rebuild DKMS: {}", e);
+                    }
+                }
+                ArchSubcommand::Mkinitcpio => {
+                    if let Err(e) = arch.regenerate_initramfs() {
+                        eprintln!("❌ Failed to regenerate initramfs: {}", e);
+                    }
+                }
+                ArchSubcommand::CheckUpdates => {
+                    match ArchIntegration::check_pending_updates() {
+                        Ok(updates) => {
+                            if updates.is_empty() {
+                                println!("✅ No pending NVIDIA/kernel updates");
+                            } else {
+                                println!("⚠️  Pending updates:");
+                                for update in updates {
+                                    println!("   {}", update);
+                                }
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to check updates: {}", e),
+                    }
+                }
+                ArchSubcommand::AurSuggestions => {
+                    let suggestions = ArchIntegration::suggest_aur_optimizations();
+                    if suggestions.is_empty() {
+                        println!("✅ All recommended AUR packages installed");
+                    } else {
+                        println!("💡 Recommended AUR packages:");
+                        for suggestion in suggestions {
+                            println!("   {}", suggestion);
+                        }
+                    }
+                }
+            }
+        }
+        Command::Gsp { subcommand } => {
+            use gsp_firmware::GspManager;
+
+            let gsp = GspManager::new();
+
+            match subcommand {
+                GspSubcommand::Status => {
+                    if let Err(e) = gsp.print_status() {
+                        eprintln!("❌ Failed to print status: {}", e);
+                    }
+                }
+                GspSubcommand::Enable => {
+                    if let Err(e) = gsp.enable_gsp() {
+                        eprintln!("❌ Failed to enable GSP: {}", e);
+                    }
+                }
+                GspSubcommand::Disable => {
+                    if let Err(e) = gsp.disable_gsp() {
+                        eprintln!("❌ Failed to disable GSP: {}", e);
+                    }
+                }
+                GspSubcommand::Diagnostics => {
+                    if let Err(e) = gsp.run_diagnostics() {
+                        eprintln!("❌ Failed to run diagnostics: {}", e);
+                    }
+                }
+                GspSubcommand::CheckUpdate => {
+                    match gsp.check_for_updates() {
+                        Ok(available) => {
+                            if available {
+                                println!("✅ Firmware update available!");
+                            } else {
+                                println!("ℹ️  No updates available");
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to check updates: {}", e),
+                    }
+                }
+                GspSubcommand::Update => {
+                    if let Err(e) = gsp.update_firmware() {
+                        eprintln!("❌ Failed to update firmware: {}", e);
+                    }
+                }
+            }
+        }
+        Command::Monitors { subcommand } => {
+            use multimonitor::MultiMonitorManager;
+
+            match subcommand {
+                MultiMonitorSubcommand::Status => {
+                    match MultiMonitorManager::new() {
+                        Ok(manager) => {
+                            if let Err(e) = manager.print_status() {
+                                eprintln!("❌ Failed to print status: {}", e);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                    }
+                }
+                MultiMonitorSubcommand::Save { name } => {
+                    match MultiMonitorManager::new() {
+                        Ok(mut manager) => {
+                            if let Err(e) = manager.save_layout(&name) {
+                                eprintln!("❌ Failed to save layout: {}", e);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                    }
+                }
+                MultiMonitorSubcommand::Load { name } => {
+                    match MultiMonitorManager::new() {
+                        Ok(mut manager) => {
+                            if let Err(e) = manager.load_layout(&name) {
+                                eprintln!("❌ Failed to load layout: {}", e);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                    }
+                }
+                MultiMonitorSubcommand::List => {
+                    match MultiMonitorManager::new() {
+                        Ok(manager) => {
+                            let layouts = manager.list_layouts();
+                            if layouts.is_empty() {
+                                println!("No saved layouts");
+                            } else {
+                                println!("📂 Saved layouts:");
+                                for layout in layouts {
+                                    println!("   • {}", layout);
+                                }
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                    }
+                }
+                MultiMonitorSubcommand::SetVrr { connector, enabled } => {
+                    match MultiMonitorManager::new() {
+                        Ok(manager) => {
+                            if let Err(e) = manager.set_display_vrr(&connector, enabled) {
+                                eprintln!("❌ Failed to set VRR: {}", e);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                    }
+                }
+                MultiMonitorSubcommand::Gamescope { connector, width, height, refresh, command } => {
+                    match MultiMonitorManager::new() {
+                        Ok(manager) => {
+                            if let Err(e) = manager.launch_gamescope_on_display(&connector, width, height, refresh, &command) {
+                                eprintln!("❌ Failed to launch gamescope: {}", e);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                    }
+                }
+                MultiMonitorSubcommand::Auto => {
+                    match MultiMonitorManager::new() {
+                        Ok(mut manager) => {
+                            if let Err(e) = manager.auto_apply_layout() {
+                                eprintln!("❌ Failed to auto-apply layout: {}", e);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                    }
+                }
+                MultiMonitorSubcommand::CreateExamples => {
+                    match MultiMonitorManager::new() {
+                        Ok(mut manager) => {
+                            if let Err(e) = manager.create_example_layouts() {
+                                eprintln!("❌ Failed to create examples: {}", e);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                    }
+                }
+            }
+        }
         Command::Drivers { subcommand } => match subcommand {
             DriversSubcommand::Status => match drivers::get_driver_status() {
                 Ok(status) => {
@@ -2152,6 +2960,122 @@ fn main() {
                         "🔧 Creating preset '{}' (interactive setup not implemented)",
                         name
                     );
+                }
+            },
+            GamingSubcommand::Launch { action } => match action {
+                LaunchAction::Run { profile, args } => {
+                    use nvcontrol::game_launcher::GameLauncher;
+
+                    match GameLauncher::new() {
+                        Ok(launcher) => {
+                            match launcher.load_profile(&profile) {
+                                Ok(game_profile) => {
+                                    match launcher.launch_game(&game_profile, args.clone()) {
+                                        Ok(()) => println!("✅ Game exited successfully"),
+                                        Err(e) => eprintln!("❌ Game launch failed: {}", e),
+                                    }
+                                }
+                                Err(e) => eprintln!("❌ Failed to load profile '{}': {}", profile, e),
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize game launcher: {}", e),
+                    }
+                }
+                LaunchAction::List => {
+                    use nvcontrol::game_launcher::GameLauncher;
+
+                    match GameLauncher::new() {
+                        Ok(launcher) => {
+                            let profiles = launcher.list_profiles();
+                            if profiles.is_empty() {
+                                println!("📂 No game profiles found");
+                                println!("   Create example profiles with: nvctl gaming launch examples");
+                            } else {
+                                println!("📂 Available game profiles:");
+                                for profile_name in profiles {
+                                    println!("   • {}", profile_name);
+                                }
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to list profiles: {}", e),
+                    }
+                }
+                LaunchAction::Show { profile } => {
+                    use nvcontrol::game_launcher::GameLauncher;
+
+                    match GameLauncher::new() {
+                        Ok(launcher) => {
+                            match launcher.load_profile(&profile) {
+                                Ok(game_profile) => {
+                                    println!("🎮 Game Profile: {}", game_profile.name);
+                                    println!();
+                                    println!("   Executable: {}", game_profile.executable);
+                                    if let Some(dir) = &game_profile.working_dir {
+                                        println!("   Working Dir: {}", dir);
+                                    }
+                                    println!();
+
+                                    if game_profile.use_gamescope {
+                                        println!("   Gamescope:");
+                                        if let (Some(w), Some(h)) = (game_profile.gamescope_width, game_profile.gamescope_height) {
+                                            println!("      Resolution: {}x{}", w, h);
+                                        }
+                                        if let Some(r) = game_profile.gamescope_refresh {
+                                            println!("      Refresh: {}Hz", r);
+                                        }
+                                        println!("      HDR: {}", game_profile.gamescope_hdr);
+                                        println!("      VRR: {}", game_profile.gamescope_vrr);
+                                        println!();
+                                    }
+
+                                    if !game_profile.env_vars.is_empty() {
+                                        println!("   Environment Variables: ({} set)", game_profile.env_vars.len());
+                                        for (key, value) in &game_profile.env_vars {
+                                            println!("      {}={}", key, value);
+                                        }
+                                        println!();
+                                    }
+
+                                    if let Some(cache) = &game_profile.shader_cache_path {
+                                        println!("   Shader Cache: {}", cache);
+                                    }
+
+                                    if let Some(power) = &game_profile.power_profile {
+                                        println!("   Power Profile: {}", power);
+                                    }
+
+                                    if let Some(affinity) = &game_profile.cpu_affinity {
+                                        println!("   CPU Affinity: {:?}", affinity);
+                                    }
+                                }
+                                Err(e) => eprintln!("❌ Failed to load profile '{}': {}", profile, e),
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to show profile: {}", e),
+                    }
+                }
+                LaunchAction::Examples => {
+                    use nvcontrol::game_launcher::GameLauncher;
+
+                    match GameLauncher::new() {
+                        Ok(launcher) => {
+                            match launcher.create_example_profiles() {
+                                Ok(()) => {
+                                    println!("✅ Example game profiles created!");
+                                    println!();
+                                    println!("Available profiles:");
+                                    println!("   • cyberpunk2077 - Cyberpunk 2077 with DLSS and RT");
+                                    println!("   • cs2 - Counter-Strike 2 competitive settings");
+                                    println!("   • eldenring - Elden Ring with Proton");
+                                    println!();
+                                    println!("Launch a game:");
+                                    println!("   nvctl gaming launch run cyberpunk2077");
+                                }
+                                Err(e) => eprintln!("❌ Failed to create examples: {}", e),
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize launcher: {}", e),
+                    }
                 }
             },
         },
