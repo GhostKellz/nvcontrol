@@ -72,6 +72,10 @@ struct NvControlApp {
     // Async GPU monitoring
     gpu_stats_rx: std::sync::mpsc::Receiver<GpuStats>,
     last_stats_update: std::time::Instant,
+    // GUI widgets
+    fan_curve: nvcontrol::gui_widgets::FanCurve,
+    voltage_curve: nvcontrol::gui_widgets::VoltageCurve,
+    monitoring_dashboard: nvcontrol::gui_widgets::MonitoringDashboard,
 }
 
 #[cfg(feature = "gui")]
@@ -84,6 +88,8 @@ struct GpuStats {
     pub memory_total: u64,
     pub power_draw: f32,
     pub fan_speed: u32,
+    pub gpu_clock: u32,
+    pub memory_clock: u32,
 }
 
 #[cfg(feature = "gui")]
@@ -117,6 +123,8 @@ impl NvControlApp {
                         let memory_used = mem_info.as_ref().map(|m| m.used).unwrap_or(0);
                         let memory_total = mem_info.as_ref().map(|m| m.total).unwrap_or(0);
                         let fan_speed = device.fan_speed(0).unwrap_or(0);
+                        let gpu_clock = device.clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics).unwrap_or(0);
+                        let memory_clock = device.clock_info(nvml_wrapper::enum_wrappers::device::Clock::Memory).unwrap_or(0);
 
                         let stats = GpuStats {
                             name,
@@ -126,6 +134,8 @@ impl NvControlApp {
                             memory_total,
                             power_draw,
                             fan_speed,
+                            gpu_clock,
+                            memory_clock,
                         };
 
                         // Send stats to UI thread (ignore errors if channel closed)
@@ -150,12 +160,24 @@ impl NvControlApp {
             gpu_stats: None,
             gpu_stats_rx: rx,
             last_stats_update: std::time::Instant::now(),
+            fan_curve: nvcontrol::gui_widgets::FanCurve::new(),
+            voltage_curve: nvcontrol::gui_widgets::VoltageCurve::new(),
+            monitoring_dashboard: nvcontrol::gui_widgets::MonitoringDashboard::new(120), // 2 minutes at 1Hz
         }
     }
 
     fn update_gpu_stats_from_channel(&mut self) {
         // Non-blocking receive from channel
         if let Ok(stats) = self.gpu_stats_rx.try_recv() {
+            // Update monitoring dashboard
+            let gui_stats = nvcontrol::gui_widgets::GpuStats {
+                temperature: stats.temperature,
+                power_draw: stats.power_draw,
+                utilization: stats.utilization,
+                fan_speed: stats.fan_speed,
+            };
+            self.monitoring_dashboard.update(&gui_stats);
+
             self.gpu_stats = Some(stats);
             self.last_stats_update = std::time::Instant::now();
         }
@@ -334,7 +356,180 @@ impl eframe::App for NvControlApp {
                             if ui.button("🔧 Show Capabilities").clicked() {
                                 // Could open a popup or navigate to settings
                             }
+
+                            if ui.button("🗑️ Clear Graphs").clicked() {
+                                self.monitoring_dashboard.clear_all();
+                            }
                         });
+                    });
+
+                    ui.add_space(10.0);
+
+                    // Real-time monitoring graphs
+                    ui.group(|ui| {
+                        ui.label("📈 Real-Time Monitoring");
+                        ui.separator();
+
+                        use egui_plot::{Line, Plot, PlotPoints};
+
+                        // Temperature graph
+                        ui.label("🌡️ Temperature History");
+                        let temp_points: PlotPoints = self
+                            .monitoring_dashboard
+                            .temperature
+                            .get_points()
+                            .into_iter()
+                            .map(|p| [p[0], p[1]])
+                            .collect();
+
+                        Plot::new("temperature_plot")
+                            .height(150.0)
+                            .width(ui.available_width())
+                            .y_axis_label("Temperature (°C)")
+                            .allow_drag(false)
+                            .allow_zoom(false)
+                            .show(ui, |plot_ui| {
+                                plot_ui.line(
+                                    Line::new(temp_points)
+                                        .color(egui::Color32::from_rgb(239, 68, 68))
+                                        .name("Temperature"),
+                                );
+                            });
+
+                        // Show stats
+                        if let (Some(min), Some(max), Some(avg)) = (
+                            self.monitoring_dashboard.temperature.min_value(),
+                            self.monitoring_dashboard.temperature.max_value(),
+                            self.monitoring_dashboard.temperature.avg_value(),
+                        ) {
+                            ui.horizontal(|ui| {
+                                ui.label(format!("Min: {:.1}°C", min));
+                                ui.separator();
+                                ui.label(format!("Max: {:.1}°C", max));
+                                ui.separator();
+                                ui.label(format!("Avg: {:.1}°C", avg));
+                            });
+                        }
+
+                        ui.add_space(10.0);
+
+                        // GPU Utilization graph
+                        ui.label("📊 GPU Utilization History");
+                        let util_points: PlotPoints = self
+                            .monitoring_dashboard
+                            .gpu_utilization
+                            .get_points()
+                            .into_iter()
+                            .map(|p| [p[0], p[1]])
+                            .collect();
+
+                        Plot::new("utilization_plot")
+                            .height(150.0)
+                            .width(ui.available_width())
+                            .y_axis_label("Utilization (%)")
+                            .allow_drag(false)
+                            .allow_zoom(false)
+                            .show(ui, |plot_ui| {
+                                plot_ui.line(
+                                    Line::new(util_points)
+                                        .color(egui::Color32::from_rgb(59, 130, 246))
+                                        .name("GPU Usage"),
+                                );
+                            });
+
+                        if let (Some(min), Some(max), Some(avg)) = (
+                            self.monitoring_dashboard.gpu_utilization.min_value(),
+                            self.monitoring_dashboard.gpu_utilization.max_value(),
+                            self.monitoring_dashboard.gpu_utilization.avg_value(),
+                        ) {
+                            ui.horizontal(|ui| {
+                                ui.label(format!("Min: {:.1}%", min));
+                                ui.separator();
+                                ui.label(format!("Max: {:.1}%", max));
+                                ui.separator();
+                                ui.label(format!("Avg: {:.1}%", avg));
+                            });
+                        }
+
+                        ui.add_space(10.0);
+
+                        // Power Draw graph
+                        ui.label("⚡ Power Draw History");
+                        let power_points: PlotPoints = self
+                            .monitoring_dashboard
+                            .power
+                            .get_points()
+                            .into_iter()
+                            .map(|p| [p[0], p[1]])
+                            .collect();
+
+                        Plot::new("power_plot")
+                            .height(150.0)
+                            .width(ui.available_width())
+                            .y_axis_label("Power (W)")
+                            .allow_drag(false)
+                            .allow_zoom(false)
+                            .show(ui, |plot_ui| {
+                                plot_ui.line(
+                                    Line::new(power_points)
+                                        .color(egui::Color32::from_rgb(251, 191, 36))
+                                        .name("Power Draw"),
+                                );
+                            });
+
+                        if let (Some(min), Some(max), Some(avg)) = (
+                            self.monitoring_dashboard.power.min_value(),
+                            self.monitoring_dashboard.power.max_value(),
+                            self.monitoring_dashboard.power.avg_value(),
+                        ) {
+                            ui.horizontal(|ui| {
+                                ui.label(format!("Min: {:.1}W", min));
+                                ui.separator();
+                                ui.label(format!("Max: {:.1}W", max));
+                                ui.separator();
+                                ui.label(format!("Avg: {:.1}W", avg));
+                            });
+                        }
+
+                        ui.add_space(10.0);
+
+                        // Fan Speed graph
+                        ui.label("🌀 Fan Speed History");
+                        let fan_points: PlotPoints = self
+                            .monitoring_dashboard
+                            .fan_speed
+                            .get_points()
+                            .into_iter()
+                            .map(|p| [p[0], p[1]])
+                            .collect();
+
+                        Plot::new("fan_plot")
+                            .height(150.0)
+                            .width(ui.available_width())
+                            .y_axis_label("Fan Speed (%)")
+                            .allow_drag(false)
+                            .allow_zoom(false)
+                            .show(ui, |plot_ui| {
+                                plot_ui.line(
+                                    Line::new(fan_points)
+                                        .color(egui::Color32::from_rgb(16, 185, 129))
+                                        .name("Fan Speed"),
+                                );
+                            });
+
+                        if let (Some(min), Some(max), Some(avg)) = (
+                            self.monitoring_dashboard.fan_speed.min_value(),
+                            self.monitoring_dashboard.fan_speed.max_value(),
+                            self.monitoring_dashboard.fan_speed.avg_value(),
+                        ) {
+                            ui.horizontal(|ui| {
+                                ui.label(format!("Min: {:.1}%", min));
+                                ui.separator();
+                                ui.label(format!("Max: {:.1}%", max));
+                                ui.separator();
+                                ui.label(format!("Avg: {:.1}%", avg));
+                            });
+                        }
                     });
                 });
             }
@@ -724,6 +919,131 @@ impl eframe::App for NvControlApp {
                             }
                         });
                     });
+
+                    ui.add_space(10.0);
+
+                    ui.group(|ui| {
+                        ui.label("📈 Voltage Curve Editor (Undervolting)");
+                        ui.separator();
+
+                        ui.label("⚡ Advanced undervolting allows you to reduce power consumption while maintaining performance.");
+                        ui.add_space(5.0);
+
+                        // Show current GPU stats
+                        if let Some(ref stats) = self.gpu_stats {
+                            ui.horizontal(|ui| {
+                                ui.label("Current GPU Clock:");
+                                ui.label(format!("{} MHz", stats.gpu_clock));
+
+                                // Calculate voltage for current frequency
+                                let voltage = self.voltage_curve.get_voltage_at_freq(stats.gpu_clock as f64);
+                                ui.label(format!("→ Target Voltage: {:.0}mV", voltage));
+                            });
+                            ui.add_space(5.0);
+                        }
+
+                        // Voltage curve plot
+                        use egui_plot::{Line, Plot, PlotPoints, Points};
+
+                        let curve_points_vec: Vec<[f64; 2]> = self
+                            .voltage_curve
+                            .points
+                            .iter()
+                            .map(|p| [p.x, p.y])
+                            .collect();
+
+                        let _plot_response = Plot::new("voltage_curve_plot")
+                            .height(300.0)
+                            .width(ui.available_width())
+                            .x_axis_label("Frequency (MHz)")
+                            .y_axis_label("Voltage (mV)")
+                            .allow_drag(true)
+                            .allow_zoom(true)
+                            .show_axes([true, true])
+                            .show(ui, |plot_ui| {
+                                // Draw the curve line
+                                let curve_line: PlotPoints = curve_points_vec.clone().into();
+                                plot_ui.line(Line::new(curve_line).color(egui::Color32::from_rgb(251, 191, 36)));
+
+                                // Draw the control points
+                                let curve_pts: PlotPoints = curve_points_vec.into();
+                                plot_ui.points(
+                                    Points::new(curve_pts)
+                                        .radius(6.0)
+                                        .color(egui::Color32::from_rgb(251, 191, 36))
+                                        .name("Voltage Points"),
+                                );
+
+                                // Draw current frequency indicator
+                                if let Some(ref stats) = self.gpu_stats {
+                                    let freq = stats.gpu_clock as f64;
+                                    let voltage = self.voltage_curve.get_voltage_at_freq(freq);
+                                    let current_point: PlotPoints = vec![[freq, voltage]].into();
+                                    plot_ui.points(
+                                        Points::new(current_point)
+                                            .radius(8.0)
+                                            .color(egui::Color32::RED)
+                                            .name("Current"),
+                                    );
+                                }
+                            });
+
+                        ui.add_space(10.0);
+
+                        // Point editor
+                        ui.horizontal(|ui| {
+                            ui.label("📍 Voltage Points:");
+                        });
+
+                        ui.separator();
+
+                        let mut point_to_remove = None;
+
+                        for (i, point) in self.voltage_curve.points.iter().enumerate() {
+                            ui.horizontal(|ui| {
+                                ui.label(format!("{}.", i + 1));
+                                ui.label(format!("{:.0} MHz → {:.0} mV", point.x, point.y));
+
+                                if ui.button("🗑️ Remove").clicked() && self.voltage_curve.points.len() > 2 {
+                                    point_to_remove = Some(i);
+                                }
+                            });
+                        }
+
+                        if let Some(i) = point_to_remove {
+                            self.voltage_curve.remove_point(i);
+                        }
+
+                        ui.add_space(5.0);
+
+                        ui.horizontal(|ui| {
+                            if ui.button("➕ Add Point").clicked() {
+                                // Add point at midpoint
+                                let mid_freq = 1500.0;
+                                let mid_voltage = self.voltage_curve.get_voltage_at_freq(mid_freq);
+                                self.voltage_curve.add_point(mid_freq, mid_voltage);
+                            }
+
+                            if ui.button("🔄 Reset to Default").clicked() {
+                                self.voltage_curve = nvcontrol::gui_widgets::VoltageCurve::default();
+                            }
+
+                            if ui.button("💾 Apply Curve").clicked() {
+                                println!("Applying voltage curve: {:?}", self.voltage_curve.points);
+                                // TODO: Apply voltage curve to GPU
+                                // This would use nvidia-smi or NVML to set voltage curve
+                            }
+                        });
+
+                        ui.add_space(10.0);
+
+                        ui.colored_label(
+                            egui::Color32::YELLOW,
+                            "⚠️ Warning: Incorrect voltage settings can cause instability. Test thoroughly!"
+                        );
+                        ui.label("💡 Tip: Lower voltages reduce power draw and heat, but too low will cause crashes.");
+                        ui.label("📖 Start with small reductions (-25mV) and stress test before going further.");
+                    });
                 });
             }
             Tab::Fan => {
@@ -731,7 +1051,7 @@ impl eframe::App for NvControlApp {
                     ui.heading("🌀 Fan Control");
 
                     ui.group(|ui| {
-                        ui.label("🌀 Fan Status");
+                        ui.label("🌀 Current Fan Status");
                         ui.separator();
 
                         let fans = fan::list_fans();
@@ -766,6 +1086,132 @@ impl eframe::App for NvControlApp {
                                 }
                             });
                         }
+                    });
+
+                    ui.add_space(10.0);
+
+                    ui.group(|ui| {
+                        ui.label("📈 Fan Curve Editor");
+                        ui.separator();
+
+                        // Show current GPU temperature
+                        if let Some(ref stats) = self.gpu_stats {
+                            ui.horizontal(|ui| {
+                                ui.label("🌡️ Current GPU Temp:");
+                                ui.colored_label(
+                                    if stats.temperature > 80.0 {
+                                        egui::Color32::RED
+                                    } else if stats.temperature > 70.0 {
+                                        egui::Color32::YELLOW
+                                    } else {
+                                        egui::Color32::GREEN
+                                    },
+                                    format!("{:.1}°C", stats.temperature),
+                                );
+
+                                let target_speed = self.fan_curve.get_speed_at_temp(stats.temperature as f64);
+                                ui.label(format!("→ Target Fan Speed: {:.0}%", target_speed));
+                            });
+                            ui.add_space(5.0);
+                        }
+
+                        // Fan curve plot
+                        use egui_plot::{Line, Plot, PlotPoints, Points};
+
+                        let curve_points_vec: Vec<[f64; 2]> = self
+                            .fan_curve
+                            .points
+                            .iter()
+                            .map(|p| [p.x, p.y])
+                            .collect();
+
+                        let _plot_response = Plot::new("fan_curve_plot")
+                            .height(300.0)
+                            .width(ui.available_width())
+                            .x_axis_label("Temperature (°C)")
+                            .y_axis_label("Fan Speed (%)")
+                            .allow_drag(true)
+                            .allow_zoom(true)
+                            .show_axes([true, true])
+                            .show(ui, |plot_ui| {
+                                // Draw the curve line
+                                let curve_line: PlotPoints = curve_points_vec.clone().into();
+                                plot_ui.line(Line::new(curve_line).color(egui::Color32::LIGHT_BLUE));
+
+                                // Draw the control points
+                                let curve_pts: PlotPoints = curve_points_vec.into();
+                                plot_ui.points(
+                                    Points::new(curve_pts)
+                                        .radius(6.0)
+                                        .color(egui::Color32::from_rgb(59, 130, 246))
+                                        .name("Control Points"),
+                                );
+
+                                // Draw current temperature indicator
+                                if let Some(ref stats) = self.gpu_stats {
+                                    let temp = stats.temperature as f64;
+                                    let speed = self.fan_curve.get_speed_at_temp(temp);
+                                    let current_point: PlotPoints = vec![[temp, speed]].into();
+                                    plot_ui.points(
+                                        Points::new(current_point)
+                                            .radius(8.0)
+                                            .color(egui::Color32::RED)
+                                            .name("Current"),
+                                    );
+                                }
+                            });
+
+                        ui.add_space(10.0);
+
+                        // Point editor
+                        ui.horizontal(|ui| {
+                            ui.label("📍 Control Points:");
+                        });
+
+                        ui.separator();
+
+                        let mut point_to_remove = None;
+
+                        for (i, point) in self.fan_curve.points.iter().enumerate() {
+                            ui.horizontal(|ui| {
+                                ui.label(format!("{}.", i + 1));
+                                ui.label(format!("{:.0}°C → {:.0}%", point.x, point.y));
+
+                                if ui.button("🗑️ Remove").clicked() && self.fan_curve.points.len() > 2 {
+                                    point_to_remove = Some(i);
+                                }
+                            });
+                        }
+
+                        if let Some(i) = point_to_remove {
+                            self.fan_curve.remove_point(i);
+                        }
+
+                        ui.add_space(5.0);
+
+                        ui.horizontal(|ui| {
+                            if ui.button("➕ Add Point").clicked() {
+                                // Add point at midpoint of curve
+                                let mid_temp = 60.0;
+                                let mid_speed = self.fan_curve.get_speed_at_temp(mid_temp);
+                                self.fan_curve.add_point(mid_temp, mid_speed);
+                            }
+
+                            if ui.button("🔄 Reset to Default").clicked() {
+                                self.fan_curve = nvcontrol::gui_widgets::FanCurve::default();
+                            }
+
+                            if ui.button("💾 Apply Curve").clicked() {
+                                // Convert to nvcontrol format and apply
+                                let curve_data = self.fan_curve.to_nvcontrol_format();
+                                println!("Applying fan curve: {:?}", curve_data);
+                                // TODO: Apply curve to GPU fan control
+                                // This would call the fan module to set automatic curve mode
+                            }
+                        });
+
+                        ui.add_space(10.0);
+                        ui.label("💡 Tip: Click 'Add Point' to create new control points, then drag points in the graph to adjust the curve.");
                     });
                 });
             }

@@ -53,6 +53,7 @@ pub mod game_detection;
 pub mod game_scanner;
 pub mod notifications;
 pub mod benchmark;
+pub mod gui_widgets;
 pub mod hdr;
 pub mod setup;
 pub mod display_info;

@@ -28,6 +28,7 @@ path = "src/bin/nvctl.rs"
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 eframe = { version = "0.27", optional = true }
+egui_plot = { version = "0.27", optional = true }
 anyhow = "1"
 thiserror = "1"
 serde = { version = "1", features = ["derive"] }
@@ -65,7 +66,7 @@ nvbind = { git = "https://github.com/ghostkellz/nvbind", optional = true }
 
 [features]
 default = ["gui", "tray", "bolt-api"]
-gui = ["eframe", "winit"]
+gui = ["eframe", "egui_plot", "winit"]
 tray = ["tray-icon"]
 bolt-api = ["bolt"]
 nvbind-api = ["nvbind"]
