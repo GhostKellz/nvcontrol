@@ -92,6 +92,12 @@ pub mod multimonitor;
 // Profile management
 pub mod profile_manager;
 
+// Multi-GPU support
+pub mod multi_gpu;
+
+// Power curves and scheduling
+pub mod power_curves;
+
 // Re-export commonly used types
 pub use config::Config;
 pub use profiles::Profile;

@@ -80,6 +80,9 @@ struct NvControlApp {
     monitoring_dashboard: nvcontrol::gui_widgets::MonitoringDashboard,
     // HDR configuration
     hdr_config: nvcontrol::hdr::HdrConfig,
+    // Multi-GPU support
+    available_gpus: Vec<nvcontrol::multi_gpu::GpuInfo>,
+    selected_gpu_index: u32,
 }
 
 #[cfg(feature = "gui")]
@@ -168,6 +171,8 @@ impl NvControlApp {
             voltage_curve: nvcontrol::gui_widgets::VoltageCurve::new(),
             monitoring_dashboard: nvcontrol::gui_widgets::MonitoringDashboard::new(120), // 2 minutes at 1Hz
             hdr_config: nvcontrol::hdr::HdrConfig::load().unwrap_or_default(),
+            available_gpus: nvcontrol::multi_gpu::detect_gpus().unwrap_or_else(|_| vec![]),
+            selected_gpu_index: 0,
         }
     }
 
@@ -290,6 +295,57 @@ impl eframe::App for NvControlApp {
             Tab::Gpu => {
                 egui::CentralPanel::default().show(ctx, |ui| {
                     ui.heading("🎮 GPU Status & Monitoring");
+
+                    // GPU Selector (if multiple GPUs)
+                    if self.available_gpus.len() > 1 {
+                        ui.group(|ui| {
+                            ui.horizontal(|ui| {
+                                ui.label("🎯 Select GPU:");
+                                egui::ComboBox::from_id_source("gpu_selector")
+                                    .selected_text(format!("GPU {} - {}",
+                                        self.selected_gpu_index,
+                                        self.available_gpus.get(self.selected_gpu_index as usize)
+                                            .map(|g| g.name.as_str())
+                                            .unwrap_or("Unknown")
+                                    ))
+                                    .show_ui(ui, |ui| {
+                                        for gpu in &self.available_gpus {
+                                            ui.selectable_value(
+                                                &mut self.selected_gpu_index,
+                                                gpu.index,
+                                                format!("GPU {} - {} ({:.1}°C, {:.0}%)",
+                                                    gpu.index,
+                                                    gpu.name,
+                                                    gpu.temperature,
+                                                    gpu.utilization
+                                                )
+                                            );
+                                        }
+                                    });
+
+                                if ui.button("🔄 Refresh GPUs").clicked() {
+                                    self.available_gpus = nvcontrol::multi_gpu::detect_gpus().unwrap_or_else(|_| vec![]);
+                                }
+                            });
+
+                            // Show multi-GPU info
+                            ui.horizontal(|ui| {
+                                ui.label(format!("📊 Total GPUs: {}", self.available_gpus.len()));
+
+                                let has_sli = self.available_gpus.iter().any(|g| g.sli_enabled);
+                                let has_nvlink = self.available_gpus.iter().any(|g| g.nvlink_enabled);
+
+                                if has_sli {
+                                    ui.colored_label(egui::Color32::GREEN, "✅ SLI");
+                                }
+                                if has_nvlink {
+                                    ui.colored_label(egui::Color32::GREEN, "✅ NVLink");
+                                }
+                            });
+                        });
+
+                        ui.add_space(10.0);
+                    }
 
                     // Get GPU info from cached stats
                     ui.group(|ui| {
