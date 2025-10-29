@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=nvcontrol
+GenericName=NVIDIA GPU Control
+Comment=Modern NVIDIA Settings Manager for Linux with Wayland Support
+Exec=nvcontrol
+Icon=nvcontrol
+Terminal=false
+Categories=System;Settings;HardwareSettings;
+Keywords=nvidia;gpu;graphics;settings;wayland;overclock;fan;vibrance;
+StartupNotify=true
+StartupWMClass=nvcontrol

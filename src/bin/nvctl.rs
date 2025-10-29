@@ -172,8 +172,52 @@ enum Command {
         #[command(subcommand)]
         subcommand: MultiMonitorSubcommand,
     },
+    /// 📊 On-Screen Display (OSD) for gaming
+    Osd {
+        #[command(subcommand)]
+        subcommand: OsdSubcommand,
+    },
     /// 📋 Show detailed version information
     Version,
+}
+
+#[derive(Subcommand)]
+enum OsdSubcommand {
+    /// Enable OSD overlay
+    Enable,
+    /// Disable OSD overlay
+    Disable,
+    /// Show OSD status and configuration
+    Status,
+    /// Configure OSD settings
+    Config {
+        /// Position: top-left, top-right, bottom-left, bottom-right
+        #[arg(long)]
+        position: Option<String>,
+        /// Font size
+        #[arg(long)]
+        font_size: Option<u32>,
+        /// Background opacity (0.0-1.0)
+        #[arg(long)]
+        opacity: Option<f32>,
+        /// Update interval in milliseconds
+        #[arg(long)]
+        interval: Option<u64>,
+    },
+    /// Add metric to OSD
+    Add {
+        /// Metric to add: fps, gpu-temp, gpu-util, vram, etc.
+        metric: String,
+    },
+    /// Remove metric from OSD
+    Remove {
+        /// Metric to remove
+        metric: String,
+    },
+    /// List available metrics
+    Metrics,
+    /// Check MangoHud installation status
+    Check,
 }
 
 #[derive(Subcommand)]
@@ -4333,6 +4377,205 @@ fn main() {
                 }
             }
         },
+        Command::Osd { subcommand } => {
+            use nvcontrol::osd::{OsdManager, OsdMetric, OsdPosition};
+
+            match subcommand {
+                OsdSubcommand::Enable => {
+                    match OsdManager::new() {
+                        Ok(mut manager) => {
+                            if !OsdManager::check_mangohud_installed() {
+                                eprintln!("⚠️  MangoHud not found!");
+                                println!("{}", OsdManager::install_mangohud_instructions());
+                                return;
+                            }
+
+                            match manager.enable() {
+                                Ok(()) => {
+                                    println!("✅ OSD enabled successfully");
+                                    println!("💡 Launch games with: mangohud <game>");
+                                    println!("💡 Or set MANGOHUD=1 environment variable");
+                                }
+                                Err(e) => eprintln!("❌ Failed to enable OSD: {}", e),
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize OSD manager: {}", e),
+                    }
+                }
+                OsdSubcommand::Disable => {
+                    match OsdManager::new() {
+                        Ok(mut manager) => {
+                            match manager.disable() {
+                                Ok(()) => println!("✅ OSD disabled"),
+                                Err(e) => eprintln!("❌ Failed to disable OSD: {}", e),
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize OSD manager: {}", e),
+                    }
+                }
+                OsdSubcommand::Status => {
+                    match OsdManager::new() {
+                        Ok(manager) => {
+                            let config = manager.get_config();
+                            println!("📊 OSD Status:");
+                            println!("   Enabled: {}", if config.enabled { "✅ Yes" } else { "❌ No" });
+                            println!("   Position: {:?}", config.position);
+                            println!("   Font Size: {}", config.font_size);
+                            println!("   Opacity: {:.2}", config.background_opacity);
+                            println!("   Update Interval: {}ms", config.update_interval_ms);
+                            println!("\n📈 Active Metrics:");
+                            for metric in &config.metrics {
+                                println!("   • {:?}", metric);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to get OSD status: {}", e),
+                    }
+                }
+                OsdSubcommand::Config {
+                    position,
+                    font_size,
+                    opacity,
+                    interval,
+                } => {
+                    match OsdManager::new() {
+                        Ok(mut manager) => {
+                            let mut changed = false;
+
+                            if let Some(pos) = position {
+                                let osd_pos = match pos.as_str() {
+                                    "top-left" => OsdPosition::TopLeft,
+                                    "top-right" => OsdPosition::TopRight,
+                                    "bottom-left" => OsdPosition::BottomLeft,
+                                    "bottom-right" => OsdPosition::BottomRight,
+                                    _ => {
+                                        eprintln!("❌ Invalid position. Use: top-left, top-right, bottom-left, bottom-right");
+                                        return;
+                                    }
+                                };
+                                let _ = manager.set_position(osd_pos);
+                                changed = true;
+                            }
+
+                            if let Some(size) = font_size {
+                                manager.get_config_mut().font_size = size;
+                                changed = true;
+                            }
+
+                            if let Some(op) = opacity {
+                                if op >= 0.0 && op <= 1.0 {
+                                    manager.get_config_mut().background_opacity = op;
+                                    changed = true;
+                                } else {
+                                    eprintln!("❌ Opacity must be between 0.0 and 1.0");
+                                }
+                            }
+
+                            if let Some(int) = interval {
+                                manager.get_config_mut().update_interval_ms = int;
+                                changed = true;
+                            }
+
+                            if changed {
+                                match manager.save_config() {
+                                    Ok(()) => println!("✅ OSD configuration saved"),
+                                    Err(e) => eprintln!("❌ Failed to save config: {}", e),
+                                }
+                            } else {
+                                println!("ℹ️  No changes made");
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize OSD manager: {}", e),
+                    }
+                }
+                OsdSubcommand::Add { metric } => {
+                    match OsdManager::new() {
+                        Ok(mut manager) => {
+                            let osd_metric = match metric.as_str() {
+                                "fps" => OsdMetric::Fps,
+                                "frametime" => OsdMetric::Frametime,
+                                "gpu-name" => OsdMetric::GpuName,
+                                "gpu-temp" => OsdMetric::GpuTemperature,
+                                "gpu-util" => OsdMetric::GpuUtilization,
+                                "vram" => OsdMetric::GpuMemoryUsed,
+                                "gpu-power" => OsdMetric::GpuPowerDraw,
+                                "gpu-fan" => OsdMetric::GpuFanSpeed,
+                                "gpu-clock" => OsdMetric::GpuClockSpeed,
+                                "cpu-temp" => OsdMetric::CpuTemperature,
+                                "cpu-util" => OsdMetric::CpuUtilization,
+                                "ram" => OsdMetric::RamUsed,
+                                _ => {
+                                    eprintln!("❌ Unknown metric. Use 'nvctl osd metrics' to list available metrics");
+                                    return;
+                                }
+                            };
+
+                            match manager.add_metric(osd_metric) {
+                                Ok(()) => println!("✅ Metric '{}' added to OSD", metric),
+                                Err(e) => eprintln!("❌ Failed to add metric: {}", e),
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize OSD manager: {}", e),
+                    }
+                }
+                OsdSubcommand::Remove { metric } => {
+                    match OsdManager::new() {
+                        Ok(mut manager) => {
+                            let osd_metric = match metric.as_str() {
+                                "fps" => OsdMetric::Fps,
+                                "frametime" => OsdMetric::Frametime,
+                                "gpu-name" => OsdMetric::GpuName,
+                                "gpu-temp" => OsdMetric::GpuTemperature,
+                                "gpu-util" => OsdMetric::GpuUtilization,
+                                "vram" => OsdMetric::GpuMemoryUsed,
+                                "gpu-power" => OsdMetric::GpuPowerDraw,
+                                "gpu-fan" => OsdMetric::GpuFanSpeed,
+                                "gpu-clock" => OsdMetric::GpuClockSpeed,
+                                "cpu-temp" => OsdMetric::CpuTemperature,
+                                "cpu-util" => OsdMetric::CpuUtilization,
+                                "ram" => OsdMetric::RamUsed,
+                                _ => {
+                                    eprintln!("❌ Unknown metric");
+                                    return;
+                                }
+                            };
+
+                            match manager.remove_metric(&osd_metric) {
+                                Ok(()) => println!("✅ Metric '{}' removed from OSD", metric),
+                                Err(e) => eprintln!("❌ Failed to remove metric: {}", e),
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize OSD manager: {}", e),
+                    }
+                }
+                OsdSubcommand::Metrics => {
+                    println!("📊 Available OSD Metrics:");
+                    println!("\n🎮 Performance:");
+                    println!("   fps          - Frames per second");
+                    println!("   frametime    - Frame time in milliseconds");
+                    println!("\n🎯 GPU:");
+                    println!("   gpu-name     - GPU model name");
+                    println!("   gpu-temp     - GPU temperature");
+                    println!("   gpu-util     - GPU utilization percentage");
+                    println!("   vram         - VRAM usage");
+                    println!("   gpu-power    - GPU power draw");
+                    println!("   gpu-fan      - GPU fan speed");
+                    println!("   gpu-clock    - GPU clock speed");
+                    println!("\n💻 System:");
+                    println!("   cpu-temp     - CPU temperature");
+                    println!("   cpu-util     - CPU utilization");
+                    println!("   ram          - RAM usage");
+                }
+                OsdSubcommand::Check => {
+                    if OsdManager::check_mangohud_installed() {
+                        println!("✅ MangoHud is installed");
+                        println!("📍 You can enable OSD with: nvctl osd enable");
+                    } else {
+                        println!("❌ MangoHud not found");
+                        println!("{}", OsdManager::install_mangohud_instructions());
+                    }
+                }
+            }
+        }
         Command::Version => {
             println!("🚀 nvcontrol v{}", env!("CARGO_PKG_VERSION"));
             println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");

@@ -69,6 +69,9 @@ struct NvControlApp {
     // Missing fields that are used in the update() method
     fan_speeds: std::collections::HashMap<usize, u8>,
     gpu_stats: Option<GpuStats>,
+    // Async GPU monitoring
+    gpu_stats_rx: std::sync::mpsc::Receiver<GpuStats>,
+    last_stats_update: std::time::Instant,
 }
 
 #[cfg(feature = "gui")]
@@ -94,6 +97,47 @@ impl NvControlApp {
             vec![0; display_count]
         };
 
+        // Create channel for async GPU stats
+        let (tx, rx) = std::sync::mpsc::channel();
+
+        // Spawn background thread for GPU monitoring
+        std::thread::spawn(move || {
+            loop {
+                // Fetch GPU stats in background
+                if let Ok(nvml) = nvml_wrapper::Nvml::init() {
+                    if let Ok(device) = nvml.device_by_index(0) {
+                        let name = device.name().unwrap_or_else(|_| "Unknown GPU".to_string());
+                        let temperature = device
+                            .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
+                            .unwrap_or(0) as f32;
+                        let power_draw = device.power_usage().map(|p| p as f32 / 1000.0).unwrap_or(0.0);
+                        let utilization_rates = device.utilization_rates().ok();
+                        let utilization = utilization_rates.map(|u| u.gpu as f32).unwrap_or(0.0);
+                        let mem_info = device.memory_info().ok();
+                        let memory_used = mem_info.as_ref().map(|m| m.used).unwrap_or(0);
+                        let memory_total = mem_info.as_ref().map(|m| m.total).unwrap_or(0);
+                        let fan_speed = device.fan_speed(0).unwrap_or(0);
+
+                        let stats = GpuStats {
+                            name,
+                            temperature,
+                            utilization,
+                            memory_used,
+                            memory_total,
+                            power_draw,
+                            fan_speed,
+                        };
+
+                        // Send stats to UI thread (ignore errors if channel closed)
+                        let _ = tx.send(stats);
+                    }
+                }
+
+                // Update every 500ms
+                std::thread::sleep(std::time::Duration::from_millis(500));
+            }
+        });
+
         Self {
             vibrance_levels,
             tab: Tab::Gpu,
@@ -104,35 +148,16 @@ impl NvControlApp {
             overclock_profile: overclocking::OverclockProfile::default(),
             fan_speeds: std::collections::HashMap::new(),
             gpu_stats: None,
+            gpu_stats_rx: rx,
+            last_stats_update: std::time::Instant::now(),
         }
     }
 
-    fn fetch_gpu_stats(&mut self) {
-        // Try to fetch GPU stats via NVML
-        if let Ok(nvml) = nvml_wrapper::Nvml::init() {
-            if let Ok(device) = nvml.device_by_index(0) {
-                let name = device.name().unwrap_or_else(|_| "Unknown GPU".to_string());
-                let temperature = device
-                    .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
-                    .unwrap_or(0) as f32;
-                let power_draw = device.power_usage().map(|p| p as f32 / 1000.0).unwrap_or(0.0);
-                let utilization_rates = device.utilization_rates().ok();
-                let utilization = utilization_rates.map(|u| u.gpu as f32).unwrap_or(0.0);
-                let mem_info = device.memory_info().ok();
-                let memory_used = mem_info.as_ref().map(|m| m.used).unwrap_or(0);
-                let memory_total = mem_info.as_ref().map(|m| m.total).unwrap_or(0);
-                let fan_speed = device.fan_speed(0).unwrap_or(0);
-
-                self.gpu_stats = Some(GpuStats {
-                    name,
-                    temperature,
-                    utilization,
-                    memory_used,
-                    memory_total,
-                    power_draw,
-                    fan_speed,
-                });
-            }
+    fn update_gpu_stats_from_channel(&mut self) {
+        // Non-blocking receive from channel
+        if let Ok(stats) = self.gpu_stats_rx.try_recv() {
+            self.gpu_stats = Some(stats);
+            self.last_stats_update = std::time::Instant::now();
         }
     }
 }
@@ -140,11 +165,11 @@ impl NvControlApp {
 #[cfg(feature = "gui")]
 impl eframe::App for NvControlApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Fetch GPU stats on every frame update
-        self.fetch_gpu_stats();
+        // Non-blocking update from background thread
+        self.update_gpu_stats_from_channel();
 
-        // Request continuous repainting for live stats
-        ctx.request_repaint();
+        // Request repaint after 500ms for smooth updates
+        ctx.request_repaint_after(std::time::Duration::from_millis(500));
 
         egui::TopBottomPanel::top("tabs").show(ctx, |ui| {
             ui.horizontal(|ui| {

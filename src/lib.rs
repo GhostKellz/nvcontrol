@@ -48,6 +48,7 @@ pub mod vibrance_native;
 pub mod nvkms_bindings;
 pub mod display_controls;
 pub mod vrr;
+pub mod osd;
 pub mod hdr;
 pub mod setup;
 pub mod display_info;

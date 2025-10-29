@@ -1,0 +1,25 @@
+pkgbase = nvcontrol-git
+	pkgdesc = Modern NVIDIA GPU Control Tool for Linux with Pure Rust Digital Vibrance
+	pkgver = 0.6.1.r0.g41a9323
+	pkgrel = 1
+	url = https://github.com/GhostKellz/nvcontrol
+	arch = x86_64
+	license = MIT
+	makedepends = rust
+	makedepends = cargo
+	makedepends = git
+	depends = nvidia-utils>=580
+	depends = wayland
+	depends = libxcb
+	depends = gtk3
+	depends = hicolor-icon-theme
+	optdepends = gamescope: For gamescope integration
+	optdepends = mangohud: For OSD integration
+	optdepends = docker: For container GPU passthrough
+	optdepends = podman: Alternative container runtime
+	provides = nvcontrol
+	conflicts = nvcontrol
+	source = git+https://github.com/GhostKellz/nvcontrol.git
+	sha256sums = SKIP
+
+pkgname = nvcontrol-git
