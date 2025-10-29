@@ -19,6 +19,8 @@ enum Tab {
     Gamescope,
     ShaderCache,
     Drivers,
+    Benchmark,
+    Hdr,
     Settings,
 }
 
@@ -76,6 +78,8 @@ struct NvControlApp {
     fan_curve: nvcontrol::gui_widgets::FanCurve,
     voltage_curve: nvcontrol::gui_widgets::VoltageCurve,
     monitoring_dashboard: nvcontrol::gui_widgets::MonitoringDashboard,
+    // HDR configuration
+    hdr_config: nvcontrol::hdr::HdrConfig,
 }
 
 #[cfg(feature = "gui")]
@@ -163,6 +167,7 @@ impl NvControlApp {
             fan_curve: nvcontrol::gui_widgets::FanCurve::new(),
             voltage_curve: nvcontrol::gui_widgets::VoltageCurve::new(),
             monitoring_dashboard: nvcontrol::gui_widgets::MonitoringDashboard::new(120), // 2 minutes at 1Hz
+            hdr_config: nvcontrol::hdr::HdrConfig::load().unwrap_or_default(),
         }
     }
 
@@ -260,6 +265,18 @@ impl eframe::App for NvControlApp {
                     .clicked()
                 {
                     self.tab = Tab::Drivers;
+                }
+                if ui
+                    .selectable_label(matches!(self.tab, Tab::Benchmark), "📊 Benchmark")
+                    .clicked()
+                {
+                    self.tab = Tab::Benchmark;
+                }
+                if ui
+                    .selectable_label(matches!(self.tab, Tab::Hdr), "🌈 HDR")
+                    .clicked()
+                {
+                    self.tab = Tab::Hdr;
                 }
                 if ui
                     .selectable_label(matches!(self.tab, Tab::Settings), "⚙️ Settings")
@@ -2099,6 +2116,336 @@ impl eframe::App for NvControlApp {
                     });
                 });
             }
+            Tab::Benchmark => {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    ui.heading("📊 GPU Benchmark Suite");
+
+                    ui.group(|ui| {
+                        ui.label("🏁 Run Benchmark");
+                        ui.separator();
+
+                        ui.label("Test your GPU performance and compare results over time");
+                        ui.add_space(5.0);
+
+                        ui.horizontal(|ui| {
+                            if ui.button("⚡ Quick Test (30s)").clicked() {
+                                std::thread::spawn(|| {
+                                    if let Ok(suite) = nvcontrol::benchmark::BenchmarkSuite::new() {
+                                        let _ = suite.run_full_benchmark(30);
+                                    }
+                                });
+                            }
+
+                            if ui.button("📊 Full Test (60s)").clicked() {
+                                std::thread::spawn(|| {
+                                    if let Ok(suite) = nvcontrol::benchmark::BenchmarkSuite::new() {
+                                        let _ = suite.run_full_benchmark(60);
+                                    }
+                                });
+                            }
+
+                            if ui.button("🔥 Extended Test (120s)").clicked() {
+                                std::thread::spawn(|| {
+                                    if let Ok(suite) = nvcontrol::benchmark::BenchmarkSuite::new() {
+                                        let _ = suite.run_full_benchmark(120);
+                                    }
+                                });
+                            }
+                        });
+                    });
+
+                    ui.add_space(10.0);
+
+                    ui.group(|ui| {
+                        ui.label("📈 Benchmark History");
+                        ui.separator();
+
+                        if let Ok(suite) = nvcontrol::benchmark::BenchmarkSuite::new() {
+                            if let Ok(results) = suite.load_all_results() {
+                                if results.is_empty() {
+                                    ui.label("No benchmark results yet. Run a benchmark to get started!");
+                                } else {
+                                    // Show latest result
+                                    if let Some(latest) = results.first() {
+                                        ui.label(format!("🏆 Latest Score: {:.2}", latest.total_score));
+                                        ui.label(format!("📅 Date: {}", latest.timestamp.format("%Y-%m-%d %H:%M")));
+                                        ui.add_space(5.0);
+                                    }
+
+                                    // Performance history graph
+                                    use egui_plot::{Line, Plot, PlotPoints};
+
+                                    let score_points: PlotPoints = results
+                                        .iter()
+                                        .rev()
+                                        .enumerate()
+                                        .map(|(i, r)| [i as f64, r.total_score])
+                                        .collect();
+
+                                    Plot::new("benchmark_history")
+                                        .height(200.0)
+                                        .width(ui.available_width())
+                                        .y_axis_label("Total Score")
+                                        .x_axis_label("Test #")
+                                        .show(ui, |plot_ui| {
+                                            plot_ui.line(
+                                                Line::new(score_points)
+                                                    .color(egui::Color32::from_rgb(59, 130, 246))
+                                                    .name("Total Score"),
+                                            );
+                                        });
+
+                                    ui.add_space(10.0);
+
+                                    // Detailed results table
+                                    ui.label("📋 Detailed Results:");
+                                    ui.separator();
+
+                                    egui::ScrollArea::vertical()
+                                        .max_height(300.0)
+                                        .show(ui, |ui| {
+                                            for result in results.iter().take(10) {
+                                                ui.horizontal(|ui| {
+                                                    ui.label(result.timestamp.format("%Y-%m-%d %H:%M").to_string());
+                                                    ui.separator();
+                                                    ui.label(format!("Score: {:.2}", result.total_score));
+                                                    ui.separator();
+                                                    ui.label(format!("Temp: {:.1}°C", result.avg_temp));
+                                                    ui.separator();
+                                                    ui.label(format!("Power: {:.1}W", result.avg_power));
+
+                                                    if let (Some(gpu), Some(mem)) = (result.gpu_offset, result.memory_offset) {
+                                                        ui.separator();
+                                                        ui.label(format!("OC: {:+}/{:+}MHz", gpu, mem));
+                                                    }
+                                                });
+                                            }
+                                        });
+
+                                    ui.add_space(10.0);
+
+                                    // Comparison section
+                                    if results.len() >= 2 {
+                                        ui.label("🔄 Compare Results:");
+                                        ui.separator();
+
+                                        let baseline = &results[results.len() - 1];
+                                        let current = &results[0];
+                                        let comparison = suite.compare(baseline, current);
+
+                                        ui.horizontal(|ui| {
+                                            ui.label("Baseline:");
+                                            ui.label(format!("{:.2}", baseline.total_score));
+                                            ui.label(format!("({})", baseline.timestamp.format("%Y-%m-%d")));
+                                        });
+
+                                        ui.horizontal(|ui| {
+                                            ui.label("Latest:");
+                                            ui.label(format!("{:.2}", current.total_score));
+                                            ui.label(format!("({})", current.timestamp.format("%Y-%m-%d")));
+                                        });
+
+                                        ui.horizontal(|ui| {
+                                            ui.label("Performance Gain:");
+                                            let color = if comparison.performance_gain >= 0.0 {
+                                                egui::Color32::GREEN
+                                            } else {
+                                                egui::Color32::RED
+                                            };
+                                            ui.colored_label(color, format!("{:+.2}%", comparison.performance_gain));
+                                        });
+
+                                        ui.horizontal(|ui| {
+                                            ui.label("Temperature Delta:");
+                                            let color = if comparison.temp_delta <= 0.0 {
+                                                egui::Color32::GREEN
+                                            } else {
+                                                egui::Color32::YELLOW
+                                            };
+                                            ui.colored_label(color, format!("{:+.1}°C", comparison.temp_delta));
+                                        });
+
+                                        ui.horizontal(|ui| {
+                                            ui.label("Power Delta:");
+                                            let color = if comparison.power_delta <= 0.0 {
+                                                egui::Color32::GREEN
+                                            } else {
+                                                egui::Color32::YELLOW
+                                            };
+                                            ui.colored_label(color, format!("{:+.1}W", comparison.power_delta));
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    });
+                });
+            }
+            Tab::Hdr => {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    ui.heading("🌈 HDR Configuration");
+
+                    ui.group(|ui| {
+                        ui.label("🎮 HDR Status");
+                        ui.separator();
+
+                        ui.horizontal(|ui| {
+                            let mut enabled = self.hdr_config.enabled;
+                            if ui.checkbox(&mut enabled, "Enable HDR").changed() {
+                                self.hdr_config.enabled = enabled;
+                                if let Err(e) = self.hdr_config.apply() {
+                                    eprintln!("Failed to apply HDR: {}", e);
+                                }
+                                let _ = self.hdr_config.save();
+                            }
+                        });
+
+                        if let Ok(caps) = nvcontrol::hdr::get_hdr_capabilities() {
+                            ui.add_space(5.0);
+                            ui.label("🖥️ Display Capabilities:");
+                            ui.horizontal(|ui| {
+                                ui.label(format!("Peak Luminance: {} nits", caps.max_luminance));
+                                ui.separator();
+                                ui.label(format!("Min Luminance: {:.4} nits", caps.min_luminance));
+                            });
+
+                            ui.horizontal(|ui| {
+                                if caps.supports_hdr10 {
+                                    ui.colored_label(egui::Color32::GREEN, "✅ HDR10");
+                                }
+                                if caps.supports_hdr10_plus {
+                                    ui.colored_label(egui::Color32::GREEN, "✅ HDR10+");
+                                }
+                                if caps.supports_dolby_vision {
+                                    ui.colored_label(egui::Color32::GREEN, "✅ Dolby Vision");
+                                }
+                                if caps.supports_hlg {
+                                    ui.colored_label(egui::Color32::GREEN, "✅ HLG");
+                                }
+                            });
+                        }
+                    });
+
+                    ui.add_space(10.0);
+
+                    ui.group(|ui| {
+                        ui.label("🎚️ HDR Metadata");
+                        ui.separator();
+
+                        ui.horizontal(|ui| {
+                            ui.label("Peak Brightness:");
+                            let mut peak = self.hdr_config.peak_brightness as f32;
+                            if ui.add(egui::Slider::new(&mut peak, 100.0..=10000.0).suffix(" nits")).changed() {
+                                self.hdr_config.peak_brightness = peak as u32;
+                                let _ = self.hdr_config.save();
+                            }
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Min Brightness:");
+                            let mut min = self.hdr_config.min_brightness;
+                            if ui.add(egui::Slider::new(&mut min, 0.0001..=0.1).suffix(" nits").logarithmic(true)).changed() {
+                                self.hdr_config.min_brightness = min;
+                                let _ = self.hdr_config.save();
+                            }
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Max Content Light Level:");
+                            let mut max_cll = self.hdr_config.max_content_light_level as f32;
+                            if ui.add(egui::Slider::new(&mut max_cll, 100.0..=10000.0).suffix(" nits")).changed() {
+                                self.hdr_config.max_content_light_level = max_cll as u32;
+                                let _ = self.hdr_config.save();
+                            }
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Max Frame Average:");
+                            let mut max_fall = self.hdr_config.max_frame_average as f32;
+                            if ui.add(egui::Slider::new(&mut max_fall, 50.0..=5000.0).suffix(" nits")).changed() {
+                                self.hdr_config.max_frame_average = max_fall as u32;
+                                let _ = self.hdr_config.save();
+                            }
+                        });
+                    });
+
+                    ui.add_space(10.0);
+
+                    ui.group(|ui| {
+                        ui.label("🎨 Color & Tone Mapping");
+                        ui.separator();
+
+                        ui.horizontal(|ui| {
+                            ui.label("Tone Mapping:");
+                            egui::ComboBox::from_id_source("tone_mapping")
+                                .selected_text(format!("{}", self.hdr_config.tone_mapping))
+                                .show_ui(ui, |ui| {
+                                    use nvcontrol::hdr::ToneMappingMode;
+                                    ui.selectable_value(&mut self.hdr_config.tone_mapping, ToneMappingMode::None, "None (Clip)");
+                                    ui.selectable_value(&mut self.hdr_config.tone_mapping, ToneMappingMode::Reinhard, "Reinhard");
+                                    ui.selectable_value(&mut self.hdr_config.tone_mapping, ToneMappingMode::Hable, "Hable (Uncharted 2)");
+                                    ui.selectable_value(&mut self.hdr_config.tone_mapping, ToneMappingMode::ACES, "ACES Filmic");
+                                    ui.selectable_value(&mut self.hdr_config.tone_mapping, ToneMappingMode::AGX, "AGX");
+                                });
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Color Space:");
+                            egui::ComboBox::from_id_source("color_space")
+                                .selected_text(format!("{}", self.hdr_config.color_space))
+                                .show_ui(ui, |ui| {
+                                    use nvcontrol::hdr::ColorSpace;
+                                    ui.selectable_value(&mut self.hdr_config.color_space, ColorSpace::BT709, "BT.709 (sRGB)");
+                                    ui.selectable_value(&mut self.hdr_config.color_space, ColorSpace::BT2020, "BT.2020 (HDR)");
+                                    ui.selectable_value(&mut self.hdr_config.color_space, ColorSpace::DCI_P3, "DCI-P3 (Wide Gamut)");
+                                });
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("EOTF:");
+                            egui::ComboBox::from_id_source("eotf")
+                                .selected_text(format!("{}", self.hdr_config.eotf))
+                                .show_ui(ui, |ui| {
+                                    use nvcontrol::hdr::Eotf;
+                                    ui.selectable_value(&mut self.hdr_config.eotf, Eotf::Gamma22, "Gamma 2.2 (SDR)");
+                                    ui.selectable_value(&mut self.hdr_config.eotf, Eotf::PQ, "PQ (HDR10)");
+                                    ui.selectable_value(&mut self.hdr_config.eotf, Eotf::HLG, "HLG (HDR10+/BBC)");
+                                });
+                        });
+
+                        ui.add_space(10.0);
+
+                        ui.horizontal(|ui| {
+                            if ui.button("💾 Save & Apply").clicked() {
+                                if let Err(e) = self.hdr_config.save() {
+                                    eprintln!("Failed to save HDR config: {}", e);
+                                }
+                                if let Err(e) = self.hdr_config.apply() {
+                                    eprintln!("Failed to apply HDR config: {}", e);
+                                }
+                                println!("✅ HDR configuration saved and applied");
+                            }
+
+                            if ui.button("🔄 Reset to Defaults").clicked() {
+                                self.hdr_config = nvcontrol::hdr::HdrConfig::default();
+                                let _ = self.hdr_config.save();
+                            }
+                        });
+                    });
+
+                    ui.add_space(10.0);
+
+                    ui.group(|ui| {
+                        ui.label("💡 HDR Tips");
+                        ui.separator();
+                        ui.label("• Peak Brightness should match your display's capabilities");
+                        ui.label("• For gaming, use Hable or ACES tone mapping");
+                        ui.label("• BT.2020 color space is required for true HDR");
+                        ui.label("• PQ (Perceptual Quantizer) is the standard for HDR10");
+                        ui.label("• HLG is better for broadcast content");
+                    });
+                });
+            }
             Tab::Settings => {
                 egui::CentralPanel::default().show(ctx, |ui| {
                     ui.heading("⚙️ Settings");
@@ -2121,6 +2468,92 @@ impl eframe::App for NvControlApp {
                                 ctx.set_visuals(self.theme.to_egui_visuals());
                             }
                         });
+                    });
+
+                    ui.separator();
+
+                    ui.group(|ui| {
+                        ui.label("💾 Profile Management");
+                        ui.separator();
+
+                        ui.horizontal(|ui| {
+                            if ui.button("📥 Export Current Profile").clicked() {
+                                if let Ok(manager) = nvcontrol::profile_manager::ProfileManager::new() {
+                                    let bundle = nvcontrol::profile_manager::ProfileBundle {
+                                        name: format!("Profile_{}", chrono::Local::now().format("%Y%m%d_%H%M%S")),
+                                        description: "Exported from GUI".to_string(),
+                                        created_at: chrono::Utc::now(),
+                                        fan_curve: Some(self.fan_curve.clone()),
+                                        voltage_curve: Some(self.voltage_curve.clone()),
+                                        overclock: Some(self.overclock_profile.clone()),
+                                        game_profiles: vec![],
+                                        vibrance_settings: Some(nvcontrol::profile_manager::VibranceSettings {
+                                            display_levels: self.vibrance_levels.clone(),
+                                            per_game_vibrance: false,
+                                        }),
+                                    };
+
+                                    match manager.export_profile(&bundle, None) {
+                                        Ok(path) => println!("✅ Profile exported to: {}", path.display()),
+                                        Err(e) => eprintln!("❌ Export failed: {}", e),
+                                    }
+                                }
+                            }
+
+                            if ui.button("📂 Open Profiles Folder").clicked() {
+                                if let Ok(manager) = nvcontrol::profile_manager::ProfileManager::new() {
+                                    let path = manager.get_profiles_dir();
+                                    let _ = std::process::Command::new("xdg-open")
+                                        .arg(path)
+                                        .spawn();
+                                }
+                            }
+                        });
+
+                        ui.add_space(5.0);
+
+                        // List available profiles
+                        ui.label("📋 Available Profiles:");
+                        ui.separator();
+
+                        if let Ok(manager) = nvcontrol::profile_manager::ProfileManager::new() {
+                            if let Ok(profiles) = manager.list_profiles() {
+                                if profiles.is_empty() {
+                                    ui.label("No profiles found. Export your current settings to create one.");
+                                } else {
+                                    egui::ScrollArea::vertical()
+                                        .max_height(200.0)
+                                        .show(ui, |ui| {
+                                            for profile in profiles {
+                                                ui.horizontal(|ui| {
+                                                    ui.label(&profile.name);
+                                                    ui.label(format!("({})", profile.created_at.format("%Y-%m-%d")));
+
+                                                    if ui.button("📥 Load").clicked() {
+                                                        if let Some(fan) = profile.fan_curve {
+                                                            self.fan_curve = fan;
+                                                        }
+                                                        if let Some(voltage) = profile.voltage_curve {
+                                                            self.voltage_curve = voltage;
+                                                        }
+                                                        if let Some(oc) = profile.overclock {
+                                                            self.overclock_profile = oc;
+                                                        }
+                                                        if let Some(vib) = profile.vibrance_settings {
+                                                            self.vibrance_levels = vib.display_levels;
+                                                        }
+                                                        println!("✅ Profile loaded: {}", profile.name);
+                                                    }
+
+                                                    if ui.button("🗑️").clicked() {
+                                                        let _ = manager.delete_profile(&profile.name);
+                                                    }
+                                                });
+                                            }
+                                        });
+                                }
+                            }
+                        }
                     });
 
                     ui.separator();

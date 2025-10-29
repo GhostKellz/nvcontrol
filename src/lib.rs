@@ -89,6 +89,9 @@ pub mod arch_integration;
 pub mod gsp_firmware;
 pub mod multimonitor;
 
+// Profile management
+pub mod profile_manager;
+
 // Re-export commonly used types
 pub use config::Config;
 pub use profiles::Profile;

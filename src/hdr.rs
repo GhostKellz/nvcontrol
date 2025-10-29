@@ -282,3 +282,184 @@ fn check_hdr_support() -> NvResult<bool> {
         _ => Ok(false),
     }
 }
+
+// Advanced HDR Configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HdrConfig {
+    pub enabled: bool,
+    pub peak_brightness: u32,      // nits (100-10000)
+    pub min_brightness: f32,        // nits (0.0001-0.1)
+    pub max_frame_average: u32,     // nits
+    pub max_content_light_level: u32, // nits
+    pub tone_mapping: ToneMappingMode,
+    pub color_space: ColorSpace,
+    pub eotf: Eotf,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum ToneMappingMode {
+    None,
+    Reinhard,
+    Hable,
+    ACES,
+    AGX,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum ColorSpace {
+    BT709,    // SDR
+    BT2020,   // HDR
+    DCI_P3,   // Wide gamut
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum Eotf {
+    Gamma22,   // SDR
+    PQ,        // Perceptual Quantizer (HDR10)
+    HLG,       // Hybrid Log-Gamma (HDR10+)
+}
+
+impl Default for HdrConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            peak_brightness: 1000,
+            min_brightness: 0.0001,
+            max_frame_average: 400,
+            max_content_light_level: 1000,
+            tone_mapping: ToneMappingMode::Hable,
+            color_space: ColorSpace::BT2020,
+            eotf: Eotf::PQ,
+        }
+    }
+}
+
+impl HdrConfig {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Load HDR config from file
+    pub fn load() -> NvResult<Self> {
+        let config_dir = dirs::config_dir()
+            .ok_or_else(|| crate::NvControlError::ConfigError("No config directory".into()))?
+            .join("nvcontrol");
+
+        let config_path = config_dir.join("hdr_config.toml");
+
+        if config_path.exists() {
+            let contents = std::fs::read_to_string(&config_path)
+                .map_err(|e| crate::NvControlError::ConfigError(format!("Failed to read config: {}", e)))?;
+
+            toml::from_str(&contents)
+                .map_err(|e| crate::NvControlError::ConfigError(format!("Failed to parse config: {}", e)))
+        } else {
+            Ok(Self::default())
+        }
+    }
+
+    /// Save HDR config to file
+    pub fn save(&self) -> NvResult<()> {
+        let config_dir = dirs::config_dir()
+            .ok_or_else(|| crate::NvControlError::ConfigError("No config directory".into()))?
+            .join("nvcontrol");
+
+        std::fs::create_dir_all(&config_dir)
+            .map_err(|e| crate::NvControlError::ConfigError(format!("Failed to create config dir: {}", e)))?;
+
+        let config_path = config_dir.join("hdr_config.toml");
+
+        let toml = toml::to_string_pretty(self)
+            .map_err(|e| crate::NvControlError::ConfigError(format!("Failed to serialize config: {}", e)))?;
+
+        std::fs::write(&config_path, toml)
+            .map_err(|e| crate::NvControlError::ConfigError(format!("Failed to write config: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Apply HDR configuration to the display
+    pub fn apply(&self) -> NvResult<()> {
+        if !self.enabled {
+            return disable_hdr_cli();
+        }
+
+        // Enable HDR first
+        enable_hdr_cli()?;
+
+        // Apply advanced settings via nvidia-settings
+        println!("🔧 Applying HDR configuration...");
+        println!("   Peak Brightness: {} nits", self.peak_brightness);
+        println!("   Tone Mapping: {:?}", self.tone_mapping);
+        println!("   Color Space: {:?}", self.color_space);
+        println!("   EOTF: {:?}", self.eotf);
+
+        // Note: Most of these settings are compositor-specific
+        // This is a placeholder for future NVML/NVKMS integration
+        Ok(())
+    }
+}
+
+/// Get display HDR capabilities
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HdrCapabilities {
+    pub max_luminance: u32,        // nits
+    pub min_luminance: f32,        // nits
+    pub max_fall: u32,             // Frame Average Light Level
+    pub supports_hdr10: bool,
+    pub supports_hdr10_plus: bool,
+    pub supports_dolby_vision: bool,
+    pub supports_hlg: bool,
+}
+
+impl Default for HdrCapabilities {
+    fn default() -> Self {
+        Self {
+            max_luminance: 1000,
+            min_luminance: 0.0001,
+            max_fall: 400,
+            supports_hdr10: true,
+            supports_hdr10_plus: false,
+            supports_dolby_vision: false,
+            supports_hlg: true,
+        }
+    }
+}
+
+pub fn get_hdr_capabilities() -> NvResult<HdrCapabilities> {
+    // TODO: Query actual display capabilities via EDID/DisplayID
+    // For now, return safe defaults
+    Ok(HdrCapabilities::default())
+}
+
+impl std::fmt::Display for ToneMappingMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ToneMappingMode::None => write!(f, "None (Clip)"),
+            ToneMappingMode::Reinhard => write!(f, "Reinhard"),
+            ToneMappingMode::Hable => write!(f, "Hable (Uncharted 2)"),
+            ToneMappingMode::ACES => write!(f, "ACES Filmic"),
+            ToneMappingMode::AGX => write!(f, "AGX"),
+        }
+    }
+}
+
+impl std::fmt::Display for ColorSpace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ColorSpace::BT709 => write!(f, "BT.709 (sRGB)"),
+            ColorSpace::BT2020 => write!(f, "BT.2020 (HDR)"),
+            ColorSpace::DCI_P3 => write!(f, "DCI-P3 (Wide Gamut)"),
+        }
+    }
+}
+
+impl std::fmt::Display for Eotf {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Eotf::Gamma22 => write!(f, "Gamma 2.2 (SDR)"),
+            Eotf::PQ => write!(f, "PQ (HDR10)"),
+            Eotf::HLG => write!(f, "HLG (HDR10+/BBC)"),
+        }
+    }
+}
