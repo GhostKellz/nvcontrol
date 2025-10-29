@@ -106,11 +106,46 @@ impl NvControlApp {
             gpu_stats: None,
         }
     }
+
+    fn fetch_gpu_stats(&mut self) {
+        // Try to fetch GPU stats via NVML
+        if let Ok(nvml) = nvml_wrapper::Nvml::init() {
+            if let Ok(device) = nvml.device_by_index(0) {
+                let name = device.name().unwrap_or_else(|_| "Unknown GPU".to_string());
+                let temperature = device
+                    .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
+                    .unwrap_or(0) as f32;
+                let power_draw = device.power_usage().map(|p| p as f32 / 1000.0).unwrap_or(0.0);
+                let utilization_rates = device.utilization_rates().ok();
+                let utilization = utilization_rates.map(|u| u.gpu as f32).unwrap_or(0.0);
+                let mem_info = device.memory_info().ok();
+                let memory_used = mem_info.as_ref().map(|m| m.used).unwrap_or(0);
+                let memory_total = mem_info.as_ref().map(|m| m.total).unwrap_or(0);
+                let fan_speed = device.fan_speed(0).unwrap_or(0);
+
+                self.gpu_stats = Some(GpuStats {
+                    name,
+                    temperature,
+                    utilization,
+                    memory_used,
+                    memory_total,
+                    power_draw,
+                    fan_speed,
+                });
+            }
+        }
+    }
 }
 
 #[cfg(feature = "gui")]
 impl eframe::App for NvControlApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Fetch GPU stats on every frame update
+        self.fetch_gpu_stats();
+
+        // Request continuous repainting for live stats
+        ctx.request_repaint();
+
         egui::TopBottomPanel::top("tabs").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if ui
@@ -124,6 +159,12 @@ impl eframe::App for NvControlApp {
                     .clicked()
                 {
                     self.tab = Tab::Display;
+                }
+                if ui
+                    .selectable_label(matches!(self.tab, Tab::Vibrance), "🌈 Vibrance")
+                    .clicked()
+                {
+                    self.tab = Tab::Vibrance;
                 }
                 if ui
                     .selectable_label(matches!(self.tab, Tab::Overclock), "⚡ Overclock")
@@ -186,74 +227,59 @@ impl eframe::App for NvControlApp {
                 egui::CentralPanel::default().show(ctx, |ui| {
                     ui.heading("🎮 GPU Status & Monitoring");
 
-                    // Get GPU info via NVML or fallback
+                    // Get GPU info from cached stats
                     ui.group(|ui| {
                         ui.label("📊 Real-time Stats");
                         ui.separator();
 
-                        // Try to get live GPU stats
-                        if let Ok(nvml) = nvml_wrapper::Nvml::init() {
-                            if let Ok(device) = nvml.device_by_index(0) {
-                                let name = device.name().unwrap_or("Unknown GPU".to_string());
-                                let temp = device
-                                    .temperature(
-                                        nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu,
-                                    )
-                                    .unwrap_or(0);
-                                let power = device
-                                    .power_usage()
-                                    .map(|p| p as f64 / 1000.0)
-                                    .unwrap_or(0.0);
-                                let util = device.utilization_rates().map(|u| u.gpu).unwrap_or(0);
-                                let mem_info = device.memory_info().ok();
+                        if let Some(ref stats) = self.gpu_stats {
+                            ui.horizontal(|ui| {
+                                ui.label("🎯 GPU:");
+                                ui.label(&stats.name);
+                            });
 
-                                ui.horizontal(|ui| {
-                                    ui.label("🎯 GPU:");
-                                    ui.label(&name);
-                                });
+                            ui.horizontal(|ui| {
+                                ui.label("🌡️ Temperature:");
+                                ui.colored_label(
+                                    if stats.temperature > 80.0 {
+                                        egui::Color32::RED
+                                    } else if stats.temperature > 70.0 {
+                                        egui::Color32::YELLOW
+                                    } else {
+                                        egui::Color32::GREEN
+                                    },
+                                    format!("{:.1}°C", stats.temperature),
+                                );
+                            });
 
-                                ui.horizontal(|ui| {
-                                    ui.label("🌡️ Temperature:");
-                                    ui.colored_label(
-                                        if temp > 80 {
-                                            egui::Color32::RED
-                                        } else if temp > 70 {
-                                            egui::Color32::YELLOW
-                                        } else {
-                                            egui::Color32::GREEN
-                                        },
-                                        format!("{}°C", temp),
-                                    );
-                                });
+                            ui.horizontal(|ui| {
+                                ui.label("⚡ Power Usage:");
+                                ui.label(format!("{:.1}W", stats.power_draw));
+                            });
 
-                                ui.horizontal(|ui| {
-                                    ui.label("⚡ Power Usage:");
-                                    ui.label(format!("{:.1}W", power));
-                                });
+                            ui.horizontal(|ui| {
+                                ui.label("📈 GPU Usage:");
+                                ui.add(
+                                    egui::ProgressBar::new(stats.utilization / 100.0)
+                                        .text(format!("{:.0}%", stats.utilization)),
+                                );
+                            });
 
-                                ui.horizontal(|ui| {
-                                    ui.label("📈 GPU Usage:");
-                                    ui.add(
-                                        egui::ProgressBar::new(util as f32 / 100.0)
-                                            .text(format!("{}%", util)),
-                                    );
-                                });
+                            ui.horizontal(|ui| {
+                                ui.label("💾 VRAM:");
+                                let used_gb = stats.memory_used as f64 / 1e9;
+                                let total_gb = stats.memory_total as f64 / 1e9;
+                                let usage_ratio = stats.memory_used as f32 / stats.memory_total as f32;
+                                ui.add(
+                                    egui::ProgressBar::new(usage_ratio)
+                                        .text(format!("{:.1}/{:.1} GB", used_gb, total_gb)),
+                                );
+                            });
 
-                                if let Some(mem) = mem_info {
-                                    ui.horizontal(|ui| {
-                                        ui.label("💾 VRAM:");
-                                        let used_gb = mem.used as f64 / 1e9;
-                                        let total_gb = mem.total as f64 / 1e9;
-                                        let usage_ratio = mem.used as f32 / mem.total as f32;
-                                        ui.add(
-                                            egui::ProgressBar::new(usage_ratio)
-                                                .text(format!("{:.1}/{:.1} GB", used_gb, total_gb)),
-                                        );
-                                    });
-                                }
-                            } else {
-                                ui.label("❌ No NVIDIA GPU detected");
-                            }
+                            ui.horizontal(|ui| {
+                                ui.label("🌀 Fan Speed:");
+                                ui.label(format!("{}%", stats.fan_speed));
+                            });
                         } else {
                             ui.label("⚠️ NVML not available - install NVIDIA drivers");
                             ui.horizontal(|ui| {

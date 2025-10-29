@@ -1792,9 +1792,15 @@ fn main() {
                 println!("Profile system not yet implemented");
             }
             OverclockSubcommand::StressTest { duration } => {
+                println!("🔥 Starting GPU stress test for {} minutes...", duration);
+                let test_duration = Duration::from_secs(duration as u64 * 60);
+                let _pb = show_progress_bar("GPU stress test", test_duration);
+
                 match overclocking::create_stress_test(duration) {
-                    Ok(()) => println!("Stress test completed"),
-                    Err(e) => eprintln!("Stress test failed: {e}"),
+                    Ok(()) => {
+                        println!("\n✅ Stress test completed successfully");
+                    }
+                    Err(e) => eprintln!("\n❌ Stress test failed: {e}"),
                 }
             }
             OverclockSubcommand::Reset => {
@@ -2905,8 +2911,25 @@ fn main() {
                     width,
                     height,
                 } => {
-                    let mut config = gamescope::GamescopeConfig::default();
+                    // Start with preset config or default
+                    let mut config = if let Some(preset_name) = preset {
+                        match preset_name.to_lowercase().as_str() {
+                            "performance" => gamescope::GamescopePreset::Performance.to_config(),
+                            "quality" => gamescope::GamescopePreset::Quality.to_config(),
+                            "balanced" => gamescope::GamescopePreset::Balanced.to_config(),
+                            "competitive" => gamescope::GamescopePreset::Competitive.to_config(),
+                            "cinematic" => gamescope::GamescopePreset::Cinematic.to_config(),
+                            "steamdeck" => gamescope::GamescopePreset::SteamDeck.to_config(),
+                            _ => {
+                                eprintln!("⚠️  Unknown preset '{}', using default", preset_name);
+                                gamescope::GamescopeConfig::default()
+                            }
+                        }
+                    } else {
+                        gamescope::GamescopeConfig::default()
+                    };
 
+                    // Override with custom width/height if provided
                     if let Some(w) = width {
                         config.width = w;
                     }
@@ -3824,9 +3847,24 @@ fn main() {
                 }
             }
             NvbindSubcommand::List { gpu_only, metrics } => {
-                println!("🐳 nvbind containers with performance metrics");
-                // Implementation would list actual nvbind containers
-                println!("   Feature implementation in progress...");
+                println!("🐳 nvbind containers");
+
+                // Filter options
+                let show_gpu_only = gpu_only;
+                let show_metrics = metrics;
+
+                if show_gpu_only {
+                    println!("   📊 Filtering: GPU containers only");
+                }
+                if show_metrics {
+                    println!("   📈 Showing: Performance metrics enabled");
+                }
+
+                println!("\n   🔍 Scanning for containers...");
+                // TODO: Actual container listing implementation
+                // This would integrate with Docker/Podman/nvbind runtime
+                println!("   ⚠️  Container listing implementation in progress");
+                println!("   💡 Use 'nvctl container list' for Docker containers");
             }
             NvbindSubcommand::Launch { .. } => {
                 println!("🚀 nvbind container launch");
@@ -3976,7 +4014,7 @@ fn main() {
                 );
 
                 match NvContainerRuntime::new() {
-                    Ok(mut runtime) => {
+                    Ok(runtime) => {
                         match runtime.create_phantomlink_container_config() {
                             Ok(mut config) => {
                                 // Configure based on mode
@@ -4397,7 +4435,7 @@ fn print_formatted_output<T: serde::Serialize>(
 }
 
 /// Show progress bar for long operations
-fn show_progress_bar(message: &str, _duration: Duration) -> ProgressBar {
+fn show_progress_bar(message: &str, duration: Duration) -> ProgressBar {
     let pb = ProgressBar::new(100);
     pb.set_style(
         ProgressStyle::default_bar()
@@ -4408,6 +4446,22 @@ fn show_progress_bar(message: &str, _duration: Duration) -> ProgressBar {
             .progress_chars("#>-"),
     );
     pb.set_message(message.to_string());
+
+    // Clone progress bar for the thread
+    let pb_clone = pb.clone();
+    let message_owned = message.to_string();
+
+    // Simulate progress over the duration
+    std::thread::spawn(move || {
+        let steps: u64 = 100;
+        let sleep_time = duration.as_millis() / (steps as u128);
+        for i in 0..=steps {
+            pb_clone.set_position(i);
+            std::thread::sleep(Duration::from_millis(sleep_time as u64));
+        }
+        pb_clone.finish_with_message(format!("✅ {} completed", message_owned));
+    });
+
     pb
 }
 
