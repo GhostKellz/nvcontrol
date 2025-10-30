@@ -12,6 +12,7 @@ enum Tab {
     Display,
     Vibrance,
     Overclock,
+    AutoOverclock,
     Fan,
     Vrr,
     Latency,
@@ -21,6 +22,8 @@ enum Tab {
     Drivers,
     Benchmark,
     Hdr,
+    PowerCurves,
+    GameProfiles,
     Settings,
 }
 
@@ -83,6 +86,16 @@ struct NvControlApp {
     // Multi-GPU support
     available_gpus: Vec<nvcontrol::multi_gpu::GpuInfo>,
     selected_gpu_index: u32,
+    // Power curves
+    power_config: nvcontrol::power_curves::PowerManagementConfig,
+    // Auto-overclock wizard
+    auto_oc_running: bool,
+    auto_oc_target: String,
+    auto_oc_safety: String,
+    auto_oc_max_temp: f32,
+    auto_oc_max_power: u32,
+    // Game profile auto-apply
+    game_auto_config: nvcontrol::game_profile_auto::AutoProfileConfig,
 }
 
 #[cfg(feature = "gui")]
@@ -173,6 +186,13 @@ impl NvControlApp {
             hdr_config: nvcontrol::hdr::HdrConfig::load().unwrap_or_default(),
             available_gpus: nvcontrol::multi_gpu::detect_gpus().unwrap_or_else(|_| vec![]),
             selected_gpu_index: 0,
+            power_config: nvcontrol::power_curves::load_power_config().unwrap_or_default(),
+            auto_oc_running: false,
+            auto_oc_target: "balanced".to_string(),
+            auto_oc_safety: "conservative".to_string(),
+            auto_oc_max_temp: 85.0,
+            auto_oc_max_power: 100,
+            game_auto_config: nvcontrol::game_profile_auto::load_config().unwrap_or_default(),
         }
     }
 
@@ -230,10 +250,28 @@ impl eframe::App for NvControlApp {
                     self.tab = Tab::Overclock;
                 }
                 if ui
+                    .selectable_label(matches!(self.tab, Tab::AutoOverclock), "🚀 Auto-OC")
+                    .clicked()
+                {
+                    self.tab = Tab::AutoOverclock;
+                }
+                if ui
                     .selectable_label(matches!(self.tab, Tab::Fan), "🌀 Fan Control")
                     .clicked()
                 {
                     self.tab = Tab::Fan;
+                }
+                if ui
+                    .selectable_label(matches!(self.tab, Tab::PowerCurves), "🔋 Power Curves")
+                    .clicked()
+                {
+                    self.tab = Tab::PowerCurves;
+                }
+                if ui
+                    .selectable_label(matches!(self.tab, Tab::GameProfiles), "🎮 Game Profiles")
+                    .clicked()
+                {
+                    self.tab = Tab::GameProfiles;
                 }
                 if ui
                     .selectable_label(matches!(self.tab, Tab::Vrr), "🔄 VRR")
@@ -2500,6 +2538,160 @@ impl eframe::App for NvControlApp {
                         ui.label("• PQ (Perceptual Quantizer) is the standard for HDR10");
                         ui.label("• HLG is better for broadcast content");
                     });
+                });
+            }
+            Tab::AutoOverclock => {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    ui.heading("🚀 Automated Overclocking Wizard");
+                    ui.add_space(10.0);
+
+                    ui.label("Safely auto-tune your GPU for optimal performance with stability testing.");
+                    ui.separator();
+
+                    ui.group(|ui| {
+                        ui.label("⚙️ Configuration");
+                        ui.add_space(5.0);
+
+                        ui.horizontal(|ui| {
+                            ui.label("Target Mode:");
+                            egui::ComboBox::from_id_source("target")
+                                .selected_text(&self.auto_oc_target)
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(&mut self.auto_oc_target, "max-performance".to_string(), "Max Performance");
+                                    ui.selectable_value(&mut self.auto_oc_target, "balanced".to_string(), "Balanced");
+                                    ui.selectable_value(&mut self.auto_oc_target, "efficiency".to_string(), "Efficiency");
+                                });
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Safety Mode:");
+                            egui::ComboBox::from_id_source("safety")
+                                .selected_text(&self.auto_oc_safety)
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(&mut self.auto_oc_safety, "conservative".to_string(), "Conservative (Safe)");
+                                    ui.selectable_value(&mut self.auto_oc_safety, "moderate".to_string(), "Moderate");
+                                    ui.selectable_value(&mut self.auto_oc_safety, "aggressive".to_string(), "Aggressive (Fast)");
+                                });
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Max Temperature:");
+                            ui.add(egui::Slider::new(&mut self.auto_oc_max_temp, 70.0..=90.0).suffix("°C"));
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Max Power:");
+                            ui.add(egui::Slider::new(&mut self.auto_oc_max_power, 80..=120).suffix("%"));
+                        });
+                    });
+
+                    ui.add_space(10.0);
+
+                    if !self.auto_oc_running {
+                        if ui.button("🚀 Start Auto-Overclock").clicked() {
+                            self.auto_oc_running = true;
+                            println!("Starting auto-overclock wizard...");
+                        }
+                    } else {
+                        ui.label("⏳ Auto-overclock in progress...");
+                        if ui.button("⏹ Stop").clicked() {
+                            self.auto_oc_running = false;
+                        }
+                    }
+
+                    ui.add_space(10.0);
+                    ui.separator();
+                    ui.label("⚠️  Note: Auto-overclocking will take 10-30 minutes depending on safety mode.");
+                    ui.label("The wizard will test stability at each step and auto-rollback if unstable.");
+                });
+            }
+            Tab::PowerCurves => {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    ui.heading("🔋 Power Limit Curves");
+                    ui.add_space(10.0);
+
+                    ui.label("Dynamic power management based on GPU temperature.");
+                    ui.separator();
+
+                    ui.group(|ui| {
+                        ui.horizontal(|ui| {
+                            ui.checkbox(&mut self.power_config.curve_enabled, "Enable Temperature-Based Power Curve");
+                        });
+                    });
+
+                    ui.add_space(10.0);
+
+                    ui.label("Curve Points (Temperature → Power Limit):");
+                    egui::ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
+                        for (i, point) in self.power_config.power_curve.points.iter().enumerate() {
+                            ui.horizontal(|ui| {
+                                ui.label(format!("Point {}: {:.0}°C → {:.0}%", i, point.x, point.y));
+                            });
+                        }
+                    });
+
+                    ui.add_space(10.0);
+
+                    ui.horizontal(|ui| {
+                        if ui.button("💾 Save Configuration").clicked() {
+                            if let Err(e) = nvcontrol::power_curves::save_power_config(&self.power_config) {
+                                eprintln!("Failed to save power config: {}", e);
+                            } else {
+                                println!("✅ Power configuration saved");
+                            }
+                        }
+                        if ui.button("🔄 Reset to Defaults").clicked() {
+                            self.power_config = nvcontrol::power_curves::PowerManagementConfig::default();
+                        }
+                    });
+                });
+            }
+            Tab::GameProfiles => {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    ui.heading("🎮 Game Profile Auto-Application");
+                    ui.add_space(10.0);
+
+                    ui.label("Automatically apply GPU profiles when games are launched.");
+                    ui.separator();
+
+                    ui.group(|ui| {
+                        ui.label("⚙️ Configuration");
+                        ui.add_space(5.0);
+
+                        ui.horizontal(|ui| {
+                            ui.checkbox(&mut self.game_auto_config.enabled, "Enable Auto-Application");
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Poll Interval:");
+                            ui.add(egui::Slider::new(&mut self.game_auto_config.poll_interval_secs, 1..=10).suffix(" seconds"));
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("Apply Delay:");
+                            ui.add(egui::Slider::new(&mut self.game_auto_config.apply_delay_secs, 0..=10).suffix(" seconds"));
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.checkbox(&mut self.game_auto_config.restore_on_exit, "Restore default profile on game exit");
+                        });
+                    });
+
+                    ui.add_space(10.0);
+
+                    ui.horizontal(|ui| {
+                        if ui.button("💾 Save Configuration").clicked() {
+                            if let Err(e) = nvcontrol::game_profile_auto::save_config(&self.game_auto_config) {
+                                eprintln!("Failed to save config: {}", e);
+                            } else {
+                                println!("✅ Configuration saved");
+                            }
+                        }
+                    });
+
+                    ui.add_space(10.0);
+                    ui.separator();
+                    ui.label("ℹ️  Note: Game profiles must be configured separately in the profiles directory.");
                 });
             }
             Tab::Settings => {
