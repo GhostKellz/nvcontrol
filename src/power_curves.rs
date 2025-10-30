@@ -354,6 +354,45 @@ impl PowerManagementConfig {
     }
 }
 
+/// Load power management configuration
+pub fn load_power_config() -> NvResult<PowerManagementConfig> {
+    let config_dir = dirs::config_dir()
+        .ok_or_else(|| NvControlError::ConfigError("No config directory".into()))?
+        .join("nvcontrol");
+
+    let config_path = config_dir.join("power_management.toml");
+
+    if config_path.exists() {
+        let contents = std::fs::read_to_string(&config_path)
+            .map_err(|e| NvControlError::ConfigError(format!("Failed to read config: {}", e)))?;
+
+        toml::from_str(&contents)
+            .map_err(|e| NvControlError::ConfigError(format!("Failed to parse config: {}", e)))
+    } else {
+        Ok(PowerManagementConfig::default())
+    }
+}
+
+/// Save power management configuration
+pub fn save_power_config(config: &PowerManagementConfig) -> NvResult<()> {
+    let config_dir = dirs::config_dir()
+        .ok_or_else(|| NvControlError::ConfigError("No config directory".into()))?
+        .join("nvcontrol");
+
+    std::fs::create_dir_all(&config_dir)
+        .map_err(|e| NvControlError::ConfigError(format!("Failed to create config dir: {}", e)))?;
+
+    let config_path = config_dir.join("power_management.toml");
+
+    let toml = toml::to_string_pretty(config)
+        .map_err(|e| NvControlError::ConfigError(format!("Failed to serialize config: {}", e)))?;
+
+    std::fs::write(&config_path, toml)
+        .map_err(|e| NvControlError::ConfigError(format!("Failed to write config: {}", e)))?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

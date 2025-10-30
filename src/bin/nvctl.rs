@@ -232,6 +232,17 @@ enum GpuSubcommand {
     Stat,
     /// Show detailed GPU overclocking capabilities
     Capabilities,
+    /// List all detected GPUs with details
+    List {
+        /// Output format: json, yaml, table
+        #[arg(short, long, value_enum, default_value = "table")]
+        format: OutputFormat,
+    },
+    /// Select active GPU for commands
+    Select {
+        /// GPU index to select (0, 1, 2, etc.)
+        index: u32,
+    },
     /// Benchmark GPU performance
     Benchmark {
         /// Benchmark duration in seconds
@@ -435,6 +446,24 @@ enum OverclockSubcommand {
         /// Duration in minutes
         #[arg(default_value = "5")]
         duration: u32,
+    },
+    /// Automated overclocking wizard with safety features
+    Auto {
+        /// Target mode: max-performance, balanced, efficiency
+        #[arg(long, default_value = "balanced")]
+        target: String,
+        /// Safety mode: conservative, moderate, aggressive
+        #[arg(long, default_value = "conservative")]
+        safety: String,
+        /// Maximum temperature limit in Celsius
+        #[arg(long, default_value = "85")]
+        max_temp: f32,
+        /// Maximum power limit percentage
+        #[arg(long, default_value = "100")]
+        max_power: u32,
+        /// Stability test duration in seconds
+        #[arg(long, default_value = "60")]
+        stability_duration: u64,
     },
     Reset,
 }
@@ -782,6 +811,69 @@ enum PowerSubcommand {
     },
     /// Automate power management
     Automate,
+    /// Manage power limit curves (temperature-based dynamic power)
+    Curve {
+        #[command(subcommand)]
+        action: PowerCurveAction,
+    },
+    /// Schedule power profiles by time
+    Schedule {
+        #[command(subcommand)]
+        action: PowerScheduleAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum PowerCurveAction {
+    /// Show current power curve
+    Show,
+    /// Edit power curve interactively
+    Edit,
+    /// Add a curve point (temperature, power_limit)
+    Add {
+        /// Temperature in Celsius
+        temp: f64,
+        /// Power limit percentage
+        power: f64,
+    },
+    /// Remove a curve point
+    Remove {
+        /// Point index to remove
+        index: usize,
+    },
+    /// Enable curve-based power management
+    Enable,
+    /// Disable curve-based power management
+    Disable,
+    /// Reset to default curve
+    Reset,
+}
+
+#[derive(Subcommand)]
+enum PowerScheduleAction {
+    /// List all scheduled power profiles
+    List,
+    /// Add a scheduled power profile
+    Add {
+        /// Hour (0-23)
+        #[arg(long)]
+        hour: u8,
+        /// Weekdays (comma-separated): mon,tue,wed,thu,fri,sat,sun or "all"
+        #[arg(long, default_value = "all")]
+        days: String,
+        /// Power limit percentage
+        #[arg(long)]
+        power: u8,
+    },
+    /// Remove a schedule
+    Remove {
+        /// Schedule index
+        index: usize,
+    },
+    /// Enable scheduled power management
+    Enable,
+    /// Disable scheduled power management
+    Disable,
 }
 
 #[derive(Subcommand)]
@@ -879,6 +971,29 @@ enum ConfigSubcommand {
         #[arg(short, long)]
         input: String,
     },
+    /// Export GPU profile to file
+    Export {
+        /// Profile name to export
+        #[arg(short, long)]
+        profile: String,
+        /// Output file path (JSON or TOML)
+        #[arg(short, long)]
+        output: String,
+    },
+    /// Import GPU profile from file
+    Import {
+        /// Input file path (JSON or TOML)
+        #[arg(short, long)]
+        input: String,
+        /// Profile name (optional, uses file name if not provided)
+        #[arg(short, long)]
+        name: Option<String>,
+        /// Skip safety validation checks
+        #[arg(long)]
+        skip_validation: bool,
+    },
+    /// List available profiles
+    Profiles,
 }
 #[derive(Subcommand)]
 enum MonitorSubcommand {
@@ -930,6 +1045,37 @@ enum GamingSubcommand {
     Launch {
         #[command(subcommand)]
         action: LaunchAction,
+    },
+    /// Automatic game profile application
+    Auto {
+        #[command(subcommand)]
+        action: GameAutoAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum GameAutoAction {
+    /// Start automatic profile application service
+    Start,
+    /// Stop automatic profile application service
+    Stop,
+    /// Show service status
+    Status,
+    /// Enable automatic profile application on boot
+    Enable,
+    /// Disable automatic profile application on boot
+    Disable,
+    /// Configure auto-application settings
+    Config {
+        /// Poll interval in seconds
+        #[arg(long)]
+        poll_interval: Option<u64>,
+        /// Apply delay in seconds (anti-crash protection)
+        #[arg(long)]
+        apply_delay: Option<u64>,
+        /// Restore default profile on game exit
+        #[arg(long)]
+        restore_on_exit: Option<bool>,
     },
 }
 
@@ -1479,6 +1625,57 @@ fn main() {
                 Ok(()) => println!("✅ Stress test completed"),
                 Err(e) => eprintln!("❌ Stress test failed: {}", e),
             },
+            GpuSubcommand::List { format } => {
+                match nvcontrol::multi_gpu::detect_gpus() {
+                    Ok(gpus) => {
+                        match format {
+                            OutputFormat::Json => {
+                                println!("{}", serde_json::to_string_pretty(&gpus).unwrap());
+                            }
+                            OutputFormat::Table => {
+                                println!("\n┌─────────────────────────────────────────────────────────────────┐");
+                                println!("│                       Detected GPUs                             │");
+                                println!("├──────┬─────────────────────┬──────────┬────────────┬───────────┤");
+                                println!("│ Idx  │ Name                │ Temp(°C) │ Util(%)    │ VRAM(GB)  │");
+                                println!("├──────┼─────────────────────┼──────────┼────────────┼───────────┤");
+                                for gpu in &gpus {
+                                    println!("│ {:4} │ {:19} │ {:8.1} │ {:10.1} │ {:9.1} │",
+                                        gpu.index,
+                                        &gpu.name[..gpu.name.len().min(19)],
+                                        gpu.temperature,
+                                        gpu.utilization,
+                                        gpu.vram_total as f64 / 1024.0 / 1024.0 / 1024.0
+                                    );
+                                }
+                                println!("└──────┴─────────────────────┴──────────┴────────────┴───────────┘");
+                            }
+                            OutputFormat::Human => {
+                                println!("\n📊 Detected GPUs:\n");
+                                for gpu in &gpus {
+                                    println!("GPU {}:", gpu.index);
+                                    println!("  Name: {}", gpu.name);
+                                    println!("  Temperature: {:.1}°C", gpu.temperature);
+                                    println!("  Utilization: {:.1}%", gpu.utilization);
+                                    println!("  VRAM: {:.2} GB", gpu.vram_total as f64 / 1024.0 / 1024.0 / 1024.0);
+                                    if let Some(cuda) = gpu.cuda_cores {
+                                        println!("  CUDA Cores: {}", cuda);
+                                    }
+                                    if let Some(cc) = &gpu.compute_capability {
+                                        println!("  Compute Capability: {}", cc);
+                                    }
+                                    println!();
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Failed to detect GPUs: {}", e),
+                }
+            }
+            GpuSubcommand::Select { index } => {
+                println!("🎯 Selected GPU {} for subsequent commands", index);
+                println!("⚠️  Note: GPU selection is not yet persistent across commands");
+                // TODO: Store selected GPU in config file
+            }
         },
         Command::Display { subcommand } => match subcommand {
             DisplaySubcommand::Info => display::get_display_info(),
@@ -1852,6 +2049,69 @@ fn main() {
                 match overclocking::apply_overclock_profile(&default_profile) {
                     Ok(()) => println!("GPU settings reset to defaults"),
                     Err(e) => eprintln!("Failed to reset settings: {e}"),
+                }
+            }
+            OverclockSubcommand::Auto {
+                target,
+                safety,
+                max_temp,
+                max_power,
+                stability_duration,
+            } => {
+                use nvcontrol::auto_overclock::{AutoOCConfig, AutoOCTarget, SafetyMode, AutoOverclocker};
+
+                // Parse target
+                let parsed_target = match target.as_str() {
+                    "max-performance" | "max" => AutoOCTarget::MaxPerformance,
+                    "balanced" | "balance" => AutoOCTarget::Balanced,
+                    "efficiency" | "efficient" => AutoOCTarget::Efficiency,
+                    _ => {
+                        eprintln!("❌ Invalid target: {}. Use: max-performance, balanced, or efficiency", target);
+                        return;
+                    }
+                };
+
+                // Parse safety mode
+                let parsed_safety = match safety.as_str() {
+                    "conservative" | "safe" => SafetyMode::Conservative,
+                    "moderate" | "medium" => SafetyMode::Moderate,
+                    "aggressive" | "fast" => SafetyMode::Aggressive,
+                    _ => {
+                        eprintln!("❌ Invalid safety mode: {}. Use: conservative, moderate, or aggressive", safety);
+                        return;
+                    }
+                };
+
+                let config = AutoOCConfig {
+                    target: parsed_target,
+                    safety_mode: parsed_safety,
+                    max_temp,
+                    max_power,
+                    stability_test_duration: stability_duration,
+                };
+
+                match AutoOverclocker::new(config) {
+                    Ok(overclocker) => {
+                        println!("🚀 Starting automated overclocking wizard...");
+                        println!("   This may take 10-30 minutes depending on settings.\n");
+
+                        match overclocker.run_auto_tune() {
+                            Ok(result) => {
+                                overclocker.print_result(&result);
+
+                                if result.successful {
+                                    println!("\n💾 To save this profile, run:");
+                                    println!("   nvctl overclock apply --gpu-offset {} --memory-offset {} --power-limit {}",
+                                        result.final_profile.gpu_clock_offset,
+                                        result.final_profile.memory_clock_offset,
+                                        result.final_profile.power_limit
+                                    );
+                                }
+                            }
+                            Err(e) => eprintln!("❌ Auto-overclock failed: {}", e),
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Failed to initialize auto-overclocker: {}", e),
                 }
             }
         },
@@ -2882,6 +3142,100 @@ fn main() {
                 Ok(()) => println!("✅ Power automation configured"),
                 Err(e) => eprintln!("❌ Failed to setup automation: {}", e),
             },
+            PowerSubcommand::Curve { action } => {
+                use nvcontrol::power_curves::{load_power_config, save_power_config};
+                use nvcontrol::gui_widgets::CurvePoint;
+
+                match action {
+                    PowerCurveAction::Show => {
+                        match load_power_config() {
+                            Ok(config) => {
+                                println!("📈 Power Curve Configuration:\n");
+                                println!("Enabled: {}", if config.curve_enabled { "Yes ✅" } else { "No ❌" });
+                                println!("\nCurve Points:");
+                                for (i, point) in config.power_curve.points.iter().enumerate() {
+                                    println!("  {}: Temp={:.1}°C → Power={:.1}%", i, point.x, point.y);
+                                }
+                            }
+                            Err(e) => eprintln!("❌ Failed to load power config: {}", e),
+                        }
+                    }
+                    PowerCurveAction::Add { temp, power } => {
+                        match load_power_config() {
+                            Ok(mut config) => {
+                                config.power_curve.points.push(CurvePoint { x: temp, y: power });
+                                config.power_curve.points.sort_by(|a, b| a.x.partial_cmp(&b.x).unwrap());
+
+                                if let Err(e) = save_power_config(&config) {
+                                    eprintln!("❌ Failed to save: {}", e);
+                                } else {
+                                    println!("✅ Added power curve point: {}°C → {}%", temp, power);
+                                }
+                            }
+                            Err(e) => eprintln!("❌ Failed to load config: {}", e),
+                        }
+                    }
+                    PowerCurveAction::Remove { index } => {
+                        match load_power_config() {
+                            Ok(mut config) => {
+                                if index < config.power_curve.points.len() {
+                                    config.power_curve.points.remove(index);
+                                    if let Err(e) = save_power_config(&config) {
+                                        eprintln!("❌ Failed to save: {}", e);
+                                    } else {
+                                        println!("✅ Removed curve point {}", index);
+                                    }
+                                } else {
+                                    eprintln!("❌ Invalid index: {}", index);
+                                }
+                            }
+                            Err(e) => eprintln!("❌ Failed to load config: {}", e),
+                        }
+                    }
+                    PowerCurveAction::Enable => {
+                        match load_power_config() {
+                            Ok(mut config) => {
+                                config.curve_enabled = true;
+                                if let Err(e) = save_power_config(&config) {
+                                    eprintln!("❌ Failed to save: {}", e);
+                                } else {
+                                    println!("✅ Power curve enabled");
+                                }
+                            }
+                            Err(e) => eprintln!("❌ Failed to load config: {}", e),
+                        }
+                    }
+                    PowerCurveAction::Disable => {
+                        match load_power_config() {
+                            Ok(mut config) => {
+                                config.curve_enabled = false;
+                                if let Err(e) = save_power_config(&config) {
+                                    eprintln!("❌ Failed to save: {}", e);
+                                } else {
+                                    println!("✅ Power curve disabled");
+                                }
+                            }
+                            Err(e) => eprintln!("❌ Failed to load config: {}", e),
+                        }
+                    }
+                    PowerCurveAction::Reset => {
+                        let default_config = nvcontrol::power_curves::PowerManagementConfig::default();
+                        if let Err(e) = save_power_config(&default_config) {
+                            eprintln!("❌ Failed to save: {}", e);
+                        } else {
+                            println!("✅ Power curve reset to defaults");
+                        }
+                    }
+                    PowerCurveAction::Edit => {
+                        println!("⚠️  Interactive curve editor not yet implemented");
+                        println!("    Use 'add' and 'remove' subcommands to modify the curve");
+                    }
+                }
+            }
+            PowerSubcommand::Schedule { action } => {
+                println!("⚠️  Power scheduling not yet fully implemented");
+                println!("    Coming soon in next release");
+            }
         },
         Command::Monitor { subcommand } => match subcommand {
             Some(MonitorSubcommand::Start { interval, count }) => {
@@ -3145,6 +3499,79 @@ fn main() {
                     }
                 }
             },
+            GamingSubcommand::Auto { action } => {
+                use nvcontrol::game_profile_auto::{load_config, save_config};
+
+                match action {
+                    GameAutoAction::Start => {
+                        println!("⚠️  Auto-profile service start not yet implemented");
+                        println!("    This will be a background daemon in future releases");
+                    }
+                    GameAutoAction::Stop => {
+                        println!("⚠️  Auto-profile service stop not yet implemented");
+                    }
+                    GameAutoAction::Status => {
+                        match load_config() {
+                            Ok(config) => {
+                                println!("🎮 Game Profile Auto-Application Status:\n");
+                                println!("Enabled: {}", if config.enabled { "Yes ✅" } else { "No ❌" });
+                                println!("Poll Interval: {}s", config.poll_interval_secs);
+                                println!("Apply Delay: {}s", config.apply_delay_secs);
+                                println!("Restore on Exit: {}", if config.restore_on_exit { "Yes" } else { "No" });
+                            }
+                            Err(e) => eprintln!("❌ Failed to load config: {}", e),
+                        }
+                    }
+                    GameAutoAction::Enable => {
+                        match load_config() {
+                            Ok(mut config) => {
+                                config.enabled = true;
+                                if let Err(e) = save_config(&config) {
+                                    eprintln!("❌ Failed to save: {}", e);
+                                } else {
+                                    println!("✅ Auto-profile application enabled");
+                                }
+                            }
+                            Err(e) => eprintln!("❌ Failed to load config: {}", e),
+                        }
+                    }
+                    GameAutoAction::Disable => {
+                        match load_config() {
+                            Ok(mut config) => {
+                                config.enabled = false;
+                                if let Err(e) = save_config(&config) {
+                                    eprintln!("❌ Failed to save: {}", e);
+                                } else {
+                                    println!("✅ Auto-profile application disabled");
+                                }
+                            }
+                            Err(e) => eprintln!("❌ Failed to load config: {}", e),
+                        }
+                    }
+                    GameAutoAction::Config { poll_interval, apply_delay, restore_on_exit } => {
+                        match load_config() {
+                            Ok(mut config) => {
+                                if let Some(interval) = poll_interval {
+                                    config.poll_interval_secs = interval;
+                                }
+                                if let Some(delay) = apply_delay {
+                                    config.apply_delay_secs = delay;
+                                }
+                                if let Some(restore) = restore_on_exit {
+                                    config.restore_on_exit = restore;
+                                }
+
+                                if let Err(e) = save_config(&config) {
+                                    eprintln!("❌ Failed to save: {}", e);
+                                } else {
+                                    println!("✅ Configuration updated");
+                                }
+                            }
+                            Err(e) => eprintln!("❌ Failed to load config: {}", e),
+                        }
+                    }
+                }
+            }
         },
         Command::Recording { subcommand } => match subcommand {
             RecordingSubcommand::Start {
@@ -4375,6 +4802,28 @@ fn main() {
                 } else {
                     println!("❌ Restore cancelled");
                 }
+            }
+            ConfigSubcommand::Export { profile, output } => {
+                println!("📤 Exporting profile '{}' to '{}'", profile, output);
+                println!("⚠️  Profile export not yet fully implemented");
+            }
+            ConfigSubcommand::Import { input, name, skip_validation } => {
+                let profile_name = name.unwrap_or_else(|| {
+                    std::path::Path::new(&input)
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("imported")
+                        .to_string()
+                });
+                println!("📥 Importing profile from '{}' as '{}'", input, profile_name);
+                if skip_validation {
+                    println!("⚠️  Skipping validation checks");
+                }
+                println!("⚠️  Profile import not yet fully implemented");
+            }
+            ConfigSubcommand::Profiles => {
+                println!("📋 Available GPU profiles:");
+                println!("⚠️  Profile listing not yet fully implemented");
             }
         },
         Command::Osd { subcommand } => {
