@@ -86,6 +86,12 @@ pub fn detect_gpus() -> NvResult<Vec<GpuInfo>> {
             let sli_enabled = check_sli_enabled(&device);
             let nvlink_enabled = check_nvlink_enabled(&device);
 
+            // Query CUDA cores and compute capability
+            let cuda_cores = device.num_cores().ok();
+            let compute_capability = device.cuda_compute_capability()
+                .ok()
+                .map(|cc| format!("{}.{}", cc.major, cc.minor));
+
             let gpu_info = GpuInfo {
                 index: i,
                 name,
@@ -93,8 +99,8 @@ pub fn detect_gpus() -> NvResult<Vec<GpuInfo>> {
                 pci_bus_id,
                 driver_version,
                 vram_total,
-                cuda_cores: None,  // TODO: Query CUDA cores
-                compute_capability: None,  // TODO: Query compute capability
+                cuda_cores,
+                compute_capability,
                 temperature,
                 power_draw,
                 power_limit,

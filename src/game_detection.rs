@@ -207,25 +207,37 @@ impl GameDetector {
         // Apply GPU overclock
         if let (Some(gpu), Some(mem)) = (profile.gpu_offset, profile.memory_offset) {
             println!("   ⚡ GPU: +{} MHz, Memory: +{} MHz", gpu, mem);
-            // TODO: Call overclocking module
+            let oc_profile = crate::overclocking::OverclockProfile {
+                name: profile.name.clone(),
+                gpu_clock_offset: gpu,
+                memory_clock_offset: mem,
+                power_limit: profile.power_limit.unwrap_or(100) as u8,
+                voltage_offset: 0,
+                temp_limit: 85,
+                fan_curve: Vec::new(),
+            };
+            crate::overclocking::apply_overclock_profile(&oc_profile)?;
         }
 
         // Apply power limit
         if let Some(power) = profile.power_limit {
             println!("   🔋 Power limit: {}%", power);
-            // TODO: Call power management module
+            crate::power::set_power_limit_percentage(power)?;
         }
 
         // Apply fan curve
         if let Some(ref curve) = profile.fan_curve {
             println!("   🌀 Fan curve: {} points", curve.len());
-            // TODO: Call fan control module
+            let curve_points: Vec<(u8, u8)> = curve.iter()
+                .map(|(temp, speed)| (*temp as u8, *speed as u8))
+                .collect();
+            crate::fan::set_fan_curve(0, &curve_points)?;
         }
 
         // Apply vibrance
         if let Some(vib) = profile.vibrance {
             println!("   🌈 Vibrance: {}%", vib);
-            // TODO: Call vibrance module
+            crate::vibrance::set_vibrance_all(vib as i32)?;
         }
 
         // Set process priority

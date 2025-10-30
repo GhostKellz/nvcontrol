@@ -117,8 +117,35 @@ impl GameProfileAutoApplier {
                         if let Some(ref profile) = game.profile {
                             println!("   ✅ Applying profile for {}", game.name);
 
-                            // TODO: Actually apply the profile settings
-                            // This would call overclocking::apply_overclock_profile, etc.
+                            // Apply GPU overclock
+                            if let (Some(gpu), Some(mem)) = (profile.gpu_offset, profile.memory_offset) {
+                                let oc_profile = crate::overclocking::OverclockProfile {
+                                    name: profile.name.clone(),
+                                    gpu_clock_offset: gpu,
+                                    memory_clock_offset: mem,
+                                    power_limit: profile.power_limit.unwrap_or(100) as u8,
+                                    voltage_offset: 0,
+                                    temp_limit: 85,
+                                    fan_curve: Vec::new(),
+                                };
+                                if let Err(e) = crate::overclocking::apply_overclock_profile(&oc_profile) {
+                                    println!("   ⚠️  Failed to apply overclock: {}", e);
+                                }
+                            }
+
+                            // Apply power limit
+                            if let Some(power) = profile.power_limit {
+                                if let Err(e) = crate::power::set_power_limit_percentage(power) {
+                                    println!("   ⚠️  Failed to apply power limit: {}", e);
+                                }
+                            }
+
+                            // Apply vibrance
+                            if let Some(vib) = profile.vibrance {
+                                if let Err(e) = crate::vibrance::set_vibrance_all(vib as i32) {
+                                    println!("   ⚠️  Failed to apply vibrance: {}", e);
+                                }
+                            }
 
                             let state = ProfileState {
                                 game_executable: game_exe.clone(),
@@ -141,7 +168,9 @@ impl GameProfileAutoApplier {
                         if config.restore_on_exit {
                             if let Some(ref default) = default_profile {
                                 println!("   🔄 Restoring default profile");
-                                // TODO: Apply default profile
+                                if let Err(e) = crate::overclocking::apply_overclock_profile(default) {
+                                    println!("   ⚠️  Failed to restore default profile: {}", e);
+                                }
                             }
                         }
 
