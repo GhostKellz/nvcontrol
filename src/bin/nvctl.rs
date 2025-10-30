@@ -4332,10 +4332,59 @@ fn main() {
                 }
 
                 println!("\n   🔍 Scanning for containers...");
-                // TODO: Actual container listing implementation
-                // This would integrate with Docker/Podman/nvbind runtime
-                println!("   ⚠️  Container listing implementation in progress");
-                println!("   💡 Use 'nvctl container list' for Docker containers");
+
+                match nvcontrol::container::list_gpu_containers() {
+                    Ok(containers) => {
+                        if containers.is_empty() {
+                            println!("   📦 No GPU containers found");
+                            println!("   💡 Use 'docker run --gpus all' to launch GPU containers");
+                        } else {
+                            println!("\n┌────────────────────────────────────────────────────────────────────┐");
+                            println!("│                       GPU Containers                               │");
+                            println!("├──────────────┬──────────────────────┬─────────────┬───────────────┤");
+                            println!("│ Container ID │ Name                 │ Image       │ GPU Devices   │");
+                            println!("├──────────────┼──────────────────────┼─────────────┼───────────────┤");
+
+                            for container in &containers {
+                                let short_id = &container.container_id[..12.min(container.container_id.len())];
+                                let short_name = if container.container_name.len() > 20 {
+                                    format!("{}...", &container.container_name[..17])
+                                } else {
+                                    container.container_name.clone()
+                                };
+                                let short_image = if container.image.len() > 13 {
+                                    format!("{}...", &container.image[..10])
+                                } else {
+                                    container.image.clone()
+                                };
+                                let gpu_list = if container.gpu_devices.is_empty() {
+                                    "None".to_string()
+                                } else {
+                                    container.gpu_devices.join(",")
+                                };
+
+                                println!("│ {:12} │ {:20} │ {:13} │ {:13} │",
+                                    short_id, short_name, short_image, gpu_list);
+                            }
+
+                            println!("└──────────────┴──────────────────────┴─────────────┴───────────────┘");
+
+                            if show_metrics {
+                                println!("\n📊 Performance Metrics:");
+                                for container in &containers {
+                                    println!("   {} ({}):", container.container_name, &container.container_id[..12]);
+                                    println!("     GPU Utilization: {:.1}%", container.gpu_utilization);
+                                    println!("     Power Usage: {:.1}W", container.power_usage);
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("   ❌ Failed to list containers: {}", e);
+                        println!("   💡 Make sure Docker is installed and running");
+                        println!("   💡 Try: sudo systemctl start docker");
+                    }
+                }
             }
             NvbindSubcommand::Launch { .. } => {
                 println!("🚀 nvbind container launch");
