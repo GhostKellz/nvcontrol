@@ -98,6 +98,12 @@ pub mod multi_gpu;
 // Power curves and scheduling
 pub mod power_curves;
 
+// Game profile auto-application
+pub mod game_profile_auto;
+
+// Automated overclocking
+pub mod auto_overclock;
+
 // Re-export commonly used types
 pub use config::Config;
 pub use profiles::Profile;
