@@ -7,20 +7,22 @@
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![NVIDIA](https://img.shields.io/badge/NVIDIA-Open%20Drivers%20580+-76B900.svg)](https://github.com/NVIDIA/open-gpu-kernel-modules)
+[![RTX 50](https://img.shields.io/badge/RTX%2050%20Series-Blackwell-ff69b4.svg)](docs/RTX_50_SERIES_READINESS.md)
 [![Wayland](https://img.shields.io/badge/Wayland-Native-brightgreen.svg)](https://wayland.freedesktop.org/)
 
-**The Ultimate NVIDIA GPU Control Tool for Linux**
+**The Ultimate NVIDIA GPU Control Tool for Linux - Gaming Dashboard Edition**
 
-nvcontrol is the most advanced NVIDIA GPU management solution for Linux, featuring pure Rust digital vibrance, comprehensive container GPU passthrough, and cutting-edge Wayland support.
+nvcontrol is the most advanced NVIDIA GPU management solution for Linux, featuring pure Rust digital vibrance, RTX 50-series Blackwell support, ASUS ROG optimization, and a modern gaming dashboard inspired by MSI Afterburner and ASUS GPU Tweak II.
 
 ## 🚀 Revolutionary Features
 
 ### 🌈 **Pure Rust Digital Vibrance**
-- **Zero Dependencies**: Built-in vibrance control - no external tools needed
-- **NVIDIA Open Drivers**: Direct integration with NVIDIA Open Drivers 580+
+- **Zero Dependencies**: Built-in vibrance control via direct NVKMS ioctls
+- **NVIDIA Open Drivers 580+**: Native integration with open kernel modules
 - **Simple Commands**: `nvctl vibe 150` - instant vibrance control
-- **Per-Display Control**: Individual settings for multi-monitor setups
+- **Per-Display Control**: Individual settings for multi-monitor setups (OLED + IPS)
 - **Wayland & X11**: Works on all display servers
+- **Inspired by [nvibrant](https://github.com/Tremeschin/nvibrant)**: Pure Rust reimplementation of the pioneering Wayland vibrance solution
 
 ### 🐳 **Container GPU Passthrough**
 - **Built-in Container Runtime**: Pure Rust runtime with predictable memory and low overhead
@@ -28,11 +30,34 @@ nvcontrol is the most advanced NVIDIA GPU management solution for Linux, featuri
 - **GPU Profiles**: Optimized profiles for ML, gaming, inference workloads
 - **Multi-Runtime**: Docker, Podman, containerd, NixOS containers
 
-### 🎮 **Advanced GPU Control**
-- **Real-time Monitoring**: Live TUI dashboard with performance graphs
-- **Smart Overclocking**: Safe limits with automatic stress testing
-- **Fan Control**: Custom curves with thermal protection
-- **Power Management**: Advanced profiles and thermal monitoring
+### 🎮 **Gaming Dashboard (MSI Afterburner + ASUS GPU Tweak Style)**
+- **Real-time Monitoring**: Live TUI/GUI dashboard with performance graphs
+- **Smart Overclocking**: GPU/Memory offsets with safety limits
+- **4-Fan Control**: ASUS ROG Astral quad-fan optimization
+- **RGB Sync**: ASUS Aura integration via OpenRGB
+- **Performance Profiles**: Silent, Standard, OC, Extreme modes
+- **Session Statistics**: FPS tracking, thermal history, power consumption
+- **OSD Integration**: In-game overlay via MangoHud
+
+### 💎 **GPU Support**
+- **RTX 50 Series (Blackwell)**: Full GB202 support - 5090, 5080, 5070 Ti/5070, 5060 Ti/5060
+  - DLSS 4 Multi-Frame Generation (2x/3x/4x)
+  - DisplayPort 2.1a (4K @ 480Hz, 8K @ 165Hz)
+  - GDDR7 memory optimization
+  - PCIe Gen 5.0 ready
+- **RTX 40 Series (Ada Lovelace)**: Complete support - 4090, 4080, 4070 Ti/4070, 4060 Ti/4060
+  - DLSS 3 Frame Generation
+  - AV1 encoding (3 concurrent sessions)
+- **RTX 30 Series (Ampere)**: Full support - 3090 Ti/3090, 3080 Ti/3080, 3070 Ti/3070, 3060 Ti/3060
+  - DLSS 2 Super Resolution
+  - Resizable BAR optimization
+
+### 🎯 **ASUS ROG Optimization**
+- **ROG Astral RTX 5090**: Factory OC detection (2610 MHz boost)
+- **Quad-Fan Profiles**: Optimized curves for 4-fan cooling
+- **Power Management**: 600W TDP support (630W max)
+- **RGB Control**: ASUS Aura ARGB via OpenRGB
+- **Per-Monitor Vibrance**: OLED + IPS presets
 
 ### ⚡ **Upscaling Technologies**
 - **DLSS/FSR/XeSS toggle** with per-game profiles

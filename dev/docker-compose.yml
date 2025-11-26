@@ -1,0 +1,163 @@
+version: '3.8'
+
+services:
+  # Main testing environment with GPU access
+  nvcontrol-test:
+    build:
+      context: ..
+      dockerfile: dev/Dockerfile
+    image: nvcontrol:test
+    container_name: nvcontrol-test
+    hostname: nvcontrol-test
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - DISPLAY=${DISPLAY:-:0}
+      - WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-wayland-0}
+      - XDG_RUNTIME_DIR=/run/user/1000
+      - RUST_BACKTRACE=1
+      - RUST_LOG=debug,nvcontrol=trace
+    volumes:
+      - ..:/workspace/nvcontrol
+      - /tmp/.X11-unix:/tmp/.X11-unix:ro
+      - /run/user/1000:/run/user/1000:ro
+      - ../test-results:/workspace/test-results
+      - cargo-cache:/home/tester/.cargo
+    devices:
+      - /dev/dri:/dev/dri
+      - /dev/nvidia0:/dev/nvidia0
+      - /dev/nvidiactl:/dev/nvidiactl
+      - /dev/nvidia-modeset:/dev/nvidia-modeset
+      - /dev/nvidia-uvm:/dev/nvidia-uvm
+      - /dev/nvidia-uvm-tools:/dev/nvidia-uvm-tools
+    privileged: false
+    cap_add:
+      - SYS_ADMIN  # For testing some GPU operations
+    networks:
+      - nvcontrol-net
+    command: bash -c "cargo test --all-features -- --test-threads=1 --nocapture"
+
+  # Unit test runner (no GPU required)
+  nvcontrol-unit-tests:
+    build:
+      context: ..
+      dockerfile: dev/Dockerfile
+    image: nvcontrol:test
+    container_name: nvcontrol-unit-tests
+    volumes:
+      - ..:/workspace/nvcontrol
+      - ../test-results:/workspace/test-results
+      - cargo-cache:/home/tester/.cargo
+    networks:
+      - nvcontrol-net
+    command: bash -c "cargo test --lib --all-features -- --nocapture"
+
+  # Integration test runner (requires GPU)
+  nvcontrol-integration-tests:
+    build:
+      context: ..
+      dockerfile: dev/Dockerfile
+    image: nvcontrol:test
+    container_name: nvcontrol-integration-tests
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - RUST_BACKTRACE=full
+    volumes:
+      - ..:/workspace/nvcontrol
+      - ../test-results:/workspace/test-results
+      - cargo-cache:/home/tester/.cargo
+    devices:
+      - /dev/nvidia0:/dev/nvidia0
+      - /dev/nvidiactl:/dev/nvidiactl
+      - /dev/nvidia-modeset:/dev/nvidia-modeset
+    networks:
+      - nvcontrol-net
+    command: bash -c "cargo test --test '*' --all-features -- --test-threads=1 --nocapture"
+
+  # Benchmark runner
+  nvcontrol-bench:
+    build:
+      context: ..
+      dockerfile: dev/Dockerfile
+    image: nvcontrol:test
+    container_name: nvcontrol-bench
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    volumes:
+      - ..:/workspace/nvcontrol
+      - ../bench-results:/workspace/bench-results
+      - cargo-cache:/home/tester/.cargo
+    devices:
+      - /dev/nvidia0:/dev/nvidia0
+      - /dev/nvidiactl:/dev/nvidiactl
+    networks:
+      - nvcontrol-net
+    command: bash -c "cargo bench --all-features"
+
+  # Code coverage runner
+  nvcontrol-coverage:
+    build:
+      context: ..
+      dockerfile: dev/Dockerfile
+    image: nvcontrol:test
+    container_name: nvcontrol-coverage
+    volumes:
+      - ..:/workspace/nvcontrol
+      - ../coverage:/workspace/coverage
+      - cargo-cache:/home/tester/.cargo
+    networks:
+      - nvcontrol-net
+    command: bash -c "cargo tarpaulin --out Html --output-dir /workspace/coverage --all-features"
+
+  # Clippy linter
+  nvcontrol-lint:
+    build:
+      context: ..
+      dockerfile: dev/Dockerfile
+    image: nvcontrol:test
+    container_name: nvcontrol-lint
+    volumes:
+      - ..:/workspace/nvcontrol
+      - cargo-cache:/home/tester/.cargo
+    networks:
+      - nvcontrol-net
+    command: bash -c "cargo clippy --all-features -- -D warnings"
+
+  # Interactive development shell
+  nvcontrol-dev:
+    build:
+      context: ..
+      dockerfile: dev/Dockerfile
+    image: nvcontrol:test
+    container_name: nvcontrol-dev
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - DISPLAY=${DISPLAY:-:0}
+      - RUST_BACKTRACE=1
+    volumes:
+      - ..:/workspace/nvcontrol
+      - /tmp/.X11-unix:/tmp/.X11-unix:ro
+      - cargo-cache:/home/tester/.cargo
+    devices:
+      - /dev/nvidia0:/dev/nvidia0
+      - /dev/nvidiactl:/dev/nvidiactl
+    networks:
+      - nvcontrol-net
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+
+networks:
+  nvcontrol-net:
+    driver: bridge
+
+volumes:
+  cargo-cache:
+    driver: local

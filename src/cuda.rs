@@ -133,14 +133,16 @@ fn parse_device_line(line: &str) -> Option<CudaDevice> {
 
 fn estimate_compute_capability(gpu_name: &str) -> String {
     // Simple heuristic based on GPU generation
-    if gpu_name.contains("RTX 40") {
-        "8.9".to_string()
+    if gpu_name.contains("RTX 50") {
+        "9.0".to_string() // Blackwell architecture
+    } else if gpu_name.contains("RTX 40") {
+        "8.9".to_string() // Ada Lovelace
     } else if gpu_name.contains("RTX 30") {
-        "8.6".to_string()
+        "8.6".to_string() // Ampere
     } else if gpu_name.contains("RTX 20") || gpu_name.contains("GTX 16") {
-        "7.5".to_string()
+        "7.5".to_string() // Turing
     } else if gpu_name.contains("GTX 10") {
-        "6.1".to_string()
+        "6.1".to_string() // Pascal
     } else {
         "Unknown".to_string()
     }
@@ -148,16 +150,41 @@ fn estimate_compute_capability(gpu_name: &str) -> String {
 
 fn estimate_cuda_cores(gpu_name: &str) -> Option<u32> {
     // Rough estimates for common GPUs
-    if gpu_name.contains("RTX 4090") {
+    // RTX 50 Series (Blackwell)
+    if gpu_name.contains("RTX 5090") {
+        Some(21760) // 170 SMs × 128 cores per SM
+    } else if gpu_name.contains("RTX 5080") {
+        Some(10752) // 84 SMs × 128 cores per SM
+    } else if gpu_name.contains("RTX 5070 Ti") {
+        Some(8960) // 70 SMs × 128 cores per SM
+    } else if gpu_name.contains("RTX 5070") {
+        Some(6144) // 48 SMs × 128 cores per SM
+    } else if gpu_name.contains("RTX 5060 Ti") {
+        Some(4608) // 36 SMs × 128 cores per SM
+    } else if gpu_name.contains("RTX 5060") {
+        Some(3584) // 28 SMs × 128 cores per SM
+    // RTX 40 Series (Ada Lovelace)
+    } else if gpu_name.contains("RTX 4090") {
         Some(16384)
     } else if gpu_name.contains("RTX 4080") {
         Some(9728)
+    } else if gpu_name.contains("RTX 4070 Ti") {
+        Some(7680)
+    } else if gpu_name.contains("RTX 4070") {
+        Some(5888)
+    } else if gpu_name.contains("RTX 4060 Ti") {
+        Some(4352)
+    } else if gpu_name.contains("RTX 4060") {
+        Some(3072)
+    // RTX 30 Series (Ampere)
     } else if gpu_name.contains("RTX 3090") {
         Some(10496)
     } else if gpu_name.contains("RTX 3080") {
         Some(8704)
     } else if gpu_name.contains("RTX 3070") {
         Some(5888)
+    } else if gpu_name.contains("RTX 3060") {
+        Some(3584)
     } else {
         None
     }

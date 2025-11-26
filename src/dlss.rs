@@ -4,9 +4,9 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Command;
 
-/// DLSS 3 Frame Generation and Super Resolution Implementation
-/// Supports DLSS 2 (Super Resolution) and DLSS 3 (Frame Generation + Super Resolution)
-/// RTX 40-series required for Frame Generation
+/// DLSS 4 Multi-Frame Generation and Super Resolution Implementation
+/// Supports DLSS 2 (Super Resolution), DLSS 3 (Frame Generation), and DLSS 4 (Multi-Frame Generation)
+/// RTX 40-series required for Frame Generation, RTX 50-series for Multi-Frame Generation
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DlssController {
@@ -22,17 +22,21 @@ pub enum DlssVersion {
     Dlss2,   // Super Resolution only (RTX 20/30 series)
     Dlss3,   // Frame Generation + Super Resolution (RTX 40 series)
     Dlss3_5, // Ray Reconstruction + Frame Generation + Super Resolution
+    Dlss4,   // Multi-Frame Generation (up to 4x) + All DLSS 3.5 features (RTX 50 series)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DlssCapabilities {
     pub gpu_model: String,
     pub supports_dlss: bool,
-    pub supports_frame_generation: bool,   // RTX 40-series only
-    pub supports_ray_reconstruction: bool, // DLSS 3.5
-    pub supports_reflex: bool,             // NVIDIA Reflex
+    pub supports_frame_generation: bool,        // RTX 40-series+
+    pub supports_multi_frame_generation: bool,  // RTX 50-series (DLSS 4)
+    pub max_frame_multiplier: u8,               // 2x, 3x, or 4x
+    pub supports_ray_reconstruction: bool,      // DLSS 3.5+
+    pub supports_reflex: bool,                  // NVIDIA Reflex
     pub tensor_cores: u32,
-    pub optical_flow_accelerator: bool, // Required for Frame Generation
+    pub optical_flow_accelerator: bool,         // Required for Frame Generation
+    pub optical_flow_accelerator_version: u8,   // Gen 4 for RTX 50
     pub driver_version: String,
     pub dlss_dll_version: Option<String>,
 }
@@ -81,9 +85,9 @@ pub struct FrameGenerationSettings {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum FrameGenerationMode {
     Off,
-    Standard,   // 2x frame generation
-    Boost,      // 3x frame generation (experimental)
-    UltraBoost, // 4x frame generation (DLSS 3.5+)
+    Standard,      // 2x frame generation (RTX 40+)
+    Boost,         // 3x frame generation (RTX 50 DLSS 4)
+    MultiFrameGen, // 4x frame generation (RTX 50 DLSS 4)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -135,10 +139,13 @@ impl DlssController {
             gpu_model: String::new(),
             supports_dlss: false,
             supports_frame_generation: false,
+            supports_multi_frame_generation: false,
+            max_frame_multiplier: 0,
             supports_ray_reconstruction: false,
             supports_reflex: false,
             tensor_cores: 0,
             optical_flow_accelerator: false,
+            optical_flow_accelerator_version: 0,
             driver_version: String::new(),
             dlss_dll_version: None,
         };
@@ -165,32 +172,58 @@ impl DlssController {
                     // RTX 20 series (Turing) - DLSS 2
                     if gpu_lower.contains("rtx 20") {
                         caps.supports_dlss = true;
+                        caps.supports_frame_generation = false;
+                        caps.supports_multi_frame_generation = false;
+                        caps.max_frame_multiplier = 0;
                         caps.supports_reflex = true;
+                        caps.optical_flow_accelerator = false;
+                        caps.optical_flow_accelerator_version = 0;
                         caps.tensor_cores = 272; // Approximate for RTX 2080
                     }
                     // RTX 30 series (Ampere) - DLSS 2
                     else if gpu_lower.contains("rtx 30") {
                         caps.supports_dlss = true;
+                        caps.supports_frame_generation = false;
+                        caps.supports_multi_frame_generation = false;
+                        caps.max_frame_multiplier = 0;
                         caps.supports_reflex = true;
+                        caps.optical_flow_accelerator = false;
+                        caps.optical_flow_accelerator_version = 0;
                         caps.tensor_cores = 328; // Approximate for RTX 3080
                     }
                     // RTX 40 series (Ada Lovelace) - DLSS 3 with Frame Generation
                     else if gpu_lower.contains("rtx 40") {
                         caps.supports_dlss = true;
                         caps.supports_frame_generation = true;
+                        caps.supports_multi_frame_generation = false;
+                        caps.max_frame_multiplier = 2;
                         caps.supports_ray_reconstruction = true;
                         caps.supports_reflex = true;
                         caps.optical_flow_accelerator = true;
+                        caps.optical_flow_accelerator_version = 3;
                         caps.tensor_cores = 512; // Approximate for RTX 4080
                     }
-                    // RTX 50 series (Blackwell) - Future support
+                    // RTX 50 series (Blackwell) - DLSS 4 Multi-Frame Generation
                     else if gpu_lower.contains("rtx 50") {
                         caps.supports_dlss = true;
                         caps.supports_frame_generation = true;
+                        caps.supports_multi_frame_generation = true;
+                        caps.max_frame_multiplier = 4;
                         caps.supports_ray_reconstruction = true;
                         caps.supports_reflex = true;
                         caps.optical_flow_accelerator = true;
-                        caps.tensor_cores = 768; // Estimated
+                        caps.optical_flow_accelerator_version = 4; // Gen 4 OFA
+
+                        // Determine tensor cores based on specific model
+                        if gpu_lower.contains("5090") {
+                            caps.tensor_cores = 1360; // 170 SMs × 8 tensor cores per SM
+                        } else if gpu_lower.contains("5080") {
+                            caps.tensor_cores = 672; // 84 SMs × 8 tensor cores per SM
+                        } else if gpu_lower.contains("5070") {
+                            caps.tensor_cores = 560; // 70 SMs × 8 tensor cores per SM
+                        } else {
+                            caps.tensor_cores = 768; // Default estimate
+                        }
                     }
                 }
             }
@@ -323,7 +356,7 @@ impl DlssController {
                         FrameGenerationMode::Off => "0",
                         FrameGenerationMode::Standard => "1",
                         FrameGenerationMode::Boost => "2",
-                        FrameGenerationMode::UltraBoost => "3",
+                        FrameGenerationMode::MultiFrameGen => "3",
                     },
                 );
             }

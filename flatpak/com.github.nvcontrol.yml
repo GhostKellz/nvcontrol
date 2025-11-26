@@ -1,0 +1,47 @@
+app-id: com.github.nvcontrol
+runtime: org.freedesktop.Platform
+runtime-version: '23.08'
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: nvctl
+finish-args:
+  # GPU access
+  - --device=dri
+  - --filesystem=/dev/nvidia0:rw
+  - --filesystem=/dev/nvidiactl:rw
+  - --filesystem=/dev/nvidia-modeset:rw
+  # System access
+  - --filesystem=xdg-config/nvcontrol:create
+  - --filesystem=xdg-cache/nvcontrol:create
+  # Wayland/X11
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  # Network for container management
+  - --share=network
+  # System bus for hardware access
+  - --system-talk-name=org.freedesktop.UPower
+  - --system-talk-name=org.freedesktop.login1
+  # Access to Docker/Podman sockets
+  - --filesystem=/var/run/docker.sock
+  - --filesystem=xdg-run/podman:ro
+
+modules:
+  - name: nvcontrol
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/rust-stable/bin
+      env:
+        CARGO_HOME: /run/build/nvcontrol/cargo
+    build-commands:
+      - cargo --offline fetch --manifest-path Cargo.toml
+      - cargo --offline build --release --all-features
+      - install -Dm755 target/release/nvctl -t /app/bin/
+      - install -Dm644 assets/nvcontrol.desktop /app/share/applications/com.github.nvcontrol.desktop
+      - install -Dm644 assets/nvcontrol.png /app/share/icons/hicolor/256x256/apps/com.github.nvcontrol.png
+    sources:
+      - type: git
+        url: https://github.com/GhostKellz/nvcontrol.git
+        tag: v0.7.0
+      - cargo-sources.json

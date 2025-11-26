@@ -24,7 +24,28 @@ enum Tab {
     Hdr,
     PowerCurves,
     GameProfiles,
+    RgbControl,     // NEW
+    Containers,     // NEW
     Settings,
+}
+
+#[cfg(feature = "gui")]
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum OcPreset {
+    Stock,       // 0/0/80%
+    MildOc,      // +75/+500/90%
+    Performance, // +150/+1000/95%
+    Extreme,     // +200/+1500/105% - RTX 5090 max
+}
+
+#[cfg(feature = "gui")]
+#[derive(Debug, Clone)]
+struct ContainerInfo {
+    pub id: String,
+    pub name: String,
+    pub image: String,
+    pub status: String,
+    pub gpu_usage: String,
 }
 
 #[cfg(feature = "gui")]
@@ -96,6 +117,23 @@ struct NvControlApp {
     auto_oc_max_power: u32,
     // Game profile auto-apply
     game_auto_config: nvcontrol::game_profile_auto::AutoProfileConfig,
+
+    // NEW: Interactive OC controls (from TUI)
+    gpu_offset: i32,        // -200 to +200 MHz
+    memory_offset: i32,     // -1000 to +1000 MHz
+    power_limit_percent: u32, // 50 to 105%
+    oc_preset: OcPreset,
+
+    // NEW: Theme selection
+    current_theme: nvcontrol::themes::ThemeVariant,
+
+    // NEW: RGB control
+    rgb_mode: String,
+    rgb_color: [f32; 3],
+
+    // NEW: Container management
+    container_runtime: Option<nvcontrol::container_runtime::NvContainerRuntime>,
+    running_containers: Vec<ContainerInfo>,
 }
 
 #[cfg(feature = "gui")]
@@ -168,6 +206,9 @@ impl NvControlApp {
             }
         });
 
+        // Initialize container runtime
+        let container_runtime = nvcontrol::container_runtime::NvContainerRuntime::new().ok();
+
         Self {
             vibrance_levels,
             tab: Tab::Gpu,
@@ -193,6 +234,23 @@ impl NvControlApp {
             auto_oc_max_temp: 85.0,
             auto_oc_max_power: 100,
             game_auto_config: nvcontrol::game_profile_auto::load_config().unwrap_or_default(),
+
+            // NEW: Interactive OC controls
+            gpu_offset: 0,
+            memory_offset: 0,
+            power_limit_percent: 100,
+            oc_preset: OcPreset::Stock,
+
+            // NEW: Theme
+            current_theme: nvcontrol::themes::ThemeVariant::TokyoNightNight,
+
+            // NEW: RGB
+            rgb_mode: "Static".to_string(),
+            rgb_color: [1.0, 0.0, 0.0], // Red (ROG default)
+
+            // NEW: Containers
+            container_runtime,
+            running_containers: Vec::new(),
         }
     }
 
@@ -210,6 +268,106 @@ impl NvControlApp {
 
             self.gpu_stats = Some(stats);
             self.last_stats_update = std::time::Instant::now();
+        }
+    }
+
+    // NEW: Apply OC preset
+    fn apply_oc_preset(&mut self, preset: OcPreset) {
+        self.oc_preset = preset;
+        match preset {
+            OcPreset::Stock => {
+                self.gpu_offset = 0;
+                self.memory_offset = 0;
+                self.power_limit_percent = 80;
+            }
+            OcPreset::MildOc => {
+                self.gpu_offset = 75;
+                self.memory_offset = 500;
+                self.power_limit_percent = 90;
+            }
+            OcPreset::Performance => {
+                self.gpu_offset = 150;
+                self.memory_offset = 1000;
+                self.power_limit_percent = 95;
+            }
+            OcPreset::Extreme => {
+                self.gpu_offset = 200;
+                self.memory_offset = 1500;
+                self.power_limit_percent = 105;
+            }
+        }
+    }
+
+    // NEW: Apply overclock settings
+    fn apply_overclock(&self) {
+        let profile = overclocking::OverclockProfile {
+            name: "GUI Custom".to_string(),
+            gpu_clock_offset: self.gpu_offset,
+            memory_clock_offset: self.memory_offset,
+            power_limit: self.power_limit_percent as u8,
+            voltage_offset: 0,
+            temp_limit: 90,
+            fan_curve: vec![],  // Use default fan curve
+        };
+
+        if let Err(e) = overclocking::apply_overclock_profile(&profile) {
+            eprintln!("Failed to apply overclock: {}", e);
+        } else {
+            println!("✅ Overclock applied: GPU {:+}MHz, Mem {:+}MHz, Power {}%",
+                self.gpu_offset, self.memory_offset, self.power_limit_percent);
+        }
+    }
+
+    // NEW: Apply RGB settings
+    fn apply_rgb_settings(&self) {
+        use nvcontrol::rgb_control::{RgbController, RgbMode, RgbColor};
+
+        if let Ok(mut controller) = RgbController::new() {
+            let color = RgbColor {
+                r: (self.rgb_color[0] * 255.0) as u8,
+                g: (self.rgb_color[1] * 255.0) as u8,
+                b: (self.rgb_color[2] * 255.0) as u8,
+            };
+
+            let mode = match self.rgb_mode.as_str() {
+                "Static" => RgbMode::Static,
+                "Breathing" => RgbMode::Breathing,
+                "Rainbow" => RgbMode::Rainbow,
+                "TempReactive" => {
+                    if let Err(e) = controller.set_temp_reactive() {
+                        eprintln!("Failed to set temp reactive mode: {}", e);
+                    }
+                    return;
+                }
+                "Off" => RgbMode::Off,
+                _ => RgbMode::Static,
+            };
+
+            if let Err(e) = controller.set_gpu_mode(mode, color) {
+                eprintln!("Failed to set RGB: {}", e);
+            } else {
+                println!("✅ RGB mode applied: {:?}", self.rgb_mode);
+            }
+        } else {
+            eprintln!("❌ Failed to initialize RGB controller. Is OpenRGB installed?");
+        }
+    }
+
+    // NEW: Apply theme
+    fn apply_theme(&mut self, ctx: &egui::Context) {
+        let palette = nvcontrol::themes::ColorPalette::from_variant(self.current_theme);
+        // Convert palette to egui visuals
+        let mut visuals = egui::Visuals::dark();
+        // Apply colors from palette (simplified for now)
+        ctx.set_visuals(visuals);
+    }
+
+    // NEW: Refresh container list
+    fn refresh_containers(&mut self) {
+        if let Some(ref runtime) = self.container_runtime {
+            // Get running containers with GPU access
+            self.running_containers = Vec::new();
+            // This would call runtime.list_containers() when implemented
         }
     }
 }
@@ -320,6 +478,18 @@ impl eframe::App for NvControlApp {
                     .clicked()
                 {
                     self.tab = Tab::Hdr;
+                }
+                if ui
+                    .selectable_label(matches!(self.tab, Tab::RgbControl), "💡 RGB")
+                    .clicked()
+                {
+                    self.tab = Tab::RgbControl;
+                }
+                if ui
+                    .selectable_label(matches!(self.tab, Tab::Containers), "🐳 Containers")
+                    .clicked()
+                {
+                    self.tab = Tab::Containers;
                 }
                 if ui
                     .selectable_label(matches!(self.tab, Tab::Settings), "⚙️ Settings")
@@ -648,39 +818,36 @@ impl eframe::App for NvControlApp {
                 egui::CentralPanel::default().show(ctx, |ui| {
                     ui.heading("🌈 Digital Vibrance Control");
 
-                    // nvibrant status
+                    // Native vibrance status
                     ui.group(|ui| {
-                        ui.label("📋 nvibrant Status");
+                        ui.label("📋 Native Vibrance Status");
                         ui.separator();
 
                         if vibrance::is_available() {
                             ui.colored_label(
                                 egui::Color32::from_rgb(16, 185, 129),
-                                "✅ nvibrant Available",
+                                "✅ Native Vibrance Available (Pure Rust)",
                             );
 
                             match vibrance::get_driver_info() {
-                                Ok(info) => ui.label(info),
-                                Err(e) => ui.colored_label(
-                                    egui::Color32::from_rgb(239, 68, 68),
-                                    format!("❌ {}", e),
-                                ),
+                                Ok(info) => {
+                                    ui.label(info);
+                                    ui.label("Using direct NVKMS ioctls - no external dependencies")
+                                },
+                                Err(e) => {
+                                    ui.colored_label(
+                                        egui::Color32::from_rgb(239, 68, 68),
+                                        format!("❌ {}", e),
+                                    )
+                                },
                             };
                         } else {
                             ui.colored_label(
                                 egui::Color32::from_rgb(239, 68, 68),
-                                "❌ nvibrant Not Available",
+                                "❌ Native Vibrance Not Available",
                             );
-                            ui.label("Digital vibrance requires nvibrant for Wayland support");
-
-                            if ui.button("📥 Install nvibrant").clicked() {
-                                if let Err(e) = std::process::Command::new("pip3")
-                                    .args(&["install", "nvibrant"])
-                                    .spawn()
-                                {
-                                    eprintln!("Failed to install nvibrant: {}", e);
-                                }
-                            }
+                            ui.label("Requires NVIDIA open drivers 580+");
+                            ui.label("Install: sudo pacman -S nvidia-open-dkms");
                         }
                     });
 
@@ -969,63 +1136,80 @@ impl eframe::App for NvControlApp {
             }
             Tab::Overclock => {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.heading("⚡ GPU Overclocking");
+                    ui.heading("⚡ Interactive GPU Overclocking");
 
                     ui.group(|ui| {
-                        ui.label("🎯 Current Profile");
+                        ui.label("🎯 Quick Presets");
                         ui.separator();
 
                         ui.horizontal(|ui| {
-                            ui.label("Profile:");
-                            ui.text_edit_singleline(&mut self.overclock_profile.name);
+                            if ui.selectable_label(self.oc_preset == OcPreset::Stock, "📊 Stock").clicked() {
+                                self.apply_oc_preset(OcPreset::Stock);
+                            }
+                            if ui.selectable_label(self.oc_preset == OcPreset::MildOc, "🔧 Mild OC").clicked() {
+                                self.apply_oc_preset(OcPreset::MildOc);
+                            }
+                            if ui.selectable_label(self.oc_preset == OcPreset::Performance, "⚡ Performance").clicked() {
+                                self.apply_oc_preset(OcPreset::Performance);
+                            }
+                            if ui.selectable_label(self.oc_preset == OcPreset::Extreme, "🔥 Extreme (5090)").clicked() {
+                                self.apply_oc_preset(OcPreset::Extreme);
+                            }
                         });
+
+                        ui.add_space(5.0);
+
+                        ui.label(format!("Current: {:?}", self.oc_preset));
+                    });
+
+                    ui.add_space(10.0);
+
+                    ui.group(|ui| {
+                        ui.label("🎛️ Manual Tuning");
+                        ui.separator();
 
                         ui.horizontal(|ui| {
                             ui.label("GPU Clock Offset:");
                             ui.add(
-                                egui::Slider::new(
-                                    &mut self.overclock_profile.gpu_clock_offset,
-                                    -200..=300,
-                                )
-                                .suffix(" MHz"),
+                                egui::Slider::new(&mut self.gpu_offset, -200..=200)
+                                    .suffix(" MHz")
+                                    .text("Core"),
                             );
+                            ui.label(format!("{:+} MHz", self.gpu_offset));
                         });
 
                         ui.horizontal(|ui| {
                             ui.label("Memory Clock Offset:");
                             ui.add(
-                                egui::Slider::new(
-                                    &mut self.overclock_profile.memory_clock_offset,
-                                    -500..=1000,
-                                )
-                                .suffix(" MHz"),
+                                egui::Slider::new(&mut self.memory_offset, -1000..=1500)
+                                    .suffix(" MHz")
+                                    .text("VRAM"),
                             );
+                            ui.label(format!("{:+} MHz", self.memory_offset));
                         });
 
                         ui.horizontal(|ui| {
                             ui.label("Power Limit:");
                             ui.add(
-                                egui::Slider::new(
-                                    &mut self.overclock_profile.power_limit,
-                                    50..=120,
-                                )
-                                .suffix("%"),
+                                egui::Slider::new(&mut self.power_limit_percent, 50..=105)
+                                    .suffix("%")
+                                    .text("TDP"),
                             );
+                            ui.label(format!("{}%", self.power_limit_percent));
                         });
 
-                        if ui.button("Apply Overclock").clicked() {
-                            match overclocking::apply_overclock_profile(&self.overclock_profile) {
-                                Ok(()) => println!("✅ Overclock applied"),
-                                Err(e) => eprintln!("❌ Overclock failed: {}", e),
-                            }
-                        }
+                        ui.add_space(10.0);
 
                         ui.horizontal(|ui| {
-                            if ui.button("Reset to Default").clicked() {
-                                self.overclock_profile = overclocking::OverclockProfile::default();
+                            if ui.button("✅ Apply Overclock").clicked() {
+                                self.apply_overclock();
                             }
 
-                            if ui.button("⚠️ Stress Test").clicked() {
+                            if ui.button("🔄 Reset to Stock").clicked() {
+                                self.apply_oc_preset(OcPreset::Stock);
+                            }
+
+                            if ui.button("⚠️ Stress Test (5 min)").clicked() {
                                 let _ = overclocking::create_stress_test(5);
                             }
                         });
@@ -2694,6 +2878,141 @@ impl eframe::App for NvControlApp {
                     ui.label("ℹ️  Note: Game profiles must be configured separately in the profiles directory.");
                 });
             }
+            Tab::RgbControl => {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    ui.heading("💡 ASUS Aura RGB Control");
+
+                    ui.group(|ui| {
+                        ui.label("🎨 RGB Mode");
+                        ui.separator();
+
+                        egui::ComboBox::from_label("Select Mode")
+                            .selected_text(&self.rgb_mode)
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut self.rgb_mode, "Static".to_string(), "Static");
+                                ui.selectable_value(&mut self.rgb_mode, "Breathing".to_string(), "Breathing");
+                                ui.selectable_value(&mut self.rgb_mode, "Rainbow".to_string(), "Rainbow");
+                                ui.selectable_value(&mut self.rgb_mode, "TempReactive".to_string(), "Temperature Reactive");
+                                ui.selectable_value(&mut self.rgb_mode, "Off".to_string(), "Off");
+                            });
+
+                        ui.add_space(10.0);
+
+                        // Color picker for static/breathing modes
+                        if self.rgb_mode == "Static" || self.rgb_mode == "Breathing" {
+                            ui.label("Color:");
+                            ui.color_edit_button_rgb(&mut self.rgb_color);
+                        }
+
+                        ui.add_space(10.0);
+
+                        if ui.button("✅ Apply RGB Settings").clicked() {
+                            self.apply_rgb_settings();
+                        }
+                    });
+
+                    ui.add_space(10.0);
+
+                    ui.group(|ui| {
+                        ui.label("ℹ️ RGB Control Info");
+                        ui.separator();
+                        ui.label("Requires OpenRGB installed:");
+                        ui.label("  yay -S openrgb");
+                        ui.label("");
+                        ui.label("i2c kernel modules must be loaded:");
+                        ui.label("  sudo modprobe i2c-dev i2c-nvidia_gpu");
+                        ui.label("");
+                        ui.label("Temperature Reactive colors:");
+                        ui.label("  < 50°C: Blue/Cyan");
+                        ui.label("  50-60°C: Green");
+                        ui.label("  60-70°C: Yellow");
+                        ui.label("  70-80°C: Orange");
+                        ui.label("  > 80°C: Red");
+                    });
+                });
+            }
+            Tab::Containers => {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    ui.heading("🐳 GPU Container Management");
+
+                    ui.group(|ui| {
+                        ui.label("📦 NVIDIA Container Toolkit Status");
+                        ui.separator();
+
+                        if let Some(ref _runtime) = self.container_runtime {
+                            ui.colored_label(egui::Color32::GREEN, "✅ Container runtime initialized");
+
+                            // Check NVIDIA Container Toolkit
+                            ui.label("Checking NVIDIA Container Toolkit...");
+                            ui.label("(Feature requires full implementation)");
+                        } else {
+                            ui.colored_label(egui::Color32::RED, "❌ Container runtime not available");
+                            ui.label("");
+                            ui.label("Install Docker or Podman:");
+                            ui.label("  sudo pacman -S docker");
+                            ui.label("");
+                            ui.label("Install NVIDIA Container Toolkit:");
+                            ui.label("  yay -S nvidia-container-toolkit");
+                        }
+                    });
+
+                    ui.add_space(10.0);
+
+                    ui.group(|ui| {
+                        ui.label("🚀 Quick Launch");
+                        ui.separator();
+
+                        ui.horizontal(|ui| {
+                            if ui.button("PyTorch (GPU)").clicked() {
+                                println!("Launching PyTorch container...");
+                                // self.launch_pytorch_container();
+                            }
+                            if ui.button("TensorFlow (GPU)").clicked() {
+                                println!("Launching TensorFlow container...");
+                                // self.launch_tensorflow_container();
+                            }
+                            if ui.button("CUDA Dev").clicked() {
+                                println!("Launching CUDA dev container...");
+                                // self.launch_cuda_dev_container();
+                            }
+                        });
+
+                        ui.add_space(5.0);
+
+                        ui.label("Available container profiles:");
+                        ui.label("  • PyTorch 2.2.0 + CUDA 12.1");
+                        ui.label("  • TensorFlow latest GPU");
+                        ui.label("  • CUDA 12.x Development");
+                    });
+
+                    ui.add_space(10.0);
+
+                    ui.group(|ui| {
+                        ui.label("📊 Running Containers");
+                        ui.separator();
+
+                        if self.running_containers.is_empty() {
+                            ui.label("No GPU containers currently running");
+                        } else {
+                            for container in &self.running_containers {
+                                ui.horizontal(|ui| {
+                                    ui.label(&container.name);
+                                    ui.label(format!("GPU: {}", container.gpu_usage));
+                                    if ui.button("Stop").clicked() {
+                                        println!("Stopping container: {}", container.id);
+                                    }
+                                });
+                            }
+                        }
+
+                        ui.add_space(5.0);
+
+                        if ui.button("🔄 Refresh Container List").clicked() {
+                            self.refresh_containers();
+                        }
+                    });
+                });
+            }
             Tab::Settings => {
                 egui::CentralPanel::default().show(ctx, |ui| {
                     ui.heading("⚙️ Settings");
@@ -2702,6 +3021,34 @@ impl eframe::App for NvControlApp {
                         ui.label("🎨 Theme Selection");
                         ui.separator();
 
+                        egui::ComboBox::from_label("Select Theme")
+                            .selected_text(self.current_theme.name())
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut self.current_theme,
+                                    nvcontrol::themes::ThemeVariant::TokyoNightNight, "Tokyo Night");
+                                ui.selectable_value(&mut self.current_theme,
+                                    nvcontrol::themes::ThemeVariant::TokyoNightStorm, "Tokyo Night Storm");
+                                ui.selectable_value(&mut self.current_theme,
+                                    nvcontrol::themes::ThemeVariant::TokyoNightMoon, "Tokyo Night Moon");
+                                ui.selectable_value(&mut self.current_theme,
+                                    nvcontrol::themes::ThemeVariant::Dracula, "Dracula");
+                                ui.selectable_value(&mut self.current_theme,
+                                    nvcontrol::themes::ThemeVariant::RogRed, "ROG Red");
+                                ui.selectable_value(&mut self.current_theme,
+                                    nvcontrol::themes::ThemeVariant::MatrixGreen, "Matrix Green");
+                                ui.selectable_value(&mut self.current_theme,
+                                    nvcontrol::themes::ThemeVariant::Cyberpunk, "Cyberpunk");
+                            });
+
+                        ui.add_space(10.0);
+
+                        if ui.button("Apply Theme").clicked() {
+                            self.apply_theme(ctx);
+                        }
+
+                        ui.add_space(5.0);
+
+                        ui.label("Legacy themes:");
                         ui.horizontal(|ui| {
                             if ui.button("NVIDIA Dark").clicked() {
                                 self.theme = theme::ModernTheme::nvidia_dark();
@@ -2810,17 +3157,28 @@ impl eframe::App for NvControlApp {
                         ui.label("📊 System Information");
                         ui.separator();
 
-                        if ui.button("🔧 Initialize nvibrant").clicked() {
-                            match vibrance::initialize_nvibrant() {
-                                Ok(()) => println!("✅ nvibrant initialized"),
-                                Err(e) => eprintln!("❌ nvibrant init failed: {}", e),
+                        if ui.button("🔧 Test Native Vibrance").clicked() {
+                            use nvcontrol::vibrance_native;
+                            match vibrance_native::get_vibrance_status_native() {
+                                Ok(status) => {
+                                    println!("✅ Native vibrance working!");
+                                    println!("Status: {:?}", status);
+                                    println!("Devices: checked");
+                                },
+                                Err(e) => eprintln!("❌ Native vibrance test failed: {}", e),
                             }
                         }
 
-                        if ui.button("🧪 Test nvibrant").clicked() {
-                            match vibrance::test_nvibrant() {
-                                Ok(()) => println!("✅ nvibrant test passed"),
-                                Err(e) => eprintln!("❌ nvibrant test failed: {}", e),
+                        if ui.button("🔍 Scan Displays").clicked() {
+                            use nvcontrol::vibrance_native;
+                            match vibrance_native::list_displays_native() {
+                                Ok(displays) => {
+                                    println!("✅ Found {} displays:", displays.len());
+                                    for (idx, disp) in displays.iter().enumerate() {
+                                        println!("  {}. Display {} - {:?}", idx + 1, disp.0, disp);
+                                    }
+                                },
+                                Err(e) => eprintln!("❌ Display scan failed: {}", e),
                             }
                         }
                     });

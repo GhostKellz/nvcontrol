@@ -177,6 +177,11 @@ enum Command {
         #[command(subcommand)]
         subcommand: OsdSubcommand,
     },
+    /// 🎛️  Interactive Menu Mode
+    #[command(alias = "menu")]
+    Interactive,
+    /// 🔍 Run system diagnostics
+    Doctor,
     /// 📋 Show detailed version information
     Version,
 }
@@ -5074,6 +5079,15 @@ fn main() {
                 }
             }
         }
+        Command::Interactive => {
+            println!("🎛️  Launching Interactive Menu Mode...\n");
+            if let Err(e) = nvcontrol::interactive_cli::InteractiveCli::new().run() {
+                eprintln!("❌ Interactive mode error: {}", e);
+            }
+        }
+        Command::Doctor => {
+            println!("{}", nvcontrol::error_messages::run_diagnostics());
+        }
         Command::Version => {
             println!("🚀 nvcontrol v{}", env!("CARGO_PKG_VERSION"));
             println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -5117,6 +5131,7 @@ fn main() {
                     println!(
                         "   DLSS Support: {} ✅",
                         match controller.version {
+                            dlss::DlssVersion::Dlss4 => "DLSS 4 (Multi-Frame Gen)",
                             dlss::DlssVersion::Dlss3_5 => "DLSS 3.5",
                             dlss::DlssVersion::Dlss3 => "DLSS 3",
                             dlss::DlssVersion::Dlss2 => "DLSS 2",

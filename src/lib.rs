@@ -72,10 +72,41 @@ pub mod power;
 pub mod recording;
 pub mod shaders;
 pub mod theme;
+pub mod themes;
 pub mod upscaling;
 
 // CUDA development tools
 pub mod cuda;
+
+// Phase 1: Core Stability & Safety
+pub mod error_recovery;
+pub mod hardware_safety;
+pub mod gpu_safe;
+
+// Phase 2: Wayland-First Experience
+pub mod wayland_integration;
+
+// Phase 3: Advanced GPU Control
+pub mod enhanced_overclock;
+pub mod intelligent_fan;
+pub mod advanced_power;
+pub mod advanced_multi_gpu;
+
+// Phase 4: Gaming & Performance
+pub mod gaming_integration;
+pub mod performance_monitoring;
+pub mod upscaling_tech;
+pub mod advanced_display;
+
+// Phase 5: Container & Virtualization
+pub mod nvbind_api;
+pub mod virtualization;
+pub mod container_specific;
+
+// ASUS ROG Integration
+pub mod asus_gpu_tweak;
+pub mod asus_aura;
+pub mod asus_fan_control;
 
 // Monitoring and TUI modules
 pub mod monitoring;
@@ -103,6 +134,42 @@ pub mod game_profile_auto;
 
 // Automated overclocking
 pub mod auto_overclock;
+
+// GPU model specifications and optimized profiles
+pub mod gpu_profiles;
+
+// Gaming optimizations for Linux
+pub mod gaming_optimizations;
+
+// Per-monitor profiles for multi-monitor setups
+pub mod monitor_profiles;
+
+// System validation for RTX 50-series (ReBAR, PCIe Gen 5, etc.)
+pub mod system_validation;
+
+// RGB/ARGB LED control (ASUS Aura, OpenRGB, etc.)
+pub mod rgb_control;
+
+// Kernel driver information and optimization
+pub mod kernel_driver;
+
+// Modern gaming dashboard (MSI Afterburner + ASUS GPU Tweak style)
+pub mod gaming_dashboard;
+
+// GPU Profiler and Monitoring (radeon-profile equivalent)
+pub mod nvidia_profiler;
+pub mod tui_monitor;
+pub mod gui_tuner;
+pub mod gui_themes;
+
+// Unified state management
+pub mod state;
+
+// Interactive CLI mode
+pub mod interactive_cli;
+
+// Enhanced error messages with solutions
+pub mod error_messages;
 
 // Re-export commonly used types
 pub use config::Config;

@@ -1,0 +1,46 @@
+version: 1
+
+AppDir:
+  path: ./AppDir
+
+  app_info:
+    id: com.github.nvcontrol
+    name: nvcontrol
+    icon: nvcontrol
+    version: 0.7.0
+    exec: usr/bin/nvctl
+    exec_args: $@
+
+  apt:
+    arch: amd64
+    sources:
+      - sourceline: 'deb [arch=amd64] http://archive.ubuntu.com/ubuntu/ jammy main restricted universe multiverse'
+
+    include:
+      - nvidia-utils-580
+      - libwayland-client0
+      - libxcb1
+      - libgtk-3-0
+
+  files:
+    include:
+      - /usr/lib/x86_64-linux-gnu/libnvidia-ml.so*
+      - /usr/lib/x86_64-linux-gnu/libcuda.so*
+    exclude:
+      - usr/share/man
+      - usr/share/doc
+
+  runtime:
+    env:
+      LD_LIBRARY_PATH: '${APPDIR}/usr/lib/x86_64-linux-gnu:${APPDIR}/usr/lib:${LD_LIBRARY_PATH}'
+      PATH: '${APPDIR}/usr/bin:${PATH}'
+
+  test:
+    debian:
+      image: ubuntu:22.04
+      command: ./AppRun --version
+
+AppImage:
+  arch: x86_64
+  update-information: guess
+  sign-key: None

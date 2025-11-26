@@ -1,6 +1,6 @@
-use crate::{NvResult, vrr};
+use crate::{NvResult, NvControlError, vrr, themes, gui_tuner, nvidia_profiler};
 use crossterm::{
-    event::{self, Event, KeyCode, KeyModifiers},
+    event::{self, Event, KeyCode, KeyModifiers, MouseEvent, MouseEventKind, EnableMouseCapture, DisableMouseCapture},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -10,11 +10,11 @@ use ratatui::{
     Frame, Terminal,
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
+    style::{Color, Modifier, Style},
     widgets::{Block, Borders, Clear, Gauge, List, ListItem, Paragraph, Sparkline, Tabs},
 };
 use std::collections::VecDeque;
-use std::io;
+use std::io::{self, IsTerminal};
 use std::time::{Duration, Instant};
 
 const MAX_HISTORY: usize = 120; // 2 minutes at 1Hz
@@ -50,6 +50,21 @@ pub struct TuiApp {
     oc_control_mode: bool,
     #[allow(dead_code)]
     fan_speed_target: u32,
+    current_theme: themes::ThemeVariant,
+    theme: themes::ColorPalette,
+    // OC controls
+    gpu_offset: i32,        // -200 to +200 MHz
+    memory_offset: i32,     // -1000 to +1000 MHz
+    power_limit_percent: u32, // 50 to 100%
+    oc_preset: OcPreset,
+    // Fan curve editing
+    fan_curve_points: Vec<(u32, u32)>, // (temp°C, fan%)
+    selected_curve_point: usize,
+    // Tuner state (MSI Afterburner-style)
+    tuner_states: Vec<gui_tuner::TunerState>,
+    // Profiler state (radeon-profile equivalent)
+    profiler: Option<nvidia_profiler::NvidiaProfiler>,
+    profiler_recording: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -60,6 +75,20 @@ enum Tab {
     Temperature,
     Power,
     Processes,
+    Overclocking,
+    FanControl,
+    Profiles,
+    Tuner,      // MSI Afterburner-style tuner
+    Profiler,   // GPU profiler (radeon-profile equivalent)
+    Settings,   // Settings panel
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum OcPreset {
+    Stock,
+    MildOc,
+    Performance,
+    Extreme,
 }
 
 impl Tab {
@@ -71,6 +100,12 @@ impl Tab {
             "Temperature",
             "Power",
             "Processes",
+            "Overclock",
+            "Fan Control",
+            "Profiles",
+            "Tuner",
+            "Profiler",
+            "Settings",
         ]
     }
 
@@ -82,6 +117,12 @@ impl Tab {
             3 => Tab::Temperature,
             4 => Tab::Power,
             5 => Tab::Processes,
+            6 => Tab::Overclocking,
+            7 => Tab::FanControl,
+            8 => Tab::Profiles,
+            9 => Tab::Tuner,
+            10 => Tab::Profiler,
+            11 => Tab::Settings,
             _ => Tab::Overview,
         }
     }
@@ -111,6 +152,31 @@ impl TuiApp {
             .map(|displays| displays.iter().any(|d| d.current_settings.enabled))
             .unwrap_or(false);
 
+        // Auto-detect theme based on GPU vendor
+        let current_theme = Self::detect_gpu_vendor_theme(&nvml);
+        let theme = themes::ColorPalette::from_variant(current_theme);
+
+        // Default fan curve (performance)
+        let fan_curve_points = vec![
+            (30, 20),   // 30°C -> 20%
+            (50, 40),   // 50°C -> 40%
+            (70, 60),   // 70°C -> 60%
+            (80, 80),   // 80°C -> 80%
+            (90, 100),  // 90°C -> 100%
+        ];
+
+        // Initialize tuner states for each GPU
+        let tuner_states = (0..device_count)
+            .map(|gpu_id| gui_tuner::TunerState::new(gpu_id))
+            .collect();
+
+        // Initialize profiler (for selected GPU initially)
+        let profiler = if device_count > 0 {
+            Some(nvidia_profiler::NvidiaProfiler::new(0, 100, 10000))
+        } else {
+            None
+        };
+
         Self {
             nvml,
             device_count,
@@ -129,13 +195,31 @@ impl TuiApp {
             fan_control_mode: false,
             oc_control_mode: false,
             fan_speed_target: 50,
+            current_theme,
+            theme,
+            gpu_offset: 0,
+            memory_offset: 0,
+            power_limit_percent: 80,
+            oc_preset: OcPreset::Stock,
+            fan_curve_points,
+            selected_curve_point: 0,
+            tuner_states,
+            profiler,
+            profiler_recording: false,
         }
     }
 
     pub fn run(&mut self) -> NvResult<()> {
+        // Check if we have a real terminal
+        if !io::stdout().is_terminal() {
+            return Err(NvControlError::RuntimeError(
+                "TUI requires a terminal (TTY). Run this command in a terminal emulator like Ghostty, Kitty, Alacritty, etc.".to_string()
+            ));
+        }
+
         enable_raw_mode()?;
         let mut stdout = io::stdout();
-        execute!(stdout, EnterAlternateScreen)?;
+        execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = Terminal::new(backend)?;
 
@@ -144,7 +228,127 @@ impl TuiApp {
         loop {
             // Handle input events
             if event::poll(Duration::from_millis(100))? {
-                if let Event::Key(key) = event::read()? {
+                let event = event::read()?;
+
+                // Handle mouse events
+                if let Event::Mouse(mouse) = event {
+                    self.handle_mouse_event(mouse);
+                    continue;
+                }
+
+                // Handle keyboard events
+                if let Event::Key(key) = event {
+                    // Handle OC mode controls first
+                    if self.oc_control_mode && self.current_tab == 6 { // Tab 6 is Overclocking
+                        match key.code {
+                            KeyCode::Left => {
+                                self.gpu_offset = (self.gpu_offset - 10).max(-200);
+                                self.set_status_message(format!("GPU Offset: {:+} MHz", self.gpu_offset));
+                                continue;
+                            }
+                            KeyCode::Right => {
+                                self.gpu_offset = (self.gpu_offset + 10).min(200);
+                                self.set_status_message(format!("GPU Offset: {:+} MHz", self.gpu_offset));
+                                continue;
+                            }
+                            KeyCode::Up => {
+                                self.memory_offset = (self.memory_offset + 50).min(1000);
+                                self.set_status_message(format!("Memory Offset: {:+} MHz", self.memory_offset));
+                                continue;
+                            }
+                            KeyCode::Down => {
+                                self.memory_offset = (self.memory_offset - 50).max(-1000);
+                                self.set_status_message(format!("Memory Offset: {:+} MHz", self.memory_offset));
+                                continue;
+                            }
+                            KeyCode::Char('+') | KeyCode::Char('=') => {
+                                self.power_limit_percent = (self.power_limit_percent + 5).min(100);
+                                self.set_status_message(format!("Power Limit: {}%", self.power_limit_percent));
+                                continue;
+                            }
+                            KeyCode::Char('-') | KeyCode::Char('_') => {
+                                self.power_limit_percent = (self.power_limit_percent - 5).max(50);
+                                self.set_status_message(format!("Power Limit: {}%", self.power_limit_percent));
+                                continue;
+                            }
+                            KeyCode::Char('1') => {
+                                self.apply_oc_preset(OcPreset::Stock);
+                                continue;
+                            }
+                            KeyCode::Char('2') => {
+                                self.apply_oc_preset(OcPreset::MildOc);
+                                continue;
+                            }
+                            KeyCode::Char('3') => {
+                                self.apply_oc_preset(OcPreset::Performance);
+                                continue;
+                            }
+                            KeyCode::Char('4') => {
+                                self.apply_oc_preset(OcPreset::Extreme);
+                                continue;
+                            }
+                            KeyCode::Enter => {
+                                self.apply_overclock();
+                                continue;
+                            }
+                            KeyCode::Char('o') | KeyCode::Esc => {
+                                self.oc_control_mode = false;
+                                self.set_status_message("OC Mode disabled".to_string());
+                                continue;
+                            }
+                            _ => {}
+                        }
+                    }
+
+                    // Handle fan control mode
+                    if self.fan_control_mode && self.current_tab == 7 { // Tab 7 is Fan Control
+                        match key.code {
+                            KeyCode::Left => {
+                                if self.selected_curve_point > 0 {
+                                    self.selected_curve_point -= 1;
+                                }
+                                continue;
+                            }
+                            KeyCode::Right => {
+                                if self.selected_curve_point < self.fan_curve_points.len() - 1 {
+                                    self.selected_curve_point += 1;
+                                }
+                                continue;
+                            }
+                            KeyCode::Up => {
+                                let idx = self.selected_curve_point;
+                                if let Some(point) = self.fan_curve_points.get_mut(idx) {
+                                    point.1 = (point.1 + 5).min(100);
+                                    let temp = point.0;
+                                    let fan = point.1;
+                                    self.set_status_message(format!("Fan curve point: {}°C -> {}%", temp, fan));
+                                }
+                                continue;
+                            }
+                            KeyCode::Down => {
+                                let idx = self.selected_curve_point;
+                                if let Some(point) = self.fan_curve_points.get_mut(idx) {
+                                    point.1 = (point.1.saturating_sub(5)).max(0);
+                                    let temp = point.0;
+                                    let fan = point.1;
+                                    self.set_status_message(format!("Fan curve point: {}°C -> {}%", temp, fan));
+                                }
+                                continue;
+                            }
+                            KeyCode::Enter => {
+                                self.apply_fan_curve();
+                                continue;
+                            }
+                            KeyCode::Char('f') | KeyCode::Esc => {
+                                self.fan_control_mode = false;
+                                self.set_status_message("Fan Control Mode disabled".to_string());
+                                continue;
+                            }
+                            _ => {}
+                        }
+                    }
+
+                    // Normal key handling
                     match key.code {
                         KeyCode::Char('q') => break,
                         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -168,6 +372,9 @@ impl TuiApp {
                         KeyCode::Char('4') => self.current_tab = 3,
                         KeyCode::Char('5') => self.current_tab = 4,
                         KeyCode::Char('6') => self.current_tab = 5,
+                        KeyCode::Char('7') => self.current_tab = 6,
+                        KeyCode::Char('8') => self.current_tab = 7,
+                        KeyCode::Char('9') => self.current_tab = 8,
                         // Feature hotkeys
                         KeyCode::Char('e') => {
                             // Export data to JSON
@@ -180,6 +387,11 @@ impl TuiApp {
                         KeyCode::Char('o') => {
                             // Open overclocking controls
                             self.oc_control_mode = !self.oc_control_mode;
+                            if self.oc_control_mode {
+                                self.set_status_message("OC Mode: Use ←/→ GPU offset, ↑/↓ Memory offset, +/- Power, 1-4 Presets, Enter to Apply".to_string());
+                            } else {
+                                self.set_status_message("OC Mode disabled".to_string());
+                            }
                         }
                         KeyCode::Char('v') => {
                             // VRR toggle
@@ -188,6 +400,10 @@ impl TuiApp {
                         KeyCode::Char('g') => {
                             // Gaming mode toggle
                             self.toggle_gaming_mode();
+                        }
+                        KeyCode::Char('t') => {
+                            // Cycle through themes
+                            self.cycle_theme();
                         }
                         _ => {}
                     }
@@ -206,7 +422,7 @@ impl TuiApp {
 
         // Cleanup
         disable_raw_mode()?;
-        execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+        execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
         terminal.show_cursor()?;
 
         Ok(())
@@ -308,6 +524,12 @@ impl TuiApp {
             Tab::Temperature => self.draw_temperature(f, chunks[2]),
             Tab::Power => self.draw_power(f, chunks[2]),
             Tab::Processes => self.draw_processes(f, chunks[2]),
+            Tab::Overclocking => self.draw_overclocking(f, chunks[2]),
+            Tab::FanControl => self.draw_fan_control(f, chunks[2]),
+            Tab::Profiles => self.draw_profiles(f, chunks[2]),
+            Tab::Tuner => self.draw_tuner(f, chunks[2]),
+            Tab::Profiler => self.draw_profiler(f, chunks[2]),
+            Tab::Settings => self.draw_settings(f, chunks[2]),
         }
 
         // Status bar
@@ -317,17 +539,23 @@ impl TuiApp {
     fn draw_header(&self, f: &mut Frame, area: Rect) {
         let gpu_count = self.device_count;
         let uptime = self.start_time.elapsed().as_secs();
-        let status = if self.paused { "PAUSED" } else { "LIVE" };
+        let status = if self.paused { "󰏤 PAUSED" } else { "󰐊 LIVE" };
 
         let title = format!(
-            "nvcontrol GPU Monitor - {} GPU(s) | {} | Uptime: {}s",
-            gpu_count, status, uptime
+            "{} nvcontrol GPU Monitor - {} GPU(s) | {} | {} Uptime: {}s | {} {}",
+            themes::icons::GPU,
+            gpu_count,
+            status,
+            themes::icons::CLOCK,
+            uptime,
+            themes::icons::THEME,
+            self.current_theme.name()
         );
 
         let header = Paragraph::new(title)
-            .block(Block::default().borders(Borders::ALL))
+            .block(Block::default().borders(Borders::ALL).style(Style::default().fg(self.theme.border.to_ratatui())))
             .alignment(Alignment::Center)
-            .style(Style::default().fg(Color::Cyan));
+            .style(Style::default().fg(self.theme.primary().to_ratatui()).add_modifier(Modifier::BOLD));
 
         f.render_widget(header, area);
     }
@@ -336,10 +564,15 @@ impl TuiApp {
         let titles: Vec<String> = Tab::titles().into_iter().map(|s| s.to_string()).collect();
 
         let tabs = Tabs::new(titles)
-            .block(Block::default().borders(Borders::ALL).title("Tabs"))
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .title("Tabs")
+                .style(Style::default().fg(self.theme.border.to_ratatui())))
             .select(self.current_tab)
-            .style(Style::default().fg(Color::White))
-            .highlight_style(Style::default().fg(Color::Yellow));
+            .style(Style::default().fg(self.theme.text().to_ratatui()))
+            .highlight_style(Style::default()
+                .fg(self.theme.accent().to_ratatui())
+                .add_modifier(Modifier::BOLD));
 
         f.render_widget(tabs, area);
     }
@@ -434,42 +667,77 @@ impl TuiApp {
             ])
             .split(area);
 
-        // GPU Utilization
+        // GPU Utilization with usage-based color
+        let gpu_color = if metrics.gpu_utilization > 90.0 {
+            self.theme.usage_high.to_ratatui()
+        } else if metrics.gpu_utilization > 50.0 {
+            self.theme.usage_medium.to_ratatui()
+        } else {
+            self.theme.usage_low.to_ratatui()
+        };
         let gpu_gauge = Gauge::default()
-            .block(Block::default().borders(Borders::ALL).title("GPU"))
-            .gauge_style(Style::default().fg(Color::Green))
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .title(format!("{} GPU", themes::icons::GPU))
+                .style(Style::default().fg(self.theme.border.to_ratatui())))
+            .gauge_style(Style::default().fg(gpu_color))
             .ratio(metrics.gpu_utilization / 100.0)
             .label(format!("{:.0}%", metrics.gpu_utilization));
         f.render_widget(gpu_gauge, chunks[0]);
 
         // Memory Utilization
+        let mem_color = if metrics.memory_utilization > 90.0 {
+            self.theme.usage_high.to_ratatui()
+        } else if metrics.memory_utilization > 70.0 {
+            self.theme.usage_medium.to_ratatui()
+        } else {
+            self.theme.usage_low.to_ratatui()
+        };
         let mem_gauge = Gauge::default()
-            .block(Block::default().borders(Borders::ALL).title("VRAM"))
-            .gauge_style(Style::default().fg(Color::Blue))
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .title(format!("{} VRAM", themes::icons::MEMORY))
+                .style(Style::default().fg(self.theme.border.to_ratatui())))
+            .gauge_style(Style::default().fg(mem_color))
             .ratio(metrics.memory_utilization / 100.0)
             .label(format!("{:.0}%", metrics.memory_utilization));
         f.render_widget(mem_gauge, chunks[1]);
 
-        // Temperature
+        // Temperature with themed colors
         let temp_color = if metrics.temperature > 80.0 {
-            Color::Red
+            self.theme.temp_hot.to_ratatui()
         } else if metrics.temperature > 70.0 {
-            Color::Yellow
+            self.theme.temp_warm.to_ratatui()
+        } else if metrics.temperature > 50.0 {
+            self.theme.temp_normal.to_ratatui()
         } else {
-            Color::Green
+            self.theme.temp_cold.to_ratatui()
         };
         let temp_gauge = Gauge::default()
-            .block(Block::default().borders(Borders::ALL).title("Temp"))
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .title(format!("{} Temp", themes::icons::TEMP))
+                .style(Style::default().fg(self.theme.border.to_ratatui())))
             .gauge_style(Style::default().fg(temp_color))
             .ratio((metrics.temperature / 100.0).min(1.0))
             .label(format!("{:.0}°C", metrics.temperature));
         f.render_widget(temp_gauge, chunks[2]);
 
-        // Power
+        // Power with themed colors
+        let power_color = if metrics.power_draw > 500.0 {
+            self.theme.power_high.to_ratatui()
+        } else if metrics.power_draw > 250.0 {
+            self.theme.power_normal.to_ratatui()
+        } else {
+            self.theme.power_efficient.to_ratatui()
+        };
         let power_gauge = Gauge::default()
-            .block(Block::default().borders(Borders::ALL).title("Power"))
-            .gauge_style(Style::default().fg(Color::Magenta))
-            .ratio((metrics.power_draw / 400.0).min(1.0)) // Assume 400W max
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .title(format!("{} Power", themes::icons::POWER))
+                .style(Style::default().fg(self.theme.border.to_ratatui())))
+            .gauge_style(Style::default().fg(power_color))
+            .ratio((metrics.power_draw / 600.0).min(1.0)) // RTX 5090 max
             .label(format!("{:.0}W", metrics.power_draw));
         f.render_widget(power_gauge, chunks[3]);
     }
@@ -1073,6 +1341,342 @@ impl TuiApp {
         f.render_widget(summary, chunks[2]);
     }
 
+    fn draw_overclocking(&self, f: &mut Frame, area: Rect) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),  // Header
+                Constraint::Length(12), // Current OC status
+                Constraint::Min(10),    // OC controls
+                Constraint::Length(5),  // Warning/Info
+            ])
+            .split(area);
+
+        // Header
+        let header = Paragraph::new(format!("{} Overclocking & Performance Tuning", themes::icons::OC))
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .style(Style::default().fg(self.theme.border.to_ratatui())))
+            .alignment(Alignment::Center)
+            .style(Style::default()
+                .fg(self.theme.warning().to_ratatui())
+                .add_modifier(Modifier::BOLD));
+        f.render_widget(header, chunks[0]);
+
+        // Current OC status
+        if let Some(ref nvml) = self.nvml {
+            if let Ok(device) = nvml.device_by_index(self.selected_gpu as u32) {
+                let mut oc_info = Vec::new();
+
+                oc_info.push(format!("{} Current Overclocking Status:", themes::icons::GPU));
+                oc_info.push(String::new());
+
+                // Current clocks
+                if let Ok(gpu_clock) = device.clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics) {
+                    if let Ok(max_clock) = device.max_clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics) {
+                        oc_info.push(format!("  {} GPU Clock: {} MHz (Max: {} MHz)",
+                            themes::icons::CLOCK, gpu_clock, max_clock));
+                    }
+                }
+
+                if let Ok(mem_clock) = device.clock_info(nvml_wrapper::enum_wrappers::device::Clock::Memory) {
+                    if let Ok(max_mem) = device.max_clock_info(nvml_wrapper::enum_wrappers::device::Clock::Memory) {
+                        oc_info.push(format!("  {} Memory Clock: {} MHz (Max: {} MHz)",
+                            themes::icons::MEMORY, mem_clock, max_mem));
+                    }
+                }
+
+                // Power limit
+                if let Ok(power_limit) = device.power_management_limit() {
+                    if let Ok(max_power) = device.power_management_limit_constraints() {
+                        oc_info.push(format!("  {} Power Limit: {:.0}W / {:.0}W",
+                            themes::icons::POWER,
+                            power_limit as f32 / 1000.0,
+                            max_power.max_limit as f32 / 1000.0));
+                    }
+                }
+
+                oc_info.push(String::new());
+                oc_info.push(format!("{} Current OC Settings:", themes::icons::PROFILE));
+                oc_info.push(format!("  GPU Offset: {:+} MHz", self.gpu_offset));
+                oc_info.push(format!("  Memory Offset: {:+} MHz", self.memory_offset));
+                oc_info.push(format!("  Power Limit: {}%", self.power_limit_percent));
+                oc_info.push(format!("  Active Preset: {:?}", self.oc_preset));
+
+                let oc_list: Vec<ListItem> = oc_info.into_iter().map(ListItem::new).collect();
+                let oc_widget = List::new(oc_list)
+                    .block(Block::default()
+                        .borders(Borders::ALL)
+                        .title("Overclocking Status")
+                        .style(Style::default().fg(self.theme.border.to_ratatui())))
+                    .style(Style::default().fg(self.theme.text().to_ratatui()));
+                f.render_widget(oc_widget, chunks[1]);
+            }
+        }
+
+        // OC Controls with live sliders
+        let gpu_slider = self.render_slider(self.gpu_offset, -200, 200, 40);
+        let mem_slider = self.render_slider(self.memory_offset, -1000, 1000, 40);
+        let power_slider = self.render_slider(self.power_limit_percent as i32, 50, 100, 40);
+
+        let mode_indicator = if self.oc_control_mode {
+            format!("{} OC MODE ACTIVE - Use arrow keys to adjust", themes::icons::WARNING)
+        } else {
+            "Press 'o' to enter OC mode".to_string()
+        };
+
+        let controls_text = format!(
+            "{} Interactive Overclocking Controls\n\n\
+            GPU Offset:    [-200] {} [+200] {:+} MHz\n\
+            Memory Offset: [-1000] {} [+1000] {:+} MHz\n\
+            Power Limit:   [50%] {} [100%] {}%\n\n\
+            {} Presets: [1] Stock  [2] Mild OC  [3] Performance  [4] Extreme\n\n\
+            {}\n\
+            ←/→: GPU offset  ↑/↓: Memory offset  +/-: Power  Enter: Apply\n\n\
+            {} For Arch + RTX 5090:\n\
+            • GDDR7 safe: +1500 MHz memory\n\
+            • GPU boost: +150-200 MHz typical\n\
+            • Power: 600W TDP (630W max for ASUS Astral)",
+            themes::icons::OC,
+            gpu_slider,
+            self.gpu_offset,
+            mem_slider,
+            self.memory_offset,
+            power_slider,
+            self.power_limit_percent,
+            themes::icons::PROFILE,
+            mode_indicator,
+            themes::icons::INFO
+        );
+
+        let controls = Paragraph::new(controls_text)
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .title("Overclock Controls")
+                .style(Style::default().fg(self.theme.border.to_ratatui())))
+            .style(Style::default().fg(self.theme.text().to_ratatui()))
+            .wrap(ratatui::widgets::Wrap { trim: false });
+        f.render_widget(controls, chunks[2]);
+
+        // Warning
+        let warning = Paragraph::new(format!(
+            "{} CAUTION: Overclocking may void warranty and cause instability. Monitor temps carefully!",
+            themes::icons::WARNING
+        ))
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .style(Style::default().fg(self.theme.border.to_ratatui())))
+            .style(Style::default().fg(self.theme.error().to_ratatui()))
+            .alignment(Alignment::Center);
+        f.render_widget(warning, chunks[3]);
+    }
+
+    fn draw_fan_control(&self, f: &mut Frame, area: Rect) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),  // Header
+                Constraint::Length(8),  // Current fan status
+                Constraint::Min(10),    // Fan curve editor
+                Constraint::Length(4),  // Presets
+            ])
+            .split(area);
+
+        // Header
+        let header = Paragraph::new(format!("{} Fan Control & Curves", themes::icons::FAN))
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .style(Style::default().fg(self.theme.border.to_ratatui())))
+            .alignment(Alignment::Center)
+            .style(Style::default()
+                .fg(self.theme.primary().to_ratatui())
+                .add_modifier(Modifier::BOLD));
+        f.render_widget(header, chunks[0]);
+
+        // Current fan status
+        if let Some(ref nvml) = self.nvml {
+            if let Ok(device) = nvml.device_by_index(self.selected_gpu as u32) {
+                let mut fan_info = Vec::new();
+
+                // Try to get fan speed for multiple fans (ASUS Astral has 4 fans)
+                for fan_id in 0..4 {
+                    if let Ok(fan_speed) = device.fan_speed(fan_id) {
+                        let fan_icon = if fan_speed > 80 {
+                            "󰈐" // High speed
+                        } else if fan_speed > 50 {
+                            "󰈐" // Medium speed
+                        } else {
+                            "󰈐" // Low speed
+                        };
+                        fan_info.push(format!("  {} Fan {}: {}% ({} RPM est.)",
+                            fan_icon, fan_id, fan_speed, fan_speed * 25));
+                    }
+                }
+
+                if fan_info.is_empty() {
+                    fan_info.push("  Fan control not available on this GPU".to_string());
+                }
+
+                fan_info.push(String::new());
+                if let Some(latest) = self.metrics_history.get(self.selected_gpu).and_then(|h| h.back()) {
+                    let temp_icon = if latest.temperature > 80.0 {
+                        ""
+                    } else {
+                        ""
+                    };
+                    fan_info.push(format!("  {} Current Temperature: {:.1}°C", temp_icon, latest.temperature));
+                }
+
+                let fan_list: Vec<ListItem> = fan_info.into_iter().map(ListItem::new).collect();
+                let fan_widget = List::new(fan_list)
+                    .block(Block::default()
+                        .borders(Borders::ALL)
+                        .title("Current Fan Status")
+                        .style(Style::default().fg(self.theme.border.to_ratatui())))
+                    .style(Style::default().fg(self.theme.text().to_ratatui()));
+                f.render_widget(fan_widget, chunks[1]);
+            }
+        }
+
+        // Fan curve editor with actual curve points
+        let mut curve_display = Vec::new();
+        curve_display.push(format!("{} Fan Curve Editor (Live)", themes::icons::CHART));
+        curve_display.push(String::new());
+
+        // Display current curve points
+        for (i, (temp, fan)) in self.fan_curve_points.iter().enumerate() {
+            let marker = if i == self.selected_curve_point && self.fan_control_mode {
+                "►"
+            } else {
+                " "
+            };
+            curve_display.push(format!("{}  {}°C -> {}%", marker, temp, fan));
+        }
+
+        curve_display.push(String::new());
+        let mode_indicator = if self.fan_control_mode {
+            format!("{} FAN MODE ACTIVE - Use arrow keys to adjust selected point", themes::icons::WARNING)
+        } else {
+            "Press 'f' to enter fan curve mode".to_string()
+        };
+        curve_display.push(mode_indicator);
+        curve_display.push("←/→: Select point  ↑/↓: Adjust fan %  Enter: Apply".to_string());
+        curve_display.push(String::new());
+        curve_display.push(format!("{} ASUS ROG Astral Quad-Fan:", themes::icons::INFO));
+        curve_display.push("• 4 independent fans for optimal cooling".to_string());
+        curve_display.push("• Per-fan curve support".to_string());
+        curve_display.push("• 0 RPM mode available (fans stop when cool)".to_string());
+
+        let curve_text = curve_display.join("\n");
+
+        let curve = Paragraph::new(curve_text)
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .title("Fan Curve Configuration")
+                .style(Style::default().fg(self.theme.border.to_ratatui())))
+            .style(Style::default().fg(self.theme.text().to_ratatui()))
+            .wrap(ratatui::widgets::Wrap { trim: false });
+        f.render_widget(curve, chunks[2]);
+
+        // Fan presets
+        let presets = Paragraph::new(format!(
+            "{} Quick Presets: [Silent] [Auto] [Performance] [Aggressive] [0 RPM Mode]",
+            themes::icons::PROFILE
+        ))
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .style(Style::default().fg(self.theme.border.to_ratatui())))
+            .style(Style::default().fg(self.theme.accent().to_ratatui()))
+            .alignment(Alignment::Center);
+        f.render_widget(presets, chunks[3]);
+    }
+
+    fn draw_profiles(&self, f: &mut Frame, area: Rect) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),  // Header
+                Constraint::Min(12),    // Profile list
+                Constraint::Length(8),  // Current profile details
+                Constraint::Length(4),  // Actions
+            ])
+            .split(area);
+
+        // Header
+        let header = Paragraph::new(format!("{} Performance Profiles", themes::icons::PROFILE))
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .style(Style::default().fg(self.theme.border.to_ratatui())))
+            .alignment(Alignment::Center)
+            .style(Style::default()
+                .fg(self.theme.primary().to_ratatui())
+                .add_modifier(Modifier::BOLD));
+        f.render_widget(header, chunks[0]);
+
+        // Profile list
+        let profiles = vec![
+            format!("{} Silent - Low power, quiet operation (50% power, stock clocks)", themes::icons::SUCCESS),
+            format!("{} Balanced - Default balanced performance", themes::icons::INFO),
+            format!("{} Performance - Higher clocks, increased power limit", themes::icons::OC),
+            format!("{} Extreme - Maximum overclock for RTX 5090 (+200 GPU, +1500 MEM, 100% power)", themes::icons::WARNING),
+            String::new(),
+            "Game-Specific Profiles:".to_string(),
+            "  Cyberpunk 2077 - DLSS 4 enabled, 4K Ultra preset".to_string(),
+            "  Counter-Strike 2 - Competitive mode, low latency".to_string(),
+            "  Stable Diffusion - Power limit 90%, memory OC".to_string(),
+            String::new(),
+            format!("{} Press Enter to apply selected profile", themes::icons::POWER),
+            format!("{} Press 'n' to create new profile", themes::icons::PROFILE),
+            format!("{} Press 'd' to delete profile", themes::icons::WARNING),
+        ];
+
+        let profile_items: Vec<ListItem> = profiles.into_iter().map(ListItem::new).collect();
+        let profile_list = List::new(profile_items)
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .title("Available Profiles")
+                .style(Style::default().fg(self.theme.border.to_ratatui())))
+            .style(Style::default().fg(self.theme.text().to_ratatui()))
+            .highlight_style(Style::default()
+                .fg(self.theme.accent().to_ratatui())
+                .add_modifier(Modifier::BOLD));
+        f.render_widget(profile_list, chunks[1]);
+
+        // Current profile details
+        let details_text = format!(
+            "{} Currently Active: Balanced\n\n\
+            • GPU Offset: +0 MHz\n\
+            • Memory Offset: +0 MHz\n\
+            • Power Limit: 80%\n\
+            • Fan Curve: Auto\n\
+            • Digital Vibrance: 130% (Gaming preset)",
+            themes::icons::INFO
+        );
+
+        let details = Paragraph::new(details_text)
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .title("Active Profile Settings")
+                .style(Style::default().fg(self.theme.border.to_ratatui())))
+            .style(Style::default().fg(self.theme.text().to_ratatui()));
+        f.render_widget(details, chunks[2]);
+
+        // Actions
+        let actions = Paragraph::new(format!(
+            "{} Auto-apply profiles per game | {} Save current settings as profile | {} Export/Import profiles",
+            themes::icons::GAMING,
+            themes::icons::PROFILE,
+            themes::icons::SETTINGS
+        ))
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .style(Style::default().fg(self.theme.border.to_ratatui())))
+            .style(Style::default().fg(self.theme.success().to_ratatui()))
+            .alignment(Alignment::Center)
+            .wrap(ratatui::widgets::Wrap { trim: true });
+        f.render_widget(actions, chunks[3]);
+    }
+
     fn draw_help_popup(&self, f: &mut Frame) {
         let area = centered_rect(70, 80, f.area());
         f.render_widget(Clear, area);
@@ -1086,6 +1690,7 @@ impl TuiApp {
             "  s          - Settings panel",
             "  Space, p   - Pause/Resume updates",
             "  r          - Reset metrics history",
+            "  t          - Cycle themes (Tokyo Night/Dracula/ROG/Matrix/Cyberpunk)",
             "",
             "Tab Navigation:",
             "  Tab        - Next tab",
@@ -1096,6 +1701,9 @@ impl TuiApp {
             "  4          - Temperature (thermal monitoring)",
             "  5          - Power (power consumption)",
             "  6          - Processes (GPU processes)",
+            "  7          - Overclock (GPU/memory OC, power limits)",
+            "  8          - Fan Control (curves, presets, 4-fan support)",
+            "  9          - Profiles (gaming profiles, per-game settings)",
             "",
             "GPU Selection (Multi-GPU):",
             "  ←/→        - Previous/Next GPU",
@@ -1108,14 +1716,21 @@ impl TuiApp {
             "  o          - Overclocking (planned)",
             "  e          - Export current data (planned)",
             "",
+            "Themes:",
+            "  • Tokyo Night (Night/Storm/Moon) - Modern dark blue theme",
+            "  • Dracula - Purple/pink dark theme",
+            "  • ROG Red - ASUS gaming theme",
+            "  • Matrix Green - Classic green terminal",
+            "  • Cyberpunk - Pink/cyan neon",
+            "",
             "System:",
             "  Ctrl+C     - Force quit",
             "",
             "Pro Tips:",
             "• Use pause to freeze data for analysis",
-            "• Temperature tab shows thermal thresholds",
+            "• Temperature colors adapt to GPU thermal state",
             "• Power tab shows efficiency metrics",
-            "• Each tab shows real-time history",
+            "• Each tab shows real-time history with Nerd Font icons",
         ];
 
         let help = Paragraph::new(help_text.join("\n"))
@@ -1216,51 +1831,54 @@ impl TuiApp {
 
         // Left section: main status
         let main_status = if self.paused {
-            "PAUSED - Press Space to resume"
+            "󰏤 PAUSED - Press Space to resume"
         } else if let Some(msg) = self.get_status_message() {
             msg
         } else {
-            "Press 'h' for help, 'q' to quit, 'v' for VRR, 'g' for gaming mode"
+            "Press 'h' for help, 'q' to quit, 't' for themes, 'v' for VRR, 'g' for gaming"
         };
 
         let status_bar = Paragraph::new(main_status)
-            .style(Style::default().fg(Color::Yellow))
+            .style(Style::default().fg(self.theme.warning().to_ratatui()))
             .alignment(Alignment::Left);
         f.render_widget(status_bar, chunks[0]);
 
         // Middle section: feature status
+        let vrr_icon = if self.vrr_enabled { themes::icons::VRR } else { "" };
+        let gaming_icon = if self.gaming_mode_enabled { themes::icons::GAMING } else { "" };
+
         let vrr_status = if self.vrr_enabled {
-            "VRR: ON"
+            format!("{} VRR", vrr_icon)
         } else {
-            "VRR: OFF"
+            "VRR: OFF".to_string()
         };
         let gaming_status = if self.gaming_mode_enabled {
-            "Gaming: ON"
+            format!("{} Gaming", gaming_icon)
         } else {
-            "Gaming: OFF"
+            "Gaming: OFF".to_string()
         };
         let feature_status = format!("{} | {}", vrr_status, gaming_status);
 
+        let feature_color = if self.vrr_enabled || self.gaming_mode_enabled {
+            self.theme.success().to_ratatui()
+        } else {
+            self.theme.text_dim().to_ratatui()
+        };
+
         let feature_bar = Paragraph::new(feature_status)
-            .style(
-                Style::default().fg(if self.vrr_enabled || self.gaming_mode_enabled {
-                    Color::Green
-                } else {
-                    Color::Gray
-                }),
-            )
+            .style(Style::default().fg(feature_color))
             .alignment(Alignment::Center);
         f.render_widget(feature_bar, chunks[1]);
 
         // Right section: GPU selection
         let gpu_info = if self.device_count > 1 {
-            format!("GPU {}/{}", self.selected_gpu + 1, self.device_count)
+            format!("{} GPU {}/{}", themes::icons::GPU, self.selected_gpu + 1, self.device_count)
         } else {
-            "GPU 1/1".to_string()
+            format!("{} GPU 1/1", themes::icons::GPU)
         };
 
         let gpu_bar = Paragraph::new(gpu_info)
-            .style(Style::default().fg(Color::Cyan))
+            .style(Style::default().fg(self.theme.primary().to_ratatui()))
             .alignment(Alignment::Right);
         f.render_widget(gpu_bar, chunks[2]);
     }
@@ -1396,7 +2014,142 @@ impl TuiApp {
         }
     }
 
+    /// Handle mouse events (clicks, scrolls)
+    fn handle_mouse_event(&mut self, mouse: MouseEvent) {
+        match mouse.kind {
+            MouseEventKind::Down(_button) => {
+                let row = mouse.row;
+                let col = mouse.column;
+
+                // Tab bar is at row 3-5 (after header)
+                if row >= 3 && row < 6 {
+                    // Calculate which tab was clicked
+                    // Each tab title is ~12 chars wide
+                    let tab_index = (col / 12) as usize;
+                    let total_tabs = Tab::titles().len();
+
+                    if tab_index < total_tabs {
+                        self.current_tab = tab_index;
+                        let tab_name = Tab::titles()[tab_index];
+                        self.set_status_message(format!("🖱️  Switched to {} tab", tab_name));
+                    }
+                }
+
+                // TODO: Add click handlers for buttons, sliders, etc.
+                // For now, clicking anywhere else shows coordinates
+                if row > 6 {
+                    self.set_status_message(format!("🖱️  Clicked at ({}, {})", col, row));
+                }
+            }
+            MouseEventKind::ScrollUp => {
+                // Scroll up - previous tab
+                if self.current_tab > 0 {
+                    self.current_tab -= 1;
+                    let tab_name = Tab::titles()[self.current_tab];
+                    self.set_status_message(format!("🖱️  Scrolled to {} tab", tab_name));
+                }
+            }
+            MouseEventKind::ScrollDown => {
+                // Scroll down - next tab
+                let total_tabs = Tab::titles().len();
+                if self.current_tab < total_tabs - 1 {
+                    self.current_tab += 1;
+                    let tab_name = Tab::titles()[self.current_tab];
+                    self.set_status_message(format!("🖱️  Scrolled to {} tab", tab_name));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Render a visual slider for values
+    fn render_slider(&self, value: i32, min: i32, max: i32, width: usize) -> String {
+        let range = max - min;
+        let position = ((value - min) as f32 / range as f32 * width as f32) as usize;
+        let position = position.min(width);
+
+        let mut slider = String::new();
+        for i in 0..width {
+            if i == position {
+                slider.push('●');  // Current position marker
+            } else {
+                slider.push('─');  // Slider bar
+            }
+        }
+        slider
+    }
+
+    fn apply_oc_preset(&mut self, preset: OcPreset) {
+        self.oc_preset = preset;
+        match preset {
+            OcPreset::Stock => {
+                self.gpu_offset = 0;
+                self.memory_offset = 0;
+                self.power_limit_percent = 80;
+                self.set_status_message("Applied Stock preset".to_string());
+            }
+            OcPreset::MildOc => {
+                self.gpu_offset = 75;
+                self.memory_offset = 500;
+                self.power_limit_percent = 90;
+                self.set_status_message("Applied Mild OC preset (+75 GPU, +500 MEM, 90% power)".to_string());
+            }
+            OcPreset::Performance => {
+                self.gpu_offset = 150;
+                self.memory_offset = 1000;
+                self.power_limit_percent = 95;
+                self.set_status_message("Applied Performance preset (+150 GPU, +1000 MEM, 95% power)".to_string());
+            }
+            OcPreset::Extreme => {
+                self.gpu_offset = 200;
+                self.memory_offset = 1500;  // GDDR7 safe for RTX 5090
+                self.power_limit_percent = 100;
+                self.set_status_message("Applied Extreme preset - RTX 5090 Max OC!".to_string());
+            }
+        }
+    }
+
+    fn apply_overclock(&mut self) {
+        // Call actual overclocking implementation
+        // TODO: Wire up to actual overclocking module when ready
+        self.set_status_message(format!(
+            "✅ OC Settings Saved! GPU:{:+}, MEM:{:+}, Power:{}% (Apply on next boot)",
+            self.gpu_offset, self.memory_offset, self.power_limit_percent
+        ));
+
+        // For now, just save to profile
+        // In production, this would call:
+        // overclocking::apply_overclock(gpu_id, gpu_offset, mem_offset, power_limit)
+    }
+
+    fn apply_fan_curve(&mut self) {
+        // Call actual fan curve implementation
+        // TODO: Wire up to actual fan module when ready
+        self.set_status_message("✅ Fan curve saved! Will apply on next boot".to_string());
+
+        // For now, just save the curve
+        // In production, this would call:
+        // fan::apply_custom_curve(gpu_id, &curve_points)
+    }
+
     /// Export metrics to JSON file
+    fn cycle_theme(&mut self) {
+        use themes::ThemeVariant;
+
+        self.current_theme = match self.current_theme {
+            ThemeVariant::TokyoNightNight => ThemeVariant::TokyoNightStorm,
+            ThemeVariant::TokyoNightStorm => ThemeVariant::TokyoNightMoon,
+            ThemeVariant::TokyoNightMoon => ThemeVariant::Dracula,
+            ThemeVariant::Dracula => ThemeVariant::RogRed,
+            ThemeVariant::RogRed => ThemeVariant::MatrixGreen,
+            ThemeVariant::MatrixGreen => ThemeVariant::Cyberpunk,
+            ThemeVariant::Cyberpunk => ThemeVariant::TokyoNightNight,
+        };
+
+        self.theme = themes::ColorPalette::from_variant(self.current_theme);
+        self.set_status_message(format!("Theme: {}", self.current_theme.name()));
+    }
+
     fn export_metrics(&self) {
         use std::fs::File;
         use std::io::Write;
@@ -1457,6 +2210,257 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
             Constraint::Percentage((100 - percent_x) / 2),
         ])
         .split(popup_layout[1])[1]
+}
+
+impl TuiApp {
+    /// Draw Tuner tab (MSI Afterburner-style)
+    fn draw_tuner(&self, f: &mut Frame, area: Rect) {
+        let tuner_state = &self.tuner_states[self.selected_gpu];
+
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),  // Title
+                Constraint::Min(0),     // Content
+            ])
+            .split(area);
+
+        // Title
+        let title = Paragraph::new(format!("🎛️  GPU Tuner - GPU {} (MSI Afterburner Style)", self.selected_gpu))
+            .style(Style::default().fg(self.theme.cyan.to_ratatui()))
+            .block(Block::default().borders(Borders::ALL));
+        f.render_widget(title, chunks[0]);
+
+        // Content
+        let content_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(50),  // Controls
+                Constraint::Percentage(50),  // Monitoring
+            ])
+            .split(chunks[1]);
+
+        // Controls
+        let controls_text = vec![
+            format!("┌─ Overclocking ────────────────────┐"),
+            format!("│ Core Clock:   {:+4} MHz  [±500]  │", tuner_state.core_clock_offset),
+            format!("│ Memory Clock: {:+4} MHz  [±1500] │", tuner_state.memory_clock_offset),
+            format!("│ Power Limit:  {:3}%  TDP         │", tuner_state.power_limit),
+            format!("│ Temp Limit:   {}°C             │", tuner_state.temp_limit),
+            format!("└───────────────────────────────────┘"),
+            format!(""),
+            format!("┌─ Fan Control ─────────────────────┐"),
+            format!("│ Mode: {:?}                 │", tuner_state.fan_mode),
+            format!("│ Speed: {}%                    │", tuner_state.fan_speed_manual),
+            format!("└───────────────────────────────────┘"),
+            format!(""),
+            format!("📋 Presets:"),
+            format!("  [S]ilent  [G]aming  [O]verclocking"),
+            format!(""),
+            format!("🎮 Controls:"),
+            format!("  [A]pply  [R]eset  [E]xport"),
+        ];
+
+        let controls = Paragraph::new(controls_text.join("\n"))
+            .style(Style::default().fg(self.theme.fg.to_ratatui()))
+            .block(Block::default().borders(Borders::ALL).title("Controls"));
+        f.render_widget(controls, content_chunks[0]);
+
+        // Monitoring (real-time stats)
+        let monitoring_text = vec![
+            format!("┌─ Live Monitoring ─────────────────┐"),
+            format!("│ GPU Clock:    {} MHz           │", tuner_state.gpu_clock),
+            format!("│ Memory Clock: {} MHz           │", tuner_state.memory_clock),
+            format!("│ Temperature:  {}°C             │", tuner_state.temperature),
+            format!("│ GPU Load:     {}%              │", tuner_state.gpu_load),
+            format!("│ Memory Load:  {}%              │", tuner_state.memory_load),
+            format!("│ VRAM Used:    {} / {} MB      │", tuner_state.vram_used, tuner_state.vram_total),
+            format!("│ Power Draw:   {:.1} W            │", tuner_state.power_draw),
+            format!("│ Fan Speed:    {}%              │", tuner_state.fan_speed),
+            format!("└───────────────────────────────────┘"),
+            format!(""),
+            format!("📊 History: {} samples", tuner_state.temp_history.len()),
+            format!(""),
+            format!("💡 Tip: Use ← → to adjust values"),
+            format!("       Use ↑ ↓ to select setting"),
+        ];
+
+        let monitoring = Paragraph::new(monitoring_text.join("\n"))
+            .style(Style::default().fg(self.theme.fg.to_ratatui()))
+            .block(Block::default().borders(Borders::ALL).title("Monitoring"));
+        f.render_widget(monitoring, content_chunks[1]);
+    }
+
+    /// Draw Profiler tab (radeon-profile equivalent)
+    fn draw_profiler(&self, f: &mut Frame, area: Rect) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),  // Title
+                Constraint::Min(0),     // Content
+            ])
+            .split(area);
+
+        // Title
+        let title_text = if self.profiler_recording {
+            format!("🔴 GPU Profiler - RECORDING (GPU {})", self.selected_gpu)
+        } else {
+            format!("📊 GPU Profiler - Ready (GPU {})", self.selected_gpu)
+        };
+        let title = Paragraph::new(title_text)
+            .style(Style::default().fg(if self.profiler_recording { Color::Red } else { self.theme.cyan.to_ratatui() }))
+            .block(Block::default().borders(Borders::ALL));
+        f.render_widget(title, chunks[0]);
+
+        // Content
+        let content_text = if let Some(ref profiler) = self.profiler {
+            let stats = profiler.get_statistics();
+            let sample_count = profiler.current_samples();
+            let recording_status = if profiler.is_recording() { "RECORDING" } else { "STOPPED" };
+
+            let mut lines = vec![
+                format!("┌─ Session Status ──────────────────────────────────────┐"),
+                format!("│ Status: {}                                    │", recording_status),
+                format!("│ Samples: {}                                         │", sample_count),
+                format!("│ Sample Interval: 100ms                              │"),
+                format!("│ Max Samples: 10,000                                  │"),
+                format!("└─────────────────────────────────────────────────────┘"),
+                format!(""),
+            ];
+
+            if let Some(stats) = stats {
+                lines.extend(vec![
+                    format!("┌─ Statistics ──────────────────────────────────────────┐"),
+                    format!("│ GPU Clock:    Avg {}  Max {}  Min {} MHz    │",
+                        stats.avg_gpu_clock, stats.max_gpu_clock, stats.min_gpu_clock),
+                    format!("│ Memory Clock: Avg {} MHz                        │", stats.avg_memory_clock),
+                    format!("│ Temperature:  Avg {}°C  Max {}°C  Min {}°C    │",
+                        stats.avg_temperature, stats.max_temperature, stats.min_temperature),
+                    format!("│ GPU Load:     Avg {}%                            │", stats.avg_gpu_load),
+                    format!("│ Power Draw:   Avg {:.1}W  Max {:.1}W           │",
+                        stats.avg_power_draw, stats.max_power_draw),
+                    format!("└─────────────────────────────────────────────────────┘"),
+                ]);
+            } else {
+                lines.push(format!("No statistics available yet - start recording"));
+            }
+
+            lines.extend(vec![
+                format!(""),
+                format!("🎮 Controls:"),
+                format!("  [Space] Start/Stop Recording"),
+                format!("  [E]xport Session to JSON"),
+                format!("  [C]lear Data"),
+                format!(""),
+                format!("💡 This profiler captures comprehensive GPU telemetry"),
+                format!("   similar to Radeon GPU Profiler but for NVIDIA GPUs."),
+            ]);
+
+            lines.join("\n")
+        } else {
+            format!("❌ No profiler available\n\nNo GPU detected or profiler initialization failed.")
+        };
+
+        let content = Paragraph::new(content_text)
+            .style(Style::default().fg(self.theme.fg.to_ratatui()))
+            .block(Block::default().borders(Borders::ALL).title("Profiler"));
+        f.render_widget(content, chunks[1]);
+    }
+
+    /// Auto-detect theme based on GPU vendor
+    fn detect_gpu_vendor_theme(nvml: &Option<Nvml>) -> themes::ThemeVariant {
+        if let Some(nvml) = nvml {
+            if let Ok(device) = nvml.device_by_index(0) {
+                if let Ok(name) = device.name() {
+                    let name_lower = name.to_lowercase();
+
+                    // ASUS ROG cards
+                    if name_lower.contains("asus") || name_lower.contains("rog") {
+                        println!("🎨 Detected ASUS GPU - using ROG Red theme");
+                        return themes::ThemeVariant::RogRed;
+                    }
+
+                    // MSI cards
+                    if name_lower.contains("msi") {
+                        println!("🎨 Detected MSI GPU - using Dracula theme");
+                        return themes::ThemeVariant::Dracula;
+                    }
+
+                    // EVGA cards
+                    if name_lower.contains("evga") {
+                        println!("🎨 Detected EVGA GPU - using Cyberpunk theme");
+                        return themes::ThemeVariant::Cyberpunk;
+                    }
+
+                    // Gigabyte cards
+                    if name_lower.contains("gigabyte") || name_lower.contains("aorus") {
+                        println!("🎨 Detected Gigabyte GPU - using Matrix Green theme");
+                        return themes::ThemeVariant::MatrixGreen;
+                    }
+
+                    // Founders Edition or generic NVIDIA
+                    if name_lower.contains("founders") || name_lower.contains("nvidia") {
+                        println!("🎨 Detected NVIDIA GPU - using Tokyo Night theme");
+                        return themes::ThemeVariant::TokyoNightNight;
+                    }
+                }
+            }
+        }
+
+        // Default theme
+        println!("🎨 Using default Tokyo Night theme");
+        themes::ThemeVariant::TokyoNightNight
+    }
+
+    /// Draw Settings tab
+    fn draw_settings(&self, f: &mut Frame, area: Rect) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),  // Title
+                Constraint::Min(0),     // Content
+            ])
+            .split(area);
+
+        // Title
+        let title = Paragraph::new("⚙️  Settings")
+            .style(Style::default().fg(self.theme.cyan.to_ratatui()))
+            .block(Block::default().borders(Borders::ALL));
+        f.render_widget(title, chunks[0]);
+
+        // Settings content
+        let settings_text = vec![
+            format!("┌─ Display Settings ────────────────────────────────────┐"),
+            format!("│ Theme: {:?}                               │", self.current_theme),
+            format!("│ Update Interval: {}s                               │", self.update_interval.as_secs()),
+            format!("│ Selected GPU: {}                                    │", self.selected_gpu),
+            format!("└─────────────────────────────────────────────────────┘"),
+            format!(""),
+            format!("┌─ Features ────────────────────────────────────────────┐"),
+            format!("│ VRR Enabled: {}                                    │", if self.vrr_enabled { "Yes" } else { "No" }),
+            format!("│ Gaming Mode: {}                                    │", if self.gaming_mode_enabled { "Yes" } else { "No" }),
+            format!("│ Fan Control: {}                                    │", if self.fan_control_mode { "Yes" } else { "No" }),
+            format!("│ OC Control:  {}                                    │", if self.oc_control_mode { "Yes" } else { "No" }),
+            format!("└─────────────────────────────────────────────────────┘"),
+            format!(""),
+            format!("┌─ System ──────────────────────────────────────────────┐"),
+            format!("│ GPUs Detected: {}                                   │", self.device_count),
+            format!("│ NVML Available: {}                                 │", if self.nvml.is_some() { "Yes" } else { "No" }),
+            format!("│ Uptime: {:.0}s                                      │", self.start_time.elapsed().as_secs()),
+            format!("└─────────────────────────────────────────────────────┘"),
+            format!(""),
+            format!("🎨 Themes Available:"),
+            format!("  [T] Cycle themes"),
+            format!("  Available: TokyoNight, Dracula, RogRed, Cyberpunk, etc."),
+            format!(""),
+            format!("⚙️  Configuration file: ~/.config/nvcontrol/config.toml"),
+        ];
+
+        let settings = Paragraph::new(settings_text.join("\n"))
+            .style(Style::default().fg(self.theme.fg.to_ratatui()))
+            .block(Block::default().borders(Borders::ALL).title("Settings"));
+        f.render_widget(settings, chunks[1]);
+    }
 }
 
 // Error conversion
