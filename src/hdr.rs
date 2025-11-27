@@ -309,7 +309,7 @@ pub enum ToneMappingMode {
 pub enum ColorSpace {
     BT709,    // SDR
     BT2020,   // HDR
-    DCI_P3,   // Wide gamut
+    DciP3,    // Wide gamut (DCI-P3)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -449,7 +449,7 @@ impl std::fmt::Display for ColorSpace {
         match self {
             ColorSpace::BT709 => write!(f, "BT.709 (sRGB)"),
             ColorSpace::BT2020 => write!(f, "BT.2020 (HDR)"),
-            ColorSpace::DCI_P3 => write!(f, "DCI-P3 (Wide Gamut)"),
+            ColorSpace::DciP3 => write!(f, "DCI-P3 (Wide Gamut)"),
         }
     }
 }

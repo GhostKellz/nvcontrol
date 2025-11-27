@@ -3,28 +3,39 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum NvControlError {
-    #[error("NVML not available: {0}")]
+    #[error("NVML not available: {0}\n  → Ensure NVIDIA drivers are installed: nvidia-smi")]
     NvmlNotAvailable(String),
-    #[error("Display detection failed: {0}")]
+
+    #[error("Display detection failed: {0}\n  → Check display connection and driver status")]
     DisplayDetectionFailed(String),
-    #[error("Vibrance control failed: {0}")]
+
+    #[error("Vibrance control failed: {0}\n  → Try: nvidia-settings -q all | grep -i vibrance")]
     VibranceControlFailed(String),
-    #[error("Fan control not supported")]
+
+    #[error("Fan control not supported on this GPU\n  → Manual fan control requires GPU with controllable fans")]
     FanControlNotSupported,
-    #[error("Power management failed: {0}")]
+
+    #[error("Power management failed: {0}\n  → Try running with sudo for power limit changes")]
     PowerManagementFailed(String),
+
     #[error("Latency optimization failed: {0}")]
     LatencyOptimizationFailed(String),
-    #[error("Container operation failed: {0}")]
+
+    #[error("Container operation failed: {0}\n  → Check Docker/Podman status and NVIDIA Container Toolkit")]
     ContainerOperationFailed(String),
-    #[error("GPU query failed: {0}")]
+
+    #[error("GPU query failed: {0}\n  → Run 'nvidia-smi' to verify GPU status")]
     GpuQueryFailed(String),
+
     #[error("Command execution failed: {0}")]
     CommandFailed(String),
-    #[error("Configuration error: {0}")]
+
+    #[error("Configuration error: {0}\n  → Check ~/.config/nvcontrol/ for config files")]
     ConfigError(String),
-    #[error("Unsupported feature: {0}")]
+
+    #[error("Unsupported feature: {0}\n  → This feature may require a different GPU or driver version")]
     UnsupportedFeature(String),
+
     #[error("Runtime error: {0}")]
     RuntimeError(String),
 }
@@ -188,6 +199,6 @@ mod tests {
     #[test]
     fn test_error_types() {
         let error = NvControlError::FanControlNotSupported;
-        assert_eq!(error.to_string(), "Fan control not supported");
+        assert!(error.to_string().contains("Fan control not supported"));
     }
 }

@@ -1,6 +1,7 @@
-/// Integration tests for Phase 1: Core Stability & Safety
+/// Safety and Recovery Tests
 ///
-/// Tests error handling, hardware safety, and graceful degradation
+/// Tests error handling, hardware safety validation, and graceful degradation
+/// when GPU or NVML is unavailable.
 
 use nvcontrol::{
     error_recovery::{ErrorContext, NvmlFallback, RetryHandler},

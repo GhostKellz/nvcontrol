@@ -178,7 +178,7 @@ pub fn get_gpu_info(index: u32) -> NvResult<GpuInfo> {
 }
 
 /// Check if SLI is enabled for this GPU
-fn check_sli_enabled(device: &nvml_wrapper::Device) -> bool {
+fn check_sli_enabled(_device: &nvml_wrapper::Device) -> bool {
     // Check if multiple GPUs exist and if they're linked
     // This is a simplified check - real SLI detection is more complex
     if let Ok(nvml) = nvml_wrapper::Nvml::init() {

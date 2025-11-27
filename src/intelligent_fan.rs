@@ -160,6 +160,7 @@ impl AcousticProfile {
 }
 
 /// ML-based fan optimizer using historical temperature data
+#[allow(dead_code)]
 pub struct FanOptimizer {
     gpu_id: u32,
     temp_history: VecDeque<TempSample>,
@@ -167,6 +168,7 @@ pub struct FanOptimizer {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct TempSample {
     timestamp: std::time::Instant,
     temperature: i32,
@@ -394,7 +396,7 @@ impl MultiFanController {
             NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e))
         })?;
 
-        device.fan_speed(fan_index).map_err(|e| {
+        device.fan_speed(fan_index).map_err(|_| {
             NvControlError::FanControlNotSupported
         })
     }

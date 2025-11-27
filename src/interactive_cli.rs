@@ -4,7 +4,6 @@
 
 use crate::NvResult;
 use console::{style, Key, Term};
-use std::io::Write;
 
 pub struct InteractiveCli {
     term: Term,

@@ -200,9 +200,9 @@ pub struct RecordingState {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum VideoEncoder {
-    NVENC_H264,
-    NVENC_H265,
-    NVENC_AV1,  // RTX 50-series
+    NvencH264,
+    NvencH265,
+    NvencAv1,  // RTX 50-series
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -592,7 +592,7 @@ impl Default for RecordingState {
         Self {
             is_recording: false,
             output_path: "~/Videos/nvcontrol".to_string(),
-            encoder: VideoEncoder::NVENC_AV1, // RTX 50-series
+            encoder: VideoEncoder::NvencAv1, // RTX 50-series
             quality: RecordingQuality::High,
             capture_fps: 60,
             instant_replay_enabled: false,

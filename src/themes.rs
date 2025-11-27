@@ -621,6 +621,9 @@ pub mod icons {
     pub const THEME: &str = "󰏘";
     pub const VRR: &str = "󰑙";
     pub const GAMING: &str = "󰊗";
+    pub const TAB: &str = "󰓫";
+    pub const PROCESS: &str = "󰕮";
+    pub const OSD: &str = "󰕧";
 }
 
 #[cfg(test)]

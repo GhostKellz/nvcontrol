@@ -65,6 +65,11 @@ pub struct TuiApp {
     // Profiler state (radeon-profile equivalent)
     profiler: Option<nvidia_profiler::NvidiaProfiler>,
     profiler_recording: bool,
+    // OSD/MangoHud state (reserved for future interactivity)
+    #[allow(dead_code)]
+    osd_enabled: bool,
+    #[allow(dead_code)]
+    osd_selected_metric: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -80,6 +85,7 @@ enum Tab {
     Profiles,
     Tuner,      // MSI Afterburner-style tuner
     Profiler,   // GPU profiler (radeon-profile equivalent)
+    Osd,        // MangoHud OSD configuration
     Settings,   // Settings panel
 }
 
@@ -105,6 +111,7 @@ impl Tab {
             "Profiles",
             "Tuner",
             "Profiler",
+            "OSD",
             "Settings",
         ]
     }
@@ -122,7 +129,8 @@ impl Tab {
             8 => Tab::Profiles,
             9 => Tab::Tuner,
             10 => Tab::Profiler,
-            11 => Tab::Settings,
+            11 => Tab::Osd,
+            12 => Tab::Settings,
             _ => Tab::Overview,
         }
     }
@@ -206,6 +214,8 @@ impl TuiApp {
             tuner_states,
             profiler,
             profiler_recording: false,
+            osd_enabled: crate::osd::OsdManager::check_mangohud_installed(),
+            osd_selected_metric: 0,
         }
     }
 
@@ -529,6 +539,7 @@ impl TuiApp {
             Tab::Profiles => self.draw_profiles(f, chunks[2]),
             Tab::Tuner => self.draw_tuner(f, chunks[2]),
             Tab::Profiler => self.draw_profiler(f, chunks[2]),
+            Tab::Osd => self.draw_osd(f, chunks[2]),
             Tab::Settings => self.draw_settings(f, chunks[2]),
         }
 
@@ -537,18 +548,32 @@ impl TuiApp {
     }
 
     fn draw_header(&self, f: &mut Frame, area: Rect) {
-        let gpu_count = self.device_count;
         let uptime = self.start_time.elapsed().as_secs();
         let status = if self.paused { "󰏤 PAUSED" } else { "󰐊 LIVE" };
 
+        // Get current GPU stats for header display
+        let gpu_stats = self.metrics_history
+            .get(self.selected_gpu)
+            .and_then(|h| h.back());
+
+        let stats_str = if let Some(m) = gpu_stats {
+            format!(
+                "{}°C | {}% | {:.0}W",
+                m.temperature as i32,
+                m.gpu_utilization as i32,
+                m.power_draw
+            )
+        } else {
+            "-- | -- | --".to_string()
+        };
+
         let title = format!(
-            "{} nvcontrol GPU Monitor - {} GPU(s) | {} | {} Uptime: {}s | {} {}",
+            "{} nvcontrol v0.7.0 │ GPU {} │ {} │ {} │ {} │ {}",
             themes::icons::GPU,
-            gpu_count,
+            self.selected_gpu,
+            stats_str,
             status,
-            themes::icons::CLOCK,
-            uptime,
-            themes::icons::THEME,
+            format!("{}m {}s", uptime / 60, uptime % 60),
             self.current_theme.name()
         );
 
@@ -561,18 +586,39 @@ impl TuiApp {
     }
 
     fn draw_tabs(&self, f: &mut Frame, area: Rect) {
-        let titles: Vec<String> = Tab::titles().into_iter().map(|s| s.to_string()).collect();
+        // Tab titles with icons for better visual identification
+        let tab_icons = [
+            "󰍹 Overview",     // 0
+            "󰓅 Performance",  // 1
+            "󰍛 Memory",       // 2
+            "󱃂 Temperature",  // 3
+            "󰚥 Power",        // 4
+            "󰕮 Processes",    // 5
+            "󰓸 Overclock",    // 6
+            "󰈐 Fan Control",  // 7
+            "󰆼 Profiles",     // 8
+            "󰔎 Tuner",        // 9
+            "󰄪 Profiler",     // 10
+            "󰕧 OSD",          // 11
+            "󰒓 Settings",     // 12
+        ];
 
+        let titles: Vec<String> = tab_icons.iter().map(|s| s.to_string()).collect();
+
+        // Use different divider style for better visual separation
         let tabs = Tabs::new(titles)
             .block(Block::default()
                 .borders(Borders::ALL)
-                .title("Tabs")
+                .title(format!(" {} Navigation ", themes::icons::TAB))
+                .title_style(Style::default().fg(self.theme.primary().to_ratatui()).add_modifier(Modifier::BOLD))
                 .style(Style::default().fg(self.theme.border.to_ratatui())))
             .select(self.current_tab)
             .style(Style::default().fg(self.theme.text().to_ratatui()))
             .highlight_style(Style::default()
-                .fg(self.theme.accent().to_ratatui())
-                .add_modifier(Modifier::BOLD));
+                .fg(Color::Black)
+                .bg(self.theme.accent().to_ratatui())
+                .add_modifier(Modifier::BOLD))
+            .divider("│");
 
         f.render_widget(tabs, area);
     }
@@ -1678,68 +1724,70 @@ impl TuiApp {
     }
 
     fn draw_help_popup(&self, f: &mut Frame) {
-        let area = centered_rect(70, 80, f.area());
+        let area = centered_rect(75, 90, f.area());
         f.render_widget(Clear, area);
 
         let help_text = vec![
-            "nvcontrol TUI - Complete Keybindings",
+            "╔═══════════════════════════════════════════════════════════════════╗",
+            "║          󰢮 nvcontrol v0.7.0 - TUI Keyboard Reference              ║",
+            "╚═══════════════════════════════════════════════════════════════════╝",
             "",
-            "Essential Controls:",
-            "  q, Esc     - Quit application",
-            "  h, F1      - Toggle this help",
-            "  s          - Settings panel",
-            "  Space, p   - Pause/Resume updates",
-            "  r          - Reset metrics history",
-            "  t          - Cycle themes (Tokyo Night/Dracula/ROG/Matrix/Cyberpunk)",
+            "═══ ESSENTIAL ═══════════════════════════════════════════════════════",
+            "  q / Ctrl+C    Exit application",
+            "  h / F1 / ?    Toggle this help screen",
+            "  Space / p     Pause/Resume real-time updates",
+            "  r             Reset metrics history",
+            "  t             Cycle through themes",
+            "  s             Open settings panel",
             "",
-            "Tab Navigation:",
-            "  Tab        - Next tab",
-            "  Shift+Tab  - Previous tab",
-            "  1          - Overview",
-            "  2          - Performance (GPU usage history)",
-            "  3          - Memory (VRAM usage)",
-            "  4          - Temperature (thermal monitoring)",
-            "  5          - Power (power consumption)",
-            "  6          - Processes (GPU processes)",
-            "  7          - Overclock (GPU/memory OC, power limits)",
-            "  8          - Fan Control (curves, presets, 4-fan support)",
-            "  9          - Profiles (gaming profiles, per-game settings)",
+            "═══ NAVIGATION ══════════════════════════════════════════════════════",
+            "  Tab / →       Next tab              Shift+Tab / ←  Previous tab",
+            "  ↑/↓           Select GPU (multi-GPU systems)",
+            "  Home / End    Jump to first/last tab",
             "",
-            "GPU Selection (Multi-GPU):",
-            "  ←/→        - Previous/Next GPU",
-            "  ↑/↓        - Previous/Next GPU",
+            "  ┌──────────────────────────────────────────────────────────────┐",
+            "  │  1 󰍹 Overview     5 󰚥 Power       9  󰆼 Profiles   13 󰒓 Settings│",
+            "  │  2 󰓅 Performance  6 󰕮 Processes  10 󰔎 Tuner                   │",
+            "  │  3 󰍛 Memory       7 󰓸 Overclock  11 󰄪 Profiler                │",
+            "  │  4 󱃂 Temperature  8 󰈐 Fan        12 󰕧 OSD                     │",
+            "  └──────────────────────────────────────────────────────────────┘",
             "",
-            "Advanced Features:",
-            "  v          - Toggle VRR/G-Sync",
-            "  g          - Toggle Gaming Mode",
-            "  f          - Fan controls (planned)",
-            "  o          - Overclocking (planned)",
-            "  e          - Export current data (planned)",
+            "═══ FEATURES ════════════════════════════════════════════════════════",
+            "  v             Toggle VRR/G-Sync (display sync)",
+            "  g             Toggle Gaming Mode (performance profile)",
+            "  o             Enter Overclock editing (Tab 7)",
+            "  f             Enter Fan curve editing (Tab 8)",
+            "  e             Export current metrics to JSON file",
             "",
-            "Themes:",
-            "  • Tokyo Night (Night/Storm/Moon) - Modern dark blue theme",
-            "  • Dracula - Purple/pink dark theme",
-            "  • ROG Red - ASUS gaming theme",
-            "  • Matrix Green - Classic green terminal",
-            "  • Cyberpunk - Pink/cyan neon",
+            "═══ OVERCLOCK MODE (Tab 7 → press 'o') ══════════════════════════════",
+            "  ←/→           Adjust GPU clock offset ±10 MHz",
+            "  ↑/↓           Adjust Memory clock offset ±50 MHz",
+            "  +/-           Adjust Power limit ±5%",
+            "  1-4           Quick presets: 1=Stock 2=Mild 3=Perf 4=Extreme",
+            "  Enter         Apply overclock settings",
+            "  Escape        Cancel and exit overclock mode",
             "",
-            "System:",
-            "  Ctrl+C     - Force quit",
+            "═══ FAN CONTROL MODE (Tab 8 → press 'f') ════════════════════════════",
+            "  ←/→           Select curve point (temperature)",
+            "  ↑/↓           Adjust fan speed at selected point",
+            "  Enter         Apply custom fan curve",
+            "  Escape        Cancel and exit fan control mode",
             "",
-            "Pro Tips:",
-            "• Use pause to freeze data for analysis",
-            "• Temperature colors adapt to GPU thermal state",
-            "• Power tab shows efficiency metrics",
-            "• Each tab shows real-time history with Nerd Font icons",
+            "═══ THEMES ══════════════════════════════════════════════════════════",
+            "  Tokyo Night (Storm/Moon) │ Dracula │ ROG Red │ Matrix │ Cyberpunk",
+            "",
+            "                      Press any key to close this help",
         ];
 
         let help = Paragraph::new(help_text.join("\n"))
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title("Help & Keybindings"),
+                    .border_style(Style::default().fg(self.theme.accent().to_ratatui()))
+                    .title(" 󰋖 Help & Keybindings ")
+                    .title_style(Style::default().fg(self.theme.primary().to_ratatui()).add_modifier(Modifier::BOLD)),
             )
-            .style(Style::default().fg(Color::White))
+            .style(Style::default().fg(self.theme.text().to_ratatui()))
             .alignment(Alignment::Left);
 
         f.render_widget(help, area);
@@ -2410,6 +2458,124 @@ impl TuiApp {
         // Default theme
         println!("🎨 Using default Tokyo Night theme");
         themes::ThemeVariant::TokyoNightNight
+    }
+
+    /// Draw OSD/MangoHud configuration tab
+    fn draw_osd(&self, f: &mut Frame, area: Rect) {
+        let chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(50),  // Left panel
+                Constraint::Percentage(50),  // Right panel
+            ])
+            .split(area);
+
+        // Left panel - Status and Current Config
+        let left_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(7),  // Status
+                Constraint::Length(10), // Current metrics
+                Constraint::Min(0),     // Presets
+            ])
+            .split(chunks[0]);
+
+        // Status section
+        let mangohud_installed = crate::osd::OsdManager::check_mangohud_installed();
+        let status_icon = if mangohud_installed { "✅" } else { "❌" };
+        let status_text = format!(
+            " MangoHud: {} {}\n\
+             Config: ~/.config/MangoHud/MangoHud.conf\n\n\
+             Launch: mangohud %command%\n\
+             Steam:  MANGOHUD=1 %command%",
+            status_icon,
+            if mangohud_installed { "Installed" } else { "Not Found" }
+        );
+        let status = Paragraph::new(status_text)
+            .style(Style::default().fg(self.theme.fg.to_ratatui()))
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .title("📊 MangoHud Status")
+                .border_style(Style::default().fg(self.theme.cyan.to_ratatui())));
+        f.render_widget(status, left_chunks[0]);
+
+        // Current metrics (read from config if exists)
+        let current_metrics = " Default metrics:\n\
+                               • fps (FPS Counter)\n\
+                               • frametime (Frame Graph)\n\
+                               • gpu_temp (Temperature)\n\
+                               • gpu_load (Utilization)\n\
+                               • vram (VRAM Usage)";
+        let current = Paragraph::new(current_metrics)
+            .style(Style::default().fg(self.theme.fg.to_ratatui()))
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .title("Active Metrics")
+                .border_style(Style::default().fg(self.theme.green.to_ratatui())));
+        f.render_widget(current, left_chunks[1]);
+
+        // Presets
+        let presets_text = " Quick Presets (via CLI):\n\n\
+                            [Minimal]   fps only\n\
+                            [Standard]  fps, frametime, gpu_temp,\n\
+                                        gpu_load, vram\n\
+                            [Full]      All metrics\n\
+                            [Benchmark] fps, frametime, temps,\n\
+                                        clocks, power";
+        let presets = Paragraph::new(presets_text)
+            .style(Style::default().fg(self.theme.fg.to_ratatui()))
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .title("⚡ Presets")
+                .border_style(Style::default().fg(self.theme.yellow.to_ratatui())));
+        f.render_widget(presets, left_chunks[2]);
+
+        // Right panel - Available Metrics and Commands
+        let right_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(12), // Available metrics
+                Constraint::Min(0),     // Commands
+            ])
+            .split(chunks[1]);
+
+        // Available metrics list
+        let metrics_items: Vec<ListItem> = vec![
+            ListItem::new(" fps          FPS Counter"),
+            ListItem::new(" frametime    Frame Time Graph"),
+            ListItem::new(" gpu_temp     GPU Temperature"),
+            ListItem::new(" gpu_load     GPU Utilization"),
+            ListItem::new(" gpu_core_clock GPU Clock Speed"),
+            ListItem::new(" gpu_power    Power Draw"),
+            ListItem::new(" vram         VRAM Usage"),
+            ListItem::new(" fan          Fan Speed"),
+            ListItem::new(" cpu_temp     CPU Temperature"),
+            ListItem::new(" cpu_load     CPU Utilization"),
+        ];
+        let metrics_list = List::new(metrics_items)
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .title("📈 Available Metrics")
+                .border_style(Style::default().fg(self.theme.magenta.to_ratatui())))
+            .style(Style::default().fg(self.theme.fg.to_ratatui()));
+        f.render_widget(metrics_list, right_chunks[0]);
+
+        // Commands
+        let commands_text = " CLI Commands:\n\n\
+                             nvctl osd enable     Enable OSD\n\
+                             nvctl osd disable    Disable OSD\n\
+                             nvctl osd status     Show config\n\
+                             nvctl osd add <m>    Add metric\n\
+                             nvctl osd remove <m> Remove metric\n\
+                             nvctl osd metrics    List metrics\n\n\
+                             💡 For GUI config: nvcontrol";
+        let commands = Paragraph::new(commands_text)
+            .style(Style::default().fg(self.theme.fg.to_ratatui()))
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .title("🔧 Commands")
+                .border_style(Style::default().fg(self.theme.border.to_ratatui())));
+        f.render_widget(commands, right_chunks[1]);
     }
 
     /// Draw Settings tab

@@ -3237,7 +3237,7 @@ fn main() {
                     }
                 }
             }
-            PowerSubcommand::Schedule { action } => {
+            PowerSubcommand::Schedule { action: _ } => {
                 println!("⚠️  Power scheduling not yet fully implemented");
                 println!("    Coming soon in next release");
             }

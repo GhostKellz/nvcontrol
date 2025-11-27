@@ -53,7 +53,7 @@ impl SafeGpuController {
 
     /// Get GPU information with automatic fallback
     pub fn get_info(&self) -> NvResult<GpuInfoEnhanced> {
-        let ctx = ErrorContext::new("get GPU information")
+        let _ctx = ErrorContext::new("get GPU information")
             .with_gpu(self.gpu_id)
             .with_suggestion("Check NVIDIA driver installation with: nvidia-smi");
 

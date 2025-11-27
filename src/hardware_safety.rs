@@ -39,6 +39,7 @@ impl Default for SafetyThresholds {
 }
 
 /// Hardware safety monitor
+#[allow(dead_code)]
 pub struct SafetyMonitor {
     thresholds: SafetyThresholds,
     gpu_id: u32,
@@ -115,7 +116,7 @@ impl SafetyMonitor {
     /// Apply thermal throttling
     fn apply_thermal_throttling(
         &self,
-        device: &nvml_wrapper::Device,
+        _device: &nvml_wrapper::Device,
         temp: i32,
     ) -> NvResult<()> {
         eprintln!(
@@ -162,7 +163,7 @@ impl SafetyMonitor {
             NvControlError::GpuQueryFailed(format!("NVML init failed: {}", e))
         })?;
 
-        let device = nvml.device_by_index(self.gpu_id).map_err(|e| {
+        let _device = nvml.device_by_index(self.gpu_id).map_err(|e| {
             NvControlError::GpuQueryFailed(format!("Failed to access GPU: {}", e))
         })?;
 

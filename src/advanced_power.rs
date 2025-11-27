@@ -40,6 +40,7 @@ pub struct DynamicPowerManager {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct LoadSample {
     timestamp: Instant,
     gpu_utilization: u32,

@@ -125,7 +125,7 @@ impl MultiGpuCoordinator {
             NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
         })?;
 
-        let device1 = nvml.device_by_index(gpu1).map_err(|e| {
+        let _device1 = nvml.device_by_index(gpu1).map_err(|e| {
             NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e))
         })?;
 

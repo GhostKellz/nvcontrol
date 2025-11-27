@@ -27,6 +27,7 @@ pub enum GameLauncher {
 }
 
 /// Steam library scanner
+#[allow(dead_code)]
 pub struct SteamScanner {
     steam_root: Option<PathBuf>,
     library_folders: Vec<PathBuf>,
@@ -198,6 +199,7 @@ impl Default for SteamScanner {
 }
 
 /// Lutris integration
+#[allow(dead_code)]
 pub struct LutrisScanner {
     lutris_db: Option<PathBuf>,
 }

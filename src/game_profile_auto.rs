@@ -1,11 +1,10 @@
 // Game Profile Auto-Application
 // Automatically detect game launches and apply GPU profiles
 
-use crate::game_detection::{GameDetector, GameProfile};
+use crate::game_detection::GameDetector;
 use crate::overclocking::OverclockProfile;
 use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;

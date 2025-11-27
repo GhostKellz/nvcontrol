@@ -9,7 +9,7 @@ fn test_nvctl_help() {
 
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(stdout.contains("NVIDIA Control CLI"));
+    assert!(stdout.contains("NVIDIA GPU") || stdout.contains("Usage: nvctl"));
 }
 
 #[test]

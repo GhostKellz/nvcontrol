@@ -237,21 +237,21 @@ fn avg(values: &[u32]) -> u32 {
     if values.is_empty() {
         return 0;
     }
-    (values.iter().sum::<u32>() / values.len() as u32)
+    values.iter().sum::<u32>() / values.len() as u32
 }
 
 fn avg_i32(values: &[i32]) -> i32 {
     if values.is_empty() {
         return 0;
     }
-    (values.iter().sum::<i32>() / values.len() as i32)
+    values.iter().sum::<i32>() / values.len() as i32
 }
 
 fn avg_f32(values: &[f32]) -> f32 {
     if values.is_empty() {
         return 0.0;
     }
-    (values.iter().sum::<f32>() / values.len() as f32)
+    values.iter().sum::<f32>() / values.len() as f32
 }
 
 /// Profiling statistics
@@ -271,6 +271,7 @@ pub struct ProfileStatistics {
 }
 
 /// Performance capture for specific workload
+#[allow(dead_code)]
 pub struct WorkloadCapture {
     profiler: NvidiaProfiler,
     workload_name: String,
