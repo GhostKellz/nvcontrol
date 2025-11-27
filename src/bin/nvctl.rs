@@ -48,7 +48,7 @@ enum Command {
         #[command(subcommand)]
         subcommand: DisplaySubcommand,
     },
-    /// 🌈 Pure Rust Digital Vibrance (0-200%)
+    /// 🌈 Digital Vibrance (0-200%)
     #[command(alias = "vibe")]
     Vibrance {
         /// Vibrance percentage (0-200%, where 100% is default)
@@ -180,6 +180,11 @@ enum Command {
     /// 🎛️  Interactive Menu Mode
     #[command(alias = "menu")]
     Interactive,
+    /// 💻 System information and platform detection
+    System {
+        #[command(subcommand)]
+        subcommand: SystemSubcommand,
+    },
     /// 🔍 Run system diagnostics
     Doctor,
     /// 📋 Show detailed version information
@@ -312,6 +317,21 @@ enum DisplaySubcommand {
         #[command(subcommand)]
         subcommand: SharpeningSubcommand,
     },
+    /// Color range control (Full vs Limited RGB)
+    ColorRange {
+        #[command(subcommand)]
+        subcommand: ColorRangeSubcommand,
+    },
+    /// Color space control (RGB, YCbCr422, YCbCr444)
+    ColorSpace {
+        #[command(subcommand)]
+        subcommand: ColorSpaceSubcommand,
+    },
+    /// Dithering control for color banding reduction
+    Dithering {
+        #[command(subcommand)]
+        subcommand: DitheringSubcommand,
+    },
 }
 
 #[derive(Subcommand)]
@@ -412,6 +432,72 @@ enum SharpeningSubcommand {
     },
     /// Show image sharpening info for a display
     Info {
+        /// Display ID (0, 1, etc.)
+        #[arg(short, long, default_value = "0")]
+        display_id: u32,
+    },
+}
+
+#[derive(Subcommand)]
+enum ColorRangeSubcommand {
+    /// Get current color range setting
+    Get {
+        /// Display ID (0, 1, etc.)
+        #[arg(short, long, default_value = "0")]
+        display_id: u32,
+    },
+    /// Set color range (full or limited)
+    Set {
+        /// Display ID (0, 1, etc.)
+        #[arg(short, long, default_value = "0")]
+        display_id: u32,
+        /// Color range: full, limited
+        #[arg(value_parser = ["full", "limited"])]
+        range: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum ColorSpaceSubcommand {
+    /// Get current color space
+    Get {
+        /// Display ID (0, 1, etc.)
+        #[arg(short, long, default_value = "0")]
+        display_id: u32,
+    },
+    /// Set color space
+    Set {
+        /// Display ID (0, 1, etc.)
+        #[arg(short, long, default_value = "0")]
+        display_id: u32,
+        /// Color space: rgb, ycbcr422, ycbcr444
+        #[arg(value_parser = ["rgb", "ycbcr422", "ycbcr444"])]
+        space: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum DitheringSubcommand {
+    /// Get current dithering settings
+    Get {
+        /// Display ID (0, 1, etc.)
+        #[arg(short, long, default_value = "0")]
+        display_id: u32,
+    },
+    /// Enable dithering with specified mode and depth
+    Enable {
+        /// Display ID (0, 1, etc.)
+        #[arg(short, long, default_value = "0")]
+        display_id: u32,
+        /// Dithering mode: auto, dynamic2x2, static2x2, temporal
+        #[arg(long, default_value = "auto")]
+        mode: String,
+        /// Dithering depth: auto, 6bit, 8bit
+        #[arg(long, default_value = "auto")]
+        depth: String,
+    },
+    /// Disable dithering
+    Disable {
         /// Display ID (0, 1, etc.)
         #[arg(short, long, default_value = "0")]
         display_id: u32,
@@ -784,6 +870,18 @@ enum DriversSubcommand {
         /// Shell type: bash, zsh, fish
         shell: String,
     },
+}
+
+#[derive(Subcommand)]
+enum SystemSubcommand {
+    /// Show system information (distro, compositor, driver)
+    Info,
+    /// Show detected Wayland compositor and capabilities
+    Compositor,
+    /// Show detected Linux distribution
+    Distro,
+    /// Show platform optimization recommendations
+    Optimize,
 }
 
 #[derive(Subcommand)]
@@ -1698,7 +1796,7 @@ fn main() {
                     VibranceSubcommand::Get => {
                         match vibrance_native::get_vibrance_status_native() {
                             Ok(status) => {
-                                println!("🌈 Pure Rust Digital Vibrance Status");
+                                println!("🌈 Digital Vibrance Status");
                                 println!("══════════════════════════════════════════════════");
                                 if let Some(devices) = status.get("devices") {
                                     println!(
@@ -1722,7 +1820,7 @@ fn main() {
                                 }
                             }
                             Err(e) => {
-                                eprintln!("❌ Pure Rust vibrance error: {}", e);
+                                eprintln!("❌ Digital vibrance error: {}", e);
                                 eprintln!(
                                     "💡 Ensure NVIDIA open drivers (580+) with nvidia_drm.modeset=1"
                                 );
@@ -1732,7 +1830,7 @@ fn main() {
                     VibranceSubcommand::Set { percentage } => {
                         match vibrance_native::set_vibrance_all_native(percentage) {
                             Ok(()) => println!(
-                                "✅ Set all displays to {}% vibrance using pure Rust implementation",
+                                "✅ Set all displays to {}% digital vibrance",
                                 percentage
                             ),
                             Err(e) => eprintln!("❌ Failed to set vibrance: {}", e),
@@ -1790,7 +1888,7 @@ fn main() {
                     }
                     VibranceSubcommand::List => match vibrance_native::list_displays_native() {
                         Ok(displays) => {
-                            println!("🖥️ Available Displays (Pure Rust):");
+                            println!("🖥️ Available Displays:");
                             for (device_id, display_id, name, connected) in displays {
                                 let status = if connected {
                                     "✅ Connected"
@@ -1808,14 +1906,14 @@ fn main() {
                     },
                     VibranceSubcommand::Reset => match vibrance_native::reset_vibrance_native() {
                         Ok(()) => println!(
-                            "✅ Reset all displays to default vibrance (100%) using pure Rust"
+                            "✅ Reset all displays to default vibrance (100%)"
                         ),
                         Err(e) => eprintln!("❌ Failed to reset vibrance: {}", e),
                     },
                     VibranceSubcommand::Info => match vibrance_native::get_vibrance_status_native()
                     {
                         Ok(status) => {
-                            println!("🌈 Pure Rust Digital Vibrance Information:");
+                            println!("🌈 Digital Vibrance Information:");
                             println!("══════════════════════════════════════════════════");
                             if let Some(driver_version) = status.get("driver_version") {
                                 println!("  Driver Version: {}", driver_version);
@@ -1974,6 +2072,162 @@ fn main() {
                             }
                         }
                         Err(e) => eprintln!("❌ Failed to get sharpening info: {}", e),
+                    }
+                }
+            },
+            DisplaySubcommand::ColorRange { subcommand } => match subcommand {
+                ColorRangeSubcommand::Get { display_id } => {
+                    use nvcontrol::display_controls::{DisplayControls, ColorRange};
+
+                    match DisplayControls::new(0, 0, display_id) {
+                        Ok(controls) => match controls.get_color_range() {
+                            Ok(info) => {
+                                println!("🎨 Color Range for display {}:", display_id);
+                                let range_str = match info.current {
+                                    ColorRange::Full => "Full (0-255)",
+                                    ColorRange::Limited => "Limited (16-235)",
+                                };
+                                println!("   Current: {}", range_str);
+                            }
+                            Err(e) => eprintln!("❌ Failed to get color range: {}", e),
+                        },
+                        Err(e) => eprintln!("❌ Failed to open display: {}", e),
+                    }
+                }
+                ColorRangeSubcommand::Set { display_id, range } => {
+                    use nvcontrol::display_controls::{DisplayControls, ColorRange};
+
+                    let color_range = match range.to_lowercase().as_str() {
+                        "full" => ColorRange::Full,
+                        "limited" => ColorRange::Limited,
+                        _ => {
+                            eprintln!("❌ Invalid color range. Use 'full' or 'limited'");
+                            return;
+                        }
+                    };
+
+                    match DisplayControls::new(0, 0, display_id) {
+                        Ok(controls) => match controls.set_color_range(color_range) {
+                            Ok(()) => println!("✅ Color range set to '{}' for display {}", range, display_id),
+                            Err(e) => eprintln!("❌ Failed to set color range: {}", e),
+                        },
+                        Err(e) => eprintln!("❌ Failed to open display: {}", e),
+                    }
+                }
+            },
+            DisplaySubcommand::ColorSpace { subcommand } => match subcommand {
+                ColorSpaceSubcommand::Get { display_id } => {
+                    use nvcontrol::display_controls::{DisplayControls, ColorSpace};
+
+                    match DisplayControls::new(0, 0, display_id) {
+                        Ok(controls) => match controls.get_color_space() {
+                            Ok(info) => {
+                                println!("🎨 Color Space for display {}:", display_id);
+                                let space_str = match info.current {
+                                    ColorSpace::RGB => "RGB",
+                                    ColorSpace::YCbCr422 => "YCbCr 4:2:2",
+                                    ColorSpace::YCbCr444 => "YCbCr 4:4:4",
+                                };
+                                println!("   Current: {}", space_str);
+                            }
+                            Err(e) => eprintln!("❌ Failed to get color space: {}", e),
+                        },
+                        Err(e) => eprintln!("❌ Failed to open display: {}", e),
+                    }
+                }
+                ColorSpaceSubcommand::Set { display_id, space } => {
+                    use nvcontrol::display_controls::{DisplayControls, ColorSpace};
+
+                    let color_space = match space.to_lowercase().as_str() {
+                        "rgb" => ColorSpace::RGB,
+                        "ycbcr422" => ColorSpace::YCbCr422,
+                        "ycbcr444" => ColorSpace::YCbCr444,
+                        _ => {
+                            eprintln!("❌ Invalid color space. Use 'rgb', 'ycbcr422', or 'ycbcr444'");
+                            return;
+                        }
+                    };
+
+                    match DisplayControls::new(0, 0, display_id) {
+                        Ok(controls) => match controls.set_color_space(color_space) {
+                            Ok(()) => println!("✅ Color space set to '{}' for display {}", space, display_id),
+                            Err(e) => eprintln!("❌ Failed to set color space: {}", e),
+                        },
+                        Err(e) => eprintln!("❌ Failed to open display: {}", e),
+                    }
+                }
+            },
+            DisplaySubcommand::Dithering { subcommand } => match subcommand {
+                DitheringSubcommand::Get { display_id } => {
+                    use nvcontrol::display_controls::{DisplayControls, DitheringMode, DitheringDepth};
+
+                    match DisplayControls::new(0, 0, display_id) {
+                        Ok(controls) => match controls.get_dithering_info() {
+                            Ok(info) => {
+                                println!("🎨 Dithering for display {}:", display_id);
+                                println!("   Enabled: {}", if info.enabled { "Yes" } else { "No" });
+                                let mode_str = match info.mode {
+                                    DitheringMode::Auto => "Auto",
+                                    DitheringMode::Dynamic2x2 => "Dynamic 2x2",
+                                    DitheringMode::Static2x2 => "Static 2x2",
+                                    DitheringMode::Temporal => "Temporal",
+                                    DitheringMode::None => "None",
+                                };
+                                println!("   Mode: {}", mode_str);
+                                let depth_str = match info.depth {
+                                    DitheringDepth::Auto => "Auto",
+                                    DitheringDepth::SixBits => "6-bit",
+                                    DitheringDepth::EightBits => "8-bit",
+                                    DitheringDepth::None => "None",
+                                };
+                                println!("   Depth: {}", depth_str);
+                            }
+                            Err(e) => eprintln!("❌ Failed to get dithering info: {}", e),
+                        },
+                        Err(e) => eprintln!("❌ Failed to open display: {}", e),
+                    }
+                }
+                DitheringSubcommand::Enable { display_id, mode, depth } => {
+                    use nvcontrol::display_controls::{DisplayControls, DitheringMode, DitheringDepth};
+
+                    let dither_mode = match mode.to_lowercase().as_str() {
+                        "auto" => DitheringMode::Auto,
+                        "dynamic2x2" => DitheringMode::Dynamic2x2,
+                        "static2x2" => DitheringMode::Static2x2,
+                        "temporal" => DitheringMode::Temporal,
+                        _ => {
+                            eprintln!("❌ Invalid dithering mode. Use 'auto', 'dynamic2x2', 'static2x2', or 'temporal'");
+                            return;
+                        }
+                    };
+
+                    let dither_depth = match depth.to_lowercase().as_str() {
+                        "auto" => DitheringDepth::Auto,
+                        "6bit" => DitheringDepth::SixBits,
+                        "8bit" => DitheringDepth::EightBits,
+                        _ => {
+                            eprintln!("❌ Invalid dithering depth. Use 'auto', '6bit', or '8bit'");
+                            return;
+                        }
+                    };
+
+                    match DisplayControls::new(0, 0, display_id) {
+                        Ok(controls) => match controls.set_dithering(true, dither_mode, dither_depth) {
+                            Ok(()) => println!("✅ Dithering enabled (mode={}, depth={}) for display {}", mode, depth, display_id),
+                            Err(e) => eprintln!("❌ Failed to enable dithering: {}", e),
+                        },
+                        Err(e) => eprintln!("❌ Failed to open display: {}", e),
+                    }
+                }
+                DitheringSubcommand::Disable { display_id } => {
+                    use nvcontrol::display_controls::{DisplayControls, DitheringMode, DitheringDepth};
+
+                    match DisplayControls::new(0, 0, display_id) {
+                        Ok(controls) => match controls.set_dithering(false, DitheringMode::None, DitheringDepth::None) {
+                            Ok(()) => println!("✅ Dithering disabled for display {}", display_id),
+                            Err(e) => eprintln!("❌ Failed to disable dithering: {}", e),
+                        },
+                        Err(e) => eprintln!("❌ Failed to open display: {}", e),
                     }
                 }
             },
@@ -5083,6 +5337,211 @@ fn main() {
             println!("🎛️  Launching Interactive Menu Mode...\n");
             if let Err(e) = nvcontrol::interactive_cli::InteractiveCli::new().run() {
                 eprintln!("❌ Interactive mode error: {}", e);
+            }
+        }
+        Command::System { subcommand } => {
+            use nvcontrol::wayland_integration::{WaylandCompositor, WaylandInfo};
+
+            match subcommand {
+                SystemSubcommand::Info => {
+                    println!("💻 nvcontrol System Information");
+                    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+                    // Distro info
+                    println!("\n📦 Distribution:");
+                    if let Ok(os_release) = std::fs::read_to_string("/etc/os-release") {
+                        let mut name = "Unknown";
+                        let mut version = "";
+                        let mut is_gaming = false;
+
+                        for line in os_release.lines() {
+                            if line.starts_with("PRETTY_NAME=") {
+                                name = line.trim_start_matches("PRETTY_NAME=").trim_matches('"');
+                            }
+                            if line.starts_with("VERSION_ID=") {
+                                version = line.trim_start_matches("VERSION_ID=").trim_matches('"');
+                            }
+                        }
+
+                        let os_lower = os_release.to_lowercase();
+                        if os_lower.contains("bazzite") {
+                            is_gaming = true;
+                            println!("   Name: {} 🎮 (Gaming Distro - Tier 1)", name);
+                        } else if os_lower.contains("nobara") {
+                            is_gaming = true;
+                            println!("   Name: {} 🎮 (Gaming Distro - Tier 1)", name);
+                        } else if os_lower.contains("arch") {
+                            println!("   Name: {} ⭐ (Premier Platform)", name);
+                        } else if os_lower.contains("pop") {
+                            println!("   Name: {} (COSMIC Support)", name);
+                        } else {
+                            println!("   Name: {}", name);
+                        }
+
+                        if !version.is_empty() {
+                            println!("   Version: {}", version);
+                        }
+
+                        if is_gaming {
+                            println!("   Gaming Optimized: ✅");
+                        }
+                    } else {
+                        println!("   ❌ Could not read /etc/os-release");
+                    }
+
+                    // Compositor info
+                    println!("\n🖥️  Display Server:");
+                    let session = std::env::var("XDG_SESSION_TYPE").unwrap_or_else(|_| "unknown".into());
+                    println!("   Session: {}", session);
+
+                    let wayland_info = WaylandInfo::detect();
+                    println!("   Compositor: {}", wayland_info.compositor.name());
+                    println!("   Desktop: {}", wayland_info.desktop);
+
+                    let caps = wayland_info.capabilities;
+                    println!("\n   Capabilities:");
+                    println!("   • Digital Vibrance: {}", if caps.digital_vibrance { "✅" } else { "❌" });
+                    println!("   • VRR Control: {}", if caps.vrr_control { "✅" } else { "❌" });
+                    println!("   • HDR Support: {}", if caps.hdr_support { "✅" } else { "❌" });
+                    println!("   • Color Management: {}", if caps.color_management { "✅" } else { "❌" });
+
+                    // Driver info
+                    println!("\n🎮 NVIDIA Driver:");
+                    if let Ok(output) = std::process::Command::new("nvidia-smi")
+                        .args(["--query-gpu=driver_version,name,memory.total", "--format=csv,noheader,nounits"])
+                        .output()
+                    {
+                        if output.status.success() {
+                            let info = String::from_utf8_lossy(&output.stdout);
+                            let parts: Vec<&str> = info.trim().split(", ").collect();
+                            if parts.len() >= 3 {
+                                println!("   Version: {}", parts[0]);
+                                println!("   GPU: {}", parts[1]);
+                                println!("   VRAM: {} MB", parts[2]);
+                            }
+                        }
+                    } else {
+                        println!("   ❌ nvidia-smi not found");
+                    }
+
+                    // Check for open kernel modules
+                    if let Ok(modules) = std::fs::read_to_string("/proc/modules") {
+                        if modules.contains("nvidia_modeset") {
+                            let driver_type = if std::path::Path::new("/sys/module/nvidia/parameters/OpenRmEnableUnsupportedGpus").exists()
+                                || modules.contains("nvidia_drm") {
+                                "Open Kernel Modules ✅"
+                            } else {
+                                "Proprietary"
+                            };
+                            println!("   Driver Type: {}", driver_type);
+                        }
+                    }
+
+                    println!("\n📋 Recommendations:");
+                    println!("   nvctl gpu info         # Detailed GPU info");
+                    println!("   nvctl system optimize  # Platform optimizations");
+                }
+                SystemSubcommand::Compositor => {
+                    let wayland_info = WaylandInfo::detect();
+                    wayland_info.print_info();
+                }
+                SystemSubcommand::Distro => {
+                    println!("📦 Linux Distribution Detection");
+                    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+                    if let Ok(os_release) = std::fs::read_to_string("/etc/os-release") {
+                        for line in os_release.lines() {
+                            if line.starts_with("PRETTY_NAME=")
+                                || line.starts_with("NAME=")
+                                || line.starts_with("VERSION=")
+                                || line.starts_with("ID=")
+                                || line.starts_with("ID_LIKE=") {
+                                let (key, value) = line.split_once('=').unwrap_or(("", ""));
+                                println!("   {}: {}", key, value.trim_matches('"'));
+                            }
+                        }
+
+                        let os_lower = os_release.to_lowercase();
+                        println!("\n   nvcontrol Tier:");
+                        if os_lower.contains("arch") {
+                            println!("   ⭐ Premier Platform (Arch Linux)");
+                        } else if os_lower.contains("bazzite") || os_lower.contains("nobara") {
+                            println!("   🎮 Tier 1 - Gaming Distro");
+                        } else if os_lower.contains("fedora") || os_lower.contains("pop") {
+                            println!("   ✅ Tier 1 - Full Support");
+                        } else if os_lower.contains("debian") || os_lower.contains("ubuntu") {
+                            println!("   ✅ Tier 1 - Full Support");
+                        } else {
+                            println!("   📦 Tier 2 - Community Support");
+                        }
+                    }
+                }
+                SystemSubcommand::Optimize => {
+                    println!("⚡ Platform Optimization Recommendations");
+                    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+                    let compositor = WaylandCompositor::detect();
+                    let session = std::env::var("XDG_SESSION_TYPE").unwrap_or_default();
+
+                    if session == "wayland" {
+                        println!("\n✅ Wayland Detected - Optimal for NVIDIA 580+ drivers");
+
+                        match compositor {
+                            WaylandCompositor::KdePlasma => {
+                                println!("\n🔧 KDE Plasma Optimizations:");
+                                println!("   • Enable VRR: kscreen-doctor output.<name>.vrr.enable");
+                                println!("   • HDR: System Settings → Display → HDR");
+                                println!("   • Compositor: kwin_wayland with explicit sync");
+                            }
+                            WaylandCompositor::Gnome => {
+                                println!("\n🔧 GNOME Optimizations:");
+                                println!("   • Enable VRR: gsettings set org.gnome.mutter experimental-features \"['variable-refresh-rate']\"");
+                                println!("   • GNOME 47+ recommended for HDR");
+                            }
+                            WaylandCompositor::Hyprland => {
+                                println!("\n🔧 Hyprland Optimizations:");
+                                println!("   • VRR: monitor=<name>,vrr,1");
+                                println!("   • env = LIBVA_DRIVER_NAME,nvidia");
+                                println!("   • env = __GLX_VENDOR_LIBRARY_NAME,nvidia");
+                            }
+                            WaylandCompositor::Cosmic => {
+                                println!("\n🔧 COSMIC (Pop!_OS) Optimizations:");
+                                println!("   • Use cosmic-randr for display config");
+                                println!("   • Native NVKMS vibrance supported");
+                                println!("   • HDR support in COSMIC compositor");
+                            }
+                            _ => {
+                                println!("\n🔧 General Wayland Optimizations:");
+                                println!("   • Set LIBVA_DRIVER_NAME=nvidia");
+                                println!("   • Set GBM_BACKEND=nvidia-drm");
+                            }
+                        }
+                    } else {
+                        println!("\n⚠️  X11 Detected - Consider migrating to Wayland for:");
+                        println!("   • Better VRR support");
+                        println!("   • HDR support (Plasma 6+, GNOME 47+)");
+                        println!("   • Explicit sync (NVIDIA 555+)");
+                    }
+
+                    // Gaming distro specific
+                    if let Ok(os_release) = std::fs::read_to_string("/etc/os-release") {
+                        let os_lower = os_release.to_lowercase();
+
+                        if os_lower.contains("bazzite") {
+                            println!("\n🎮 Bazzite-Specific:");
+                            println!("   • Use ujust for system updates");
+                            println!("   • Gamescope session recommended");
+                            println!("   • rpm-ostree for package management");
+                        } else if os_lower.contains("nobara") {
+                            println!("\n🎮 Nobara-Specific:");
+                            println!("   • Pre-configured for gaming");
+                            println!("   • Use dnf for package management");
+                            println!("   • OBS Studio NVENC ready");
+                        }
+                    }
+
+                    println!("\n📋 Run 'nvctl doctor' for full diagnostics");
+                }
             }
         }
         Command::Doctor => {

@@ -38,42 +38,74 @@ pub fn detect_vrr_displays() -> NvResult<Vec<DisplayVrrCapability>> {
     let mut displays = Vec::new();
 
     // Try different methods based on desktop environment
-    let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default();
+    let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default().to_uppercase();
 
-    match desktop.as_str() {
-        "KDE" => displays = detect_vrr_kde()?,
-        "GNOME" => displays = detect_vrr_gnome()?,
-        "Hyprland" => displays = detect_vrr_hyprland()?,
-        "sway" => displays = detect_vrr_sway()?,
-        _ => {
-            // Try multiple methods as fallback
-            if let Ok(kde_displays) = detect_vrr_kde() {
+    // Check for KDE session even if XDG_CURRENT_DESKTOP is empty
+    let is_kde = desktop.contains("KDE")
+        || desktop.contains("PLASMA")
+        || std::env::var("KDE_SESSION_VERSION").is_ok()
+        || std::process::Command::new("which").arg("kscreen-doctor").output()
+            .map(|o| o.status.success()).unwrap_or(false);
+
+    if is_kde {
+        if let Ok(kde_displays) = detect_vrr_kde() {
+            if !kde_displays.is_empty() {
                 displays = kde_displays;
-            } else if let Ok(x11_displays) = detect_vrr_x11() {
-                displays = x11_displays;
             }
+        }
+    } else if desktop.contains("GNOME") {
+        displays = detect_vrr_gnome()?;
+    } else if desktop.contains("HYPRLAND") {
+        displays = detect_vrr_hyprland()?;
+    } else if desktop.contains("SWAY") {
+        displays = detect_vrr_sway()?;
+    }
+
+    // If still empty, try multiple methods as fallback
+    if displays.is_empty() {
+        if let Ok(kde_displays) = detect_vrr_kde() {
+            if !kde_displays.is_empty() {
+                displays = kde_displays;
+            }
+        }
+    }
+    if displays.is_empty() {
+        if let Ok(x11_displays) = detect_vrr_x11() {
+            displays = x11_displays;
         }
     }
 
     if displays.is_empty() {
-        // Fallback with mock data for development
-        displays.push(DisplayVrrCapability {
-            display_name: "HDMI-A-1".to_string(),
-            supports_vrr: true,
-            supports_gsync: true,
-            supports_freesync: false,
-            min_refresh: 48,
-            max_refresh: 144,
-            current_settings: VrrSettings::default(),
-        });
+        // Try to get display names from xrandr as fallback
+        if let Ok(output) = std::process::Command::new("xrandr")
+            .arg("--query")
+            .output()
+        {
+            if output.status.success() {
+                let output_str = String::from_utf8_lossy(&output.stdout);
+                for line in output_str.lines() {
+                    if line.contains(" connected") {
+                        if let Some(name) = line.split_whitespace().next() {
+                            displays.push(DisplayVrrCapability {
+                                display_name: name.to_string(),
+                                supports_vrr: true,
+                                supports_gsync: name.starts_with("DP-"),
+                                supports_freesync: true,
+                                min_refresh: 48,
+                                max_refresh: 144,
+                                current_settings: VrrSettings::default(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
     }
 
     Ok(displays)
 }
 
 fn detect_vrr_kde() -> NvResult<Vec<DisplayVrrCapability>> {
-    let mut displays = Vec::new();
-
     // Use kscreen-doctor to query display capabilities
     if let Ok(output) = std::process::Command::new("kscreen-doctor")
         .arg("-j")
@@ -81,41 +113,65 @@ fn detect_vrr_kde() -> NvResult<Vec<DisplayVrrCapability>> {
     {
         if output.status.success() {
             let output_str = String::from_utf8_lossy(&output.stdout);
-            displays = parse_kscreen_vrr_info(&output_str)?;
+            return parse_kscreen_vrr_info(&output_str);
         }
     }
 
-    Ok(displays)
+    Ok(vec![])
 }
 
 fn parse_kscreen_vrr_info(json_str: &str) -> NvResult<Vec<DisplayVrrCapability>> {
     let mut displays = Vec::new();
 
-    // Simple JSON parsing for VRR capabilities
-    // In a real implementation, you'd use serde_json
-    for line in json_str.lines() {
-        if line.contains("\"name\":") && line.contains("DP-") || line.contains("HDMI-") {
-            if let Some(name_start) = line.find("\"name\":\"") {
-                let name_start = name_start + 8;
-                if let Some(name_end) = line[name_start..].find("\"") {
-                    let display_name = &line[name_start..name_start + name_end];
+    // Parse kscreen-doctor JSON using serde_json
+    if let Ok(json) = serde_json::from_str::<serde_json::Value>(json_str) {
+        if let Some(outputs) = json.get("outputs").and_then(|o| o.as_array()) {
+            for output in outputs {
+                // Get display name (e.g., "DP-2", "HDMI-1")
+                let display_name = output
+                    .get("name")
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("Unknown")
+                    .to_string();
 
-                    // Check for VRR support indicators
-                    let supports_vrr = json_str.contains("\"vrr\":true")
-                        || json_str.contains("\"adaptiveSync\":true");
-                    let supports_gsync = json_str.contains("\"gsync\":true");
-                    let supports_freesync = json_str.contains("\"freesync\":true");
-
-                    displays.push(DisplayVrrCapability {
-                        display_name: display_name.to_string(),
-                        supports_vrr,
-                        supports_gsync,
-                        supports_freesync,
-                        min_refresh: 48,
-                        max_refresh: 144, // Would parse from JSON in real implementation
-                        current_settings: VrrSettings::default(),
-                    });
+                // Skip disconnected displays
+                let connected = output.get("connected").and_then(|c| c.as_bool()).unwrap_or(false);
+                if !connected {
+                    continue;
                 }
+
+                // vrrPolicy: 0 = Never, 1 = Always, 2 = Automatic
+                let vrr_policy = output.get("vrrPolicy").and_then(|v| v.as_i64()).unwrap_or(0);
+                let vrr_enabled = vrr_policy > 0;
+
+                // Get max refresh rate from modes
+                let mut max_refresh: u32 = 60;
+                if let Some(modes) = output.get("modes").and_then(|m| m.as_array()) {
+                    for mode in modes {
+                        if let Some(rate) = mode.get("refreshRate").and_then(|r| r.as_f64()) {
+                            max_refresh = max_refresh.max(rate as u32);
+                        }
+                    }
+                }
+
+                // G-Sync compatible displays support VRR via NVIDIA
+                let supports_gsync = display_name.starts_with("DP-"); // DP typically supports G-Sync
+
+                displays.push(DisplayVrrCapability {
+                    display_name,
+                    supports_vrr: true, // If connected via DP/HDMI 2.1, assume VRR capable
+                    supports_gsync,
+                    supports_freesync: true, // Most modern displays support FreeSync
+                    min_refresh: 48,
+                    max_refresh,
+                    current_settings: VrrSettings {
+                        enabled: vrr_enabled,
+                        min_refresh_rate: 48,
+                        max_refresh_rate: max_refresh,
+                        adaptive_sync: vrr_enabled,
+                        low_framerate_compensation: true,
+                    },
+                });
             }
         }
     }
@@ -269,28 +325,101 @@ pub fn apply_vrr_settings(display_name: &str, settings: &VrrSettings) -> NvResul
 }
 
 fn apply_vrr_kde(display_name: &str, settings: &VrrSettings) -> NvResult<()> {
-    let vrr_state = if settings.enabled {
-        "enable"
+    // VRR policy values: 0 = Never, 1 = Always, 2 = Automatic
+    let vrr_policy = if settings.enabled {
+        if settings.adaptive_sync { "2" } else { "1" }
     } else {
-        "disable"
+        "0"
     };
 
+    // Try kscreen-doctor first with vrrpolicy parameter
     let output = std::process::Command::new("kscreen-doctor")
-        .arg(format!("output.{}.vrr.{}", display_name, vrr_state))
+        .arg(format!("output.{}.vrrpolicy.{}", display_name, vrr_policy))
         .output()
         .map_err(|e| {
             NvControlError::DisplayDetectionFailed(format!("kscreen-doctor failed: {e}"))
         })?;
 
     if output.status.success() {
+        let vrr_state = match vrr_policy {
+            "0" => "disabled",
+            "1" => "enabled (always)",
+            "2" => "enabled (automatic)",
+            _ => "unknown",
+        };
         println!("VRR {} for display {}", vrr_state, display_name);
         Ok(())
     } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(NvControlError::DisplayDetectionFailed(format!(
-            "kscreen-doctor error: {stderr}"
-        )))
+        // If kscreen-doctor fails, try direct config file modification
+        apply_vrr_kde_config(display_name, settings)
     }
+}
+
+/// Fallback: directly modify kscreen config files
+fn apply_vrr_kde_config(display_name: &str, settings: &VrrSettings) -> NvResult<()> {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let control_dir = std::path::PathBuf::from(&home)
+        .join(".local/share/kscreen/control/outputs");
+
+    if !control_dir.exists() {
+        return Err(NvControlError::DisplayDetectionFailed(
+            "kscreen control directory not found".to_string(),
+        ));
+    }
+
+    // VRR policy: 0 = Never, 1 = Always, 2 = Automatic
+    let vrr_policy = if settings.enabled {
+        if settings.adaptive_sync { 2 } else { 1 }
+    } else {
+        0
+    };
+
+    // Find and update config files for this display
+    for entry in std::fs::read_dir(&control_dir).map_err(|e| {
+        NvControlError::DisplayDetectionFailed(format!("Failed to read kscreen dir: {e}"))
+    })? {
+        let entry = entry.map_err(|e| {
+            NvControlError::DisplayDetectionFailed(format!("Failed to read entry: {e}"))
+        })?;
+
+        let path = entry.path();
+        if let Ok(contents) = std::fs::read_to_string(&path) {
+            if let Ok(mut json) = serde_json::from_str::<serde_json::Value>(&contents) {
+                // Check if this config is for our display
+                if let Some(metadata) = json.get("metadata") {
+                    if let Some(name) = metadata.get("name").and_then(|n| n.as_str()) {
+                        if name == display_name {
+                            // Update vrrpolicy
+                            json["vrrpolicy"] = serde_json::json!(vrr_policy);
+
+                            // Write back
+                            let new_contents = serde_json::to_string_pretty(&json).map_err(|e| {
+                                NvControlError::DisplayDetectionFailed(format!("Failed to serialize: {e}"))
+                            })?;
+
+                            std::fs::write(&path, new_contents).map_err(|e| {
+                                NvControlError::DisplayDetectionFailed(format!("Failed to write config: {e}"))
+                            })?;
+
+                            let vrr_state = match vrr_policy {
+                                0 => "disabled",
+                                1 => "enabled (always)",
+                                2 => "enabled (automatic)",
+                                _ => "unknown",
+                            };
+                            println!("VRR {} for display {} (config updated)", vrr_state, display_name);
+                            return Ok(());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Err(NvControlError::DisplayDetectionFailed(format!(
+        "Could not find kscreen config for display {}",
+        display_name
+    )))
 }
 
 fn apply_vrr_gnome(settings: &VrrSettings) -> NvResult<()> {

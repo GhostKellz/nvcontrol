@@ -1,0 +1,19 @@
+nvcontrol (0.7.1-1) unstable; urgency=medium
+
+  * New display controls: color range, color space, dithering
+  * Tokyo Night Moon as default theme
+  * RTX 5090/Blackwell architecture support
+  * Improved Wayland compositor detection
+  * Native digital vibrance implementation (no nvidia-settings required)
+
+ -- CK Technology LLC <contact@ck-technology.com>  Wed, 27 Nov 2024 12:00:00 +0000
+
+nvcontrol (0.7.0-1) unstable; urgency=medium
+
+  * Initial Debian package release
+  * Full TUI dashboard with GPU monitoring
+  * Digital vibrance, VRR, HDR support
+  * Multi-compositor support (KDE, GNOME, Hyprland, Sway)
+  * Container GPU passthrough
+
+ -- CK Technology LLC <contact@ck-technology.com>  Mon, 25 Nov 2024 12:00:00 +0000

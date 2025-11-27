@@ -1,0 +1,50 @@
+Source: nvcontrol
+Section: utils
+Priority: optional
+Maintainer: CK Technology LLC <contact@ck-technology.com>
+Build-Depends: debhelper-compat (= 13),
+               cargo,
+               rustc (>= 1.75),
+               libclang-dev,
+               pkg-config,
+               libwayland-dev,
+               libxkbcommon-dev,
+               libfontconfig1-dev,
+               libfreetype6-dev,
+               libcosmic-dev
+Standards-Version: 4.6.2
+Homepage: https://github.com/GhostKellz/nvcontrol
+Vcs-Git: https://github.com/GhostKellz/nvcontrol.git
+Vcs-Browser: https://github.com/GhostKellz/nvcontrol
+
+Package: nvcontrol
+Architecture: amd64
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         system76-driver-nvidia | nvidia-driver-libs (>= 535),
+         libwayland-client0,
+         libxkbcommon0,
+         libfontconfig1,
+         libfreetype6
+Recommends: gamescope,
+            mangohud,
+            gamemode,
+            cosmic-randr,
+            cosmic-settings
+Suggests: docker.io | podman,
+          nvidia-container-toolkit
+Description: Modern NVIDIA Settings Manager for Pop!_OS Cosmic
+ nvcontrol is a comprehensive NVIDIA GPU control tool optimized for
+ Pop!_OS with the COSMIC desktop environment.
+ .
+ Features optimized for COSMIC:
+  * Native Wayland support via cosmic-randr
+  * Digital Vibrance control (no nvidia-settings required)
+  * VRR / G-SYNC configuration via cosmic-settings
+  * HDR management with COSMIC compositor
+  * GPU overclocking and power management
+  * Fan curve control
+  * Multi-monitor profile management
+  * Container GPU passthrough support
+ .
+ Integrates with System76's NVIDIA drivers and COSMIC desktop.

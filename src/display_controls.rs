@@ -1,5 +1,5 @@
 // Enhanced Display Controls - Image Sharpening, Color Range/Space, Dithering
-// Pure Rust implementation using NVKMS ioctls
+// Native implementation using NVKMS ioctls
 use crate::nvkms_bindings::*;
 use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};

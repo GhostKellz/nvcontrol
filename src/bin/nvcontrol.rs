@@ -26,7 +26,7 @@ enum Tab {
     GameProfiles,
     RgbControl,
     Containers,
-    Osd,            // MangoHud/OSD configuration
+    Osd,            // On-Screen Display configuration
     Settings,
 }
 
@@ -67,14 +67,39 @@ fn main() -> eframe::Result<()> {
         "nvcontrol - NVIDIA Settings Manager",
         options,
         Box::new(|cc| {
-            // Apply modern theme
-            let theme = theme::ModernTheme::nvidia_dark();
-            cc.egui_ctx.set_visuals(theme.to_egui_visuals());
+            // Load config and apply saved theme
+            let config = config::Config::load();
+            let theme_variant = nvcontrol::themes::ThemeVariant::from_config_key(&config.theme)
+                .unwrap_or(nvcontrol::themes::ThemeVariant::TokyoNightMoon);
+
+            // Apply the theme from config
+            let theme_data = nvcontrol::themes::Theme::from_variant(theme_variant);
+            let colors = &theme_data.colors;
+
+            let mut visuals = egui::Visuals::dark();
+            visuals.panel_fill = colors.bg.to_egui();
+            visuals.window_fill = colors.bg_highlight.to_egui();
+            visuals.extreme_bg_color = colors.bg_dark.to_egui();
+            visuals.widgets.noninteractive.bg_fill = colors.bg_highlight.to_egui();
+            visuals.widgets.noninteractive.fg_stroke = egui::Stroke::new(1.0, colors.fg.to_egui());
+            // Minty green buttons - fresh mint green with white text
+            let mint_green = egui::Color32::from_rgb(0x3E, 0xB4, 0x89); // #3EB489 mint green
+            let mint_light = egui::Color32::from_rgb(0x50, 0xC8, 0x78); // #50C878 lighter mint
+            let mint_dark = egui::Color32::from_rgb(0x2E, 0x8B, 0x6A); // #2E8B6A darker mint
+            visuals.widgets.inactive.bg_fill = mint_dark;
+            visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, egui::Color32::WHITE);
+            visuals.widgets.hovered.bg_fill = mint_green;
+            visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.5, egui::Color32::WHITE);
+            visuals.widgets.active.bg_fill = mint_light;
+            visuals.widgets.active.fg_stroke = egui::Stroke::new(2.0, colors.bg_dark.to_egui());
+            visuals.selection.bg_fill = colors.selection.to_egui();
+            visuals.hyperlink_color = colors.blue.to_egui();
+            cc.egui_ctx.set_visuals(visuals);
 
             // Enable better fonts and styling
             cc.egui_ctx.set_pixels_per_point(1.2);
 
-            Box::new(NvControlApp::new())
+            Box::new(NvControlApp::new_with_theme(theme_variant))
         }),
     )
 }
@@ -86,13 +111,14 @@ fn main() {
 }
 
 #[cfg(feature = "gui")]
+#[allow(dead_code)]
 struct NvControlApp {
     vibrance_levels: Vec<i16>,
     tab: Tab,
     config: config::Config,
     hdr_enabled: bool,
     selected_icc_profile_idx: usize,
-    theme: theme::ModernTheme,
+    theme: theme::ModernTheme,  // Legacy theme, kept for compatibility
     overclock_profile: overclocking::OverclockProfile,
     // Missing fields that are used in the update() method
     fan_speeds: std::collections::HashMap<usize, u8>,
@@ -137,7 +163,7 @@ struct NvControlApp {
     container_runtime: Option<nvcontrol::container_runtime::NvContainerRuntime>,
     running_containers: Vec<ContainerInfo>,
 
-    // OSD/MangoHud configuration
+    // OSD (On-Screen Display) configuration
     osd_enabled: bool,
     osd_position: String,
     osd_metrics: Vec<String>,
@@ -169,7 +195,12 @@ struct GpuStats {
 
 #[cfg(feature = "gui")]
 impl NvControlApp {
+    #[allow(dead_code)]
     fn new() -> Self {
+        Self::new_with_theme(nvcontrol::themes::ThemeVariant::TokyoNightMoon)
+    }
+
+    fn new_with_theme(theme_variant: nvcontrol::themes::ThemeVariant) -> Self {
         let config = config::Config::load();
         let display_count = display::get_display_count();
         let vibrance_levels = if config.vibrance_levels.len() == display_count {
@@ -291,8 +322,8 @@ impl NvControlApp {
             power_limit_percent: 100,
             oc_preset: OcPreset::Stock,
 
-            // NEW: Theme
-            current_theme: nvcontrol::themes::ThemeVariant::TokyoNightNight,
+            // Theme (loaded from config or default)
+            current_theme: theme_variant,
 
             // NEW: RGB
             rgb_mode: "Static".to_string(),
@@ -302,7 +333,7 @@ impl NvControlApp {
             container_runtime,
             running_containers: Vec::new(),
 
-            // OSD/MangoHud
+            // OSD (On-Screen Display)
             osd_enabled: false,
             osd_position: "top-left".to_string(),
             osd_metrics: vec![
@@ -417,13 +448,115 @@ impl NvControlApp {
         }
     }
 
-    // NEW: Apply theme
-    #[allow(unused_variables)]
+    // Get emoji icon for current theme
+    fn theme_icon(&self) -> &'static str {
+        match self.current_theme {
+            nvcontrol::themes::ThemeVariant::TokyoNightNight => "🌙",
+            nvcontrol::themes::ThemeVariant::TokyoNightStorm => "⛈️",
+            nvcontrol::themes::ThemeVariant::TokyoNightMoon => "🌕",
+            nvcontrol::themes::ThemeVariant::Dracula => "🧛",
+            nvcontrol::themes::ThemeVariant::RogRed => "🎮",
+            nvcontrol::themes::ThemeVariant::MatrixGreen => "💻",
+            nvcontrol::themes::ThemeVariant::Cyberpunk => "🌆",
+        }
+    }
+
+    // Get current theme colors for use in UI
+    fn theme_colors(&self) -> nvcontrol::themes::ColorPalette {
+        nvcontrol::themes::ColorPalette::from_variant(self.current_theme)
+    }
+
+    // Get temperature color based on current theme
+    fn temp_color(&self, temp: f32) -> egui::Color32 {
+        let colors = self.theme_colors();
+        if temp > 80.0 {
+            colors.temp_hot.to_egui()
+        } else if temp > 70.0 {
+            colors.temp_warm.to_egui()
+        } else if temp > 50.0 {
+            colors.temp_normal.to_egui()
+        } else {
+            colors.temp_cold.to_egui()
+        }
+    }
+
+    // Get usage color based on current theme (for GPU, VRAM, etc.)
+    fn usage_color(&self, usage_percent: f32) -> egui::Color32 {
+        let colors = self.theme_colors();
+        if usage_percent > 80.0 {
+            colors.usage_high.to_egui()
+        } else if usage_percent > 50.0 {
+            colors.usage_medium.to_egui()
+        } else {
+            colors.usage_low.to_egui()
+        }
+    }
+
+    // Get power color based on current theme
+    fn power_color(&self, power_ratio: f32) -> egui::Color32 {
+        let colors = self.theme_colors();
+        if power_ratio > 0.90 {
+            colors.power_high.to_egui()
+        } else if power_ratio > 0.70 {
+            colors.power_normal.to_egui()
+        } else {
+            colors.power_efficient.to_egui()
+        }
+    }
+
+    // Apply theme - converts ThemeVariant to egui visuals
     fn apply_theme(&mut self, ctx: &egui::Context) {
-        let palette = nvcontrol::themes::ColorPalette::from_variant(self.current_theme);
-        // Convert palette to egui visuals
-        let visuals = egui::Visuals::dark();
-        // Apply colors from palette (simplified for now)
+        let theme = nvcontrol::themes::Theme::from_variant(self.current_theme);
+        let colors = &theme.colors;
+
+        let mut visuals = egui::Visuals::dark();
+
+        // Background colors
+        visuals.panel_fill = colors.bg.to_egui();
+        visuals.window_fill = colors.bg_highlight.to_egui();
+        visuals.extreme_bg_color = colors.bg_dark.to_egui();
+        visuals.faint_bg_color = colors.bg_popup.to_egui();
+
+        // Widget colors
+        visuals.widgets.noninteractive.bg_fill = colors.bg_highlight.to_egui();
+        visuals.widgets.noninteractive.fg_stroke = egui::Stroke::new(1.0, colors.fg.to_egui());
+        visuals.widgets.noninteractive.bg_stroke = egui::Stroke::new(1.0, colors.border.to_egui());
+
+        // Minty green buttons - fresh, vibrant mint colors with white text
+        let mint_green = egui::Color32::from_rgb(0x3E, 0xB4, 0x89); // #3EB489 mint green
+        let mint_light = egui::Color32::from_rgb(0x50, 0xC8, 0x78); // #50C878 lighter mint
+        let mint_dark = egui::Color32::from_rgb(0x2E, 0x8B, 0x6A); // #2E8B6A darker mint
+
+        // Buttons at rest - dark mint background with white text
+        visuals.widgets.inactive.bg_fill = mint_dark;
+        visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, egui::Color32::WHITE);
+        visuals.widgets.inactive.bg_stroke = egui::Stroke::new(1.0, mint_green);
+
+        // Buttons on hover - brighter mint
+        visuals.widgets.hovered.bg_fill = mint_green;
+        visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.5, egui::Color32::WHITE);
+        visuals.widgets.hovered.bg_stroke = egui::Stroke::new(1.0, mint_light);
+
+        // Buttons when clicked/active - lightest mint
+        visuals.widgets.active.bg_fill = mint_light;
+        visuals.widgets.active.fg_stroke = egui::Stroke::new(2.0, colors.bg_dark.to_egui());
+        visuals.widgets.active.bg_stroke = egui::Stroke::new(1.0, mint_green);
+
+        visuals.widgets.open.bg_fill = colors.bg_popup.to_egui();
+        visuals.widgets.open.fg_stroke = egui::Stroke::new(1.0, colors.fg.to_egui());
+        visuals.widgets.open.bg_stroke = egui::Stroke::new(1.0, colors.border_highlight.to_egui());
+
+        // Selection color
+        visuals.selection.bg_fill = colors.selection.to_egui();
+        visuals.selection.stroke = egui::Stroke::new(1.0, colors.cyan.to_egui());
+
+        // Hyperlink color
+        visuals.hyperlink_color = colors.blue.to_egui();
+
+        // Warning/error colors
+        visuals.warn_fg_color = colors.yellow.to_egui();
+        visuals.error_fg_color = colors.red.to_egui();
+
         ctx.set_visuals(visuals);
     }
 
@@ -475,35 +608,81 @@ impl eframe::App for NvControlApp {
         // Request repaint after 500ms for smooth updates
         ctx.request_repaint_after(std::time::Duration::from_millis(500));
 
+        // ═══════════════════════════════════════════════════════════════════════
+        // KEYBOARD SHORTCUTS
+        // ═══════════════════════════════════════════════════════════════════════
+        ctx.input(|i| {
+            // Tab navigation: 1-9 for quick access
+            if i.key_pressed(egui::Key::Num1) { self.tab = Tab::Gpu; }
+            if i.key_pressed(egui::Key::Num2) { self.tab = Tab::Overclock; }
+            if i.key_pressed(egui::Key::Num3) { self.tab = Tab::Fan; }
+            if i.key_pressed(egui::Key::Num4) { self.tab = Tab::Display; }
+            if i.key_pressed(egui::Key::Num5) { self.tab = Tab::Vibrance; }
+            if i.key_pressed(egui::Key::Num6) { self.tab = Tab::Hdr; }
+            if i.key_pressed(egui::Key::Num7) { self.tab = Tab::GameProfiles; }
+            if i.key_pressed(egui::Key::Num8) { self.tab = Tab::Osd; }
+            if i.key_pressed(egui::Key::Num9) { self.tab = Tab::Settings; }
+
+            // Ctrl+S to save config
+            if i.modifiers.ctrl && i.key_pressed(egui::Key::S) {
+                self.config.vibrance_levels = self.vibrance_levels.clone();
+                self.config.hdr_enabled = self.hdr_enabled;
+                self.config.theme = self.current_theme.config_key().to_string();
+                self.config.save();
+            }
+
+            // Ctrl+R to reset overclock to stock
+            if i.modifiers.ctrl && i.key_pressed(egui::Key::R) {
+                self.apply_oc_preset(OcPreset::Stock);
+            }
+
+            // Ctrl+T to cycle through themes
+            if i.modifiers.ctrl && i.key_pressed(egui::Key::T) {
+                let themes = nvcontrol::themes::ThemeVariant::all();
+                let current_idx = themes.iter().position(|&t| t == self.current_theme).unwrap_or(0);
+                let next_idx = (current_idx + 1) % themes.len();
+                self.current_theme = themes[next_idx];
+                self.apply_theme(ctx);
+                // Save to config
+                self.config.theme = self.current_theme.config_key().to_string();
+                self.config.save();
+            }
+
+            // F5 to refresh GPU stats display (triggers immediate repaint)
+            if i.key_pressed(egui::Key::F5) {
+                ctx.request_repaint();
+            }
+        });
+
         // Side panel with grouped navigation
+        let sidebar_colors = self.theme_colors();
         egui::SidePanel::left("nav_panel").default_width(170.0).show(ctx, |ui| {
             ui.add_space(8.0);
 
             // Header with GPU stats
             ui.horizontal(|ui| {
-                ui.heading(egui::RichText::new("󰢮 nvcontrol").strong());
+                ui.heading(egui::RichText::new("󰢮 nvcontrol").strong().color(sidebar_colors.blue.to_egui()));
             });
 
             // Live GPU stats in header
             if let Some(stats) = &self.gpu_stats {
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
-                    let temp_color = if stats.temperature > 80.0 {
-                        egui::Color32::from_rgb(255, 85, 85)
-                    } else if stats.temperature > 70.0 {
-                        egui::Color32::from_rgb(255, 170, 0)
-                    } else {
-                        egui::Color32::from_rgb(80, 250, 123)
-                    };
+                    let temp_color = self.temp_color(stats.temperature);
                     ui.label(egui::RichText::new(format!("{}°C", stats.temperature as i32))
                         .small()
                         .color(temp_color));
                     ui.separator();
+                    let usage_color = self.usage_color(stats.utilization);
                     ui.label(egui::RichText::new(format!("{}%", stats.utilization as i32))
-                        .small());
+                        .small()
+                        .color(usage_color));
                     ui.separator();
+                    let power_ratio = if stats.power_limit > 0.0 { stats.power_draw / stats.power_limit } else { 0.0 };
+                    let power_color = self.power_color(power_ratio);
                     ui.label(egui::RichText::new(format!("{:.0}W", stats.power_draw))
-                        .small());
+                        .small()
+                        .color(power_color));
                 });
             }
 
@@ -513,7 +692,7 @@ impl eframe::App for NvControlApp {
 
             egui::ScrollArea::vertical().show(ui, |ui| {
                 // GPU & Hardware section
-                ui.label(egui::RichText::new("󰍹 GPU & Hardware").small().strong().color(egui::Color32::from_rgb(139, 233, 253)));
+                ui.label(egui::RichText::new("󰍹 GPU & Hardware").small().strong().color(sidebar_colors.cyan.to_egui()));
                 ui.add_space(2.0);
                 if ui.selectable_label(matches!(self.tab, Tab::Gpu), "   🎮 GPU Status").clicked() {
                     self.tab = Tab::Gpu;
@@ -546,7 +725,7 @@ impl eframe::App for NvControlApp {
                 ui.add_space(4.0);
 
                 // Display section
-                ui.label(egui::RichText::new("🖥️ Display").small().strong().color(egui::Color32::from_rgb(189, 147, 249)));
+                ui.label(egui::RichText::new("🖥️ Display").small().strong().color(sidebar_colors.purple.to_egui()));
                 ui.add_space(2.0);
                 if ui.selectable_label(matches!(self.tab, Tab::Display), "   🖥️ Display").clicked() {
                     self.tab = Tab::Display;
@@ -576,7 +755,7 @@ impl eframe::App for NvControlApp {
                 ui.add_space(4.0);
 
                 // Gaming section
-                ui.label(egui::RichText::new("🎯 Gaming").small().strong().color(egui::Color32::from_rgb(80, 250, 123)));
+                ui.label(egui::RichText::new("🎯 Gaming").small().strong().color(sidebar_colors.green.to_egui()));
                 ui.add_space(2.0);
                 if ui.selectable_label(matches!(self.tab, Tab::GameProfiles), "   🎮 Profiles").clicked() {
                     self.tab = Tab::GameProfiles;
@@ -604,7 +783,7 @@ impl eframe::App for NvControlApp {
                 ui.add_space(4.0);
 
                 // System section
-                ui.label(egui::RichText::new("⚙️ System").small().strong().color(egui::Color32::from_rgb(255, 121, 198)));
+                ui.label(egui::RichText::new("⚙️ System").small().strong().color(sidebar_colors.magenta.to_egui()));
                 ui.add_space(2.0);
                 if ui.selectable_label(matches!(self.tab, Tab::ShaderCache), "   🎨 Shaders").clicked() {
                     self.tab = Tab::ShaderCache;
@@ -700,10 +879,11 @@ impl eframe::App for NvControlApp {
                     }
 
                     // Two-column layout for GPU info
+                    let theme_colors = self.theme_colors();
                     ui.columns(2, |columns| {
                         // Left column: GPU Identity Card
                         columns[0].group(|ui| {
-                            ui.label(egui::RichText::new("󰢮 GPU Information").strong().color(egui::Color32::from_rgb(139, 233, 253)));
+                            ui.label(egui::RichText::new("󰢮 GPU Information").strong().color(theme_colors.cyan.to_egui()));
                             ui.separator();
 
                             if let Some(ref stats) = self.gpu_stats {
@@ -714,18 +894,20 @@ impl eframe::App for NvControlApp {
 
                                 ui.add_space(4.0);
 
-                                // Architecture badge
+                                // Architecture badge with theme-aware colors
                                 ui.horizontal(|ui| {
                                     let arch_color = match stats.architecture.as_str() {
-                                        "Blackwell" => egui::Color32::from_rgb(255, 215, 0),  // Gold
-                                        "Ada Lovelace" => egui::Color32::from_rgb(80, 250, 123),  // Green
-                                        "Ampere" => egui::Color32::from_rgb(139, 233, 253),  // Cyan
-                                        "Turing" => egui::Color32::from_rgb(189, 147, 249),  // Purple
-                                        _ => egui::Color32::GRAY,
+                                        "Blackwell" => theme_colors.yellow.to_egui(),
+                                        "Ada Lovelace" => theme_colors.green.to_egui(),
+                                        "Ampere" => theme_colors.cyan.to_egui(),
+                                        "Turing" => theme_colors.purple.to_egui(),
+                                        "Volta" => theme_colors.blue.to_egui(),
+                                        "Pascal" => theme_colors.orange.to_egui(),
+                                        _ => theme_colors.fg_dark.to_egui(),
                                     };
                                     ui.label(egui::RichText::new(format!("󰘚 {}", stats.architecture))
                                         .color(arch_color)
-                                        .background_color(egui::Color32::from_rgb(40, 42, 54)));
+                                        .background_color(theme_colors.bg_highlight.to_egui()));
                                     ui.label(format!("SM {}", stats.compute_capability));
                                 });
 
@@ -756,20 +938,15 @@ impl eframe::App for NvControlApp {
 
                         // Right column: Real-time Stats
                         columns[1].group(|ui| {
-                            ui.label(egui::RichText::new("📊 Real-time Metrics").strong().color(egui::Color32::from_rgb(80, 250, 123)));
+                            let theme_colors = self.theme_colors();
+                            ui.label(egui::RichText::new("📊 Real-time Metrics").strong().color(theme_colors.green.to_egui()));
                             ui.separator();
 
                             if let Some(ref stats) = self.gpu_stats {
-                                // Temperature with color-coded background
+                                // Temperature with theme-aware color
                                 ui.horizontal(|ui| {
                                     ui.label("🌡️ Temperature:");
-                                    let temp_color = if stats.temperature > 80.0 {
-                                        egui::Color32::from_rgb(255, 85, 85)
-                                    } else if stats.temperature > 70.0 {
-                                        egui::Color32::from_rgb(255, 184, 108)
-                                    } else {
-                                        egui::Color32::from_rgb(80, 250, 123)
-                                    };
+                                    let temp_color = self.temp_color(stats.temperature);
                                     ui.label(egui::RichText::new(format!("{:.0}°C", stats.temperature))
                                         .color(temp_color)
                                         .strong()
@@ -778,16 +955,10 @@ impl eframe::App for NvControlApp {
 
                                 ui.add_space(4.0);
 
-                                // GPU Usage with colored progress bar
+                                // GPU Usage with theme-aware progress bar
                                 ui.horizontal(|ui| {
                                     ui.label("📈 GPU:");
-                                    let usage_color = if stats.utilization > 80.0 {
-                                        egui::Color32::from_rgb(255, 85, 85)
-                                    } else if stats.utilization > 50.0 {
-                                        egui::Color32::from_rgb(255, 184, 108)
-                                    } else {
-                                        egui::Color32::from_rgb(80, 250, 123)
-                                    };
+                                    let usage_color = self.usage_color(stats.utilization);
                                     ui.add(
                                         egui::ProgressBar::new(stats.utilization / 100.0)
                                             .text(format!("{:.0}%", stats.utilization))
@@ -795,19 +966,13 @@ impl eframe::App for NvControlApp {
                                     );
                                 });
 
-                                // VRAM Usage
+                                // VRAM Usage with theme-aware color
                                 ui.horizontal(|ui| {
                                     ui.label("💾 VRAM:");
                                     let used_gb = stats.memory_used as f64 / 1e9;
                                     let total_gb = stats.memory_total as f64 / 1e9;
                                     let usage_ratio = stats.memory_used as f32 / stats.memory_total.max(1) as f32;
-                                    let vram_color = if usage_ratio > 0.9 {
-                                        egui::Color32::from_rgb(255, 85, 85)
-                                    } else if usage_ratio > 0.7 {
-                                        egui::Color32::from_rgb(255, 184, 108)
-                                    } else {
-                                        egui::Color32::from_rgb(139, 233, 253)
-                                    };
+                                    let vram_color = self.usage_color(usage_ratio * 100.0);
                                     ui.add(
                                         egui::ProgressBar::new(usage_ratio)
                                             .text(format!("{:.1}/{:.0} GB", used_gb, total_gb))
@@ -815,7 +980,7 @@ impl eframe::App for NvControlApp {
                                     );
                                 });
 
-                                // Power with limit indicator
+                                // Power with theme-aware color
                                 ui.horizontal(|ui| {
                                     ui.label("⚡ Power:");
                                     let power_ratio = if stats.power_limit > 0.0 {
@@ -823,13 +988,7 @@ impl eframe::App for NvControlApp {
                                     } else {
                                         0.0
                                     };
-                                    let power_color = if power_ratio > 0.95 {
-                                        egui::Color32::from_rgb(255, 85, 85)
-                                    } else if power_ratio > 0.8 {
-                                        egui::Color32::from_rgb(255, 184, 108)
-                                    } else {
-                                        egui::Color32::from_rgb(189, 147, 249)
-                                    };
+                                    let power_color = self.power_color(power_ratio);
                                     ui.add(
                                         egui::ProgressBar::new(power_ratio.min(1.0))
                                             .text(format!("{:.0}W / {:.0}W", stats.power_draw, stats.power_limit))
@@ -861,16 +1020,17 @@ impl eframe::App for NvControlApp {
                         });
                     });
 
-                    ui.separator();
+                    ui.add_space(8.0);
 
-                    // Quick actions
+                    // Quick actions with themed styling
+                    let qa_colors = self.theme_colors();
                     ui.group(|ui| {
-                        ui.label("🚀 Quick Actions");
+                        ui.label(egui::RichText::new("🚀 Quick Actions").strong().color(qa_colors.yellow.to_egui()));
                         ui.separator();
 
                         ui.horizontal(|ui| {
-                            if ui.button("📊 Open Live Monitor (TUI)").clicked() {
-                                // Launch the TUI monitor in a new terminal
+                            let tui_btn = egui::Button::new(egui::RichText::new("📊 Live Monitor (TUI)").color(qa_colors.cyan.to_egui()));
+                            if ui.add(tui_btn).on_hover_text("Open terminal-based monitor").clicked() {
                                 std::thread::spawn(|| {
                                     let _ = std::process::Command::new("x-terminal-emulator")
                                         .args(["-e", "nvctl", "gpu", "stat"])
@@ -878,27 +1038,36 @@ impl eframe::App for NvControlApp {
                                 });
                             }
 
-                            if ui.button("🔧 Show Capabilities").clicked() {
-                                // Could open a popup or navigate to settings
+                            let cap_btn = egui::Button::new(egui::RichText::new("🔧 Capabilities").color(qa_colors.green.to_egui()));
+                            if ui.add(cap_btn).on_hover_text("Show GPU capabilities").clicked() {
+                                self.tab = Tab::Settings;
                             }
 
-                            if ui.button("🗑️ Clear Graphs").clicked() {
+                            let clear_btn = egui::Button::new(egui::RichText::new("🗑️ Clear Graphs").color(qa_colors.orange.to_egui()));
+                            if ui.add(clear_btn).on_hover_text("Reset monitoring history").clicked() {
                                 self.monitoring_dashboard.clear_all();
+                            }
+
+                            // Add OC shortcut
+                            let oc_btn = egui::Button::new(egui::RichText::new("⚡ Quick OC").color(qa_colors.purple.to_egui()));
+                            if ui.add(oc_btn).on_hover_text("Go to Overclock tab (key: 2)").clicked() {
+                                self.tab = Tab::Overclock;
                             }
                         });
                     });
 
                     ui.add_space(10.0);
 
-                    // Real-time monitoring graphs
+                    // Real-time monitoring graphs with theme colors
+                    let graph_colors = self.theme_colors();
                     ui.group(|ui| {
-                        ui.label("📈 Real-Time Monitoring");
+                        ui.label(egui::RichText::new("📈 Real-Time Monitoring").strong().color(graph_colors.blue.to_egui()));
                         ui.separator();
 
                         use egui_plot::{Line, Plot, PlotPoints};
 
                         // Temperature graph
-                        ui.label("🌡️ Temperature History");
+                        ui.label(egui::RichText::new("🌡️ Temperature History").color(graph_colors.red.to_egui()));
                         let temp_points: PlotPoints = self
                             .monitoring_dashboard
                             .temperature
@@ -908,38 +1077,38 @@ impl eframe::App for NvControlApp {
                             .collect();
 
                         Plot::new("temperature_plot")
-                            .height(150.0)
+                            .height(120.0)
                             .width(ui.available_width())
-                            .y_axis_label("Temperature (°C)")
+                            .y_axis_label("°C")
                             .allow_drag(false)
                             .allow_zoom(false)
                             .show(ui, |plot_ui| {
                                 plot_ui.line(
                                     Line::new(temp_points)
-                                        .color(egui::Color32::from_rgb(239, 68, 68))
+                                        .color(graph_colors.red.to_egui())
                                         .name("Temperature"),
                                 );
                             });
 
-                        // Show stats
+                        // Show stats inline
                         if let (Some(min), Some(max), Some(avg)) = (
                             self.monitoring_dashboard.temperature.min_value(),
                             self.monitoring_dashboard.temperature.max_value(),
                             self.monitoring_dashboard.temperature.avg_value(),
                         ) {
                             ui.horizontal(|ui| {
-                                ui.label(format!("Min: {:.1}°C", min));
+                                ui.label(egui::RichText::new(format!("Min: {:.0}°C", min)).small().color(graph_colors.cyan.to_egui()));
                                 ui.separator();
-                                ui.label(format!("Max: {:.1}°C", max));
+                                ui.label(egui::RichText::new(format!("Max: {:.0}°C", max)).small().color(graph_colors.red.to_egui()));
                                 ui.separator();
-                                ui.label(format!("Avg: {:.1}°C", avg));
+                                ui.label(egui::RichText::new(format!("Avg: {:.0}°C", avg)).small().color(graph_colors.yellow.to_egui()));
                             });
                         }
 
-                        ui.add_space(10.0);
+                        ui.add_space(8.0);
 
                         // GPU Utilization graph
-                        ui.label("📊 GPU Utilization History");
+                        ui.label(egui::RichText::new("📊 GPU Utilization History").color(graph_colors.cyan.to_egui()));
                         let util_points: PlotPoints = self
                             .monitoring_dashboard
                             .gpu_utilization
@@ -949,15 +1118,15 @@ impl eframe::App for NvControlApp {
                             .collect();
 
                         Plot::new("utilization_plot")
-                            .height(150.0)
+                            .height(120.0)
                             .width(ui.available_width())
-                            .y_axis_label("Utilization (%)")
+                            .y_axis_label("%")
                             .allow_drag(false)
                             .allow_zoom(false)
                             .show(ui, |plot_ui| {
                                 plot_ui.line(
                                     Line::new(util_points)
-                                        .color(egui::Color32::from_rgb(59, 130, 246))
+                                        .color(graph_colors.cyan.to_egui())
                                         .name("GPU Usage"),
                                 );
                             });
@@ -968,18 +1137,18 @@ impl eframe::App for NvControlApp {
                             self.monitoring_dashboard.gpu_utilization.avg_value(),
                         ) {
                             ui.horizontal(|ui| {
-                                ui.label(format!("Min: {:.1}%", min));
+                                ui.label(egui::RichText::new(format!("Min: {:.0}%", min)).small().color(graph_colors.green.to_egui()));
                                 ui.separator();
-                                ui.label(format!("Max: {:.1}%", max));
+                                ui.label(egui::RichText::new(format!("Max: {:.0}%", max)).small().color(graph_colors.red.to_egui()));
                                 ui.separator();
-                                ui.label(format!("Avg: {:.1}%", avg));
+                                ui.label(egui::RichText::new(format!("Avg: {:.0}%", avg)).small().color(graph_colors.yellow.to_egui()));
                             });
                         }
 
-                        ui.add_space(10.0);
+                        ui.add_space(8.0);
 
                         // Power Draw graph
-                        ui.label("⚡ Power Draw History");
+                        ui.label(egui::RichText::new("⚡ Power Draw History").color(graph_colors.yellow.to_egui()));
                         let power_points: PlotPoints = self
                             .monitoring_dashboard
                             .power
@@ -989,15 +1158,15 @@ impl eframe::App for NvControlApp {
                             .collect();
 
                         Plot::new("power_plot")
-                            .height(150.0)
+                            .height(120.0)
                             .width(ui.available_width())
-                            .y_axis_label("Power (W)")
+                            .y_axis_label("W")
                             .allow_drag(false)
                             .allow_zoom(false)
                             .show(ui, |plot_ui| {
                                 plot_ui.line(
                                     Line::new(power_points)
-                                        .color(egui::Color32::from_rgb(251, 191, 36))
+                                        .color(graph_colors.yellow.to_egui())
                                         .name("Power Draw"),
                                 );
                             });
@@ -1008,18 +1177,18 @@ impl eframe::App for NvControlApp {
                             self.monitoring_dashboard.power.avg_value(),
                         ) {
                             ui.horizontal(|ui| {
-                                ui.label(format!("Min: {:.1}W", min));
+                                ui.label(egui::RichText::new(format!("Min: {:.0}W", min)).small().color(graph_colors.green.to_egui()));
                                 ui.separator();
-                                ui.label(format!("Max: {:.1}W", max));
+                                ui.label(egui::RichText::new(format!("Max: {:.0}W", max)).small().color(graph_colors.red.to_egui()));
                                 ui.separator();
-                                ui.label(format!("Avg: {:.1}W", avg));
+                                ui.label(egui::RichText::new(format!("Avg: {:.0}W", avg)).small().color(graph_colors.yellow.to_egui()));
                             });
                         }
 
-                        ui.add_space(10.0);
+                        ui.add_space(8.0);
 
                         // Fan Speed graph
-                        ui.label("🌀 Fan Speed History");
+                        ui.label(egui::RichText::new("🌀 Fan Speed History").color(graph_colors.purple.to_egui()));
                         let fan_points: PlotPoints = self
                             .monitoring_dashboard
                             .fan_speed
@@ -1029,15 +1198,15 @@ impl eframe::App for NvControlApp {
                             .collect();
 
                         Plot::new("fan_plot")
-                            .height(150.0)
+                            .height(120.0)
                             .width(ui.available_width())
-                            .y_axis_label("Fan Speed (%)")
+                            .y_axis_label("%")
                             .allow_drag(false)
                             .allow_zoom(false)
                             .show(ui, |plot_ui| {
                                 plot_ui.line(
                                     Line::new(fan_points)
-                                        .color(egui::Color32::from_rgb(16, 185, 129))
+                                        .color(graph_colors.purple.to_egui())
                                         .name("Fan Speed"),
                                 );
                             });
@@ -1048,11 +1217,11 @@ impl eframe::App for NvControlApp {
                             self.monitoring_dashboard.fan_speed.avg_value(),
                         ) {
                             ui.horizontal(|ui| {
-                                ui.label(format!("Min: {:.1}%", min));
+                                ui.label(egui::RichText::new(format!("Min: {:.0}%", min)).small().color(graph_colors.green.to_egui()));
                                 ui.separator();
-                                ui.label(format!("Max: {:.1}%", max));
+                                ui.label(egui::RichText::new(format!("Max: {:.0}%", max)).small().color(graph_colors.red.to_egui()));
                                 ui.separator();
-                                ui.label(format!("Avg: {:.1}%", avg));
+                                ui.label(egui::RichText::new(format!("Avg: {:.0}%", avg)).small().color(graph_colors.yellow.to_egui()));
                             });
                         }
                     });
@@ -1060,94 +1229,150 @@ impl eframe::App for NvControlApp {
             }
             Tab::Vibrance => {
                 egui::CentralPanel::default().show(ctx, |ui| {
+                    let vib_colors = self.theme_colors();
                     ui.heading("🌈 Digital Vibrance Control");
 
-                    // Native vibrance status
+                    // Native vibrance status - try native NVKMS first
                     ui.group(|ui| {
-                        ui.label("📋 Native Vibrance Status");
+                        ui.label(egui::RichText::new("📋 Vibrance Backend Status").strong().color(vib_colors.cyan.to_egui()));
                         ui.separator();
 
-                        if vibrance::is_available() {
-                            ui.colored_label(
-                                egui::Color32::from_rgb(16, 185, 129),
-                                "✅ Native Vibrance Available (Pure Rust)",
-                            );
-
-                            match vibrance::get_driver_info() {
-                                Ok(info) => {
-                                    ui.label(info);
-                                    ui.label("Using direct NVKMS ioctls - no external dependencies")
-                                },
-                                Err(e) => {
+                        // Try native NVKMS controller first (preferred for 580+ drivers)
+                        match nvcontrol::vibrance_native::get_vibrance_controller() {
+                            Ok(guard) => {
+                                if let Some(controller) = guard.as_ref() {
                                     ui.colored_label(
-                                        egui::Color32::from_rgb(239, 68, 68),
-                                        format!("❌ {}", e),
-                                    )
-                                },
-                            };
-                        } else {
-                            ui.colored_label(
-                                egui::Color32::from_rgb(239, 68, 68),
-                                "❌ Native Vibrance Not Available",
-                            );
-                            ui.label("Requires NVIDIA open drivers 580+");
-                            ui.label("Install: sudo pacman -S nvidia-open-dkms");
-                        }
-                    });
+                                        vib_colors.green.to_egui(),
+                                        "✅ Native Digital Vibrance Available",
+                                    );
+                                    ui.label(egui::RichText::new(format!("Driver: {} (Open)", controller.driver_version)).small());
+                                    ui.label(egui::RichText::new("Using direct NVKMS ioctls - no external dependencies").small().weak());
 
-                    ui.separator();
-
-                    // Per-display vibrance control
-                    ui.group(|ui| {
-                        ui.label("🖥️ Per-Display Vibrance Control");
-                        ui.separator();
-
-                        match vibrance::get_displays() {
-                            Ok(displays) => {
-                                let mut changed = false;
-
-                                for (i, display) in displays.iter().enumerate() {
-                                    ui.horizontal(|ui| {
-                                        ui.label(format!("Display {}: {}", i, display));
-
-                                        // Get current vibrance
-                                        let current_vibrance =
-                                            vibrance::get_display_vibrance(i).unwrap_or(0);
-                                        let mut percentage =
-                                            vibrance::vibrance_to_percentage(current_vibrance)
-                                                as i32;
-
-                                        if ui
-                                            .add(
-                                                egui::Slider::new(&mut percentage, 0..=200)
-                                                    .suffix("%")
-                                                    .text("Vibrance"),
-                                            )
-                                            .changed()
-                                        {
-                                            let vibrance_val =
-                                                vibrance::percentage_to_vibrance(percentage as u32);
-                                            let display_values = vec![(i, vibrance_val)];
-                                            if let Err(e) = vibrance::set_vibrance(&display_values)
-                                            {
-                                                eprintln!("Failed to set vibrance: {}", e);
-                                            } else {
-                                                changed = true;
-                                            }
-                                        }
-                                    });
-                                }
-
-                                if changed {
-                                    // Update config
-                                    // TODO: Save vibrance settings to config
+                                    // Show detected displays from native controller
+                                    let displays = controller.list_displays();
+                                    if !displays.is_empty() {
+                                        ui.add_space(4.0);
+                                        ui.label(egui::RichText::new(format!("Detected {} display(s)", displays.len())).small().color(vib_colors.yellow.to_egui()));
+                                    }
                                 }
                             }
                             Err(e) => {
-                                ui.colored_label(
-                                    egui::Color32::from_rgb(239, 68, 68),
-                                    format!("❌ Failed to detect displays: {}", e),
-                                );
+                                // Native not available, check for nvibrant fallback
+                                if vibrance::is_available() {
+                                    ui.colored_label(
+                                        vib_colors.yellow.to_egui(),
+                                        "⚠️ Using nvibrant fallback",
+                                    );
+                                    match vibrance::get_driver_info() {
+                                        Ok(info) => ui.label(egui::RichText::new(format!("Driver: {}", info)).small()),
+                                        Err(_) => ui.label(egui::RichText::new("Driver version unknown").small().weak()),
+                                    };
+                                } else {
+                                    ui.colored_label(
+                                        vib_colors.red.to_egui(),
+                                        "❌ Vibrance Not Available",
+                                    );
+                                    ui.label(egui::RichText::new(format!("Error: {}", e)).small().weak());
+                                    ui.add_space(4.0);
+                                    ui.label("Requirements:");
+                                    ui.label(egui::RichText::new("• NVIDIA open drivers 580+").small());
+                                    ui.label(egui::RichText::new("• nvidia_drm.modeset=1 in kernel params").small());
+                                    ui.label(egui::RichText::new("• User in 'video' group or run as root").small());
+                                }
+                            }
+                        }
+                    });
+
+                    ui.add_space(8.0);
+
+                    // Per-display vibrance control using native controller
+                    ui.group(|ui| {
+                        ui.label(egui::RichText::new("🖥️ Per-Display Vibrance Control").strong().color(vib_colors.purple.to_egui()));
+                        ui.separator();
+
+                        // Try native controller first
+                        match nvcontrol::vibrance_native::get_vibrance_controller() {
+                            Ok(guard) => {
+                                if let Some(controller) = guard.as_ref() {
+                                    let displays = controller.list_displays();
+                                    if displays.is_empty() {
+                                        ui.label(egui::RichText::new("No displays detected").weak().italics());
+                                    } else {
+                                        for (_device_id, connector_idx, name, connected) in &displays {
+                                            ui.horizontal(|ui| {
+                                                let status_icon = if *connected { "🟢" } else { "🔴" };
+                                                ui.label(egui::RichText::new(format!("{} {}", status_icon, name)).strong());
+
+                                                // Get current vibrance from connectors
+                                                let current_pct: i32 = controller.connectors
+                                                    .get(*connector_idx as usize)
+                                                    .map(|c| controller.vibrance_to_percentage(c.current_vibrance) as i32)
+                                                    .unwrap_or(100);
+
+                                                let mut percentage = current_pct;
+                                                if ui
+                                                    .add(
+                                                        egui::Slider::new(&mut percentage, 0..=200)
+                                                            .suffix("%")
+                                                            .text("Vibrance"),
+                                                    )
+                                                    .changed()
+                                                {
+                                                    if let Err(e) = nvcontrol::vibrance_native::set_display_vibrance_native(
+                                                        0, *connector_idx, percentage as u32
+                                                    ) {
+                                                        eprintln!("Failed to set vibrance: {}", e);
+                                                    }
+                                                }
+                                            });
+                                        }
+                                    }
+                                } else {
+                                    ui.label(egui::RichText::new("Controller not initialized").weak().italics());
+                                }
+                            }
+                            Err(_) => {
+                                // Fall back to nvibrant-based control
+                                match vibrance::get_displays() {
+                                    Ok(displays) => {
+                                        for (i, display) in displays.iter().enumerate() {
+                                            ui.horizontal(|ui| {
+                                                ui.label(format!("Display {}: {}", i, display));
+
+                                                let current_vibrance =
+                                                    vibrance::get_display_vibrance(i).unwrap_or(0);
+                                                let mut percentage =
+                                                    vibrance::vibrance_to_percentage(current_vibrance)
+                                                        as i32;
+
+                                                if ui
+                                                    .add(
+                                                        egui::Slider::new(&mut percentage, 0..=200)
+                                                            .suffix("%")
+                                                            .text("Vibrance"),
+                                                    )
+                                                    .changed()
+                                                {
+                                                    let vibrance_val =
+                                                        vibrance::percentage_to_vibrance(percentage as u32);
+                                                    let display_values = vec![(i, vibrance_val)];
+                                                    if let Err(e) = vibrance::set_vibrance(&display_values)
+                                                    {
+                                                        eprintln!("Failed to set vibrance: {}", e);
+                                                    }
+                                                }
+                                            });
+                                        }
+                                    }
+                                    Err(e) => {
+                                        ui.colored_label(
+                                            vib_colors.red.to_egui(),
+                                            format!("❌ Failed to detect displays: {}", e),
+                                        );
+                                        ui.add_space(4.0);
+                                        ui.label(egui::RichText::new("Try: nvidia-settings -q all | grep -i vibrance").small().monospace());
+                                    }
+                                }
                             }
                         }
                     });
@@ -1436,60 +1661,104 @@ impl eframe::App for NvControlApp {
                     }
 
                     // Two-column layout
+                    let oc_colors = self.theme_colors();
                     ui.columns(2, |columns| {
-                        // Left: Presets and Manual Tuning
+                        // Left: Presets with detailed cards
                         columns[0].group(|ui| {
-                            ui.label(egui::RichText::new("🎯 Quick Presets").strong().color(egui::Color32::from_rgb(139, 233, 253)));
+                            ui.label(egui::RichText::new("🎯 Performance Presets").strong().color(oc_colors.cyan.to_egui()));
                             ui.separator();
+                            ui.add_space(4.0);
 
-                            ui.horizontal(|ui| {
-                                let preset_btn = |ui: &mut egui::Ui, preset: OcPreset, current: OcPreset, label: &str, color: egui::Color32| -> bool {
-                                    let is_selected = preset == current;
-                                    let btn = egui::Button::new(egui::RichText::new(label).color(if is_selected { egui::Color32::BLACK } else { color }));
-                                    let btn = if is_selected {
-                                        btn.fill(color)
-                                    } else {
-                                        btn
-                                    };
-                                    ui.add(btn).clicked()
+                            // Preset card helper
+                            let preset_card = |ui: &mut egui::Ui, preset: OcPreset, current: OcPreset,
+                                             icon: &str, name: &str, desc: &str,
+                                             specs: &str, color: egui::Color32, risk: &str| -> bool {
+                                let is_selected = preset == current;
+                                let frame_fill = if is_selected {
+                                    color.linear_multiply(0.3)
+                                } else {
+                                    egui::Color32::from_gray(30)
+                                };
+                                let frame_stroke = if is_selected {
+                                    egui::Stroke::new(2.0, color)
+                                } else {
+                                    egui::Stroke::new(1.0, egui::Color32::from_gray(50))
                                 };
 
-                                if preset_btn(ui, OcPreset::Stock, self.oc_preset, "📊 Stock", egui::Color32::from_rgb(98, 114, 164)) {
-                                    self.apply_oc_preset(OcPreset::Stock);
-                                }
-                                if preset_btn(ui, OcPreset::MildOc, self.oc_preset, "🔧 Mild", egui::Color32::from_rgb(80, 250, 123)) {
-                                    self.apply_oc_preset(OcPreset::MildOc);
-                                }
-                                if preset_btn(ui, OcPreset::Performance, self.oc_preset, "⚡ Perf", egui::Color32::from_rgb(255, 184, 108)) {
-                                    self.apply_oc_preset(OcPreset::Performance);
-                                }
-                                if preset_btn(ui, OcPreset::Extreme, self.oc_preset, "🔥 Max", egui::Color32::from_rgb(255, 85, 85)) {
-                                    self.apply_oc_preset(OcPreset::Extreme);
-                                }
-                            });
-
-                            // Preset description
-                            let preset_desc = match self.oc_preset {
-                                OcPreset::Stock => "Default clocks, 80% power limit",
-                                OcPreset::MildOc => "+75 MHz Core, +500 MHz VRAM, 90% power",
-                                OcPreset::Performance => "+150 MHz Core, +1000 MHz VRAM, 95% power",
-                                OcPreset::Extreme => "+200 MHz Core, +1500 MHz VRAM, 105% power (RTX 5090)",
+                                let resp = egui::Frame::none()
+                                    .fill(frame_fill)
+                                    .stroke(frame_stroke)
+                                    .rounding(6.0)
+                                    .inner_margin(8.0)
+                                    .show(ui, |ui| {
+                                        ui.horizontal(|ui| {
+                                            // Icon
+                                            ui.label(egui::RichText::new(icon).size(24.0).color(color));
+                                            ui.vertical(|ui| {
+                                                ui.horizontal(|ui| {
+                                                    ui.label(egui::RichText::new(name).strong().color(if is_selected { color } else { egui::Color32::WHITE }));
+                                                    if is_selected {
+                                                        ui.label(egui::RichText::new("✓").color(color));
+                                                    }
+                                                });
+                                                ui.label(egui::RichText::new(desc).small().weak());
+                                                ui.label(egui::RichText::new(specs).small().monospace().color(egui::Color32::from_gray(140)));
+                                            });
+                                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                                ui.label(egui::RichText::new(risk).small().color(color));
+                                            });
+                                        });
+                                    });
+                                resp.response.interact(egui::Sense::click()).clicked()
                             };
-                            ui.label(egui::RichText::new(preset_desc).small().weak());
+
+                            // Stock preset
+                            if preset_card(ui, OcPreset::Stock, self.oc_preset,
+                                "📊", "Stock", "Factory default settings",
+                                "0/0/80%", egui::Color32::from_rgb(98, 114, 164), "Safe") {
+                                self.apply_oc_preset(OcPreset::Stock);
+                            }
+                            ui.add_space(4.0);
+
+                            // Mild OC
+                            if preset_card(ui, OcPreset::MildOc, self.oc_preset,
+                                "🔧", "Mild OC", "Modest gains, minimal risk",
+                                "+75/+500/90%", egui::Color32::from_rgb(80, 250, 123), "Low") {
+                                self.apply_oc_preset(OcPreset::MildOc);
+                            }
+                            ui.add_space(4.0);
+
+                            // Performance
+                            if preset_card(ui, OcPreset::Performance, self.oc_preset,
+                                "⚡", "Performance", "Balanced speed & stability",
+                                "+150/+1000/95%", egui::Color32::from_rgb(255, 184, 108), "Medium") {
+                                self.apply_oc_preset(OcPreset::Performance);
+                            }
+                            ui.add_space(4.0);
+
+                            // Extreme
+                            if preset_card(ui, OcPreset::Extreme, self.oc_preset,
+                                "🔥", "Extreme", "Maximum performance (RTX 5090)",
+                                "+200/+1500/105%", egui::Color32::from_rgb(255, 85, 85), "High") {
+                                self.apply_oc_preset(OcPreset::Extreme);
+                            }
                         });
 
                         columns[0].add_space(8.0);
 
                         columns[0].group(|ui| {
-                            ui.label(egui::RichText::new("🎛️ Manual Tuning").strong().color(egui::Color32::from_rgb(80, 250, 123)));
+                            ui.label(egui::RichText::new("🎛️ Manual Tuning").strong().color(oc_colors.green.to_egui()));
                             ui.separator();
 
                             // GPU Clock slider with visual indicator
-                            ui.label("Core Clock Offset");
+                            ui.horizontal(|ui| {
+                                ui.label(egui::RichText::new("Core Clock").small().strong());
+                                ui.label(egui::RichText::new("(GPU boost offset)").small().weak());
+                            });
                             let gpu_color = if self.gpu_offset > 0 {
-                                egui::Color32::from_rgb(80, 250, 123)
+                                oc_colors.green.to_egui()
                             } else if self.gpu_offset < 0 {
-                                egui::Color32::from_rgb(139, 233, 253)
+                                oc_colors.cyan.to_egui()
                             } else {
                                 egui::Color32::GRAY
                             };
@@ -1502,14 +1771,17 @@ impl eframe::App for NvControlApp {
                                 ui.label(egui::RichText::new(format!("{:+} MHz", self.gpu_offset)).strong().color(gpu_color));
                             });
 
-                            ui.add_space(4.0);
+                            ui.add_space(6.0);
 
                             // Memory Clock slider
-                            ui.label("Memory Clock Offset");
+                            ui.horizontal(|ui| {
+                                ui.label(egui::RichText::new("Memory Clock").small().strong());
+                                ui.label(egui::RichText::new("(VRAM speed offset)").small().weak());
+                            });
                             let mem_color = if self.memory_offset > 0 {
-                                egui::Color32::from_rgb(189, 147, 249)
+                                oc_colors.purple.to_egui()
                             } else if self.memory_offset < 0 {
-                                egui::Color32::from_rgb(139, 233, 253)
+                                oc_colors.cyan.to_egui()
                             } else {
                                 egui::Color32::GRAY
                             };
@@ -1522,16 +1794,19 @@ impl eframe::App for NvControlApp {
                                 ui.label(egui::RichText::new(format!("{:+} MHz", self.memory_offset)).strong().color(mem_color));
                             });
 
-                            ui.add_space(4.0);
+                            ui.add_space(6.0);
 
                             // Power Limit slider
-                            ui.label("Power Limit");
+                            ui.horizontal(|ui| {
+                                ui.label(egui::RichText::new("Power Limit").small().strong());
+                                ui.label(egui::RichText::new("(max TDP percentage)").small().weak());
+                            });
                             let power_color = if self.power_limit_percent > 100 {
-                                egui::Color32::from_rgb(255, 85, 85)
+                                oc_colors.red.to_egui()
                             } else if self.power_limit_percent < 80 {
-                                egui::Color32::from_rgb(80, 250, 123)
+                                oc_colors.green.to_egui()
                             } else {
-                                egui::Color32::from_rgb(255, 184, 108)
+                                oc_colors.yellow.to_egui()
                             };
                             ui.horizontal(|ui| {
                                 ui.add(
@@ -1541,14 +1816,17 @@ impl eframe::App for NvControlApp {
                                 ui.label(egui::RichText::new(format!("{}%", self.power_limit_percent)).strong().color(power_color));
                             });
 
-                            ui.add_space(10.0);
+                            ui.add_space(12.0);
 
+                            // Action buttons with better styling
                             ui.horizontal(|ui| {
-                                if ui.button(egui::RichText::new("✅ Apply").color(egui::Color32::from_rgb(80, 250, 123))).clicked() {
+                                let apply_btn = egui::Button::new(egui::RichText::new("✅ Apply OC").strong())
+                                    .fill(oc_colors.green.to_egui().linear_multiply(0.3));
+                                if ui.add(apply_btn).on_hover_text("Apply overclock settings to GPU").clicked() {
                                     self.apply_overclock();
                                 }
 
-                                if ui.button("🔄 Reset").clicked() {
+                                if ui.button("🔄 Reset to Stock").on_hover_text("Ctrl+R").clicked() {
                                     self.apply_oc_preset(OcPreset::Stock);
                                 }
 
@@ -1558,29 +1836,29 @@ impl eframe::App for NvControlApp {
                             });
                         });
 
-                        // Right: Safety info and warnings
+                        // Right: Safety info and live monitoring
                         columns[1].group(|ui| {
-                            ui.label(egui::RichText::new("⚠️ Safety Information").strong().color(egui::Color32::from_rgb(255, 184, 108)));
+                            ui.label(egui::RichText::new("⚠️ Safety Information").strong().color(oc_colors.orange.to_egui()));
                             ui.separator();
 
                             ui.label("Overclocking can cause:");
-                            ui.label("• System instability or crashes");
-                            ui.label("• Increased power consumption");
-                            ui.label("• Higher temperatures");
-                            ui.label("• Potential hardware damage if extreme");
+                            ui.label(egui::RichText::new("• System instability or crashes").small());
+                            ui.label(egui::RichText::new("• Increased power consumption").small());
+                            ui.label(egui::RichText::new("• Higher temperatures").small());
+                            ui.label(egui::RichText::new("• Potential hardware damage if extreme").small());
 
                             ui.add_space(8.0);
 
-                            // Temperature warning
+                            // Temperature warning with theme colors
                             if let Some(ref stats) = self.gpu_stats {
                                 if stats.temperature > 80.0 {
-                                    ui.colored_label(egui::Color32::from_rgb(255, 85, 85),
+                                    ui.colored_label(oc_colors.red.to_egui(),
                                         "⚠️ GPU is HOT! Consider reducing overclock.");
                                 } else if stats.temperature > 70.0 {
-                                    ui.colored_label(egui::Color32::from_rgb(255, 184, 108),
+                                    ui.colored_label(oc_colors.yellow.to_egui(),
                                         "ℹ️ Temperature elevated but safe.");
                                 } else {
-                                    ui.colored_label(egui::Color32::from_rgb(80, 250, 123),
+                                    ui.colored_label(oc_colors.green.to_egui(),
                                         "✅ Temperature is good for overclocking.");
                                 }
                             }
@@ -1589,24 +1867,65 @@ impl eframe::App for NvControlApp {
 
                             // Architecture-specific tips
                             if let Some(ref stats) = self.gpu_stats {
-                                ui.label(egui::RichText::new(format!("Tips for {} GPUs:", stats.architecture)).strong());
+                                ui.label(egui::RichText::new(format!("💡 Tips for {} GPUs:", stats.architecture)).strong().color(oc_colors.blue.to_egui()));
                                 match stats.architecture.as_str() {
                                     "Blackwell" => {
-                                        ui.label("• RTX 50 series responds well to memory OC");
-                                        ui.label("• GDDR7 can handle +1500 MHz safely");
-                                        ui.label("• Core benefits from slight undervolt");
+                                        ui.label(egui::RichText::new("• RTX 50 series responds well to memory OC").small());
+                                        ui.label(egui::RichText::new("• GDDR7 can handle +1500 MHz safely").small());
+                                        ui.label(egui::RichText::new("• Core benefits from slight undervolt").small());
                                     }
                                     "Ada Lovelace" => {
-                                        ui.label("• RTX 40 series has good thermal headroom");
-                                        ui.label("• +150-200 MHz core is typical safe range");
-                                        ui.label("• GDDR6X runs hot, watch temps");
+                                        ui.label(egui::RichText::new("• RTX 40 series has good thermal headroom").small());
+                                        ui.label(egui::RichText::new("• +150-200 MHz core is typical safe range").small());
+                                        ui.label(egui::RichText::new("• GDDR6X runs hot, watch temps").small());
                                     }
                                     _ => {
-                                        ui.label("• Start with small offsets (+50 core)");
-                                        ui.label("• Test stability with each increase");
-                                        ui.label("• Monitor temperatures closely");
+                                        ui.label(egui::RichText::new("• Start with small offsets (+50 core)").small());
+                                        ui.label(egui::RichText::new("• Test stability with each increase").small());
+                                        ui.label(egui::RichText::new("• Monitor temperatures closely").small());
                                     }
                                 }
+                            }
+                        });
+
+                        // Add a live monitoring panel
+                        columns[1].add_space(8.0);
+                        columns[1].group(|ui| {
+                            ui.label(egui::RichText::new("📊 Live Monitoring").strong().color(oc_colors.purple.to_egui()));
+                            ui.separator();
+
+                            if let Some(ref stats) = self.gpu_stats {
+                                egui::Grid::new("oc_live_stats").num_columns(2).spacing([20.0, 4.0]).show(ui, |ui| {
+                                    ui.label("GPU Clock:");
+                                    ui.label(egui::RichText::new(format!("{} MHz", stats.gpu_clock)).monospace().color(oc_colors.cyan.to_egui()));
+                                    ui.end_row();
+
+                                    ui.label("Memory Clock:");
+                                    ui.label(egui::RichText::new(format!("{} MHz", stats.memory_clock)).monospace().color(oc_colors.purple.to_egui()));
+                                    ui.end_row();
+
+                                    ui.label("Temperature:");
+                                    let temp_c = self.temp_color(stats.temperature);
+                                    ui.label(egui::RichText::new(format!("{:.0}°C", stats.temperature)).monospace().color(temp_c));
+                                    ui.end_row();
+
+                                    ui.label("Power:");
+                                    let pwr_ratio = if stats.power_limit > 0.0 { stats.power_draw / stats.power_limit } else { 0.0 };
+                                    let pwr_c = self.power_color(pwr_ratio);
+                                    ui.label(egui::RichText::new(format!("{:.0}W / {:.0}W", stats.power_draw, stats.power_limit)).monospace().color(pwr_c));
+                                    ui.end_row();
+
+                                    ui.label("Fan Speed:");
+                                    ui.label(egui::RichText::new(format!("{}%", stats.fan_speed)).monospace());
+                                    ui.end_row();
+
+                                    ui.label("GPU Load:");
+                                    let usage_c = self.usage_color(stats.utilization);
+                                    ui.label(egui::RichText::new(format!("{:.0}%", stats.utilization)).monospace().color(usage_c));
+                                    ui.end_row();
+                                });
+                            } else {
+                                ui.label(egui::RichText::new("Waiting for GPU stats...").weak().italics());
                             }
                         });
                     });
@@ -1739,72 +2058,142 @@ impl eframe::App for NvControlApp {
             }
             Tab::Fan => {
                 egui::CentralPanel::default().show(ctx, |ui| {
+                    let fan_colors = self.theme_colors();
                     ui.heading("🌀 Fan Control");
 
-                    ui.group(|ui| {
-                        ui.label("🌀 Current Fan Status");
-                        ui.separator();
+                    // Two-column layout
+                    ui.columns(2, |columns| {
+                        // Left: Current fan status
+                        columns[0].group(|ui| {
+                            ui.label(egui::RichText::new("🌀 Current Fan Status").strong().color(fan_colors.cyan.to_egui()));
+                            ui.separator();
 
-                        let fans = fan::list_fans();
-                        for fan in fans {
-                            ui.horizontal(|ui| {
-                                ui.label(format!("Fan {}:", fan.id));
-                                if let Some(rpm) = fan.rpm {
-                                    ui.label(format!("{} RPM", rpm));
-                                }
-                                if let Some(percent) = fan.percent {
-                                    ui.label(format!("{}%", percent));
-                                }
-
-                                if fan.controllable {
-                                    let current_speed =
-                                        self.fan_speeds.get(&fan.id).copied().unwrap_or(50);
-                                    let mut new_speed = current_speed;
-                                    if ui
-                                        .add(egui::Slider::new(&mut new_speed, 0..=100).suffix("%"))
-                                        .changed()
-                                    {
-                                        self.fan_speeds.insert(fan.id, new_speed);
-                                        if let Err(e) = fan::set_fan_speed(fan.id, new_speed) {
-                                            eprintln!("Failed to set fan speed: {}", e);
-                                        }
+                            let fans = fan::list_fans();
+                            if fans.is_empty() {
+                                ui.label(egui::RichText::new("No controllable fans detected").weak().italics());
+                            }
+                            for fan_info in fans {
+                                ui.horizontal(|ui| {
+                                    ui.label(egui::RichText::new(format!("Fan {}:", fan_info.id)).strong());
+                                    if let Some(rpm) = fan_info.rpm {
+                                        ui.label(egui::RichText::new(format!("{} RPM", rpm)).color(fan_colors.green.to_egui()));
                                     }
+                                    if let Some(percent) = fan_info.percent {
+                                        let fan_color = if percent > 80 {
+                                            fan_colors.red.to_egui()
+                                        } else if percent > 50 {
+                                            fan_colors.yellow.to_egui()
+                                        } else {
+                                            fan_colors.green.to_egui()
+                                        };
+                                        ui.label(egui::RichText::new(format!("{}%", percent)).strong().color(fan_color));
+                                    }
+                                });
+
+                                if fan_info.controllable {
+                                    let current_speed =
+                                        self.fan_speeds.get(&fan_info.id).copied().unwrap_or(50);
+                                    let mut new_speed = current_speed;
+                                    ui.horizontal(|ui| {
+                                        ui.label("Speed:");
+                                        if ui
+                                            .add(egui::Slider::new(&mut new_speed, 0..=100).suffix("%"))
+                                            .changed()
+                                        {
+                                            self.fan_speeds.insert(fan_info.id, new_speed);
+                                            if let Err(e) = fan::set_fan_speed(fan_info.id, new_speed) {
+                                                eprintln!("Failed to set fan speed: {}", e);
+                                            }
+                                        }
+                                    });
                                 } else {
-                                    ui.colored_label(
-                                        egui::Color32::from_rgb(156, 163, 175),
-                                        "Read-only",
-                                    );
+                                    ui.label(egui::RichText::new("Read-only (automatic)").small().weak());
+                                }
+                                ui.add_space(4.0);
+                            }
+
+                            // Quick preset buttons
+                            ui.add_space(8.0);
+                            ui.label(egui::RichText::new("⚡ Quick Presets").small().strong().color(fan_colors.yellow.to_egui()));
+                            ui.horizontal(|ui| {
+                                if ui.button("🔇 Silent").on_hover_text("30% - Quiet operation").clicked() {
+                                    for (_, speed) in self.fan_speeds.iter_mut() {
+                                        *speed = 30;
+                                    }
+                                }
+                                if ui.button("⚖️ Balanced").on_hover_text("50% - Default cooling").clicked() {
+                                    for (_, speed) in self.fan_speeds.iter_mut() {
+                                        *speed = 50;
+                                    }
+                                }
+                                if ui.button("❄️ Cool").on_hover_text("70% - Better cooling").clicked() {
+                                    for (_, speed) in self.fan_speeds.iter_mut() {
+                                        *speed = 70;
+                                    }
+                                }
+                                if ui.button("🔥 Max").on_hover_text("100% - Maximum cooling").clicked() {
+                                    for (_, speed) in self.fan_speeds.iter_mut() {
+                                        *speed = 100;
+                                    }
                                 }
                             });
-                        }
+                        });
+
+                        // Right: Live temperature display
+                        columns[1].group(|ui| {
+                            ui.label(egui::RichText::new("🌡️ Thermal Status").strong().color(fan_colors.orange.to_egui()));
+                            ui.separator();
+
+                            if let Some(ref stats) = self.gpu_stats {
+                                let temp_color = self.temp_color(stats.temperature);
+                                ui.horizontal(|ui| {
+                                    ui.label("GPU Temperature:");
+                                    ui.label(egui::RichText::new(format!("{:.0}°C", stats.temperature))
+                                        .size(24.0)
+                                        .strong()
+                                        .color(temp_color));
+                                });
+
+                                ui.add_space(4.0);
+
+                                let target_speed = self.fan_curve.get_speed_at_temp(stats.temperature as f64);
+                                ui.horizontal(|ui| {
+                                    ui.label("Target Fan Speed:");
+                                    ui.label(egui::RichText::new(format!("{:.0}%", target_speed))
+                                        .size(18.0)
+                                        .color(fan_colors.cyan.to_egui()));
+                                });
+
+                                ui.add_space(8.0);
+
+                                // Thermal status indicator
+                                let status = if stats.temperature > 85.0 {
+                                    ("🔥 CRITICAL", fan_colors.red.to_egui(), "GPU is overheating!")
+                                } else if stats.temperature > 80.0 {
+                                    ("⚠️ HOT", fan_colors.orange.to_egui(), "Consider increasing fan speed")
+                                } else if stats.temperature > 70.0 {
+                                    ("🌡️ WARM", fan_colors.yellow.to_egui(), "Normal gaming temperature")
+                                } else if stats.temperature > 50.0 {
+                                    ("✅ GOOD", fan_colors.green.to_egui(), "Healthy operating range")
+                                } else {
+                                    ("❄️ COOL", fan_colors.cyan.to_egui(), "Low load temperature")
+                                };
+
+                                ui.horizontal(|ui| {
+                                    ui.label(egui::RichText::new(status.0).strong().color(status.1));
+                                });
+                                ui.label(egui::RichText::new(status.2).small().weak());
+                            } else {
+                                ui.label(egui::RichText::new("Waiting for GPU stats...").weak().italics());
+                            }
+                        });
                     });
 
                     ui.add_space(10.0);
 
                     ui.group(|ui| {
-                        ui.label("📈 Fan Curve Editor");
+                        ui.label(egui::RichText::new("📈 Fan Curve Editor").strong().color(fan_colors.purple.to_egui()));
                         ui.separator();
-
-                        // Show current GPU temperature
-                        if let Some(ref stats) = self.gpu_stats {
-                            ui.horizontal(|ui| {
-                                ui.label("🌡️ Current GPU Temp:");
-                                ui.colored_label(
-                                    if stats.temperature > 80.0 {
-                                        egui::Color32::RED
-                                    } else if stats.temperature > 70.0 {
-                                        egui::Color32::YELLOW
-                                    } else {
-                                        egui::Color32::GREEN
-                                    },
-                                    format!("{:.1}°C", stats.temperature),
-                                );
-
-                                let target_speed = self.fan_curve.get_speed_at_temp(stats.temperature as f64);
-                                ui.label(format!("→ Target Fan Speed: {:.0}%", target_speed));
-                            });
-                            ui.add_space(5.0);
-                        }
 
                         // Fan curve plot
                         use egui_plot::{Line, Plot, PlotPoints, Points};
@@ -1817,7 +2206,7 @@ impl eframe::App for NvControlApp {
                             .collect();
 
                         let _plot_response = Plot::new("fan_curve_plot")
-                            .height(300.0)
+                            .height(250.0)
                             .width(ui.available_width())
                             .x_axis_label("Temperature (°C)")
                             .y_axis_label("Fan Speed (%)")
@@ -1827,14 +2216,14 @@ impl eframe::App for NvControlApp {
                             .show(ui, |plot_ui| {
                                 // Draw the curve line
                                 let curve_line: PlotPoints = curve_points_vec.clone().into();
-                                plot_ui.line(Line::new(curve_line).color(egui::Color32::LIGHT_BLUE));
+                                plot_ui.line(Line::new(curve_line).color(fan_colors.cyan.to_egui()));
 
                                 // Draw the control points
                                 let curve_pts: PlotPoints = curve_points_vec.into();
                                 plot_ui.points(
                                     Points::new(curve_pts)
                                         .radius(6.0)
-                                        .color(egui::Color32::from_rgb(59, 130, 246))
+                                        .color(fan_colors.blue.to_egui())
                                         .name("Control Points"),
                                 );
 
@@ -1846,63 +2235,89 @@ impl eframe::App for NvControlApp {
                                     plot_ui.points(
                                         Points::new(current_point)
                                             .radius(8.0)
-                                            .color(egui::Color32::RED)
+                                            .color(fan_colors.red.to_egui())
                                             .name("Current"),
                                     );
                                 }
                             });
 
-                        ui.add_space(10.0);
+                        ui.add_space(8.0);
 
-                        // Point editor
-                        ui.horizontal(|ui| {
-                            ui.label("📍 Control Points:");
-                        });
+                        // Point editor in columns
+                        ui.columns(2, |columns| {
+                            columns[0].label(egui::RichText::new("📍 Control Points").small().strong().color(fan_colors.green.to_egui()));
+                            columns[0].separator();
 
-                        ui.separator();
+                            let mut point_to_remove = None;
 
-                        let mut point_to_remove = None;
+                            for (i, point) in self.fan_curve.points.iter().enumerate() {
+                                columns[0].horizontal(|ui| {
+                                    ui.label(egui::RichText::new(format!("{}.", i + 1)).monospace());
+                                    ui.label(egui::RichText::new(format!("{:.0}°C", point.x)).color(fan_colors.orange.to_egui()));
+                                    ui.label("→");
+                                    ui.label(egui::RichText::new(format!("{:.0}%", point.y)).color(fan_colors.cyan.to_egui()));
 
-                        for (i, point) in self.fan_curve.points.iter().enumerate() {
-                            ui.horizontal(|ui| {
-                                ui.label(format!("{}.", i + 1));
-                                ui.label(format!("{:.0}°C → {:.0}%", point.x, point.y));
+                                    if ui.small_button("🗑️").on_hover_text("Remove point").clicked() && self.fan_curve.points.len() > 2 {
+                                        point_to_remove = Some(i);
+                                    }
+                                });
+                            }
 
-                                if ui.button("🗑️ Remove").clicked() && self.fan_curve.points.len() > 2 {
-                                    point_to_remove = Some(i);
+                            if let Some(i) = point_to_remove {
+                                self.fan_curve.remove_point(i);
+                            }
+
+                            // Actions column
+                            columns[1].label(egui::RichText::new("⚙️ Actions").small().strong().color(fan_colors.yellow.to_egui()));
+                            columns[1].separator();
+
+                            columns[1].horizontal(|ui| {
+                                if ui.button("➕ Add Point").on_hover_text("Add control point at 60°C").clicked() {
+                                    let mid_temp = 60.0;
+                                    let mid_speed = self.fan_curve.get_speed_at_temp(mid_temp);
+                                    self.fan_curve.add_point(mid_temp, mid_speed);
+                                }
+
+                                if ui.button("🔄 Reset").on_hover_text("Reset to default curve").clicked() {
+                                    self.fan_curve = nvcontrol::gui_widgets::FanCurve::default();
+                                }
+
+                                if ui.button("💾 Apply").on_hover_text("Apply fan curve to GPU").clicked() {
+                                    let curve_data = self.fan_curve.to_nvcontrol_format();
+                                    println!("Applying fan curve: {:?}", curve_data);
                                 }
                             });
-                        }
 
-                        if let Some(i) = point_to_remove {
-                            self.fan_curve.remove_point(i);
-                        }
-
-                        ui.add_space(5.0);
-
-                        ui.horizontal(|ui| {
-                            if ui.button("➕ Add Point").clicked() {
-                                // Add point at midpoint of curve
-                                let mid_temp = 60.0;
-                                let mid_speed = self.fan_curve.get_speed_at_temp(mid_temp);
-                                self.fan_curve.add_point(mid_temp, mid_speed);
-                            }
-
-                            if ui.button("🔄 Reset to Default").clicked() {
-                                self.fan_curve = nvcontrol::gui_widgets::FanCurve::default();
-                            }
-
-                            if ui.button("💾 Apply Curve").clicked() {
-                                // Convert to nvcontrol format and apply
-                                let curve_data = self.fan_curve.to_nvcontrol_format();
-                                println!("Applying fan curve: {:?}", curve_data);
-                                // TODO: Apply curve to GPU fan control
-                                // This would call the fan module to set automatic curve mode
-                            }
+                            // Preset curves
+                            columns[1].add_space(8.0);
+                            columns[1].label(egui::RichText::new("📋 Preset Curves").small().color(fan_colors.purple.to_egui()));
+                            columns[1].horizontal(|ui| {
+                                if ui.small_button("Silent").on_hover_text("Low noise profile").clicked() {
+                                    self.fan_curve.points.clear();
+                                    self.fan_curve.add_point(30.0, 20.0);
+                                    self.fan_curve.add_point(50.0, 30.0);
+                                    self.fan_curve.add_point(70.0, 50.0);
+                                    self.fan_curve.add_point(85.0, 80.0);
+                                }
+                                if ui.small_button("Balanced").on_hover_text("Default cooling").clicked() {
+                                    self.fan_curve.points.clear();
+                                    self.fan_curve.add_point(30.0, 30.0);
+                                    self.fan_curve.add_point(50.0, 40.0);
+                                    self.fan_curve.add_point(65.0, 60.0);
+                                    self.fan_curve.add_point(80.0, 100.0);
+                                }
+                                if ui.small_button("Aggressive").on_hover_text("Maximum cooling").clicked() {
+                                    self.fan_curve.points.clear();
+                                    self.fan_curve.add_point(30.0, 40.0);
+                                    self.fan_curve.add_point(45.0, 60.0);
+                                    self.fan_curve.add_point(60.0, 80.0);
+                                    self.fan_curve.add_point(75.0, 100.0);
+                                }
+                            });
                         });
 
-                        ui.add_space(10.0);
-                        ui.label("💡 Tip: Click 'Add Point' to create new control points, then drag points in the graph to adjust the curve.");
+                        ui.add_space(8.0);
+                        ui.label(egui::RichText::new("💡 Tip: Drag points in the graph to adjust the curve, or use preset curves above.").small().weak());
                     });
                 });
             }
@@ -3411,16 +3826,20 @@ impl eframe::App for NvControlApp {
             }
             Tab::Osd => {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.heading("📊 OSD / MangoHud Configuration");
+                    ui.heading("📊 On-Screen Display (OSD)");
+                    ui.label(egui::RichText::new("Configure performance overlay • Future: envyhub integration").small().color(egui::Color32::GRAY));
+                    ui.add_space(8.0);
 
-                    // MangoHud installation status
+                    // Backend status (MangoHud for now, envyhub later)
                     ui.group(|ui| {
+                        ui.label(egui::RichText::new("🔧 OSD Backend").strong());
                         ui.horizontal(|ui| {
                             if self.mangohud_installed {
-                                ui.label("✅ MangoHud installed");
+                                ui.label("✅ MangoHud detected");
+                                ui.label(egui::RichText::new("(envyhub coming soon)").small().color(egui::Color32::GRAY));
                             } else {
-                                ui.label("❌ MangoHud not installed");
-                                if ui.button("📋 Install Instructions").clicked() {
+                                ui.label("❌ No OSD backend installed");
+                                if ui.button("📋 Install MangoHud").clicked() {
                                     // Show install instructions
                                 }
                             }
@@ -3603,7 +4022,7 @@ impl eframe::App for NvControlApp {
 
                     // Config preview
                     ui.group(|ui| {
-                        ui.label("📄 MangoHud Config Preview");
+                        ui.label("📄 OSD Config Preview (MangoHud format)");
                         ui.separator();
 
                         let config_preview = format!(
@@ -3633,11 +4052,12 @@ impl eframe::App for NvControlApp {
                             ui.label(egui::RichText::new("🎨 Theme & Appearance").strong().color(egui::Color32::from_rgb(189, 147, 249)));
                             ui.separator();
 
-                            // Theme selector with preview
+                            // Theme selector with auto-apply
+                            let previous_theme = self.current_theme;
                             ui.horizontal(|ui| {
                                 ui.label("Theme:");
                                 egui::ComboBox::from_id_source("theme_selector")
-                                    .selected_text(self.current_theme.name())
+                                    .selected_text(format!("{} {}", self.theme_icon(), self.current_theme.name()))
                                     .show_ui(ui, |ui| {
                                         ui.selectable_value(&mut self.current_theme,
                                             nvcontrol::themes::ThemeVariant::TokyoNightNight, "🌙 Tokyo Night");
@@ -3656,69 +4076,92 @@ impl eframe::App for NvControlApp {
                                     });
                             });
 
-                            ui.add_space(8.0);
-
-                            // Theme preview
-                            ui.label(egui::RichText::new("Preview:").small());
-                            let theme_palette = nvcontrol::themes::Theme::from_variant(self.current_theme);
-                            ui.horizontal(|ui| {
-                                let colors = &theme_palette.colors;
-                                // Show color swatches
-                                let swatch = |ui: &mut egui::Ui, color: nvcontrol::themes::Color, name: &str| {
-                                    let c = egui::Color32::from_rgb(color.r, color.g, color.b);
-                                    ui.vertical(|ui| {
-                                        let (rect, _) = ui.allocate_exact_size(egui::vec2(30.0, 20.0), egui::Sense::hover());
-                                        ui.painter().rect_filled(rect, 4.0, c);
-                                        ui.label(egui::RichText::new(name).small());
-                                    });
-                                };
-                                swatch(ui, colors.blue, "Primary");
-                                swatch(ui, colors.green, "Success");
-                                swatch(ui, colors.red, "Error");
-                                swatch(ui, colors.yellow, "Warning");
-                                swatch(ui, colors.purple, "Accent");
-                            });
-
-                            ui.add_space(8.0);
-
-                            if ui.button("✅ Apply Theme").on_hover_text("Apply the selected theme").clicked() {
+                            // Auto-apply when theme changes
+                            if self.current_theme != previous_theme {
                                 self.apply_theme(ctx);
+                                // Save to config
+                                self.config.theme = self.current_theme.config_key().to_string();
+                                self.config.save();
                             }
 
-                            ui.add_space(10.0);
+                            ui.add_space(12.0);
 
-                            // Legacy themes
-                            ui.collapsing("Legacy Themes", |ui| {
+                            // Enhanced theme preview
+                            ui.label(egui::RichText::new("Color Palette:").small().strong());
+                            let theme_palette = nvcontrol::themes::Theme::from_variant(self.current_theme);
+                            let colors = &theme_palette.colors;
+
+                            // Background preview
+                            ui.horizontal(|ui| {
+                                let bg_rect = ui.allocate_exact_size(egui::vec2(120.0, 40.0), egui::Sense::hover()).0;
+                                ui.painter().rect_filled(bg_rect, 6.0, colors.bg.to_egui());
+                                ui.painter().rect_stroke(bg_rect, 6.0, egui::Stroke::new(1.0, colors.border.to_egui()));
+                                ui.painter().text(
+                                    bg_rect.center(),
+                                    egui::Align2::CENTER_CENTER,
+                                    "Background",
+                                    egui::FontId::proportional(11.0),
+                                    colors.fg.to_egui(),
+                                );
+                            });
+
+                            ui.add_space(6.0);
+
+                            // Color swatches in a grid
+                            ui.horizontal_wrapped(|ui| {
+                                let swatch = |ui: &mut egui::Ui, color: &nvcontrol::themes::Color, name: &str| {
+                                    let c = color.to_egui();
+                                    ui.vertical(|ui| {
+                                        let (rect, resp) = ui.allocate_exact_size(egui::vec2(36.0, 24.0), egui::Sense::hover());
+                                        ui.painter().rect_filled(rect, 4.0, c);
+                                        ui.painter().rect_stroke(rect, 4.0, egui::Stroke::new(1.0, egui::Color32::from_gray(60)));
+                                        resp.on_hover_text(format!("#{:02X}{:02X}{:02X}", color.r, color.g, color.b));
+                                        ui.label(egui::RichText::new(name).small().color(egui::Color32::GRAY));
+                                    });
+                                };
+                                swatch(ui, &colors.blue, "Blue");
+                                swatch(ui, &colors.cyan, "Cyan");
+                                swatch(ui, &colors.green, "Green");
+                                swatch(ui, &colors.yellow, "Yellow");
+                                swatch(ui, &colors.orange, "Orange");
+                                swatch(ui, &colors.red, "Red");
+                                swatch(ui, &colors.purple, "Purple");
+                                swatch(ui, &colors.magenta, "Magenta");
+                            });
+
+                            ui.add_space(12.0);
+
+                            // GPU-specific color meanings
+                            ui.collapsing("🌡️ Temperature Colors", |ui| {
                                 ui.horizontal(|ui| {
-                                    if ui.button("NVIDIA Dark").on_hover_text("Classic NVIDIA dark theme").clicked() {
-                                        self.theme = theme::ModernTheme::nvidia_dark();
-                                        ctx.set_visuals(self.theme.to_egui_visuals());
-                                    }
-                                    if ui.button("NVIDIA Light").on_hover_text("Light theme for day use").clicked() {
-                                        self.theme = theme::ModernTheme::nvidia_light();
-                                        ctx.set_visuals(self.theme.to_egui_visuals());
-                                    }
-                                    if ui.button("Gaming").on_hover_text("High contrast gaming theme").clicked() {
-                                        self.theme = theme::ModernTheme::gaming();
-                                        ctx.set_visuals(self.theme.to_egui_visuals());
-                                    }
+                                    let temp_swatch = |ui: &mut egui::Ui, color: &nvcontrol::themes::Color, label: &str| {
+                                        let (rect, _) = ui.allocate_exact_size(egui::vec2(50.0, 18.0), egui::Sense::hover());
+                                        ui.painter().rect_filled(rect, 3.0, color.to_egui());
+                                        ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, label,
+                                            egui::FontId::proportional(10.0), egui::Color32::WHITE);
+                                    };
+                                    temp_swatch(ui, &colors.temp_cold, "<50°C");
+                                    temp_swatch(ui, &colors.temp_normal, "50-70°C");
+                                    temp_swatch(ui, &colors.temp_warm, "70-80°C");
+                                    temp_swatch(ui, &colors.temp_hot, ">80°C");
                                 });
                             });
                         });
 
-                        // Right column: System info
+                        // Right column: System info & About
+                        let settings_colors = self.theme_colors();
                         columns[1].group(|ui| {
-                            ui.label(egui::RichText::new("ℹ️ System Information").strong().color(egui::Color32::from_rgb(139, 233, 253)));
+                            ui.label(egui::RichText::new("ℹ️ System Information").strong().color(settings_colors.cyan.to_egui()));
                             ui.separator();
 
                             if let Some(ref stats) = self.gpu_stats {
                                 egui::Grid::new("system_info").num_columns(2).spacing([20.0, 4.0]).show(ui, |ui| {
                                     ui.label("GPU:");
-                                    ui.label(egui::RichText::new(&stats.name).strong());
+                                    ui.label(egui::RichText::new(&stats.name).strong().color(settings_colors.green.to_egui()));
                                     ui.end_row();
 
                                     ui.label("Architecture:");
-                                    ui.label(&stats.architecture);
+                                    ui.label(egui::RichText::new(&stats.architecture).color(settings_colors.yellow.to_egui()));
                                     ui.end_row();
 
                                     ui.label("Driver:");
@@ -3735,21 +4178,36 @@ impl eframe::App for NvControlApp {
                                 });
                             }
 
-                            ui.add_space(10.0);
-
-                            // App version
+                            ui.add_space(12.0);
                             ui.separator();
-                            ui.horizontal(|ui| {
-                                ui.label("nvcontrol version:");
-                                ui.label(egui::RichText::new("0.7.0").strong());
+                            ui.add_space(4.0);
+
+                            // About section
+                            ui.label(egui::RichText::new("📦 About nvcontrol").strong().color(settings_colors.blue.to_egui()));
+                            ui.add_space(4.0);
+
+                            egui::Grid::new("about_info").num_columns(2).spacing([20.0, 4.0]).show(ui, |ui| {
+                                ui.label("Version:");
+                                ui.label(egui::RichText::new("0.7.0").strong().color(settings_colors.green.to_egui()));
+                                ui.end_row();
+
+                                ui.label("Theme:");
+                                ui.label(format!("{} {}", self.theme_icon(), self.current_theme.name()));
+                                ui.end_row();
+
+                                ui.label("Config:");
+                                ui.label(egui::RichText::new("~/.config/nvcontrol/").small());
+                                ui.end_row();
                             });
+
+                            ui.add_space(8.0);
 
                             ui.horizontal(|ui| {
                                 if ui.button("📋 Copy System Info").on_hover_text("Copy system info to clipboard").clicked() {
                                     if let Some(ref stats) = self.gpu_stats {
                                         let info = format!(
-                                            "GPU: {}\nArchitecture: {}\nDriver: {}\nVRAM: {:.0} GB\nnvcontrol: 0.7.0",
-                                            stats.name, stats.architecture, stats.driver_version, stats.memory_total as f64 / 1e9
+                                            "nvcontrol v0.7.0\n\nGPU: {}\nArchitecture: {}\nDriver: {}\nVRAM: {:.0} GB\nTheme: {}",
+                                            stats.name, stats.architecture, stats.driver_version, stats.memory_total as f64 / 1e9, self.current_theme.name()
                                         );
                                         ctx.copy_text(info);
                                     }
@@ -3757,9 +4215,83 @@ impl eframe::App for NvControlApp {
 
                                 if ui.button("🔗 GitHub").on_hover_text("Open project on GitHub").clicked() {
                                     let _ = std::process::Command::new("xdg-open")
-                                        .arg("https://github.com/your-repo/nvcontrol")
+                                        .arg("https://github.com/ghostkellz/nvcontrol")
                                         .spawn();
                                 }
+                            });
+
+                            ui.add_space(8.0);
+
+                            // Ecosystem links
+                            ui.collapsing("🔗 Related Projects", |ui| {
+                                ui.horizontal_wrapped(|ui| {
+                                    if ui.small_button("nvprime").on_hover_text("Unified NVIDIA platform").clicked() {
+                                        let _ = std::process::Command::new("xdg-open").arg("https://github.com/ghostkellz/nvprime").spawn();
+                                    }
+                                    if ui.small_button("envyhub").on_hover_text("Performance overlay").clicked() {
+                                        let _ = std::process::Command::new("xdg-open").arg("https://github.com/ghostkellz/envyhub").spawn();
+                                    }
+                                    if ui.small_button("nvproton").on_hover_text("Proton integration").clicked() {
+                                        let _ = std::process::Command::new("xdg-open").arg("https://github.com/ghostkellz/nvproton").spawn();
+                                    }
+                                    if ui.small_button("nvshader").on_hover_text("Shader cache management").clicked() {
+                                        let _ = std::process::Command::new("xdg-open").arg("https://github.com/ghostkellz/nvshader").spawn();
+                                    }
+                                });
+                            });
+                        });
+                    });
+
+                    ui.add_space(10.0);
+
+                    // Keyboard shortcuts section
+                    ui.columns(2, |columns| {
+                        columns[0].group(|ui| {
+                            let settings_colors = self.theme_colors();
+                            ui.label(egui::RichText::new("⌨️ Keyboard Shortcuts").strong().color(settings_colors.yellow.to_egui()));
+                            ui.separator();
+
+                            egui::Grid::new("shortcuts_grid").num_columns(2).spacing([40.0, 4.0]).show(ui, |ui| {
+                                let key_style = |text: &str| egui::RichText::new(text).monospace().strong();
+                                let desc_style = |text: &str| egui::RichText::new(text).small();
+
+                                ui.label(key_style("1-9"));
+                                ui.label(desc_style("Quick tab navigation"));
+                                ui.end_row();
+
+                                ui.label(key_style("Ctrl+S"));
+                                ui.label(desc_style("Save configuration"));
+                                ui.end_row();
+
+                                ui.label(key_style("Ctrl+R"));
+                                ui.label(desc_style("Reset OC to stock"));
+                                ui.end_row();
+
+                                ui.label(key_style("Ctrl+T"));
+                                ui.label(desc_style("Cycle themes"));
+                                ui.end_row();
+
+                                ui.label(key_style("F5"));
+                                ui.label(desc_style("Refresh display"));
+                                ui.end_row();
+                            });
+                        });
+
+                        columns[1].group(|ui| {
+                            let settings_colors = self.theme_colors();
+                            ui.label(egui::RichText::new("🔢 Tab Shortcuts").strong().color(settings_colors.cyan.to_egui()));
+                            ui.separator();
+
+                            egui::Grid::new("tab_shortcuts").num_columns(2).spacing([20.0, 2.0]).show(ui, |ui| {
+                                ui.label(egui::RichText::new("1").monospace()); ui.label("GPU Status"); ui.end_row();
+                                ui.label(egui::RichText::new("2").monospace()); ui.label("Overclock"); ui.end_row();
+                                ui.label(egui::RichText::new("3").monospace()); ui.label("Fan Control"); ui.end_row();
+                                ui.label(egui::RichText::new("4").monospace()); ui.label("Display"); ui.end_row();
+                                ui.label(egui::RichText::new("5").monospace()); ui.label("Vibrance"); ui.end_row();
+                                ui.label(egui::RichText::new("6").monospace()); ui.label("HDR"); ui.end_row();
+                                ui.label(egui::RichText::new("7").monospace()); ui.label("Profiles"); ui.end_row();
+                                ui.label(egui::RichText::new("8").monospace()); ui.label("OSD"); ui.end_row();
+                                ui.label(egui::RichText::new("9").monospace()); ui.label("Settings"); ui.end_row();
                             });
                         });
                     });

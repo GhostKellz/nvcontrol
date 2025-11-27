@@ -547,6 +547,46 @@ impl ThemeVariant {
             ThemeVariant::Cyberpunk => "Cyberpunk",
         }
     }
+
+    /// Get the config key for saving/loading
+    pub fn config_key(&self) -> &str {
+        match self {
+            ThemeVariant::TokyoNightNight => "tokyo_night",
+            ThemeVariant::TokyoNightStorm => "tokyo_night_storm",
+            ThemeVariant::TokyoNightMoon => "tokyo_night_moon",
+            ThemeVariant::Dracula => "dracula",
+            ThemeVariant::RogRed => "rog_red",
+            ThemeVariant::MatrixGreen => "matrix_green",
+            ThemeVariant::Cyberpunk => "cyberpunk",
+        }
+    }
+
+    /// Create from config key
+    pub fn from_config_key(key: &str) -> Option<Self> {
+        match key {
+            "tokyo_night" => Some(ThemeVariant::TokyoNightNight),
+            "tokyo_night_storm" => Some(ThemeVariant::TokyoNightStorm),
+            "tokyo_night_moon" => Some(ThemeVariant::TokyoNightMoon),
+            "dracula" => Some(ThemeVariant::Dracula),
+            "rog_red" => Some(ThemeVariant::RogRed),
+            "matrix_green" => Some(ThemeVariant::MatrixGreen),
+            "cyberpunk" => Some(ThemeVariant::Cyberpunk),
+            _ => None,
+        }
+    }
+
+    /// Get all variants for iteration
+    pub fn all() -> &'static [ThemeVariant] {
+        &[
+            ThemeVariant::TokyoNightNight,
+            ThemeVariant::TokyoNightStorm,
+            ThemeVariant::TokyoNightMoon,
+            ThemeVariant::Dracula,
+            ThemeVariant::RogRed,
+            ThemeVariant::MatrixGreen,
+            ThemeVariant::Cyberpunk,
+        ]
+    }
 }
 
 impl ColorPalette {

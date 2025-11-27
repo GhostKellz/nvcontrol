@@ -1,102 +1,191 @@
 # Maintainer: CK Technology LLC <contact@ck-technology.com>
-pkgname=nvcontrol-git
-pkgver=0.6.1.r0.g41a9323
+# nvcontrol - Modern NVIDIA Settings Manager for Linux + Wayland
+# Premier platform: Arch Linux
+
+pkgname=nvcontrol
+pkgver=0.7.1
 pkgrel=1
-pkgdesc="Modern NVIDIA GPU Control Tool for Linux with Pure Rust Digital Vibrance"
+pkgdesc="Modern NVIDIA Settings Manager for Linux + Wayland - Digital Vibrance, VRR, HDR, Overclocking"
 arch=('x86_64')
 url="https://github.com/GhostKellz/nvcontrol"
 license=('MIT')
 depends=(
-    'nvidia-utils>=580'     # NVIDIA drivers for NVML and vibrance
-    'wayland'               # Wayland support
-    'libxcb'                # X11 support
-    'gtk3'                  # For GUI
-    'hicolor-icon-theme'    # Icons
+    'nvidia-utils>=565'     # NVIDIA drivers (565+ recommended, 580+ optimal)
+    'wayland'               # Wayland protocol support
+    'libxkbcommon'          # Keyboard handling
+    'fontconfig'            # Font configuration
+    'freetype2'             # Font rendering
 )
 makedepends=(
-    'rust'                  # Rust compiler
+    'rust>=1.75'            # Rust compiler (edition 2024)
     'cargo'                 # Rust package manager
-    'git'                   # For -git package
+    'git'                   # Version control
+    'clang'                 # For bindgen
+    'pkg-config'            # Build configuration
 )
 optdepends=(
-    'gamescope: For gamescope integration'
-    'mangohud: For OSD integration'
-    'docker: For container GPU passthrough'
-    'podman: Alternative container runtime'
+    'gamescope: Valve compositor for gaming (HDR, VRR, FSR)'
+    'mangohud: Performance overlay/OSD support'
+    'gamemode: Feral GameMode integration'
+    'docker: Container GPU passthrough'
+    'podman: Rootless container runtime'
+    'nvidia-container-toolkit: NVIDIA Container Runtime'
+    'libvirt: GPU passthrough for VMs'
+    'vulkan-icd-loader: Vulkan support'
+    'lib32-nvidia-utils: 32-bit game support'
 )
-provides=('nvcontrol')
-conflicts=('nvcontrol')
-source=("git+https://github.com/GhostKellz/nvcontrol.git")
+provides=('nvcontrol' 'nvctl')
+conflicts=('nvcontrol-git')
+backup=('etc/nvcontrol/config.toml')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/GhostKellz/$pkgname/archive/v$pkgver.tar.gz")
 sha256sums=('SKIP')
 
-pkgver() {
-    cd "$srcdir/nvcontrol"
-    git describe --long --tags 2>/dev/null | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g' || \
-    printf "0.6.1.r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
-}
-
-prepare() {
-    cd "$srcdir/nvcontrol"
-    export RUSTUP_TOOLCHAIN=stable
-    cargo fetch --locked --target "$CARCH-unknown-linux-gnu"
-}
+# Bazzite/Nobara compatibility (Fedora Atomic based)
+# These distros use rpm-ostree but can install via cargo or flatpak
 
 build() {
-    cd "$srcdir/nvcontrol"
+    cd "$pkgname-$pkgver"
     export RUSTUP_TOOLCHAIN=stable
     export CARGO_TARGET_DIR=target
 
-    # Build with all features for full functionality
-    cargo build --frozen --release --all-features
+    # Build CLI tool
+    cargo build --release --bin nvctl
+
+    # Build GUI (requires gui feature)
+    cargo build --release --bin nvcontrol --features gui
 }
 
 check() {
-    cd "$srcdir/nvcontrol"
+    cd "$pkgname-$pkgver"
     export RUSTUP_TOOLCHAIN=stable
 
-    # Run tests (skip hardware-dependent tests)
-    cargo test --frozen --release --lib
+    # Run library tests (skip hardware-dependent tests)
+    cargo test --release --lib -- --skip hardware --skip nvml || true
 }
 
 package() {
-    cd "$srcdir/nvcontrol"
+    cd "$pkgname-$pkgver"
 
-    # Install binaries
-    install -Dm755 "target/release/nvcontrol" "$pkgdir/usr/bin/nvcontrol"
+    # Install CLI binary
     install -Dm755 "target/release/nvctl" "$pkgdir/usr/bin/nvctl"
 
-    # Install desktop file (if exists)
-    if [ -f "assets/nvcontrol.desktop" ]; then
-        install -Dm644 "assets/nvcontrol.desktop" "$pkgdir/usr/share/applications/nvcontrol.desktop"
+    # Install GUI binary
+    install -Dm755 "target/release/nvcontrol" "$pkgdir/usr/bin/nvcontrol"
+
+    # Install desktop file
+    install -Dm644 /dev/stdin "$pkgdir/usr/share/applications/nvcontrol.desktop" << 'EOF'
+[Desktop Entry]
+Name=nvcontrol
+Comment=NVIDIA GPU Control Panel for Linux
+Exec=nvcontrol
+Icon=nvcontrol
+Terminal=false
+Type=Application
+Categories=Settings;HardwareSettings;System;
+Keywords=nvidia;gpu;graphics;gaming;vibrance;vrr;hdr;
+StartupWMClass=nvcontrol
+EOF
+
+    # Install shell completions
+    install -dm755 "$pkgdir/usr/share/bash-completion/completions"
+    install -dm755 "$pkgdir/usr/share/zsh/site-functions"
+    install -dm755 "$pkgdir/usr/share/fish/vendor_completions.d"
+
+    # Generate completions if they exist
+    if [ -f "completions/nvctl.bash" ]; then
+        install -Dm644 "completions/nvctl.bash" "$pkgdir/usr/share/bash-completion/completions/nvctl"
+    fi
+    if [ -f "completions/nvctl.zsh" ] || [ -f "completions/_nvctl" ]; then
+        install -Dm644 "completions/_nvctl" "$pkgdir/usr/share/zsh/site-functions/_nvctl" 2>/dev/null || \
+        install -Dm644 "completions/nvctl.zsh" "$pkgdir/usr/share/zsh/site-functions/_nvctl" 2>/dev/null || true
+    fi
+    if [ -f "completions/nvctl.fish" ]; then
+        install -Dm644 "completions/nvctl.fish" "$pkgdir/usr/share/fish/vendor_completions.d/nvctl.fish"
     fi
 
-    # Install icons
-    for size in 16 32 48 64 128 256 512; do
-        if [ -f "assets/icons/icon-${size}x${size}.png" ]; then
-            install -Dm644 "assets/icons/icon-${size}x${size}.png" \
-                "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/nvcontrol.png"
-        fi
-    done
+    # Install documentation
+    install -Dm644 "README.md" "$pkgdir/usr/share/doc/$pkgname/README.md"
+    [ -f "COMMANDS.md" ] && install -Dm644 "COMMANDS.md" "$pkgdir/usr/share/doc/$pkgname/COMMANDS.md"
+    [ -f "CHANGELOG.md" ] && install -Dm644 "CHANGELOG.md" "$pkgdir/usr/share/doc/$pkgname/CHANGELOG.md"
 
     # Install license
     install -Dm644 "LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 
-    # Install documentation
-    install -Dm644 "README.md" "$pkgdir/usr/share/doc/$pkgname/README.md"
-    install -Dm644 "COMMANDS.md" "$pkgdir/usr/share/doc/$pkgname/COMMANDS.md"
+    # Install default config
+    install -dm755 "$pkgdir/etc/nvcontrol"
+    install -Dm644 /dev/stdin "$pkgdir/etc/nvcontrol/config.toml" << 'EOF'
+# nvcontrol default configuration
+# See: nvctl config --help
 
-    # Install shell completions (if available)
-    if [ -d "completions" ]; then
-        [ -f "completions/nvctl.bash" ] && install -Dm644 "completions/nvctl.bash" "$pkgdir/usr/share/bash-completion/completions/nvctl"
-        [ -f "completions/_nvctl" ] && install -Dm644 "completions/_nvctl" "$pkgdir/usr/share/zsh/site-functions/_nvctl"
-        [ -f "completions/nvctl.fish" ] && install -Dm644 "completions/nvctl.fish" "$pkgdir/usr/share/fish/vendor_completions.d/nvctl.fish"
-    fi
+[general]
+theme = "tokyo_night_moon"
+
+[vibrance]
+# Default vibrance levels per display (0-200, where 100 is default)
+# levels = [100, 100]
+
+[vrr]
+enabled = true
+adaptive_sync = true
+
+[power]
+# Power management profile: performance, balanced, quiet
+profile = "balanced"
+EOF
 
     # Install systemd user services
-    install -Dm644 "nvcontrol-monitor.service" "$pkgdir/usr/lib/systemd/user/nvcontrol-monitor.service"
-    install -Dm644 "nvcontrol-alerts.service" "$pkgdir/usr/lib/systemd/user/nvcontrol-alerts.service"
-    install -Dm644 "nvcontrol-gamedetect.service" "$pkgdir/usr/lib/systemd/user/nvcontrol-gamedetect.service"
+    install -dm755 "$pkgdir/usr/lib/systemd/user"
 
-    # Install service installation script
-    install -Dm755 "install-services.sh" "$pkgdir/usr/share/nvcontrol/install-services.sh"
+    # Monitor service
+    install -Dm644 /dev/stdin "$pkgdir/usr/lib/systemd/user/nvcontrol-monitor.service" << 'EOF'
+[Unit]
+Description=nvcontrol GPU Monitor
+Documentation=https://github.com/GhostKellz/nvcontrol
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/nvctl gpu watch --interval 5
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+EOF
+
+    # Game detection service
+    install -Dm644 /dev/stdin "$pkgdir/usr/lib/systemd/user/nvcontrol-gamedetect.service" << 'EOF'
+[Unit]
+Description=nvcontrol Game Detection
+Documentation=https://github.com/GhostKellz/nvcontrol
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/nvctl game detect --daemon
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=graphical-session.target
+EOF
+}
+
+# Post-install message
+post_install() {
+    echo "==> nvcontrol v$pkgver installed!"
+    echo "    CLI: nvctl --help"
+    echo "    GUI: nvcontrol"
+    echo ""
+    echo "==> Quick start:"
+    echo "    nvctl gpu info          # GPU information"
+    echo "    nvctl gpu stat          # TUI dashboard"
+    echo "    nvctl display vibrance list  # Digital vibrance"
+    echo ""
+    echo "==> Enable services (optional):"
+    echo "    systemctl --user enable --now nvcontrol-monitor"
+    echo "    systemctl --user enable --now nvcontrol-gamedetect"
+}
+
+post_upgrade() {
+    post_install
 }

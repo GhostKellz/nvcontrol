@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use tokio::runtime::Runtime;
 
-/// Pure Rust NVIDIA Container Runtime implementation
+/// NVIDIA Container Runtime implementation
 /// This provides docker/podman/bolt/nix container GPU passthrough functionality
 /// built directly into nvcontrol, with native Bolt API integration
 

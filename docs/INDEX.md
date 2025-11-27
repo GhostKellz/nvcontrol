@@ -1,13 +1,14 @@
 # nvcontrol Documentation Hub
 
-Complete documentation for nvcontrol - The Ultimate NVIDIA GPU Control Tool for Linux + Wayland.
+Complete documentation for nvcontrol v0.7.1 - Modern NVIDIA Settings Manager for Linux + Wayland.
 
 ## Quick Start
 
 **New Users:**
 1. [README](../README.md) - Project overview and installation
-2. [BUILDING](BUILDING.md) - Build from source
-3. [TUI User Guide](TUI_USER_GUIDE.md) - Terminal interface quickstart
+2. [BUILDING](../BUILDING.md) - Build from source
+3. [CONTRIBUTING](../CONTRIBUTING.md) - Development guidelines
+4. [TUI User Guide](TUI_USER_GUIDE.md) - Terminal interface quickstart
 
 **RTX 5090 Users:**
 - [RTX 5090 Setup Guide](RTX_5090_SETUP_GUIDE.md) - Blackwell-specific setup
@@ -177,16 +178,18 @@ nvctl profile apply quiet
 ### Linux Distributions
 
 **Primary Support** (Tier 1):
-- ✅ **Arch Linux** - Rolling release, AUR package available
-- ✅ **Ubuntu 22.04+** - LTS and latest
-- ✅ **Fedora 38+** - Latest releases
-- ✅ **Debian 12+** - Stable
+- ✅ **Arch Linux** - Premier platform, PKGBUILD available
+- ✅ **Fedora 39+** - Full RPM support
+- ✅ **Nobara** - Gaming-optimized Fedora, first-class support
+- ✅ **Bazzite** - Fedora Atomic gaming, rpm-ostree compatible
+- ✅ **Debian 12+** / Ubuntu 22.04+ - .deb packages
+- ✅ **Pop!_OS** - Includes COSMIC desktop support
 
 **Additional Support** (Tier 2):
-- ✅ Pop!_OS
 - ✅ Manjaro
 - ✅ openSUSE Tumbleweed
 - ✅ Gentoo
+- ✅ EndeavourOS
 
 ### Display Servers
 
@@ -206,12 +209,14 @@ nvctl profile apply quiet
 - GNOME 45+ (Wayland)
 - Hyprland
 - Sway
+- Pop!_OS COSMIC (new in v0.7.1)
 
 **Supported:**
 - XFCE
 - Cinnamon
 - MATE
 - i3/bspwm
+- Weston (reference)
 
 ---
 
@@ -457,4 +462,4 @@ nvcontrol/
 
 ---
 
-**Last Updated**: November 2024 (RTX 5090 Blackwell support added)
+**Last Updated**: November 2024 (v0.7.1 - Pop!_OS COSMIC support, display controls)

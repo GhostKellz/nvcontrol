@@ -1,0 +1,36 @@
+#!/usr/bin/make -f
+# nvcontrol Debian build rules
+
+export DH_VERBOSE = 1
+export CARGO_HOME = $(CURDIR)/debian/.cargo
+export RUSTUP_TOOLCHAIN = stable
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	cargo build --release --bin nvctl
+	cargo build --release --bin nvcontrol --features gui
+
+override_dh_auto_install:
+	# Install binaries
+	install -Dm755 target/release/nvctl debian/nvcontrol/usr/bin/nvctl
+	install -Dm755 target/release/nvcontrol debian/nvcontrol/usr/bin/nvcontrol
+
+	# Install desktop file
+	install -Dm644 debian/nvcontrol.desktop debian/nvcontrol/usr/share/applications/nvcontrol.desktop
+
+	# Install systemd user services
+	install -Dm644 debian/nvcontrol-monitor.service debian/nvcontrol/usr/lib/systemd/user/nvcontrol-monitor.service
+	install -Dm644 debian/nvcontrol-gamedetect.service debian/nvcontrol/usr/lib/systemd/user/nvcontrol-gamedetect.service
+
+	# Install documentation
+	install -Dm644 README.md debian/nvcontrol/usr/share/doc/nvcontrol/README.md
+
+override_dh_auto_test:
+	# Skip tests that require GPU hardware
+	cargo test --release --lib -- --skip hardware --skip nvml || true
+
+override_dh_auto_clean:
+	cargo clean || true
+	rm -rf $(CARGO_HOME)

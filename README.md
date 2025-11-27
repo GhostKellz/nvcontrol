@@ -1,408 +1,249 @@
-# nvcontrol 🎮
+# nvcontrol
 
 <div align="center">
   <img src="assets/icons/nvctl_logo.png" alt="nvcontrol Logo" width="128" height="128">
+
+  **Modern NVIDIA Settings Manager for Linux + Wayland**
+
+  [![Version](https://img.shields.io/badge/version-0.7.1-blue.svg)](https://github.com/GhostKellz/nvcontrol/releases)
+  [![Rust](https://img.shields.io/badge/rust-1.75+-orange.svg)](https://www.rust-lang.org)
+  [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+  [![NVIDIA](https://img.shields.io/badge/NVIDIA-Open%20Drivers%20580+-76B900.svg)](https://github.com/NVIDIA/open-gpu-kernel-modules)
+  [![Wayland](https://img.shields.io/badge/Wayland-Native-brightgreen.svg)](https://wayland.freedesktop.org/)
+
+  *The missing NVIDIA Control Panel for Linux*
 </div>
 
-[![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![NVIDIA](https://img.shields.io/badge/NVIDIA-Open%20Drivers%20580+-76B900.svg)](https://github.com/NVIDIA/open-gpu-kernel-modules)
-[![RTX 50](https://img.shields.io/badge/RTX%2050%20Series-Blackwell-ff69b4.svg)](docs/RTX_50_SERIES_READINESS.md)
-[![Wayland](https://img.shields.io/badge/Wayland-Native-brightgreen.svg)](https://wayland.freedesktop.org/)
+---
 
-**The Ultimate NVIDIA GPU Control Tool for Linux - Gaming Dashboard Edition**
+## Overview
 
-nvcontrol is the most advanced NVIDIA GPU management solution for Linux, featuring pure Rust digital vibrance, RTX 50-series Blackwell support, ASUS ROG optimization, and a modern gaming dashboard inspired by MSI Afterburner and ASUS GPU Tweak II.
+nvcontrol is a comprehensive NVIDIA GPU control tool for Linux, designed from the ground up for Wayland. It provides everything you need to manage your NVIDIA GPU: digital vibrance, VRR/G-SYNC, HDR, overclocking, fan control, and more.
 
-## 🚀 Revolutionary Features
+**Key Features:**
+- Native digital vibrance via NVKMS ioctls (no nvidia-settings required)
+- Full Wayland support: KDE Plasma, GNOME, Hyprland, Sway, Pop!_OS COSMIC
+- RTX 50-series (Blackwell) and RTX 40/30-series support
+- TUI dashboard + GUI application
+- Container GPU passthrough
 
-### 🌈 **Pure Rust Digital Vibrance**
-- **Zero Dependencies**: Built-in vibrance control via direct NVKMS ioctls
-- **NVIDIA Open Drivers 580+**: Native integration with open kernel modules
-- **Simple Commands**: `nvctl vibe 150` - instant vibrance control
-- **Per-Display Control**: Individual settings for multi-monitor setups (OLED + IPS)
-- **Wayland & X11**: Works on all display servers
-- **Inspired by [nvibrant](https://github.com/Tremeschin/nvibrant)**: Pure Rust reimplementation of the pioneering Wayland vibrance solution
+## Quick Start
 
-### 🐳 **Container GPU Passthrough**
-- **Built-in Container Runtime**: Pure Rust runtime with predictable memory and low overhead
-- **PhantomLink Integration**: Audio container with RTX Voice in one command
-- **GPU Profiles**: Optimized profiles for ML, gaming, inference workloads
-- **Multi-Runtime**: Docker, Podman, containerd, NixOS containers
-
-### 🎮 **Gaming Dashboard (MSI Afterburner + ASUS GPU Tweak Style)**
-- **Real-time Monitoring**: Live TUI/GUI dashboard with performance graphs
-- **Smart Overclocking**: GPU/Memory offsets with safety limits
-- **4-Fan Control**: ASUS ROG Astral quad-fan optimization
-- **RGB Sync**: ASUS Aura integration via OpenRGB
-- **Performance Profiles**: Silent, Standard, OC, Extreme modes
-- **Session Statistics**: FPS tracking, thermal history, power consumption
-- **OSD Integration**: In-game overlay via MangoHud
-
-### 💎 **GPU Support**
-- **RTX 50 Series (Blackwell)**: Full GB202 support - 5090, 5080, 5070 Ti/5070, 5060 Ti/5060
-  - DLSS 4 Multi-Frame Generation (2x/3x/4x)
-  - DisplayPort 2.1a (4K @ 480Hz, 8K @ 165Hz)
-  - GDDR7 memory optimization
-  - PCIe Gen 5.0 ready
-- **RTX 40 Series (Ada Lovelace)**: Complete support - 4090, 4080, 4070 Ti/4070, 4060 Ti/4060
-  - DLSS 3 Frame Generation
-  - AV1 encoding (3 concurrent sessions)
-- **RTX 30 Series (Ampere)**: Full support - 3090 Ti/3090, 3080 Ti/3080, 3070 Ti/3070, 3060 Ti/3060
-  - DLSS 2 Super Resolution
-  - Resizable BAR optimization
-
-### 🎯 **ASUS ROG Optimization**
-- **ROG Astral RTX 5090**: Factory OC detection (2610 MHz boost)
-- **Quad-Fan Profiles**: Optimized curves for 4-fan cooling
-- **Power Management**: 600W TDP support (630W max)
-- **RGB Control**: ASUS Aura ARGB via OpenRGB
-- **Per-Monitor Vibrance**: OLED + IPS presets
-
-### ⚡ **Upscaling Technologies**
-- **DLSS/FSR/XeSS toggle** with per-game profiles
-- **Automatic game detection** and profile application
-- **Quality presets** (Performance, Balanced, Quality, Ultra)
-- **Configuration file modification** for deep integration
-
-### 🌀 **Fan Control**
-- **Real-time fan monitoring** with RPM and percentage display
-- **Manual fan speed control** (where supported)
-- **Quick presets** (Quiet, Auto, Max)
-- **Custom fan curves** (coming soon)
-
-### 🚀 **Driver Management**
-- **Package manager integration** (Arch, Ubuntu, Fedora)
-- **Driver installation**: `nvctl drivers install proprietary/open/open-beta`
-- **DKMS issue resolution** with automatic repair
-- **Shell completions** for Bash, Zsh, Fish
-
-## 🏗️ **Modern Architecture**
-
-### **Wayland-Native**
-- Full support for KDE, GNOME, Hyprland, Sway
-- Direct compositor integration for VRR control
-- No X11 dependencies for core functionality
-
-### **Beautiful UI**
-- **Glass morphism design** with NVIDIA-inspired themes
-- **Dark/Light/Gaming** theme variants
-- **Live GPU stats** with real-time graphs
-- **Intuitive controls** with safety warnings
-
-### **Essential Commands**
-
-#### Pure Rust Digital Vibrance
 ```bash
-# Simple vibrance control (0-200%)
-nvctl vibe 100        # Default vibrance
-nvctl vibe 150        # Enhanced colors
-nvctl vibe 200        # Maximum saturation
-nvctl vibe 80         # Reduced saturation
+# GPU information (like nvidia-smi)
+nvctl gpu info
 
-# Advanced vibrance control
-nvctl display vibrance get          # Current status
-nvctl display vibrance reset        # Reset to default
-nvctl display vibrance info         # Show capabilities
+# Live monitoring dashboard
+nvctl gpu stat
+
+# Digital vibrance (0-200, default 100)
+nvctl display vibrance set 150
+
+# Launch GUI
+nvcontrol
 ```
 
-#### Container GPU Control (nvctl ct / nvctl ctr)
+## Installation
+
+### Arch Linux (Premier Platform)
 ```bash
-# Launch GPU containers
-nvctl ct launch --image nvidia/cuda:12.0-runtime-ubuntu20.04 --gpu all -i
-nvctl ctr launch --image tensorflow/tensorflow:latest-gpu --name ml-training
-
-# PhantomLink audio container with RTX Voice
-nvctl ct phantomlink --rtx-voice --mode prod
-
-# Container management
-nvctl ct list                       # List GPU containers
-nvctl ct runtime info              # Runtime information
-nvctl ct runtime test              # Test GPU passthrough
-```
-
-#### GPU Monitoring & Control
-```bash
-# Live monitoring
-nvctl gpu stat                      # Interactive TUI dashboard
-nvctl gpu info                      # GPU information
-
-# Overclocking
-nvctl overclock apply --gpu-offset 150 --memory-offset 500
-nvctl overclock stress-test 10      # Stability test
-
-# Power & thermal
-nvctl power limit 90                # Power limit percentage
-nvctl fan set 0 75                  # Fan speed control
-```
-
-## 🎯 **What Makes nvcontrol Special**
-
-### **Linux-First Design**
-Unlike Windows tools ported to Linux, nvcontrol is built ground-up for Linux:
-- **Package manager integration** instead of manual downloads
-- **Systemd integration** for automatic startup
-- **Proper desktop file** with correct categories and icons
-- **Shell completion** for power users
-
-### **Wayland Excellence** 
-- **No X11 fallbacks** - true Wayland-native operation
-- **Per-compositor optimization** (KDE vs GNOME vs Hyprland)
-- **Future-proof architecture** ready for post-X11 world
-
-### **Advanced Features**
-- **Per-game profiles** that auto-apply when games launch
-- **Thermal management** with predictive algorithms
-- **Smart defaults** that learn from user behavior
-- **Enterprise features** for multi-GPU setups
-
-## 🚀 **Quick Start**
-
-### **Prerequisites**
-For full functionality, especially digital vibrance control:
-```bash
-# Python 3.9+ and pip/uv for nvibrant integration
-sudo apt install python3 python3-pip  # Ubuntu/Debian
-# OR
-sudo pacman -S python python-pip      # Arch
-# OR  
-sudo dnf install python3 python3-pip  # Fedora
-
-# nvibrant will be automatically installed during build
-```
-
-### **GUI Application**
-```bash
-# Install and run GUI
-cargo build --release --features gui
-./target/release/nvcontrol
-```
-
-### **CLI Tools** 
-```bash
-# Install shell completions
-./scripts/install-completions.sh
-
-# Basic usage
-nvctl gpu info                   # GPU information
-nvctl display vibrance 800 600  # Set vibrance
-nvctl fan info                   # Fan status
-```
-
-### **Installation**
-```bash
-# Arch Linux (AUR)
+# From AUR
 yay -S nvcontrol-git
 
-# Ubuntu/Debian
-sudo dpkg -i nvcontrol_0.1.0_amd64.deb
+# Or build from source
+git clone https://github.com/GhostKellz/nvcontrol
+cd nvcontrol
+makepkg -si -p release/arch/PKGBUILD
+```
 
-# Fedora
-sudo rpm -i nvcontrol-0.1.0.x86_64.rpm
+### Debian/Ubuntu
+```bash
+# Download from releases
+wget https://github.com/GhostKellz/nvcontrol/releases/latest/download/nvcontrol_0.7.1-1_amd64.deb
+sudo apt install ./nvcontrol_0.7.1-1_amd64.deb
+```
 
-# From source
-git clone https://github.com/ghostkellz/nvcontrol
+### Fedora/Nobara
+```bash
+# Download from releases
+sudo dnf install https://github.com/GhostKellz/nvcontrol/releases/latest/download/nvcontrol-0.7.1-1.fc39.x86_64.rpm
+```
+
+### From Source
+```bash
+git clone https://github.com/GhostKellz/nvcontrol
 cd nvcontrol
 cargo build --release
+sudo install -Dm755 target/release/nvctl /usr/bin/nvctl
+sudo install -Dm755 target/release/nvcontrol /usr/bin/nvcontrol
 ```
 
-## 📚 **Documentation**
+See [BUILDING.md](BUILDING.md) for detailed build instructions.
 
-- [**COMMANDS.md**](COMMANDS.md) - Complete CLI reference
-- [**DOCS.md**](DOCS.md) - Technical documentation  
-- [**BUILDING.md**](BUILDING.md) - Build instructions
+## Features
 
-## 🎨 **Screenshots**
+### Digital Vibrance
+Native implementation using NVKMS ioctls - works on Wayland without nvidia-settings.
 
-### Modern GUI
-The application features a beautiful, modern interface with:
-- **Real-time GPU monitoring** with live charts
-- **Advanced overclocking controls** with safety warnings
-- **VRR management** across all displays
-- **Theme selection** (NVIDIA Dark, Light, Gaming)
-
-### TUI Dashboard
-```
-┌─ GPU Stats ─────────────────────────────────────┐
-│ 🎯 RTX 4090          🌡️ 72°C    ⚡ 380W        │
-│ 📈 GPU: ████████░░ 85%   💾 VRAM: 18.2/24.0 GB │
-│ 🌀 Fan: ██████░░░░ 65%   🔥 Temp: ████████░░    │
-└─────────────────────────────────────────────────┘
+```bash
+nvctl display vibrance list          # Show all displays
+nvctl display vibrance set 150       # Boost colors (100=default)
+nvctl display vibrance set 150 -d 1  # Specific display
 ```
 
-## 🛣️ **Roadmap**
+### Display Controls
+```bash
+nvctl display ls                     # List displays
+nvctl display color-range get        # Full vs Limited RGB
+nvctl display color-space get        # RGB, YCbCr422, YCbCr444
+nvctl display dithering get          # Dithering status
+nvctl display sharpening set 5       # Image sharpening (0-10)
+```
 
-### **v0.2.0 - Enhanced Gaming**
-- [ ] Gamescope integration
-- [ ] Shader cache management  
-- [ ] Latency optimization tools
-- [ ] RGB lighting control
+### VRR / G-SYNC
+```bash
+nvctl vrr status                     # Check VRR status
+nvctl vrr enable DP-1                # Enable on display
+nvctl vrr disable DP-1               # Disable
+```
 
-### **v0.3.0 - Enterprise Features**
-- [ ] Multi-GPU management
-- [ ] Remote monitoring
-- [ ] Team management tools
-- [ ] Performance analytics
+### GPU Monitoring
+```bash
+nvctl gpu info                       # GPU information
+nvctl gpu stat                       # TUI dashboard
+nvctl gpu watch                      # Live monitoring
+nvctl gpu watch --interval 500       # Custom refresh rate
+```
 
-### **v1.0.0 - Production Ready**
-- [ ] Stable API
-- [ ] Plugin system
-- [ ] Marketplace integration
-- [ ] Enterprise support
+### Overclocking
+```bash
+nvctl overclock status               # Current clocks
+nvctl overclock apply --gpu-offset 100 --memory-offset 500
+nvctl overclock reset                # Reset to stock
+```
 
-## 🤝 **Contributing**
+### Fan Control
+```bash
+nvctl fan info                       # Fan status
+nvctl fan set 0 75                   # Set fan 0 to 75%
+nvctl fan auto                       # Return to auto
+```
 
-nvcontrol is open source and welcomes contributions! See our contributing guidelines for details on:
-- Code style and standards
-- Testing requirements  
-- Documentation updates
-- Feature proposals
+### Power Management
+```bash
+nvctl power status                   # Power info
+nvctl power limit 90                 # Set power limit %
+```
 
-## 📄 **License**
+## Supported Hardware
+
+| Generation | GPUs | Status |
+|------------|------|--------|
+| RTX 50 (Blackwell) | 5090, 5080, 5070 Ti/5070, 5060 Ti/5060 | Full Support |
+| RTX 40 (Ada) | 4090, 4080, 4070 Ti/4070, 4060 Ti/4060 | Full Support |
+| RTX 30 (Ampere) | 3090/3080/3070/3060 series | Full Support |
+| RTX 20 (Turing) | 2080/2070/2060 series | Supported |
+| GTX 16/10 | 1660/1650/1080/1070/1060 | Basic Support |
+
+## Supported Compositors
+
+| Compositor | Vibrance | VRR | HDR |
+|------------|----------|-----|-----|
+| KDE Plasma 6 | Native NVKMS | kscreen-doctor | Yes |
+| GNOME 45+ | Native NVKMS | gsettings | Yes |
+| Hyprland | Native NVKMS | hyprctl | Planned |
+| Sway | Native NVKMS | swaymsg | No |
+| Pop!_OS COSMIC | Native NVKMS | cosmic-randr | Yes |
+
+## TUI Dashboard
+
+Launch with `nvctl gpu stat`:
+
+```
+┌─ nvcontrol v0.7.1 │ GPU 0 │ 55°C │ 85% │ LIVE ─────────────┐
+├─ Overview ─ Performance ─ Memory ─ Temp ─ Power ─ OC ─────┤
+│                                                            │
+│  GPU Stats                                                 │
+│  ┌────────────────────────────────────────────────────┐   │
+│  │ NVIDIA GeForce RTX 5090    72°C  ⚡ 380W           │   │
+│  │ GPU:  [████████████████░░░░] 85%                   │   │
+│  │ VRAM: [██████████████░░░░░░] 18.2/32.0 GB          │   │
+│  │ Fan:  [████████████░░░░░░░░] 65%                   │   │
+│  └────────────────────────────────────────────────────┘   │
+│                                                            │
+│  [q]uit [h]elp [t]heme [←→] tabs [↑↓] scroll              │
+└────────────────────────────────────────────────────────────┘
+```
+
+Tabs: Overview, Performance, Memory, Temperature, Power, Processes, Overclock, Fan Control, Profiles, Tuner, Profiler, OSD, Settings
+
+## Themes
+
+nvcontrol includes several themes:
+- **Tokyo Night Moon** (default)
+- Tokyo Night / Tokyo Night Storm
+- Dracula
+- ROG Red (auto-selected for ASUS GPUs)
+- Matrix Green
+- Cyberpunk
+
+Change theme with `t` in TUI or via Settings in GUI.
+
+## Documentation
+
+- [COMMANDS.md](COMMANDS.md) - Complete CLI reference
+- [BUILDING.md](BUILDING.md) - Build instructions
+- [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
+- [docs/](docs/) - Additional documentation
+  - [TUI_USER_GUIDE.md](docs/TUI_USER_GUIDE.md) - TUI dashboard guide
+  - [RTX_5090_SETUP_GUIDE.md](docs/RTX_5090_SETUP_GUIDE.md) - RTX 50-series setup
+  - [digital-vibrance.md](docs/digital-vibrance.md) - Vibrance implementation details
+
+## Platform Support
+
+| Platform | Package | Status |
+|----------|---------|--------|
+| **Arch Linux** | PKGBUILD | Premier |
+| **Fedora** | .rpm | Tier 1 |
+| **Nobara** | .rpm | Tier 1 (Gaming) |
+| **Bazzite** | rpm-ostree | Tier 1 (Gaming) |
+| **Pop!_OS** | .deb + COSMIC | Tier 1 |
+| Debian/Ubuntu | .deb | Full |
+
+## Requirements
+
+- **NVIDIA Driver**: 535+ (565+ recommended, 580+ for RTX 50-series)
+- **Linux Kernel**: 6.0+ (6.6+ recommended)
+- **Rust**: 1.75+ (for building from source)
+
+## Contributing
+
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+Areas where help is needed:
+- Compositor integrations (Hyprland HDR, COSMIC features)
+- Testing on various hardware
+- Documentation and translations
+- Packaging for additional distros
+
+## License
 
 MIT License - see [LICENSE](LICENSE) for details.
 
 Copyright (c) 2025 CK Technology LLC
 
----
-
-**Made with ❤️ for the Linux gaming community**
-
-[![Wayland Support](https://img.shields.io/badge/Wayland-Ready-brightgreen?logo=wayland)](https://wayland.freedesktop.org/)
-[![NVIDIA](https://img.shields.io/badge/NVIDIA-Supported-brightgreen?logo=nvidia)](https://nvidia.com)
-[![CLI & GUI](https://img.shields.io/badge/CLI_%2B_GUI-Full_Featured-blueviolet)](#features)
-[![nvibrance Integration](https://img.shields.io/badge/nvibrance-Integrated-ff69b4)](https://github.com/Tremeschin/nVibrant)
-[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/ghostkellz/nvcontrol/ci.yml?branch=main)](https://github.com/ghostkellz/nvcontrol/actions)
-
----
-
-## The Missing NVIDIA Control Panel for Linux + Wayland
-
-**nvcontrol** is a modern, fully featured NVIDIA settings manager for Linux.  
-Think: _NVIDIA Control Panel & GeForce Experience, but for Linux + Wayland_.  
-No more missing options. No more hacky workarounds. No more nvidia-settings being years behind.
-
-- **Wayland native:** Full support for Wayland compositors (KDE, GNOME, Hyprland, Sway, etc.)
-- **Legacy X11 compatible:** Works wherever NVIDIA is available.
-
----
-
-## Features
-
-- 🖥️ **Full GPU Control**  
-  - Clock speeds, power limits, overclocking, undervolting
-  - Memory timings, fan curves, temp/power monitoring
-  - 🎛️ **Display & Color Management**
-  - Per-display resolution, refresh rate, orientation, rotation
-  - Digital Vibrance, color profiles, gamma control (via integrated [nVibrant](https://github.com/Tremeschin/nVibrant))
-  - HDR toggling and fine-tuning (where supported)
-  - Hotplug/multi-monitor configuration with persistent profiles
-
-- 🔊 **Performance & Monitoring**
-  - Real-time stats: GPU/VRAM usage, temps, wattage, per-process utilization
-  - System tray widget for live monitoring and quick toggles
-  - Advanced logging & export (JSON/CSV)
-
-- 🌡️ **Fan & Thermal Control**
-  - Custom fan curves, manual overrides, and auto-fan settings
-  - Overheat protection, alerts, and fail-safe triggers
-
-- 🖱️ **Input & Latency Tweaks**
-  - Low-latency and frame pacing controls for gaming
-  - Adjustable frame limiter, VRR/G-SYNC toggle, V-Sync, and more
-  - VR/AR optimizations (if available)
-
-- 🧩 **Profiles & Automation**
-  - Game/app-specific profiles (auto-load settings per-app)
-
----
-
-## Installation
-
-### Pre-built Binaries
-Download prebuilt binaries from the [Releases](https://github.com/ghostkellz/nvcontrol/releases) page.
-
-### From Source
-```sh
-# Full installation with GUI and system tray
-cargo install nvcontrol --all-features
-
-# CLI only (no GUI dependencies)
-cargo install nvcontrol --no-default-features
-
-# GUI without system tray
-cargo install nvcontrol --features gui
-```
-
-### Build Options
-- `--all-features` - Full GUI with system tray support (default for releases)
-- `--features gui` - GUI without system tray
-- `--no-default-features` - CLI only, minimal dependencies
-
-### Requirements
-
-- NVIDIA GPU with nvidia open drivers (570+) at least during testing
-- Wayland compositor (KDE, GNOME, Hyprland, Sway, etc.)
-- Rust (for building from source)
-
-### Optional Dependencies
-- **GUI features**: GTK3, GLib (automatically handled by package managers)
-- **System tray**: Desktop environment with system tray support
-- **Digital vibrance**: [nVibrant](https://github.com/Tremeschin/nVibrant) for Wayland
-- **AUR**: TBD
-
----
-
-## Usage
-
-### CLI
-
-```sh
-nvctl --help
-```
-
-### GUI
-
-Launch via your application launcher or run:
-
-```sh
-# Full GUI (requires --features gui or --all-features during build)
-nvcontrol
-```
-
-If built without GUI features, nvcontrol will display an error message.
-
----
-
-## Roadmap
-
-- [ ] Full support for all NVIDIA GPUs (Turing, Ampere, Ada, etc.)
-- [ ] Flatpak & AUR packaging
-- [ ] Profile system with save/load functionality
-- [ ] System tray widget for quick access
-- [ ] Advanced display management (resolution, refresh rate, orientation)
-- [ ] Custom fan curves and thermal management
-- [ ] Real-time notifications and alerts
-
----
-
-## Contributing
-
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-For detailed build instructions, see [BUILDING.md](BUILDING.md).
-
----
-
-## License
-
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
-
----
-
 ## Acknowledgments
 
-- [nVibrant](https://github.com/Tremeschin/nVibrant) for Digital Vibrance integration
-- [wlroots](https://gitlab.freedesktop.org/wlroots/wlroots) and the Wayland community
-- All contributors and testers
+- [nvibrant](https://github.com/Tremeschin/nvibrant) - Inspiration for NVKMS vibrance implementation
+- [nvidia-open-gpu-kernel-modules](https://github.com/NVIDIA/open-gpu-kernel-modules) - NVIDIA open source drivers
+- The Linux gaming community
 
+---
+
+<div align="center">
+
+**Made for the Linux gaming community**
+
+[![GitHub Stars](https://img.shields.io/github/stars/GhostKellz/nvcontrol?style=social)](https://github.com/GhostKellz/nvcontrol)
+
+</div>

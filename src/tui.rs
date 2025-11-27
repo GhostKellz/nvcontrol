@@ -568,7 +568,7 @@ impl TuiApp {
         };
 
         let title = format!(
-            "{} nvcontrol v0.7.0 │ GPU {} │ {} │ {} │ {} │ {}",
+            "{} nvcontrol v0.7.1 │ GPU {} │ {} │ {} │ {} │ {}",
             themes::icons::GPU,
             self.selected_gpu,
             stats_str,
@@ -2448,16 +2448,16 @@ impl TuiApp {
 
                     // Founders Edition or generic NVIDIA
                     if name_lower.contains("founders") || name_lower.contains("nvidia") {
-                        println!("🎨 Detected NVIDIA GPU - using Tokyo Night theme");
-                        return themes::ThemeVariant::TokyoNightNight;
+                        println!("🎨 Detected NVIDIA GPU - using Tokyo Night Moon theme");
+                        return themes::ThemeVariant::TokyoNightMoon;
                     }
                 }
             }
         }
 
-        // Default theme
-        println!("🎨 Using default Tokyo Night theme");
-        themes::ThemeVariant::TokyoNightNight
+        // Default theme - Tokyo Night Moon
+        println!("🎨 Using default Tokyo Night Moon theme");
+        themes::ThemeVariant::TokyoNightMoon
     }
 
     /// Draw OSD/MangoHud configuration tab

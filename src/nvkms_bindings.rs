@@ -27,17 +27,8 @@ pub type NvKmsSurfaceHandle = NvU32;
 // ===== Display ID (from nv_dpy_id.h) =====
 pub type NVDpyId = NvU32;
 
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct NVDpyIdList {
-    pub id: [NvU32; 8], // Array to hold multiple display IDs
-}
-
-impl Default for NVDpyIdList {
-    fn default() -> Self {
-        Self { id: [0; 8] }
-    }
-}
+// NVDpyIdList is actually just a bitmask (single NvU32), not an array
+pub type NVDpyIdList = NvU32;
 
 // ===== NVKMS IOC TL Infrastructure from nvkms-ioctl.h =====
 #[repr(C)]
@@ -55,16 +46,17 @@ pub const NVKMS_IOCTL_CMD: u8 = 0;
 pub const NVKMS_IOCTL_IOWR: c_ulong = nix::request_code_readwrite!(NVKMS_IOCTL_MAGIC, NVKMS_IOCTL_CMD, std::mem::size_of::<NvKmsIoctlParams>());
 
 // ===== NVKMS Ioctl Commands from nvkms-api.h =====
+// These MUST match the enum order in the NVIDIA open source driver
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum NvKmsIoctlCommand {
-    AllocDevice = 0,
-    FreeDevice = 1,
-    QueryDisp = 2,
-    QueryConnectorStaticData = 3,
-    QueryConnectorDynamicData = 4,
-    QueryDpyStaticData = 5,
-    QueryDpyDynamicData = 6,
+    AllocDevice = 0,                   // NVKMS_IOCTL_ALLOC_DEVICE
+    FreeDevice = 1,                    // NVKMS_IOCTL_FREE_DEVICE
+    QueryDisp = 2,                     // NVKMS_IOCTL_QUERY_DISP
+    QueryConnectorStaticData = 3,      // NVKMS_IOCTL_QUERY_CONNECTOR_STATIC_DATA
+    QueryConnectorDynamicData = 4,     // NVKMS_IOCTL_QUERY_CONNECTOR_DYNAMIC_DATA
+    QueryDpyStaticData = 5,            // NVKMS_IOCTL_QUERY_DPY_STATIC_DATA
+    QueryDpyDynamicData = 6,           // NVKMS_IOCTL_QUERY_DPY_DYNAMIC_DATA
     ValidateModeIndex = 7,
     ValidateMode = 8,
     SetMode = 9,
@@ -80,9 +72,9 @@ pub enum NvKmsIoctlCommand {
     GrantSurface = 19,
     AcquireSurface = 20,
     ReleaseSurface = 21,
-    SetDpyAttribute = 22,
-    GetDpyAttribute = 23,
-    GetDpyAttributeValidValues = 24,
+    SetDpyAttribute = 22,              // NVKMS_IOCTL_SET_DPY_ATTRIBUTE
+    GetDpyAttribute = 23,              // NVKMS_IOCTL_GET_DPY_ATTRIBUTE
+    GetDpyAttributeValidValues = 24,   // NVKMS_IOCTL_GET_DPY_ATTRIBUTE_VALID_VALUES
     SetDispAttribute = 25,
     GetDispAttribute = 26,
     GetDispAttributeValidValues = 27,
@@ -244,6 +236,9 @@ pub struct NvKmsGetDpyAttributeValidValuesParams {
 }
 
 // ===== Query Display Structures =====
+// Total size: Request=8, Reply=164, Params=172
+pub const NVKMS_MAX_CONNECTORS_PER_DISP: usize = 16;
+
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct NvKmsQueryDispRequest {
@@ -251,14 +246,19 @@ pub struct NvKmsQueryDispRequest {
     pub disp_handle: NvKmsDispHandle,
 }
 
+// QueryDispReply: 164 bytes total
+// numConnectors at offset 16, connectorHandles at offset 20
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct NvKmsQueryDispReply {
-    pub valid_dpys: NVDpyIdList,
-    pub boot_dpys: NVDpyIdList,
-    pub mux_dpys: NVDpyIdList,
-    pub connector_handles: [NvKmsConnectorHandle; 32],
-    pub num_connectors: NvU32,
+    pub valid_dpys: NVDpyIdList,      // offset 0
+    pub boot_dpys: NVDpyIdList,       // offset 4
+    pub mux_dpys: NVDpyIdList,        // offset 8
+    pub frame_lock_handle: NvU32,     // offset 12
+    pub num_connectors: NvU32,        // offset 16
+    pub connector_handles: [NvKmsConnectorHandle; NVKMS_MAX_CONNECTORS_PER_DISP], // offset 20
+    // Remaining fields (gpu_string is actually 80 bytes starting at 84)
+    pub _padding: [u8; 164 - 20 - (NVKMS_MAX_CONNECTORS_PER_DISP * 4)], // 164 - 20 - 64 = 80
 }
 
 #[repr(C)]
@@ -268,10 +268,108 @@ pub struct NvKmsQueryDispParams {
     pub reply: NvKmsQueryDispReply,
 }
 
+// ===== Connector Types =====
+#[repr(u32)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum NvKmsConnectorType {
+    Dp = 0,
+    Vga = 1,
+    DviI = 2,
+    DviD = 3,
+    Adc = 4,
+    Lvds = 5,
+    Hdmi = 6,
+    Usbc = 7,
+    Dsi = 8,
+    Unknown = 255,
+}
+
+#[repr(u32)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum NvKmsConnectorSignalFormat {
+    Unknown = 0,
+    Vga = 1,
+    Lvds = 2,
+    Tmds = 3,
+    Dp = 4,
+    Dsi = 5,
+}
+
+// ===== Query Connector Static Data =====
+// Total: Request=12, Reply=32, Params=44
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct NvKmsQueryConnectorStaticDataRequest {
+    pub device_handle: NvKmsDeviceHandle,
+    pub disp_handle: NvKmsDispHandle,
+    pub connector_handle: NvKmsConnectorHandle,
+}
+
+// QueryConnectorStaticDataReply: 32 bytes
+// dpyId at 0, type at 12, signalFormat at 20, physicalIndex at 24
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct NvKmsQueryConnectorStaticDataReply {
+    pub dpy_id: NVDpyId,                          // offset 0
+    pub is_dp: NvBool,                            // offset 4
+    pub is_lvds: NvBool,                          // offset 5
+    pub location_on_chip: NvBool,                 // offset 6
+    pub _pad1: NvBool,                            // offset 7 (alignment)
+    pub legacy_type_index: NvU32,                 // offset 8
+    pub connector_type: NvKmsConnectorType,       // offset 12
+    pub type_index: NvU32,                        // offset 16
+    pub signal_format: NvKmsConnectorSignalFormat, // offset 20
+    pub physical_index: NvU32,                    // offset 24
+    pub physical_location: NvU32,                 // offset 28
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct NvKmsQueryConnectorStaticDataParams {
+    pub request: NvKmsQueryConnectorStaticDataRequest,
+    pub reply: NvKmsQueryConnectorStaticDataReply,
+}
+
+// ===== Query Dpy Dynamic Data =====
+// Exact sizes from driver 580.105.08:
+// - Request: 2072 bytes (has EDID buffer and many flags)
+// - Reply: 35088 bytes (connected at offset 132)
+// - Total Params: 37160 bytes
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct NvKmsQueryDpyDynamicDataRequest {
+    pub device_handle: NvKmsDeviceHandle,
+    pub disp_handle: NvKmsDispHandle,
+    pub dpy_id: NVDpyId,
+    // Padding for additional fields (forceConnected, forceDisconnected, overrideEdid,
+    // ignoreEdid, ignoreEdidChecksum, allowDVISpecPClkOverride, dpInbandStereoSignaling,
+    // disableACPIBrightnessHotkeys, edid buffer, etc.)
+    pub _padding: [u8; 2072 - 12], // 12 = 4 + 4 + 4 for the three handles
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct NvKmsQueryDpyDynamicDataReply {
+    // Fields before 'connected' (offset 132)
+    pub _pre_connected: [u8; 132],
+    pub connected: NvBool,
+    // Rest of the struct
+    pub _post_connected: [u8; 35088 - 132 - 1],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct NvKmsQueryDpyDynamicDataParams {
+    pub request: NvKmsQueryDpyDynamicDataRequest,
+    pub reply: NvKmsQueryDpyDynamicDataReply,
+}
+
 // ===== Alloc Device Structures =====
-pub const NVKMS_NVIDIA_DRIVER_VERSION_STRING_LENGTH: usize = 64;
+// These constants must match the NVIDIA driver exactly (from nvkms-api.h)
+pub const NVKMS_NVIDIA_DRIVER_VERSION_STRING_LENGTH: usize = 32;
 pub const NVKMS_MAX_DEVICE_REGISTRY_KEYS: usize = 16;
-pub const NVKMS_MAX_DEVICE_REGISTRY_KEYNAME_LEN: usize = 64;
+pub const NVKMS_MAX_DEVICE_REGISTRY_KEYNAME_LEN: usize = 32;
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -315,13 +413,19 @@ pub enum NvKmsAllocDeviceStatus {
     Unspecified = 4,
 }
 
-#[repr(C)]
+// AllocDeviceReply: 888 bytes total, 8-byte alignment (due to NvKmsLayerCapabilities)
+// Key fields: status (offset 0), deviceHandle (offset 4), numDisps (offset 16), dispHandles (offset 20)
+#[repr(C, align(8))]
 #[derive(Copy, Clone)]
 pub struct NvKmsAllocDeviceReply {
-    pub device_handle: NvKmsDeviceHandle,
-    pub disp_handles: [NvKmsDispHandle; NVKMS_MAX_SUBDEVICES],
-    pub num_disps: NvU32,
-    pub status: NvKmsAllocDeviceStatus,
+    pub status: NvKmsAllocDeviceStatus,    // offset 0
+    pub device_handle: NvKmsDeviceHandle,  // offset 4
+    pub sub_device_mask: NvU32,            // offset 8
+    pub num_heads: NvU32,                  // offset 12
+    pub num_disps: NvU32,                  // offset 16
+    pub disp_handles: [NvKmsDispHandle; NVKMS_MAX_SUBDEVICES], // offset 20
+    // Remaining fields (caps, layer info, etc.)
+    pub _padding: [u8; 888 - 20 - (NVKMS_MAX_SUBDEVICES * 4)], // 888 - 20 - 32 = 836
 }
 
 #[repr(C)]
@@ -329,6 +433,26 @@ pub struct NvKmsAllocDeviceReply {
 pub struct NvKmsAllocDeviceParams {
     pub request: NvKmsAllocDeviceRequest,
     pub reply: NvKmsAllocDeviceReply,
+}
+
+// ===== Free Device Structures =====
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct NvKmsFreeDeviceRequest {
+    pub device_handle: NvKmsDeviceHandle,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct NvKmsFreeDeviceReply {
+    pub padding: NvU32,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct NvKmsFreeDeviceParams {
+    pub request: NvKmsFreeDeviceRequest,
+    pub reply: NvKmsFreeDeviceReply,
 }
 
 // ===== Helper Functions =====

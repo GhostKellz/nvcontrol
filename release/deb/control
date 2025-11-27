@@ -1,0 +1,47 @@
+Source: nvcontrol
+Section: utils
+Priority: optional
+Maintainer: CK Technology LLC <contact@ck-technology.com>
+Build-Depends: debhelper-compat (= 13),
+               cargo,
+               rustc (>= 1.75),
+               libclang-dev,
+               pkg-config,
+               libwayland-dev,
+               libxkbcommon-dev,
+               libfontconfig1-dev,
+               libfreetype6-dev
+Standards-Version: 4.6.2
+Homepage: https://github.com/GhostKellz/nvcontrol
+Vcs-Git: https://github.com/GhostKellz/nvcontrol.git
+Vcs-Browser: https://github.com/GhostKellz/nvcontrol
+Rules-Requires-Root: no
+
+Package: nvcontrol
+Architecture: amd64
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         nvidia-driver-libs (>= 535) | libnvidia-ml1 (>= 535),
+         libwayland-client0,
+         libxkbcommon0,
+         libfontconfig1,
+         libfreetype6
+Recommends: gamescope,
+            mangohud,
+            gamemode
+Suggests: docker.io | podman,
+          nvidia-container-toolkit
+Description: Modern NVIDIA Settings Manager for Linux + Wayland
+ nvcontrol is a comprehensive NVIDIA GPU control tool for Linux,
+ designed specifically for Wayland environments. Features include:
+ .
+  * Digital Vibrance control (native, no nvidia-settings required)
+  * VRR (Variable Refresh Rate) / G-SYNC configuration
+  * HDR (High Dynamic Range) management
+  * GPU overclocking and power management
+  * Fan curve control
+  * Multi-monitor profile management
+  * Container GPU passthrough support
+  * Game detection and automatic profile switching
+ .
+ Supports KDE Plasma, GNOME, Hyprland, Sway, and Pop!_OS Cosmic.
