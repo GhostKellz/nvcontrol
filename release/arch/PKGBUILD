@@ -17,12 +17,12 @@ depends=(
     'freetype2'             # Font rendering
 )
 makedepends=(
-    'rust>=1.75'            # Rust compiler (edition 2024)
-    'cargo'                 # Rust package manager
     'git'                   # Version control
     'clang'                 # For bindgen
     'pkg-config'            # Build configuration
 )
+# Rust can be provided by either 'rust' package or 'rustup'
+# Don't force one over the other - check at build time
 optdepends=(
     'gamescope: Valve compositor for gaming (HDR, VRR, FSR)'
     'mangohud: Performance overlay/OSD support'
@@ -45,6 +45,13 @@ sha256sums=('SKIP')
 
 build() {
     cd "$pkgname-$pkgver"
+
+    # Check for cargo (from rust package or rustup)
+    if ! command -v cargo &> /dev/null; then
+        echo "ERROR: cargo not found. Install 'rust' or 'rustup' package."
+        exit 1
+    fi
+
     export RUSTUP_TOOLCHAIN=stable
     export CARGO_TARGET_DIR=target
 
