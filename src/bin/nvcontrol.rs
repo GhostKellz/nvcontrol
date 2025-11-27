@@ -156,9 +156,15 @@ struct GpuStats {
     pub memory_used: u64,
     pub memory_total: u64,
     pub power_draw: f32,
+    pub power_limit: f32,
     pub fan_speed: u32,
     pub gpu_clock: u32,
     pub memory_clock: u32,
+    pub pci_bus: String,
+    pub driver_version: String,
+    pub cuda_cores: u32,
+    pub architecture: String,
+    pub compute_capability: String,
 }
 
 #[cfg(feature = "gui")]
@@ -186,6 +192,7 @@ impl NvControlApp {
                             .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
                             .unwrap_or(0) as f32;
                         let power_draw = device.power_usage().map(|p| p as f32 / 1000.0).unwrap_or(0.0);
+                        let power_limit = device.power_management_limit().map(|p| p as f32 / 1000.0).unwrap_or(0.0);
                         let utilization_rates = device.utilization_rates().ok();
                         let utilization = utilization_rates.map(|u| u.gpu as f32).unwrap_or(0.0);
                         let mem_info = device.memory_info().ok();
@@ -195,6 +202,32 @@ impl NvControlApp {
                         let gpu_clock = device.clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics).unwrap_or(0);
                         let memory_clock = device.clock_info(nvml_wrapper::enum_wrappers::device::Clock::Memory).unwrap_or(0);
 
+                        // Additional info (fetch once per second to reduce overhead)
+                        let driver_version = nvml.sys_driver_version().unwrap_or_else(|_| "Unknown".to_string());
+                        let pci_info = device.pci_info().ok();
+                        let pci_bus = pci_info.map(|p| format!("{:04x}:{:02x}:{:02x}.0", p.domain, p.bus, p.device))
+                            .unwrap_or_else(|| "Unknown".to_string());
+
+                        // Compute capability and architecture detection
+                        let compute_cap = device.cuda_compute_capability().ok();
+                        let (architecture, compute_capability) = if let Some(cc) = compute_cap {
+                            let arch = match (cc.major, cc.minor) {
+                                (10, _) => "Blackwell",
+                                (8, 9) => "Ada Lovelace",
+                                (8, 6) | (8, 0) => "Ampere",
+                                (7, 5) => "Turing",
+                                (7, 0) => "Volta",
+                                (6, _) => "Pascal",
+                                _ => "Unknown",
+                            };
+                            (arch.to_string(), format!("{}.{}", cc.major, cc.minor))
+                        } else {
+                            ("Unknown".to_string(), "N/A".to_string())
+                        };
+
+                        // Estimate CUDA cores based on architecture
+                        let cuda_cores = device.num_cores().unwrap_or(0);
+
                         let stats = GpuStats {
                             name,
                             temperature,
@@ -202,9 +235,15 @@ impl NvControlApp {
                             memory_used,
                             memory_total,
                             power_draw,
+                            power_limit,
                             fan_speed,
                             gpu_clock,
                             memory_clock,
+                            pci_bus,
+                            driver_version,
+                            cuda_cores,
+                            architecture,
+                            compute_capability,
                         };
 
                         // Send stats to UI thread (ignore errors if channel closed)
@@ -660,66 +699,166 @@ impl eframe::App for NvControlApp {
                         ui.add_space(10.0);
                     }
 
-                    // Get GPU info from cached stats
-                    ui.group(|ui| {
-                        ui.label("📊 Real-time Stats");
-                        ui.separator();
+                    // Two-column layout for GPU info
+                    ui.columns(2, |columns| {
+                        // Left column: GPU Identity Card
+                        columns[0].group(|ui| {
+                            ui.label(egui::RichText::new("󰢮 GPU Information").strong().color(egui::Color32::from_rgb(139, 233, 253)));
+                            ui.separator();
 
-                        if let Some(ref stats) = self.gpu_stats {
-                            ui.horizontal(|ui| {
-                                ui.label("🎯 GPU:");
-                                ui.label(&stats.name);
-                            });
+                            if let Some(ref stats) = self.gpu_stats {
+                                // GPU Name with architecture badge
+                                ui.horizontal(|ui| {
+                                    ui.label(egui::RichText::new(&stats.name).strong().size(16.0));
+                                });
 
-                            ui.horizontal(|ui| {
-                                ui.label("🌡️ Temperature:");
-                                ui.colored_label(
-                                    if stats.temperature > 80.0 {
-                                        egui::Color32::RED
+                                ui.add_space(4.0);
+
+                                // Architecture badge
+                                ui.horizontal(|ui| {
+                                    let arch_color = match stats.architecture.as_str() {
+                                        "Blackwell" => egui::Color32::from_rgb(255, 215, 0),  // Gold
+                                        "Ada Lovelace" => egui::Color32::from_rgb(80, 250, 123),  // Green
+                                        "Ampere" => egui::Color32::from_rgb(139, 233, 253),  // Cyan
+                                        "Turing" => egui::Color32::from_rgb(189, 147, 249),  // Purple
+                                        _ => egui::Color32::GRAY,
+                                    };
+                                    ui.label(egui::RichText::new(format!("󰘚 {}", stats.architecture))
+                                        .color(arch_color)
+                                        .background_color(egui::Color32::from_rgb(40, 42, 54)));
+                                    ui.label(format!("SM {}", stats.compute_capability));
+                                });
+
+                                ui.add_space(6.0);
+
+                                // Specs grid
+                                egui::Grid::new("gpu_specs").num_columns(2).spacing([20.0, 4.0]).show(ui, |ui| {
+                                    ui.label("CUDA Cores:");
+                                    ui.label(egui::RichText::new(format!("{}", stats.cuda_cores)).strong());
+                                    ui.end_row();
+
+                                    ui.label("VRAM:");
+                                    ui.label(egui::RichText::new(format!("{:.0} GB GDDR", stats.memory_total as f64 / 1e9)).strong());
+                                    ui.end_row();
+
+                                    ui.label("Driver:");
+                                    ui.label(&stats.driver_version);
+                                    ui.end_row();
+
+                                    ui.label("PCI Bus:");
+                                    ui.label(egui::RichText::new(&stats.pci_bus).small());
+                                    ui.end_row();
+                                });
+                            } else {
+                                ui.label("⚠️ GPU not detected");
+                            }
+                        });
+
+                        // Right column: Real-time Stats
+                        columns[1].group(|ui| {
+                            ui.label(egui::RichText::new("📊 Real-time Metrics").strong().color(egui::Color32::from_rgb(80, 250, 123)));
+                            ui.separator();
+
+                            if let Some(ref stats) = self.gpu_stats {
+                                // Temperature with color-coded background
+                                ui.horizontal(|ui| {
+                                    ui.label("🌡️ Temperature:");
+                                    let temp_color = if stats.temperature > 80.0 {
+                                        egui::Color32::from_rgb(255, 85, 85)
                                     } else if stats.temperature > 70.0 {
-                                        egui::Color32::YELLOW
+                                        egui::Color32::from_rgb(255, 184, 108)
                                     } else {
-                                        egui::Color32::GREEN
-                                    },
-                                    format!("{:.1}°C", stats.temperature),
-                                );
-                            });
+                                        egui::Color32::from_rgb(80, 250, 123)
+                                    };
+                                    ui.label(egui::RichText::new(format!("{:.0}°C", stats.temperature))
+                                        .color(temp_color)
+                                        .strong()
+                                        .size(18.0));
+                                });
 
-                            ui.horizontal(|ui| {
-                                ui.label("⚡ Power Usage:");
-                                ui.label(format!("{:.1}W", stats.power_draw));
-                            });
+                                ui.add_space(4.0);
 
-                            ui.horizontal(|ui| {
-                                ui.label("📈 GPU Usage:");
-                                ui.add(
-                                    egui::ProgressBar::new(stats.utilization / 100.0)
-                                        .text(format!("{:.0}%", stats.utilization)),
-                                );
-                            });
+                                // GPU Usage with colored progress bar
+                                ui.horizontal(|ui| {
+                                    ui.label("📈 GPU:");
+                                    let usage_color = if stats.utilization > 80.0 {
+                                        egui::Color32::from_rgb(255, 85, 85)
+                                    } else if stats.utilization > 50.0 {
+                                        egui::Color32::from_rgb(255, 184, 108)
+                                    } else {
+                                        egui::Color32::from_rgb(80, 250, 123)
+                                    };
+                                    ui.add(
+                                        egui::ProgressBar::new(stats.utilization / 100.0)
+                                            .text(format!("{:.0}%", stats.utilization))
+                                            .fill(usage_color),
+                                    );
+                                });
 
-                            ui.horizontal(|ui| {
-                                ui.label("💾 VRAM:");
-                                let used_gb = stats.memory_used as f64 / 1e9;
-                                let total_gb = stats.memory_total as f64 / 1e9;
-                                let usage_ratio = stats.memory_used as f32 / stats.memory_total as f32;
-                                ui.add(
-                                    egui::ProgressBar::new(usage_ratio)
-                                        .text(format!("{:.1}/{:.1} GB", used_gb, total_gb)),
-                                );
-                            });
+                                // VRAM Usage
+                                ui.horizontal(|ui| {
+                                    ui.label("💾 VRAM:");
+                                    let used_gb = stats.memory_used as f64 / 1e9;
+                                    let total_gb = stats.memory_total as f64 / 1e9;
+                                    let usage_ratio = stats.memory_used as f32 / stats.memory_total.max(1) as f32;
+                                    let vram_color = if usage_ratio > 0.9 {
+                                        egui::Color32::from_rgb(255, 85, 85)
+                                    } else if usage_ratio > 0.7 {
+                                        egui::Color32::from_rgb(255, 184, 108)
+                                    } else {
+                                        egui::Color32::from_rgb(139, 233, 253)
+                                    };
+                                    ui.add(
+                                        egui::ProgressBar::new(usage_ratio)
+                                            .text(format!("{:.1}/{:.0} GB", used_gb, total_gb))
+                                            .fill(vram_color),
+                                    );
+                                });
 
-                            ui.horizontal(|ui| {
-                                ui.label("🌀 Fan Speed:");
-                                ui.label(format!("{}%", stats.fan_speed));
-                            });
-                        } else {
-                            ui.label("⚠️ NVML not available - install NVIDIA drivers");
-                            ui.horizontal(|ui| {
-                                ui.label("🎯 GPU:");
-                                ui.label("Unknown (fallback mode)");
-                            });
-                        }
+                                // Power with limit indicator
+                                ui.horizontal(|ui| {
+                                    ui.label("⚡ Power:");
+                                    let power_ratio = if stats.power_limit > 0.0 {
+                                        stats.power_draw / stats.power_limit
+                                    } else {
+                                        0.0
+                                    };
+                                    let power_color = if power_ratio > 0.95 {
+                                        egui::Color32::from_rgb(255, 85, 85)
+                                    } else if power_ratio > 0.8 {
+                                        egui::Color32::from_rgb(255, 184, 108)
+                                    } else {
+                                        egui::Color32::from_rgb(189, 147, 249)
+                                    };
+                                    ui.add(
+                                        egui::ProgressBar::new(power_ratio.min(1.0))
+                                            .text(format!("{:.0}W / {:.0}W", stats.power_draw, stats.power_limit))
+                                            .fill(power_color),
+                                    );
+                                });
+
+                                // Clocks
+                                ui.add_space(4.0);
+                                ui.horizontal(|ui| {
+                                    ui.label("⏱️ Clocks:");
+                                    ui.label(format!("{} MHz GPU", stats.gpu_clock));
+                                    ui.separator();
+                                    ui.label(format!("{} MHz Mem", stats.memory_clock));
+                                });
+
+                                // Fan speed
+                                ui.horizontal(|ui| {
+                                    ui.label("🌀 Fan:");
+                                    ui.add(
+                                        egui::ProgressBar::new(stats.fan_speed as f32 / 100.0)
+                                            .text(format!("{}%", stats.fan_speed))
+                                            .fill(egui::Color32::from_rgb(98, 114, 164)),
+                                    );
+                                });
+                            } else {
+                                ui.label("⚠️ NVML not available - install NVIDIA drivers");
+                            }
+                        });
                     });
 
                     ui.separator();
@@ -1243,79 +1382,231 @@ impl eframe::App for NvControlApp {
                 egui::CentralPanel::default().show(ctx, |ui| {
                     ui.heading("⚡ Interactive GPU Overclocking");
 
-                    ui.group(|ui| {
-                        ui.label("🎯 Quick Presets");
-                        ui.separator();
-
+                    // Current status bar at top
+                    if let Some(ref stats) = self.gpu_stats {
                         ui.horizontal(|ui| {
-                            if ui.selectable_label(self.oc_preset == OcPreset::Stock, "📊 Stock").clicked() {
-                                self.apply_oc_preset(OcPreset::Stock);
-                            }
-                            if ui.selectable_label(self.oc_preset == OcPreset::MildOc, "🔧 Mild OC").clicked() {
-                                self.apply_oc_preset(OcPreset::MildOc);
-                            }
-                            if ui.selectable_label(self.oc_preset == OcPreset::Performance, "⚡ Performance").clicked() {
-                                self.apply_oc_preset(OcPreset::Performance);
-                            }
-                            if ui.selectable_label(self.oc_preset == OcPreset::Extreme, "🔥 Extreme (5090)").clicked() {
-                                self.apply_oc_preset(OcPreset::Extreme);
-                            }
+                            // Current clocks
+                            ui.group(|ui| {
+                                ui.vertical(|ui| {
+                                    ui.label(egui::RichText::new("Current Clocks").small());
+                                    ui.horizontal(|ui| {
+                                        ui.label(egui::RichText::new(format!("{} MHz", stats.gpu_clock))
+                                            .strong()
+                                            .color(egui::Color32::from_rgb(139, 233, 253)));
+                                        ui.label("GPU");
+                                        ui.separator();
+                                        ui.label(egui::RichText::new(format!("{} MHz", stats.memory_clock))
+                                            .strong()
+                                            .color(egui::Color32::from_rgb(189, 147, 249)));
+                                        ui.label("VRAM");
+                                    });
+                                });
+                            });
+
+                            // Temperature indicator
+                            ui.group(|ui| {
+                                ui.vertical(|ui| {
+                                    ui.label(egui::RichText::new("Temperature").small());
+                                    let temp_color = if stats.temperature > 80.0 {
+                                        egui::Color32::from_rgb(255, 85, 85)
+                                    } else if stats.temperature > 70.0 {
+                                        egui::Color32::from_rgb(255, 184, 108)
+                                    } else {
+                                        egui::Color32::from_rgb(80, 250, 123)
+                                    };
+                                    ui.label(egui::RichText::new(format!("{:.0}°C", stats.temperature))
+                                        .strong()
+                                        .size(18.0)
+                                        .color(temp_color));
+                                });
+                            });
+
+                            // Power indicator
+                            ui.group(|ui| {
+                                ui.vertical(|ui| {
+                                    ui.label(egui::RichText::new("Power Draw").small());
+                                    ui.label(egui::RichText::new(format!("{:.0}W / {:.0}W", stats.power_draw, stats.power_limit))
+                                        .strong()
+                                        .color(egui::Color32::from_rgb(255, 121, 198)));
+                                });
+                            });
                         });
 
-                        ui.add_space(5.0);
+                        ui.add_space(8.0);
+                    }
 
-                        ui.label(format!("Current: {:?}", self.oc_preset));
-                    });
+                    // Two-column layout
+                    ui.columns(2, |columns| {
+                        // Left: Presets and Manual Tuning
+                        columns[0].group(|ui| {
+                            ui.label(egui::RichText::new("🎯 Quick Presets").strong().color(egui::Color32::from_rgb(139, 233, 253)));
+                            ui.separator();
 
-                    ui.add_space(10.0);
+                            ui.horizontal(|ui| {
+                                let preset_btn = |ui: &mut egui::Ui, preset: OcPreset, current: OcPreset, label: &str, color: egui::Color32| -> bool {
+                                    let is_selected = preset == current;
+                                    let btn = egui::Button::new(egui::RichText::new(label).color(if is_selected { egui::Color32::BLACK } else { color }));
+                                    let btn = if is_selected {
+                                        btn.fill(color)
+                                    } else {
+                                        btn
+                                    };
+                                    ui.add(btn).clicked()
+                                };
 
-                    ui.group(|ui| {
-                        ui.label("🎛️ Manual Tuning");
-                        ui.separator();
+                                if preset_btn(ui, OcPreset::Stock, self.oc_preset, "📊 Stock", egui::Color32::from_rgb(98, 114, 164)) {
+                                    self.apply_oc_preset(OcPreset::Stock);
+                                }
+                                if preset_btn(ui, OcPreset::MildOc, self.oc_preset, "🔧 Mild", egui::Color32::from_rgb(80, 250, 123)) {
+                                    self.apply_oc_preset(OcPreset::MildOc);
+                                }
+                                if preset_btn(ui, OcPreset::Performance, self.oc_preset, "⚡ Perf", egui::Color32::from_rgb(255, 184, 108)) {
+                                    self.apply_oc_preset(OcPreset::Performance);
+                                }
+                                if preset_btn(ui, OcPreset::Extreme, self.oc_preset, "🔥 Max", egui::Color32::from_rgb(255, 85, 85)) {
+                                    self.apply_oc_preset(OcPreset::Extreme);
+                                }
+                            });
 
-                        ui.horizontal(|ui| {
-                            ui.label("GPU Clock Offset:");
-                            ui.add(
-                                egui::Slider::new(&mut self.gpu_offset, -200..=200)
-                                    .suffix(" MHz")
-                                    .text("Core"),
-                            );
-                            ui.label(format!("{:+} MHz", self.gpu_offset));
+                            // Preset description
+                            let preset_desc = match self.oc_preset {
+                                OcPreset::Stock => "Default clocks, 80% power limit",
+                                OcPreset::MildOc => "+75 MHz Core, +500 MHz VRAM, 90% power",
+                                OcPreset::Performance => "+150 MHz Core, +1000 MHz VRAM, 95% power",
+                                OcPreset::Extreme => "+200 MHz Core, +1500 MHz VRAM, 105% power (RTX 5090)",
+                            };
+                            ui.label(egui::RichText::new(preset_desc).small().weak());
                         });
 
-                        ui.horizontal(|ui| {
-                            ui.label("Memory Clock Offset:");
-                            ui.add(
-                                egui::Slider::new(&mut self.memory_offset, -1000..=1500)
-                                    .suffix(" MHz")
-                                    .text("VRAM"),
-                            );
-                            ui.label(format!("{:+} MHz", self.memory_offset));
+                        columns[0].add_space(8.0);
+
+                        columns[0].group(|ui| {
+                            ui.label(egui::RichText::new("🎛️ Manual Tuning").strong().color(egui::Color32::from_rgb(80, 250, 123)));
+                            ui.separator();
+
+                            // GPU Clock slider with visual indicator
+                            ui.label("Core Clock Offset");
+                            let gpu_color = if self.gpu_offset > 0 {
+                                egui::Color32::from_rgb(80, 250, 123)
+                            } else if self.gpu_offset < 0 {
+                                egui::Color32::from_rgb(139, 233, 253)
+                            } else {
+                                egui::Color32::GRAY
+                            };
+                            ui.horizontal(|ui| {
+                                ui.add(
+                                    egui::Slider::new(&mut self.gpu_offset, -200..=200)
+                                        .suffix(" MHz")
+                                        .custom_formatter(|v, _| format!("{:+.0}", v)),
+                                );
+                                ui.label(egui::RichText::new(format!("{:+} MHz", self.gpu_offset)).strong().color(gpu_color));
+                            });
+
+                            ui.add_space(4.0);
+
+                            // Memory Clock slider
+                            ui.label("Memory Clock Offset");
+                            let mem_color = if self.memory_offset > 0 {
+                                egui::Color32::from_rgb(189, 147, 249)
+                            } else if self.memory_offset < 0 {
+                                egui::Color32::from_rgb(139, 233, 253)
+                            } else {
+                                egui::Color32::GRAY
+                            };
+                            ui.horizontal(|ui| {
+                                ui.add(
+                                    egui::Slider::new(&mut self.memory_offset, -1000..=1500)
+                                        .suffix(" MHz")
+                                        .custom_formatter(|v, _| format!("{:+.0}", v)),
+                                );
+                                ui.label(egui::RichText::new(format!("{:+} MHz", self.memory_offset)).strong().color(mem_color));
+                            });
+
+                            ui.add_space(4.0);
+
+                            // Power Limit slider
+                            ui.label("Power Limit");
+                            let power_color = if self.power_limit_percent > 100 {
+                                egui::Color32::from_rgb(255, 85, 85)
+                            } else if self.power_limit_percent < 80 {
+                                egui::Color32::from_rgb(80, 250, 123)
+                            } else {
+                                egui::Color32::from_rgb(255, 184, 108)
+                            };
+                            ui.horizontal(|ui| {
+                                ui.add(
+                                    egui::Slider::new(&mut self.power_limit_percent, 50..=105)
+                                        .suffix("%"),
+                                );
+                                ui.label(egui::RichText::new(format!("{}%", self.power_limit_percent)).strong().color(power_color));
+                            });
+
+                            ui.add_space(10.0);
+
+                            ui.horizontal(|ui| {
+                                if ui.button(egui::RichText::new("✅ Apply").color(egui::Color32::from_rgb(80, 250, 123))).clicked() {
+                                    self.apply_overclock();
+                                }
+
+                                if ui.button("🔄 Reset").clicked() {
+                                    self.apply_oc_preset(OcPreset::Stock);
+                                }
+
+                                if ui.button("🔥 Stress Test").on_hover_text("Run 5-minute stability test").clicked() {
+                                    let _ = overclocking::create_stress_test(5);
+                                }
+                            });
                         });
 
-                        ui.horizontal(|ui| {
-                            ui.label("Power Limit:");
-                            ui.add(
-                                egui::Slider::new(&mut self.power_limit_percent, 50..=105)
-                                    .suffix("%")
-                                    .text("TDP"),
-                            );
-                            ui.label(format!("{}%", self.power_limit_percent));
-                        });
+                        // Right: Safety info and warnings
+                        columns[1].group(|ui| {
+                            ui.label(egui::RichText::new("⚠️ Safety Information").strong().color(egui::Color32::from_rgb(255, 184, 108)));
+                            ui.separator();
 
-                        ui.add_space(10.0);
+                            ui.label("Overclocking can cause:");
+                            ui.label("• System instability or crashes");
+                            ui.label("• Increased power consumption");
+                            ui.label("• Higher temperatures");
+                            ui.label("• Potential hardware damage if extreme");
 
-                        ui.horizontal(|ui| {
-                            if ui.button("✅ Apply Overclock").clicked() {
-                                self.apply_overclock();
+                            ui.add_space(8.0);
+
+                            // Temperature warning
+                            if let Some(ref stats) = self.gpu_stats {
+                                if stats.temperature > 80.0 {
+                                    ui.colored_label(egui::Color32::from_rgb(255, 85, 85),
+                                        "⚠️ GPU is HOT! Consider reducing overclock.");
+                                } else if stats.temperature > 70.0 {
+                                    ui.colored_label(egui::Color32::from_rgb(255, 184, 108),
+                                        "ℹ️ Temperature elevated but safe.");
+                                } else {
+                                    ui.colored_label(egui::Color32::from_rgb(80, 250, 123),
+                                        "✅ Temperature is good for overclocking.");
+                                }
                             }
 
-                            if ui.button("🔄 Reset to Stock").clicked() {
-                                self.apply_oc_preset(OcPreset::Stock);
-                            }
+                            ui.add_space(8.0);
 
-                            if ui.button("⚠️ Stress Test (5 min)").clicked() {
-                                let _ = overclocking::create_stress_test(5);
+                            // Architecture-specific tips
+                            if let Some(ref stats) = self.gpu_stats {
+                                ui.label(egui::RichText::new(format!("Tips for {} GPUs:", stats.architecture)).strong());
+                                match stats.architecture.as_str() {
+                                    "Blackwell" => {
+                                        ui.label("• RTX 50 series responds well to memory OC");
+                                        ui.label("• GDDR7 can handle +1500 MHz safely");
+                                        ui.label("• Core benefits from slight undervolt");
+                                    }
+                                    "Ada Lovelace" => {
+                                        ui.label("• RTX 40 series has good thermal headroom");
+                                        ui.label("• +150-200 MHz core is typical safe range");
+                                        ui.label("• GDDR6X runs hot, watch temps");
+                                    }
+                                    _ => {
+                                        ui.label("• Start with small offsets (+50 core)");
+                                        ui.label("• Test stability with each increase");
+                                        ui.label("• Monitor temperatures closely");
+                                    }
+                                }
                             }
                         });
                     });
@@ -3335,53 +3626,145 @@ impl eframe::App for NvControlApp {
                 egui::CentralPanel::default().show(ctx, |ui| {
                     ui.heading("⚙️ Settings");
 
-                    ui.group(|ui| {
-                        ui.label("🎨 Theme Selection");
-                        ui.separator();
+                    // Two-column layout for settings
+                    ui.columns(2, |columns| {
+                        // Left column: Theme and Appearance
+                        columns[0].group(|ui| {
+                            ui.label(egui::RichText::new("🎨 Theme & Appearance").strong().color(egui::Color32::from_rgb(189, 147, 249)));
+                            ui.separator();
 
-                        egui::ComboBox::from_label("Select Theme")
-                            .selected_text(self.current_theme.name())
-                            .show_ui(ui, |ui| {
-                                ui.selectable_value(&mut self.current_theme,
-                                    nvcontrol::themes::ThemeVariant::TokyoNightNight, "Tokyo Night");
-                                ui.selectable_value(&mut self.current_theme,
-                                    nvcontrol::themes::ThemeVariant::TokyoNightStorm, "Tokyo Night Storm");
-                                ui.selectable_value(&mut self.current_theme,
-                                    nvcontrol::themes::ThemeVariant::TokyoNightMoon, "Tokyo Night Moon");
-                                ui.selectable_value(&mut self.current_theme,
-                                    nvcontrol::themes::ThemeVariant::Dracula, "Dracula");
-                                ui.selectable_value(&mut self.current_theme,
-                                    nvcontrol::themes::ThemeVariant::RogRed, "ROG Red");
-                                ui.selectable_value(&mut self.current_theme,
-                                    nvcontrol::themes::ThemeVariant::MatrixGreen, "Matrix Green");
-                                ui.selectable_value(&mut self.current_theme,
-                                    nvcontrol::themes::ThemeVariant::Cyberpunk, "Cyberpunk");
+                            // Theme selector with preview
+                            ui.horizontal(|ui| {
+                                ui.label("Theme:");
+                                egui::ComboBox::from_id_source("theme_selector")
+                                    .selected_text(self.current_theme.name())
+                                    .show_ui(ui, |ui| {
+                                        ui.selectable_value(&mut self.current_theme,
+                                            nvcontrol::themes::ThemeVariant::TokyoNightNight, "🌙 Tokyo Night");
+                                        ui.selectable_value(&mut self.current_theme,
+                                            nvcontrol::themes::ThemeVariant::TokyoNightStorm, "⛈️ Tokyo Night Storm");
+                                        ui.selectable_value(&mut self.current_theme,
+                                            nvcontrol::themes::ThemeVariant::TokyoNightMoon, "🌕 Tokyo Night Moon");
+                                        ui.selectable_value(&mut self.current_theme,
+                                            nvcontrol::themes::ThemeVariant::Dracula, "🧛 Dracula");
+                                        ui.selectable_value(&mut self.current_theme,
+                                            nvcontrol::themes::ThemeVariant::RogRed, "🎮 ROG Red");
+                                        ui.selectable_value(&mut self.current_theme,
+                                            nvcontrol::themes::ThemeVariant::MatrixGreen, "💻 Matrix Green");
+                                        ui.selectable_value(&mut self.current_theme,
+                                            nvcontrol::themes::ThemeVariant::Cyberpunk, "🌆 Cyberpunk");
+                                    });
                             });
 
-                        ui.add_space(10.0);
+                            ui.add_space(8.0);
 
-                        if ui.button("Apply Theme").clicked() {
-                            self.apply_theme(ctx);
-                        }
+                            // Theme preview
+                            ui.label(egui::RichText::new("Preview:").small());
+                            let theme_palette = nvcontrol::themes::Theme::from_variant(self.current_theme);
+                            ui.horizontal(|ui| {
+                                let colors = &theme_palette.colors;
+                                // Show color swatches
+                                let swatch = |ui: &mut egui::Ui, color: nvcontrol::themes::Color, name: &str| {
+                                    let c = egui::Color32::from_rgb(color.r, color.g, color.b);
+                                    ui.vertical(|ui| {
+                                        let (rect, _) = ui.allocate_exact_size(egui::vec2(30.0, 20.0), egui::Sense::hover());
+                                        ui.painter().rect_filled(rect, 4.0, c);
+                                        ui.label(egui::RichText::new(name).small());
+                                    });
+                                };
+                                swatch(ui, colors.blue, "Primary");
+                                swatch(ui, colors.green, "Success");
+                                swatch(ui, colors.red, "Error");
+                                swatch(ui, colors.yellow, "Warning");
+                                swatch(ui, colors.purple, "Accent");
+                            });
 
-                        ui.add_space(5.0);
+                            ui.add_space(8.0);
 
-                        ui.label("Legacy themes:");
-                        ui.horizontal(|ui| {
-                            if ui.button("NVIDIA Dark").clicked() {
-                                self.theme = theme::ModernTheme::nvidia_dark();
-                                ctx.set_visuals(self.theme.to_egui_visuals());
+                            if ui.button("✅ Apply Theme").on_hover_text("Apply the selected theme").clicked() {
+                                self.apply_theme(ctx);
                             }
-                            if ui.button("NVIDIA Light").clicked() {
-                                self.theme = theme::ModernTheme::nvidia_light();
-                                ctx.set_visuals(self.theme.to_egui_visuals());
+
+                            ui.add_space(10.0);
+
+                            // Legacy themes
+                            ui.collapsing("Legacy Themes", |ui| {
+                                ui.horizontal(|ui| {
+                                    if ui.button("NVIDIA Dark").on_hover_text("Classic NVIDIA dark theme").clicked() {
+                                        self.theme = theme::ModernTheme::nvidia_dark();
+                                        ctx.set_visuals(self.theme.to_egui_visuals());
+                                    }
+                                    if ui.button("NVIDIA Light").on_hover_text("Light theme for day use").clicked() {
+                                        self.theme = theme::ModernTheme::nvidia_light();
+                                        ctx.set_visuals(self.theme.to_egui_visuals());
+                                    }
+                                    if ui.button("Gaming").on_hover_text("High contrast gaming theme").clicked() {
+                                        self.theme = theme::ModernTheme::gaming();
+                                        ctx.set_visuals(self.theme.to_egui_visuals());
+                                    }
+                                });
+                            });
+                        });
+
+                        // Right column: System info
+                        columns[1].group(|ui| {
+                            ui.label(egui::RichText::new("ℹ️ System Information").strong().color(egui::Color32::from_rgb(139, 233, 253)));
+                            ui.separator();
+
+                            if let Some(ref stats) = self.gpu_stats {
+                                egui::Grid::new("system_info").num_columns(2).spacing([20.0, 4.0]).show(ui, |ui| {
+                                    ui.label("GPU:");
+                                    ui.label(egui::RichText::new(&stats.name).strong());
+                                    ui.end_row();
+
+                                    ui.label("Architecture:");
+                                    ui.label(&stats.architecture);
+                                    ui.end_row();
+
+                                    ui.label("Driver:");
+                                    ui.label(&stats.driver_version);
+                                    ui.end_row();
+
+                                    ui.label("VRAM:");
+                                    ui.label(format!("{:.0} GB", stats.memory_total as f64 / 1e9));
+                                    ui.end_row();
+
+                                    ui.label("PCI Bus:");
+                                    ui.label(egui::RichText::new(&stats.pci_bus).small());
+                                    ui.end_row();
+                                });
                             }
-                            if ui.button("Gaming").clicked() {
-                                self.theme = theme::ModernTheme::gaming();
-                                ctx.set_visuals(self.theme.to_egui_visuals());
-                            }
+
+                            ui.add_space(10.0);
+
+                            // App version
+                            ui.separator();
+                            ui.horizontal(|ui| {
+                                ui.label("nvcontrol version:");
+                                ui.label(egui::RichText::new("0.7.0").strong());
+                            });
+
+                            ui.horizontal(|ui| {
+                                if ui.button("📋 Copy System Info").on_hover_text("Copy system info to clipboard").clicked() {
+                                    if let Some(ref stats) = self.gpu_stats {
+                                        let info = format!(
+                                            "GPU: {}\nArchitecture: {}\nDriver: {}\nVRAM: {:.0} GB\nnvcontrol: 0.7.0",
+                                            stats.name, stats.architecture, stats.driver_version, stats.memory_total as f64 / 1e9
+                                        );
+                                        ctx.copy_text(info);
+                                    }
+                                }
+
+                                if ui.button("🔗 GitHub").on_hover_text("Open project on GitHub").clicked() {
+                                    let _ = std::process::Command::new("xdg-open")
+                                        .arg("https://github.com/your-repo/nvcontrol")
+                                        .spawn();
+                                }
+                            });
                         });
                     });
+
+                    ui.add_space(10.0);
 
                     ui.separator();
 
