@@ -1,4 +1,4 @@
-use crate::{NvResult, NvControlError, vrr, themes, gui_tuner, nvidia_profiler};
+use crate::{NvResult, NvControlError, vrr, themes, gui_tuner, nvidia_profiler, asus_power_detector};
 use crossterm::{
     event::{self, Event, KeyCode, KeyModifiers, MouseEvent, MouseEventKind, EnableMouseCapture, DisableMouseCapture},
     execute,
@@ -1147,9 +1147,10 @@ impl TuiApp {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(8), // Current power usage
-                Constraint::Length(8), // Power history
-                Constraint::Min(6),    // Power details
+                Constraint::Length(8),  // Current power usage
+                Constraint::Length(8),  // Power history
+                Constraint::Length(10), // Power details
+                Constraint::Min(6),     // ASUS Power Detector (if available)
             ])
             .split(area);
 
@@ -1262,6 +1263,86 @@ impl TuiApp {
                 .style(Style::default());
             f.render_widget(power_details, chunks[2]);
         }
+
+        // ASUS Power Detector+ (ROG GPUs only)
+        self.draw_asus_power_detector(f, chunks[3]);
+    }
+
+    fn draw_asus_power_detector(&self, f: &mut Frame, area: Rect) {
+        // Try to detect ASUS ROG GPUs
+        let asus_gpus = asus_power_detector::detect_asus_gpus();
+
+        if asus_gpus.is_empty() {
+            let placeholder = Paragraph::new("No ASUS ROG GPU detected")
+                .alignment(Alignment::Center)
+                .style(Style::default().fg(Color::DarkGray))
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title("ASUS Power Detector+"),
+                );
+            f.render_widget(placeholder, area);
+            return;
+        }
+
+        // Get first ASUS GPU
+        let (pci_id, model) = &asus_gpus[0];
+
+        // Try to create detector and read power rails
+        let power_info = match asus_power_detector::AsusPowerDetector::new(pci_id) {
+            Ok(detector) => {
+                if !detector.is_supported() {
+                    format!("{}: Power Detector+ not available", model.name())
+                } else {
+                    match detector.read_power_rails() {
+                        Ok(status) => {
+                            let health_str = match status.health {
+                                asus_power_detector::PowerHealth::Good => "✓ GOOD",
+                                asus_power_detector::PowerHealth::Warning => "⚠ WARNING",
+                                asus_power_detector::PowerHealth::Critical => "✗ CRITICAL",
+                                asus_power_detector::PowerHealth::Unknown => "? UNKNOWN",
+                            };
+
+                            let rails_str: Vec<String> = status.rails.iter().map(|r| {
+                                let current = r.current_ma.map(|c| format!("{:.2}A", c as f32 / 1000.0))
+                                    .unwrap_or_else(|| "N/A".to_string());
+                                format!("Rail {}: {}", r.rail_id, current)
+                            }).collect();
+
+                            format!(
+                                "12V-2x6 Connector Health: {}\n\n{}\n\nTotal Power: {:.1}W",
+                                health_str,
+                                rails_str.join("  │  "),
+                                status.total_power_w.unwrap_or(0.0)
+                            )
+                        }
+                        Err(e) => format!("Read error: {}", e),
+                    }
+                }
+            }
+            Err(e) => format!("Detector init failed: {}", e),
+        };
+
+        // Color based on health
+        let title_color = if power_info.contains("✓ GOOD") {
+            Color::Green
+        } else if power_info.contains("⚠ WARNING") {
+            Color::Yellow
+        } else if power_info.contains("✗ CRITICAL") {
+            Color::Red
+        } else {
+            Color::Gray
+        };
+
+        let asus_widget = Paragraph::new(power_info)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(format!("ASUS Power Detector+ - {}", asus_gpus[0].1.name()))
+                    .border_style(Style::default().fg(title_color)),
+            )
+            .style(Style::default());
+        f.render_widget(asus_widget, area);
     }
 
     fn draw_processes(&self, f: &mut Frame, area: Rect) {

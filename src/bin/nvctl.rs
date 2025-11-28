@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 use console::{Key, Term, style};
 use indicatif::{ProgressBar, ProgressStyle};
 use nvcontrol::{
+    asus_power_detector,
     display, drivers, fan, gamescope,
     gpu::{self, OutputFormat},
     latency, monitoring, overclocking, power, recording, upscaling, vrr,
@@ -189,6 +190,11 @@ enum Command {
     Doctor,
     /// 📋 Show detailed version information
     Version,
+    /// 🎯 ASUS ROG GPU Features (Power Detector+, Aura, etc.)
+    Asus {
+        #[command(subcommand)]
+        subcommand: AsusSubcommand,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1649,6 +1655,51 @@ enum RuntimeAction {
     Test,
     /// Configure NVIDIA Container Runtime
     Configure,
+}
+
+#[derive(Subcommand)]
+enum AsusSubcommand {
+    /// Detect ASUS ROG GPUs in system
+    Detect,
+    /// Show Power Detector+ status (12V-2x6 connector monitoring)
+    #[command(alias = "pd")]
+    Power {
+        /// GPU PCI ID (default: auto-detect)
+        #[arg(short, long)]
+        gpu: Option<String>,
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+        /// Watch mode - continuous monitoring
+        #[arg(short, long)]
+        watch: bool,
+        /// Watch interval in seconds
+        #[arg(long, default_value = "1")]
+        interval: u64,
+    },
+    /// Show ASUS GPU Tweak-style status
+    Status,
+    /// ASUS Aura RGB control
+    Aura {
+        #[command(subcommand)]
+        action: AsusAuraAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum AsusAuraAction {
+    /// Show Aura status
+    Status,
+    /// Set Aura mode
+    Mode {
+        /// Mode: off, static, breathing, rainbow, cycle
+        mode: String,
+    },
+    /// Set Aura color
+    Color {
+        /// RGB hex color (e.g., FF0000 for red)
+        color: String,
+    },
 }
 
 fn main() {
@@ -5611,6 +5662,145 @@ fn main() {
             println!("   nvcontrol              Launch GUI");
             println!("\n🔗 More info: {}", env!("CARGO_PKG_HOMEPAGE"));
         }
+        Command::Asus { subcommand } => match subcommand {
+            AsusSubcommand::Detect => {
+                println!("🔍 Detecting ASUS ROG GPUs...\n");
+                let gpus = asus_power_detector::detect_asus_gpus();
+
+                if gpus.is_empty() {
+                    println!("❌ No ASUS ROG GPUs detected");
+                    println!("   This feature requires an ASUS ROG graphics card");
+                } else {
+                    println!("✅ Found {} ASUS ROG GPU(s):\n", gpus.len());
+                    for (pci_id, model) in &gpus {
+                        println!("   🎮 {} @ {}", model.name(), pci_id);
+                        if model.supports_power_detector() {
+                            println!("      └─ Power Detector+ supported");
+                        }
+                    }
+                }
+            }
+            AsusSubcommand::Power { gpu, json, watch, interval } => {
+                // Auto-detect GPU if not specified
+                let pci_id = match gpu {
+                    Some(id) => id,
+                    None => {
+                        let gpus = asus_power_detector::detect_asus_gpus();
+                        if gpus.is_empty() {
+                            eprintln!("❌ No ASUS ROG GPU detected");
+                            return;
+                        }
+                        gpus[0].0.clone()
+                    }
+                };
+
+                match asus_power_detector::AsusPowerDetector::new(&pci_id) {
+                    Ok(detector) => {
+                        if !detector.is_supported() {
+                            eprintln!("❌ Power Detector+ not supported on this card");
+                            eprintln!("   Model: {}", detector.model().name());
+                            return;
+                        }
+
+                        if watch {
+                            println!("🔌 ASUS Power Detector+ - Live Monitor");
+                            println!("   Press Ctrl+C to stop\n");
+
+                            loop {
+                                // Clear screen and move cursor to top
+                                print!("\x1b[2J\x1b[H");
+
+                                match detector.status_string() {
+                                    Ok(status) => println!("{}", status),
+                                    Err(e) => {
+                                        eprintln!("❌ Read error: {}", e);
+                                        eprintln!("   (May need root: sudo nvctl asus power -w)");
+                                    }
+                                }
+
+                                std::thread::sleep(Duration::from_secs(interval));
+                            }
+                        } else if json {
+                            match detector.read_power_rails() {
+                                Ok(status) => {
+                                    println!("{}", serde_json::to_string_pretty(&status).unwrap_or_default());
+                                }
+                                Err(e) => {
+                                    eprintln!("{{\"error\": \"{}\"}}", e);
+                                }
+                            }
+                        } else {
+                            match detector.status_string() {
+                                Ok(status) => println!("{}", status),
+                                Err(e) => {
+                                    eprintln!("❌ Failed to read power status: {}", e);
+                                    eprintln!("   (May need root: sudo nvctl asus power)");
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("❌ Failed to initialize Power Detector: {}", e);
+                    }
+                }
+            }
+            AsusSubcommand::Status => {
+                println!("🎮 ASUS GPU Tweak Status\n");
+
+                let gpus = asus_power_detector::detect_asus_gpus();
+                if gpus.is_empty() {
+                    println!("❌ No ASUS ROG GPU detected");
+                    return;
+                }
+
+                for (pci_id, model) in &gpus {
+                    println!("GPU: {} @ {}", model.name(), pci_id);
+                    println!("─────────────────────────────────────");
+
+                    // Show basic GPU info from nvidia-smi
+                    if let Ok(output) = std::process::Command::new("nvidia-smi")
+                        .args(["--query-gpu=temperature.gpu,power.draw,power.limit,fan.speed,clocks.gr,clocks.mem",
+                               "--format=csv,noheader,nounits"])
+                        .output()
+                    {
+                        if output.status.success() {
+                            let info = String::from_utf8_lossy(&output.stdout);
+                            let parts: Vec<&str> = info.trim().split(", ").collect();
+                            if parts.len() >= 6 {
+                                println!("  Temperature:  {}°C", parts[0]);
+                                println!("  Power:        {}W / {}W", parts[1], parts[2]);
+                                println!("  Fan Speed:    {}%", parts[3]);
+                                println!("  GPU Clock:    {} MHz", parts[4]);
+                                println!("  Memory Clock: {} MHz", parts[5]);
+                            }
+                        }
+                    }
+
+                    // Show Power Detector+ status if supported
+                    if model.supports_power_detector() {
+                        println!("\n  Power Detector+: ✅ Supported");
+                        println!("  Run 'nvctl asus power' for 12V rail monitoring");
+                    }
+                    println!();
+                }
+            }
+            AsusSubcommand::Aura { action } => {
+                match action {
+                    AsusAuraAction::Status => {
+                        println!("🌈 ASUS Aura RGB Status");
+                        println!("   (Aura control coming soon)");
+                    }
+                    AsusAuraAction::Mode { mode } => {
+                        println!("🌈 Setting Aura mode to: {}", mode);
+                        println!("   (Aura control coming soon)");
+                    }
+                    AsusAuraAction::Color { color } => {
+                        println!("🌈 Setting Aura color to: #{}", color);
+                        println!("   (Aura control coming soon)");
+                    }
+                }
+            }
+        },
     }
 }
 

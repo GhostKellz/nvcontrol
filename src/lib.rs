@@ -118,6 +118,7 @@ pub mod container_specific;
 pub mod asus_gpu_tweak;
 pub mod asus_aura;
 pub mod asus_fan_control;
+pub mod asus_power_detector;
 
 // Monitoring and TUI modules
 pub mod monitoring;

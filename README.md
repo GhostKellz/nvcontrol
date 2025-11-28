@@ -5,7 +5,7 @@
 
   **Modern NVIDIA Settings Manager for Linux + Wayland**
 
-  [![Version](https://img.shields.io/badge/version-0.7.1-blue.svg)](https://github.com/GhostKellz/nvcontrol/releases)
+  [![Version](https://img.shields.io/badge/version-0.7.2-blue.svg)](https://github.com/GhostKellz/nvcontrol/releases)
   [![Rust](https://img.shields.io/badge/rust-1.75+-orange.svg)](https://www.rust-lang.org)
   [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
   [![NVIDIA](https://img.shields.io/badge/NVIDIA-Open%20Drivers%20580+-76B900.svg)](https://github.com/NVIDIA/open-gpu-kernel-modules)
@@ -13,6 +13,10 @@
 
   *The missing NVIDIA Control Panel for Linux*
 </div>
+
+---
+
+> **Warning**: Overclocking and voltage modification features are experimental. Use at your own risk. Improper settings can cause system instability or hardware damage. Always monitor temperatures and power draw when adjusting GPU settings.
 
 ---
 
@@ -59,14 +63,14 @@ makepkg -si -p release/arch/PKGBUILD
 ### Debian/Ubuntu
 ```bash
 # Download from releases
-wget https://github.com/GhostKellz/nvcontrol/releases/latest/download/nvcontrol_0.7.1-1_amd64.deb
-sudo apt install ./nvcontrol_0.7.1-1_amd64.deb
+wget https://github.com/GhostKellz/nvcontrol/releases/latest/download/nvcontrol_0.7.2-1_amd64.deb
+sudo apt install ./nvcontrol_0.7.2-1_amd64.deb
 ```
 
 ### Fedora/Nobara
 ```bash
 # Download from releases
-sudo dnf install https://github.com/GhostKellz/nvcontrol/releases/latest/download/nvcontrol-0.7.1-1.fc39.x86_64.rpm
+sudo dnf install https://github.com/GhostKellz/nvcontrol/releases/latest/download/nvcontrol-0.7.2-1.fc39.x86_64.rpm
 ```
 
 ### From Source
@@ -116,6 +120,9 @@ nvctl gpu watch --interval 500       # Custom refresh rate
 ```
 
 ### Overclocking
+
+> **Caution**: Overclocking is experimental. Improper settings can cause instability or hardware damage. Use at your own risk.
+
 ```bash
 nvctl overclock status               # Current clocks
 nvctl overclock apply --gpu-offset 100 --memory-offset 500
@@ -130,6 +137,9 @@ nvctl fan auto                       # Return to auto
 ```
 
 ### Power Management
+
+> **Caution**: Modifying power limits is experimental. Ensure adequate cooling before increasing limits.
+
 ```bash
 nvctl power status                   # Power info
 nvctl power limit 90                 # Set power limit %
@@ -155,12 +165,48 @@ nvctl power limit 90                 # Set power limit %
 | Sway | Native NVKMS | swaymsg | No |
 | Pop!_OS COSMIC | Native NVKMS | cosmic-randr | Yes |
 
+## ASUS ROG Features
+
+Native support for ASUS ROG graphics cards with vendor-specific features.
+
+### Power Detector+ (ROG Astral/Matrix)
+
+Monitor 12V-2x6 power connector health in real-time:
+
+```bash
+# Check power connector status
+nvctl asus power
+
+# Output:
+# ASUS Power Detector+ - ROG Astral RTX 5090
+# ═══════════════════════════════════════
+# Connector Health: [GOOD]
+# ...
+```
+
+Health status: **GOOD** (green) | **WARNING** (yellow) | **CRITICAL** (red)
+
+### ASUS Commands
+
+```bash
+nvctl asus detect    # Detect ASUS ROG GPUs
+nvctl asus power     # Power Detector+ status
+nvctl asus status    # GPU overview
+nvctl asus power --json  # JSON output for scripts
+```
+
+**Supported Cards:**
+- ROG Astral RTX 5090
+- ROG Matrix RTX 5090 (planned)
+
+See [ASTRAL_OWNERS.md](ASTRAL_OWNERS.md) for Astral-specific guide.
+
 ## TUI Dashboard
 
 Launch with `nvctl gpu stat`:
 
 ```
-┌─ nvcontrol v0.7.1 │ GPU 0 │ 55°C │ 85% │ LIVE ─────────────┐
+┌─ nvcontrol v0.7.2 │ GPU 0 │ 55°C │ 85% │ LIVE ─────────────┐
 ├─ Overview ─ Performance ─ Memory ─ Temp ─ Power ─ OC ─────┤
 │                                                            │
 │  GPU Stats                                                 │
@@ -194,9 +240,11 @@ Change theme with `t` in TUI or via Settings in GUI.
 - [COMMANDS.md](COMMANDS.md) - Complete CLI reference
 - [BUILDING.md](BUILDING.md) - Build instructions
 - [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
+- [ASTRAL_OWNERS.md](ASTRAL_OWNERS.md) - ASUS ROG Astral quick start
 - [docs/](docs/) - Additional documentation
   - [TUI_USER_GUIDE.md](docs/TUI_USER_GUIDE.md) - TUI dashboard guide
   - [RTX_5090_SETUP_GUIDE.md](docs/RTX_5090_SETUP_GUIDE.md) - RTX 50-series setup
+  - [POWER_DETECTION.md](docs/POWER_DETECTION.md) - ASUS Power Detector+ details
   - [digital-vibrance.md](docs/digital-vibrance.md) - Vibrance implementation details
 
 ## Platform Support

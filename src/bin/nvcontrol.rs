@@ -6,6 +6,66 @@ use nvcontrol::{
     vibrance, vrr,
 };
 
+// Phosphor icon constants for clean, consistent icons
+#[cfg(feature = "gui")]
+mod icons {
+    use egui_phosphor::regular::*;
+
+    // GPU & Hardware
+    pub const GPU: &str = GRAPHICS_CARD;
+    pub const OVERCLOCK: &str = LIGHTNING;
+    pub const FAN_ICON: &str = FAN;
+    pub const POWER: &str = egui_phosphor::regular::POWER;
+    pub const TEMP: &str = THERMOMETER;
+    pub const SPEED: &str = GAUGE;
+
+    // Display
+    pub const DISPLAY: &str = MONITOR;
+    pub const VIBRANCE: &str = RAINBOW;
+    pub const HDR: &str = SUN;
+    pub const VRR: &str = ARROW_COUNTER_CLOCKWISE;
+
+    // Gaming
+    pub const GAME: &str = GAME_CONTROLLER;
+    pub const LATENCY: &str = TIMER;
+    pub const RECORD: &str = egui_phosphor::regular::RECORD;
+    pub const FILM: &str = FILM_SLATE;
+    pub const ROCKET: &str = egui_phosphor::regular::ROCKET;
+
+    // System
+    pub const SHADER: &str = CUBE;
+    pub const DRIVER: &str = WRENCH;
+    pub const CONTAINER: &str = PACKAGE;
+    pub const RGB: &str = PALETTE;
+    pub const BENCHMARK: &str = CHART_BAR;
+    pub const SETTINGS: &str = GEAR;
+
+    // Status
+    pub const OK: &str = CHECK_CIRCLE;
+    pub const WARN: &str = WARNING;
+    pub const ERR: &str = X_CIRCLE;
+    pub const INFO: &str = egui_phosphor::regular::INFO;
+    pub const BULB: &str = LIGHTBULB;
+
+    // Actions
+    pub const REFRESH: &str = ARROW_COUNTER_CLOCKWISE;
+    pub const SAVE: &str = FLOPPY_DISK;
+    pub const RESET: &str = ARROW_COUNTER_CLOCKWISE;
+    pub const APPLY: &str = CHECK;
+
+    // Misc
+    pub const CHART: &str = CHART_LINE;
+    pub const CHART_UP: &str = CHART_LINE_UP;
+    pub const LIST: &str = CLIPBOARD;
+    pub const TARGET: &str = CROSSHAIR;
+    pub const FIRE: &str = FLAME;
+    pub const CPU_ICON: &str = CPU;
+    pub const MEMORY: &str = egui_phosphor::regular::MEMORY;
+    pub const DESKTOP_ICON: &str = DESKTOP;
+    pub const ACTIVITY: &str = PULSE;
+    pub const PLAY: &str = egui_phosphor::regular::PLAY;
+}
+
 #[cfg(feature = "gui")]
 enum Tab {
     Gpu,
@@ -96,10 +156,39 @@ fn main() -> eframe::Result<()> {
             visuals.hyperlink_color = colors.blue.to_egui();
             cc.egui_ctx.set_visuals(visuals);
 
-            // Enable better fonts and styling
+            // Setup custom fonts: Fira Code Nerd Font + Phosphor Icons
+            // Fira Code Nerd Font already includes ALL nerd font icons embedded!
+            let mut fonts = egui::FontDefinitions::default();
+
+            // Embed Fira Code Nerd Font (monospace with all nerd font icons built-in)
+            fonts.font_data.insert(
+                "FiraCodeNerd".to_owned(),
+                egui::FontData::from_static(
+                    include_bytes!("../../assets/fonts/FiraCodeNerdFontMono-Regular.ttf")
+                ),
+            );
+
+            // Add Phosphor icons (regular variant) for additional clean icons
+            egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
+
+            // Set Fira Code Nerd as primary monospace font
+            fonts.families
+                .entry(egui::FontFamily::Monospace)
+                .or_default()
+                .insert(0, "FiraCodeNerd".to_owned());
+
+            // Add Fira Code Nerd as fallback for proportional text (for nerd font glyphs)
+            fonts.families
+                .entry(egui::FontFamily::Proportional)
+                .or_default()
+                .push("FiraCodeNerd".to_owned());
+
+            cc.egui_ctx.set_fonts(fonts);
+
+            // Enable better styling
             cc.egui_ctx.set_pixels_per_point(1.2);
 
-            Box::new(NvControlApp::new_with_theme(theme_variant))
+            Ok(Box::new(NvControlApp::new_with_theme(theme_variant)))
         }),
     )
 }
@@ -661,7 +750,7 @@ impl eframe::App for NvControlApp {
 
             // Header with GPU stats
             ui.horizontal(|ui| {
-                ui.heading(egui::RichText::new("󰢮 nvcontrol").strong().color(sidebar_colors.blue.to_egui()));
+                ui.heading(egui::RichText::new("nvcontrol").strong().color(sidebar_colors.blue.to_egui()));
             });
 
             // Live GPU stats in header
@@ -691,32 +780,46 @@ impl eframe::App for NvControlApp {
             ui.add_space(4.0);
 
             egui::ScrollArea::vertical().show(ui, |ui| {
+                // Teal color for unselected menu items (mint green)
+                let menu_color = sidebar_colors.teal.to_egui();
+                let menu_active = sidebar_colors.cyan.to_egui();
+
                 // GPU & Hardware section
-                ui.label(egui::RichText::new("󰍹 GPU & Hardware").small().strong().color(sidebar_colors.cyan.to_egui()));
+                ui.label(egui::RichText::new("GPU & Hardware").small().strong().color(sidebar_colors.cyan.to_egui()));
                 ui.add_space(2.0);
-                if ui.selectable_label(matches!(self.tab, Tab::Gpu), "   🎮 GPU Status").clicked() {
+                let selected = matches!(self.tab, Tab::Gpu);
+                if ui.add(egui::SelectableLabel::new(selected,
+                    egui::RichText::new("    GPU Status").color(if selected { menu_active } else { menu_color }))).clicked() {
                     self.tab = Tab::Gpu;
                 }
                 let oc_label = if self.gpu_offset != 0 || self.memory_offset != 0 {
-                    "   ⚡ Overclock  ●"
+                    "    Overclock  *"
                 } else {
-                    "   ⚡ Overclock"
+                    "    Overclock"
                 };
-                if ui.selectable_label(matches!(self.tab, Tab::Overclock), oc_label).clicked() {
+                let selected = matches!(self.tab, Tab::Overclock);
+                if ui.add(egui::SelectableLabel::new(selected,
+                    egui::RichText::new(oc_label).color(if selected { menu_active } else { menu_color }))).clicked() {
                     self.tab = Tab::Overclock;
                 }
                 let auto_oc_label = if self.auto_oc_running {
-                    "   🚀 Auto-OC  ⟳"
+                    "    Auto-OC  ~"
                 } else {
-                    "   🚀 Auto-OC"
+                    "    Auto-OC"
                 };
-                if ui.selectable_label(matches!(self.tab, Tab::AutoOverclock), auto_oc_label).clicked() {
+                let selected = matches!(self.tab, Tab::AutoOverclock);
+                if ui.add(egui::SelectableLabel::new(selected,
+                    egui::RichText::new(auto_oc_label).color(if selected { menu_active } else { menu_color }))).clicked() {
                     self.tab = Tab::AutoOverclock;
                 }
-                if ui.selectable_label(matches!(self.tab, Tab::Fan), "   🌀 Fan Control").clicked() {
+                let selected = matches!(self.tab, Tab::Fan);
+                if ui.add(egui::SelectableLabel::new(selected,
+                    egui::RichText::new("    Fan Control").color(if selected { menu_active } else { menu_color }))).clicked() {
                     self.tab = Tab::Fan;
                 }
-                if ui.selectable_label(matches!(self.tab, Tab::PowerCurves), "   🔋 Power").clicked() {
+                let selected = matches!(self.tab, Tab::PowerCurves);
+                if ui.add(egui::SelectableLabel::new(selected,
+                    egui::RichText::new("    Power").color(if selected { menu_active } else { menu_color }))).clicked() {
                     self.tab = Tab::PowerCurves;
                 }
 
@@ -725,28 +828,36 @@ impl eframe::App for NvControlApp {
                 ui.add_space(4.0);
 
                 // Display section
-                ui.label(egui::RichText::new("🖥️ Display").small().strong().color(sidebar_colors.purple.to_egui()));
+                ui.label(egui::RichText::new("Display").small().strong().color(sidebar_colors.purple.to_egui()));
                 ui.add_space(2.0);
-                if ui.selectable_label(matches!(self.tab, Tab::Display), "   🖥️ Display").clicked() {
+                let selected = matches!(self.tab, Tab::Display);
+                if ui.add(egui::SelectableLabel::new(selected,
+                    egui::RichText::new("    Display").color(if selected { menu_active } else { menu_color }))).clicked() {
                     self.tab = Tab::Display;
                 }
                 let vibrance_label = if self.vibrance_levels.iter().any(|&v| v != 0) {
-                    "   🌈 Vibrance  ●"
+                    "    Vibrance  *"
                 } else {
-                    "   🌈 Vibrance"
+                    "    Vibrance"
                 };
-                if ui.selectable_label(matches!(self.tab, Tab::Vibrance), vibrance_label).clicked() {
+                let selected = matches!(self.tab, Tab::Vibrance);
+                if ui.add(egui::SelectableLabel::new(selected,
+                    egui::RichText::new(vibrance_label).color(if selected { menu_active } else { menu_color }))).clicked() {
                     self.tab = Tab::Vibrance;
                 }
                 let hdr_label = if self.hdr_enabled {
-                    "   ☀️ HDR  ●"
+                    "    HDR  *"
                 } else {
-                    "   ☀️ HDR"
+                    "    HDR"
                 };
-                if ui.selectable_label(matches!(self.tab, Tab::Hdr), hdr_label).clicked() {
+                let selected = matches!(self.tab, Tab::Hdr);
+                if ui.add(egui::SelectableLabel::new(selected,
+                    egui::RichText::new(hdr_label).color(if selected { menu_active } else { menu_color }))).clicked() {
                     self.tab = Tab::Hdr;
                 }
-                if ui.selectable_label(matches!(self.tab, Tab::Vrr), "   🔄 VRR").clicked() {
+                let selected = matches!(self.tab, Tab::Vrr);
+                if ui.add(egui::SelectableLabel::new(selected,
+                    egui::RichText::new("    VRR").color(if selected { menu_active } else { menu_color }))).clicked() {
                     self.tab = Tab::Vrr;
                 }
 
@@ -755,26 +866,36 @@ impl eframe::App for NvControlApp {
                 ui.add_space(4.0);
 
                 // Gaming section
-                ui.label(egui::RichText::new("🎯 Gaming").small().strong().color(sidebar_colors.green.to_egui()));
+                ui.label(egui::RichText::new("Gaming").small().strong().color(sidebar_colors.green.to_egui()));
                 ui.add_space(2.0);
-                if ui.selectable_label(matches!(self.tab, Tab::GameProfiles), "   🎮 Profiles").clicked() {
+                let selected = matches!(self.tab, Tab::GameProfiles);
+                if ui.add(egui::SelectableLabel::new(selected,
+                    egui::RichText::new("    Profiles").color(if selected { menu_active } else { menu_color }))).clicked() {
                     self.tab = Tab::GameProfiles;
                 }
                 let osd_label = if self.osd_enabled {
-                    "   📊 OSD  ●"
+                    "    OSD  *"
                 } else {
-                    "   📊 OSD"
+                    "    OSD"
                 };
-                if ui.selectable_label(matches!(self.tab, Tab::Osd), osd_label).clicked() {
+                let selected = matches!(self.tab, Tab::Osd);
+                if ui.add(egui::SelectableLabel::new(selected,
+                    egui::RichText::new(osd_label).color(if selected { menu_active } else { menu_color }))).clicked() {
                     self.tab = Tab::Osd;
                 }
-                if ui.selectable_label(matches!(self.tab, Tab::Latency), "   ⚡ Latency").clicked() {
+                let selected = matches!(self.tab, Tab::Latency);
+                if ui.add(egui::SelectableLabel::new(selected,
+                    egui::RichText::new("    Latency").color(if selected { menu_active } else { menu_color }))).clicked() {
                     self.tab = Tab::Latency;
                 }
-                if ui.selectable_label(matches!(self.tab, Tab::Gamescope), "   🎯 Gamescope").clicked() {
+                let selected = matches!(self.tab, Tab::Gamescope);
+                if ui.add(egui::SelectableLabel::new(selected,
+                    egui::RichText::new("    Gamescope").color(if selected { menu_active } else { menu_color }))).clicked() {
                     self.tab = Tab::Gamescope;
                 }
-                if ui.selectable_label(matches!(self.tab, Tab::Recording), "   📹 Recording").clicked() {
+                let selected = matches!(self.tab, Tab::Recording);
+                if ui.add(egui::SelectableLabel::new(selected,
+                    egui::RichText::new("    Recording").color(if selected { menu_active } else { menu_color }))).clicked() {
                     self.tab = Tab::Recording;
                 }
 
@@ -783,26 +904,36 @@ impl eframe::App for NvControlApp {
                 ui.add_space(4.0);
 
                 // System section
-                ui.label(egui::RichText::new("⚙️ System").small().strong().color(sidebar_colors.magenta.to_egui()));
+                ui.label(egui::RichText::new("System").small().strong().color(sidebar_colors.magenta.to_egui()));
                 ui.add_space(2.0);
-                if ui.selectable_label(matches!(self.tab, Tab::ShaderCache), "   🎨 Shaders").clicked() {
+                let selected = matches!(self.tab, Tab::ShaderCache);
+                if ui.add(egui::SelectableLabel::new(selected,
+                    egui::RichText::new("    Shaders").color(if selected { menu_active } else { menu_color }))).clicked() {
                     self.tab = Tab::ShaderCache;
                 }
-                if ui.selectable_label(matches!(self.tab, Tab::Drivers), "   🔧 Drivers").clicked() {
+                let selected = matches!(self.tab, Tab::Drivers);
+                if ui.add(egui::SelectableLabel::new(selected,
+                    egui::RichText::new("    Drivers").color(if selected { menu_active } else { menu_color }))).clicked() {
                     self.tab = Tab::Drivers;
                 }
                 let container_label = if !self.running_containers.is_empty() {
-                    format!("   🐳 Containers  ({})", self.running_containers.len())
+                    format!("    Containers  ({})", self.running_containers.len())
                 } else {
-                    "   🐳 Containers".to_string()
+                    "    Containers".to_string()
                 };
-                if ui.selectable_label(matches!(self.tab, Tab::Containers), &container_label).clicked() {
+                let selected = matches!(self.tab, Tab::Containers);
+                if ui.add(egui::SelectableLabel::new(selected,
+                    egui::RichText::new(&container_label).color(if selected { menu_active } else { menu_color }))).clicked() {
                     self.tab = Tab::Containers;
                 }
-                if ui.selectable_label(matches!(self.tab, Tab::RgbControl), "   💡 RGB").clicked() {
+                let selected = matches!(self.tab, Tab::RgbControl);
+                if ui.add(egui::SelectableLabel::new(selected,
+                    egui::RichText::new("    RGB").color(if selected { menu_active } else { menu_color }))).clicked() {
                     self.tab = Tab::RgbControl;
                 }
-                if ui.selectable_label(matches!(self.tab, Tab::Benchmark), "   📊 Benchmark").clicked() {
+                let selected = matches!(self.tab, Tab::Benchmark);
+                if ui.add(egui::SelectableLabel::new(selected,
+                    egui::RichText::new("    Benchmark").color(if selected { menu_active } else { menu_color }))).clicked() {
                     self.tab = Tab::Benchmark;
                 }
 
@@ -811,27 +942,29 @@ impl eframe::App for NvControlApp {
                 ui.add_space(4.0);
 
                 // Settings at bottom
-                if ui.selectable_label(matches!(self.tab, Tab::Settings), "   ⚙️ Settings").clicked() {
+                let selected = matches!(self.tab, Tab::Settings);
+                if ui.add(egui::SelectableLabel::new(selected,
+                    egui::RichText::new("    Settings").color(if selected { menu_active } else { menu_color }))).clicked() {
                     self.tab = Tab::Settings;
                 }
 
                 // Version info at bottom
                 ui.add_space(10.0);
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
-                    ui.label(egui::RichText::new("v0.7.0").small().weak());
+                    ui.label(egui::RichText::new("v0.7.2").small().weak());
                 });
             });
         });
         match self.tab {
             Tab::Gpu => {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.heading("🎮 GPU Status & Monitoring");
+                    ui.heading(format!("{} GPU Status & Monitoring", icons::GPU));
 
                     // GPU Selector (if multiple GPUs)
                     if self.available_gpus.len() > 1 {
                         ui.group(|ui| {
                             ui.horizontal(|ui| {
-                                ui.label("🎯 Select GPU:");
+                                ui.label(format!("{} Select GPU:", icons::TARGET));
                                 egui::ComboBox::from_id_source("gpu_selector")
                                     .selected_text(format!("GPU {} - {}",
                                         self.selected_gpu_index,
@@ -854,23 +987,23 @@ impl eframe::App for NvControlApp {
                                         }
                                     });
 
-                                if ui.button("🔄 Refresh GPUs").clicked() {
+                                if ui.button(format!("{} Refresh GPUs", icons::REFRESH)).clicked() {
                                     self.available_gpus = nvcontrol::multi_gpu::detect_gpus().unwrap_or_else(|_| vec![]);
                                 }
                             });
 
                             // Show multi-GPU info
                             ui.horizontal(|ui| {
-                                ui.label(format!("📊 Total GPUs: {}", self.available_gpus.len()));
+                                ui.label(format!("{} Total GPUs: {}", icons::CHART, self.available_gpus.len()));
 
                                 let has_sli = self.available_gpus.iter().any(|g| g.sli_enabled);
                                 let has_nvlink = self.available_gpus.iter().any(|g| g.nvlink_enabled);
 
                                 if has_sli {
-                                    ui.colored_label(egui::Color32::GREEN, "✅ SLI");
+                                    ui.colored_label(egui::Color32::GREEN, format!("{} SLI", icons::OK));
                                 }
                                 if has_nvlink {
-                                    ui.colored_label(egui::Color32::GREEN, "✅ NVLink");
+                                    ui.colored_label(egui::Color32::GREEN, format!("{} NVLink", icons::OK));
                                 }
                             });
                         });
@@ -932,20 +1065,20 @@ impl eframe::App for NvControlApp {
                                     ui.end_row();
                                 });
                             } else {
-                                ui.label("⚠️ GPU not detected");
+                                ui.label(format!("{} GPU not detected", icons::WARN));
                             }
                         });
 
                         // Right column: Real-time Stats
                         columns[1].group(|ui| {
                             let theme_colors = self.theme_colors();
-                            ui.label(egui::RichText::new("📊 Real-time Metrics").strong().color(theme_colors.green.to_egui()));
+                            ui.label(egui::RichText::new(format!("{} Real-time Metrics", icons::CHART)).strong().color(theme_colors.green.to_egui()));
                             ui.separator();
 
                             if let Some(ref stats) = self.gpu_stats {
                                 // Temperature with theme-aware color
                                 ui.horizontal(|ui| {
-                                    ui.label("🌡️ Temperature:");
+                                    ui.label(format!("{} Temperature:", icons::TEMP));
                                     let temp_color = self.temp_color(stats.temperature);
                                     ui.label(egui::RichText::new(format!("{:.0}°C", stats.temperature))
                                         .color(temp_color)
@@ -957,7 +1090,7 @@ impl eframe::App for NvControlApp {
 
                                 // GPU Usage with theme-aware progress bar
                                 ui.horizontal(|ui| {
-                                    ui.label("📈 GPU:");
+                                    ui.label(format!("{} GPU:", icons::CHART_UP));
                                     let usage_color = self.usage_color(stats.utilization);
                                     ui.add(
                                         egui::ProgressBar::new(stats.utilization / 100.0)
@@ -968,7 +1101,7 @@ impl eframe::App for NvControlApp {
 
                                 // VRAM Usage with theme-aware color
                                 ui.horizontal(|ui| {
-                                    ui.label("💾 VRAM:");
+                                    ui.label(format!("{} VRAM:", icons::MEMORY));
                                     let used_gb = stats.memory_used as f64 / 1e9;
                                     let total_gb = stats.memory_total as f64 / 1e9;
                                     let usage_ratio = stats.memory_used as f32 / stats.memory_total.max(1) as f32;
@@ -982,7 +1115,7 @@ impl eframe::App for NvControlApp {
 
                                 // Power with theme-aware color
                                 ui.horizontal(|ui| {
-                                    ui.label("⚡ Power:");
+                                    ui.label(format!("{} Power:", icons::OVERCLOCK));
                                     let power_ratio = if stats.power_limit > 0.0 {
                                         stats.power_draw / stats.power_limit
                                     } else {
@@ -999,7 +1132,7 @@ impl eframe::App for NvControlApp {
                                 // Clocks
                                 ui.add_space(4.0);
                                 ui.horizontal(|ui| {
-                                    ui.label("⏱️ Clocks:");
+                                    ui.label(format!("{} Clocks:", icons::SPEED));
                                     ui.label(format!("{} MHz GPU", stats.gpu_clock));
                                     ui.separator();
                                     ui.label(format!("{} MHz Mem", stats.memory_clock));
@@ -1007,7 +1140,7 @@ impl eframe::App for NvControlApp {
 
                                 // Fan speed
                                 ui.horizontal(|ui| {
-                                    ui.label("🌀 Fan:");
+                                    ui.label(format!("{} Fan:", icons::FAN_ICON));
                                     ui.add(
                                         egui::ProgressBar::new(stats.fan_speed as f32 / 100.0)
                                             .text(format!("{}%", stats.fan_speed))
@@ -1015,7 +1148,7 @@ impl eframe::App for NvControlApp {
                                     );
                                 });
                             } else {
-                                ui.label("⚠️ NVML not available - install NVIDIA drivers");
+                                ui.label(format!("{} NVML not available - install NVIDIA drivers", icons::WARN));
                             }
                         });
                     });
@@ -1025,11 +1158,11 @@ impl eframe::App for NvControlApp {
                     // Quick actions with themed styling
                     let qa_colors = self.theme_colors();
                     ui.group(|ui| {
-                        ui.label(egui::RichText::new("🚀 Quick Actions").strong().color(qa_colors.yellow.to_egui()));
+                        ui.label(egui::RichText::new(format!("{} Quick Actions", icons::ROCKET)).strong().color(qa_colors.yellow.to_egui()));
                         ui.separator();
 
                         ui.horizontal(|ui| {
-                            let tui_btn = egui::Button::new(egui::RichText::new("📊 Live Monitor (TUI)").color(qa_colors.cyan.to_egui()));
+                            let tui_btn = egui::Button::new(egui::RichText::new(format!("{} Live Monitor (TUI)", icons::CHART)).color(qa_colors.cyan.to_egui()));
                             if ui.add(tui_btn).on_hover_text("Open terminal-based monitor").clicked() {
                                 std::thread::spawn(|| {
                                     let _ = std::process::Command::new("x-terminal-emulator")
@@ -1038,18 +1171,18 @@ impl eframe::App for NvControlApp {
                                 });
                             }
 
-                            let cap_btn = egui::Button::new(egui::RichText::new("🔧 Capabilities").color(qa_colors.green.to_egui()));
+                            let cap_btn = egui::Button::new(egui::RichText::new(format!("{} Capabilities", icons::DRIVER)).color(qa_colors.green.to_egui()));
                             if ui.add(cap_btn).on_hover_text("Show GPU capabilities").clicked() {
                                 self.tab = Tab::Settings;
                             }
 
-                            let clear_btn = egui::Button::new(egui::RichText::new("🗑️ Clear Graphs").color(qa_colors.orange.to_egui()));
+                            let clear_btn = egui::Button::new(egui::RichText::new(format!("{} Clear Graphs", icons::REFRESH)).color(qa_colors.orange.to_egui()));
                             if ui.add(clear_btn).on_hover_text("Reset monitoring history").clicked() {
                                 self.monitoring_dashboard.clear_all();
                             }
 
                             // Add OC shortcut
-                            let oc_btn = egui::Button::new(egui::RichText::new("⚡ Quick OC").color(qa_colors.purple.to_egui()));
+                            let oc_btn = egui::Button::new(egui::RichText::new(format!("{} Quick OC", icons::OVERCLOCK)).color(qa_colors.purple.to_egui()));
                             if ui.add(oc_btn).on_hover_text("Go to Overclock tab (key: 2)").clicked() {
                                 self.tab = Tab::Overclock;
                             }
@@ -1061,13 +1194,13 @@ impl eframe::App for NvControlApp {
                     // Real-time monitoring graphs with theme colors
                     let graph_colors = self.theme_colors();
                     ui.group(|ui| {
-                        ui.label(egui::RichText::new("📈 Real-Time Monitoring").strong().color(graph_colors.blue.to_egui()));
+                        ui.label(egui::RichText::new(format!("{} Real-Time Monitoring", icons::CHART_UP)).strong().color(graph_colors.blue.to_egui()));
                         ui.separator();
 
                         use egui_plot::{Line, Plot, PlotPoints};
 
                         // Temperature graph
-                        ui.label(egui::RichText::new("🌡️ Temperature History").color(graph_colors.red.to_egui()));
+                        ui.label(egui::RichText::new(format!("{} Temperature History", icons::TEMP)).color(graph_colors.red.to_egui()));
                         let temp_points: PlotPoints = self
                             .monitoring_dashboard
                             .temperature
@@ -1108,7 +1241,7 @@ impl eframe::App for NvControlApp {
                         ui.add_space(8.0);
 
                         // GPU Utilization graph
-                        ui.label(egui::RichText::new("📊 GPU Utilization History").color(graph_colors.cyan.to_egui()));
+                        ui.label(egui::RichText::new(format!("{} GPU Utilization History", icons::CHART)).color(graph_colors.cyan.to_egui()));
                         let util_points: PlotPoints = self
                             .monitoring_dashboard
                             .gpu_utilization
@@ -1148,7 +1281,7 @@ impl eframe::App for NvControlApp {
                         ui.add_space(8.0);
 
                         // Power Draw graph
-                        ui.label(egui::RichText::new("⚡ Power Draw History").color(graph_colors.yellow.to_egui()));
+                        ui.label(egui::RichText::new(format!("{} Power Draw History", icons::OVERCLOCK)).color(graph_colors.yellow.to_egui()));
                         let power_points: PlotPoints = self
                             .monitoring_dashboard
                             .power
@@ -1188,7 +1321,7 @@ impl eframe::App for NvControlApp {
                         ui.add_space(8.0);
 
                         // Fan Speed graph
-                        ui.label(egui::RichText::new("🌀 Fan Speed History").color(graph_colors.purple.to_egui()));
+                        ui.label(egui::RichText::new(format!("{} Fan Speed History", icons::FAN_ICON)).color(graph_colors.purple.to_egui()));
                         let fan_points: PlotPoints = self
                             .monitoring_dashboard
                             .fan_speed
@@ -1230,11 +1363,11 @@ impl eframe::App for NvControlApp {
             Tab::Vibrance => {
                 egui::CentralPanel::default().show(ctx, |ui| {
                     let vib_colors = self.theme_colors();
-                    ui.heading("🌈 Digital Vibrance Control");
+                    ui.heading(format!("{} Digital Vibrance Control", icons::VIBRANCE));
 
                     // Native vibrance status - try native NVKMS first
                     ui.group(|ui| {
-                        ui.label(egui::RichText::new("📋 Vibrance Backend Status").strong().color(vib_colors.cyan.to_egui()));
+                        ui.label(egui::RichText::new(format!("{} Vibrance Backend Status", icons::LIST)).strong().color(vib_colors.cyan.to_egui()));
                         ui.separator();
 
                         // Try native NVKMS controller first (preferred for 580+ drivers)
@@ -1243,7 +1376,7 @@ impl eframe::App for NvControlApp {
                                 if let Some(controller) = guard.as_ref() {
                                     ui.colored_label(
                                         vib_colors.green.to_egui(),
-                                        "✅ Native Digital Vibrance Available",
+                                        format!("{} Native Digital Vibrance Available", icons::OK),
                                     );
                                     ui.label(egui::RichText::new(format!("Driver: {} (Open)", controller.driver_version)).small());
                                     ui.label(egui::RichText::new("Using direct NVKMS ioctls - no external dependencies").small().weak());
@@ -1261,7 +1394,7 @@ impl eframe::App for NvControlApp {
                                 if vibrance::is_available() {
                                     ui.colored_label(
                                         vib_colors.yellow.to_egui(),
-                                        "⚠️ Using nvibrant fallback",
+                                        format!("{} Using nvibrant fallback", icons::WARN),
                                     );
                                     match vibrance::get_driver_info() {
                                         Ok(info) => ui.label(egui::RichText::new(format!("Driver: {}", info)).small()),
@@ -1270,7 +1403,7 @@ impl eframe::App for NvControlApp {
                                 } else {
                                     ui.colored_label(
                                         vib_colors.red.to_egui(),
-                                        "❌ Vibrance Not Available",
+                                        format!("{} Vibrance Not Available", icons::ERR),
                                     );
                                     ui.label(egui::RichText::new(format!("Error: {}", e)).small().weak());
                                     ui.add_space(4.0);
@@ -1287,7 +1420,7 @@ impl eframe::App for NvControlApp {
 
                     // Per-display vibrance control using native controller
                     ui.group(|ui| {
-                        ui.label(egui::RichText::new("🖥️ Per-Display Vibrance Control").strong().color(vib_colors.purple.to_egui()));
+                        ui.label(egui::RichText::new(format!("{} Per-Display Vibrance Control", icons::DISPLAY)).strong().color(vib_colors.purple.to_egui()));
                         ui.separator();
 
                         // Try native controller first
@@ -1300,7 +1433,7 @@ impl eframe::App for NvControlApp {
                                     } else {
                                         for (_device_id, connector_idx, name, connected) in &displays {
                                             ui.horizontal(|ui| {
-                                                let status_icon = if *connected { "🟢" } else { "🔴" };
+                                                let status_icon = if *connected { icons::OK } else { icons::ERR };
                                                 ui.label(egui::RichText::new(format!("{} {}", status_icon, name)).strong());
 
                                                 // Get current vibrance from connectors
@@ -1367,7 +1500,7 @@ impl eframe::App for NvControlApp {
                                     Err(e) => {
                                         ui.colored_label(
                                             vib_colors.red.to_egui(),
-                                            format!("❌ Failed to detect displays: {}", e),
+                                            format!("{} Failed to detect displays: {}", icons::ERR, e),
                                         );
                                         ui.add_space(4.0);
                                         ui.label(egui::RichText::new("Try: nvidia-settings -q all | grep -i vibrance").small().monospace());
@@ -1381,11 +1514,11 @@ impl eframe::App for NvControlApp {
 
                     // Quick presets
                     ui.group(|ui| {
-                        ui.label("🎨 Quick Presets");
+                        ui.label(format!("{} Quick Presets", icons::RGB));
                         ui.separator();
 
                         ui.horizontal(|ui| {
-                            if ui.button("🎮 Gaming (150%)").clicked() {
+                            if ui.button(format!("{} Gaming (150%)", icons::GAME)).clicked() {
                                 if let Err(e) = vibrance::set_vibrance_all(
                                     vibrance::percentage_to_vibrance(150),
                                 ) {
@@ -1393,7 +1526,7 @@ impl eframe::App for NvControlApp {
                                 }
                             }
 
-                            if ui.button("🎨 Content Creation (120%)").clicked() {
+                            if ui.button(format!("{} Content Creation (120%)", icons::RGB)).clicked() {
                                 if let Err(e) = vibrance::set_vibrance_all(
                                     vibrance::percentage_to_vibrance(120),
                                 ) {
@@ -1401,13 +1534,13 @@ impl eframe::App for NvControlApp {
                                 }
                             }
 
-                            if ui.button("🔄 Default (100%)").clicked() {
+                            if ui.button(format!("{} Default (100%)", icons::REFRESH)).clicked() {
                                 if let Err(e) = vibrance::set_vibrance_all(0) {
                                     eprintln!("Failed to reset vibrance: {}", e);
                                 }
                             }
 
-                            if ui.button("🌑 Grayscale (0%)").clicked() {
+                            if ui.button("Grayscale (0%)").clicked() {
                                 if let Err(e) =
                                     vibrance::set_vibrance_all(vibrance::percentage_to_vibrance(0))
                                 {
@@ -1417,7 +1550,7 @@ impl eframe::App for NvControlApp {
                         });
 
                         ui.horizontal(|ui| {
-                            if ui.button("🎯 Max Vibrance (200%)").clicked() {
+                            if ui.button(format!("{} Max Vibrance (200%)", icons::TARGET)).clicked() {
                                 if let Err(e) = vibrance::set_vibrance_all(
                                     vibrance::percentage_to_vibrance(200),
                                 ) {
@@ -1425,7 +1558,7 @@ impl eframe::App for NvControlApp {
                                 }
                             }
 
-                            if ui.button("📺 Movie Mode (110%)").clicked() {
+                            if ui.button(format!("{} Movie Mode (110%)", icons::DISPLAY)).clicked() {
                                 if let Err(e) = vibrance::set_vibrance_all(
                                     vibrance::percentage_to_vibrance(110),
                                 ) {
@@ -1439,11 +1572,11 @@ impl eframe::App for NvControlApp {
 
                     // Advanced settings
                     ui.group(|ui| {
-                        ui.label("⚙️ Advanced Settings");
+                        ui.label(format!("{} Advanced Settings", icons::SETTINGS));
                         ui.separator();
 
                         ui.horizontal(|ui| {
-                            if ui.button("📋 List Displays").clicked() {
+                            if ui.button(format!("{} List Displays", icons::LIST)).clicked() {
                                 match vibrance::get_displays() {
                                     Ok(displays) => {
                                         for (i, display) in displays.iter().enumerate() {
@@ -1454,7 +1587,7 @@ impl eframe::App for NvControlApp {
                                 }
                             }
 
-                            if ui.button("🔍 Driver Info").clicked() {
+                            if ui.button(format!("{} Driver Info", icons::INFO)).clicked() {
                                 match vibrance::get_driver_info() {
                                     Ok(info) => println!("Driver Info: {}", info),
                                     Err(e) => eprintln!("Failed to get driver info: {}", e),
@@ -1462,15 +1595,15 @@ impl eframe::App for NvControlApp {
                             }
                         });
 
-                        ui.label("💡 Tip: Changes apply immediately and work on Wayland!");
-                        ui.label("🎯 Use Gaming preset for enhanced colors in games");
-                        ui.label("🎨 Use Content Creation for color-accurate work");
+                        ui.label(format!("{} Tip: Changes apply immediately and work on Wayland!", icons::BULB));
+                        ui.label(format!("{} Use Gaming preset for enhanced colors in games", icons::TARGET));
+                        ui.label(format!("{} Use Content Creation for color-accurate work", icons::RGB));
                     });
                 });
             }
             Tab::Display => {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.heading("🖥️ Display & Color Management");
+                    ui.heading(format!("{} Display & Color Management", icons::DISPLAY));
 
                     ui.label("Digital Vibrance (per display):");
                     let mut changed = false;
@@ -1605,7 +1738,7 @@ impl eframe::App for NvControlApp {
             }
             Tab::Overclock => {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.heading("⚡ Interactive GPU Overclocking");
+                    ui.heading(format!("{} Interactive GPU Overclocking", icons::OVERCLOCK));
 
                     // Current status bar at top
                     if let Some(ref stats) = self.gpu_stats {
@@ -1838,7 +1971,7 @@ impl eframe::App for NvControlApp {
 
                         // Right: Safety info and live monitoring
                         columns[1].group(|ui| {
-                            ui.label(egui::RichText::new("⚠️ Safety Information").strong().color(oc_colors.orange.to_egui()));
+                            ui.label(egui::RichText::new("⚠ Safety Information").strong().color(oc_colors.orange.to_egui()));
                             ui.separator();
 
                             ui.label("Overclocking can cause:");
@@ -2059,7 +2192,7 @@ impl eframe::App for NvControlApp {
             Tab::Fan => {
                 egui::CentralPanel::default().show(ctx, |ui| {
                     let fan_colors = self.theme_colors();
-                    ui.heading("🌀 Fan Control");
+                    ui.heading(format!("{} Fan Control", icons::FAN_ICON));
 
                     // Two-column layout
                     ui.columns(2, |columns| {
@@ -2323,7 +2456,7 @@ impl eframe::App for NvControlApp {
             }
             Tab::Vrr => {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.heading("🔄 VRR (Variable Refresh Rate) & G-Sync Control");
+                    ui.heading(format!("{} VRR (Variable Refresh Rate) & G-Sync Control", icons::VRR));
 
                     ui.group(|ui| {
                         ui.label("🖥️ Display VRR Status");
@@ -2408,7 +2541,7 @@ impl eframe::App for NvControlApp {
             }
             Tab::Latency => {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.heading("⚡ Latency Optimization & Gaming Performance");
+                    ui.heading(format!("{} Latency Optimization & Gaming Performance", icons::LATENCY));
 
                     ui.group(|ui| {
                         ui.label("🎯 Current Latency Status");
@@ -2550,7 +2683,7 @@ impl eframe::App for NvControlApp {
             }
             Tab::Recording => {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.heading("📹 NVENC Recording & Shadowplay-like Features");
+                    ui.heading(format!("{} NVENC Recording & Shadowplay-like Features", icons::RECORD));
 
                     ui.group(|ui| {
                         ui.label("🎬 NVENC Capabilities");
@@ -2827,7 +2960,7 @@ impl eframe::App for NvControlApp {
             }
             Tab::Gamescope => {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.heading("🎯 Gamescope Integration & Steam Deck Optimization");
+                    ui.heading(format!("{} Gamescope Integration & Steam Deck Optimization", icons::GAME));
 
                     ui.group(|ui| {
                         ui.label("🚀 Quick Launch Presets");
@@ -2967,7 +3100,7 @@ impl eframe::App for NvControlApp {
             }
             Tab::ShaderCache => {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.heading("🎨 Shader Cache Management");
+                    ui.heading(format!("{} Shader Cache Management", icons::SHADER));
 
                     ui.group(|ui| {
                         ui.label("📊 Shader Cache Status");
@@ -3065,7 +3198,7 @@ impl eframe::App for NvControlApp {
             }
             Tab::Drivers => {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.heading("🔧 Driver Management");
+                    ui.heading(format!("{} Driver Management", icons::DRIVER));
 
                     ui.group(|ui| {
                         ui.label("📋 Current Driver Information");
@@ -3207,7 +3340,7 @@ impl eframe::App for NvControlApp {
             }
             Tab::Benchmark => {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.heading("📊 GPU Benchmark Suite");
+                    ui.heading(format!("{} GPU Benchmark Suite", icons::BENCHMARK));
 
                     ui.group(|ui| {
                         ui.label("🏁 Run Benchmark");
@@ -3372,7 +3505,7 @@ impl eframe::App for NvControlApp {
             }
             Tab::Hdr => {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.heading("🌈 HDR Configuration");
+                    ui.heading(format!("{} HDR Configuration", icons::HDR));
 
                     ui.group(|ui| {
                         ui.label("🎮 HDR Status");
@@ -3537,7 +3670,7 @@ impl eframe::App for NvControlApp {
             }
             Tab::AutoOverclock => {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.heading("🚀 Automated Overclocking Wizard");
+                    ui.heading(format!("{} Automated Overclocking Wizard", icons::ROCKET));
                     ui.add_space(10.0);
 
                     ui.label("Safely auto-tune your GPU for optimal performance with stability testing.");
@@ -3602,7 +3735,7 @@ impl eframe::App for NvControlApp {
             }
             Tab::PowerCurves => {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.heading("🔋 Power Limit Curves");
+                    ui.heading(format!("{} Power Limit Curves", icons::POWER));
                     ui.add_space(10.0);
 
                     ui.label("Dynamic power management based on GPU temperature.");
@@ -3643,7 +3776,7 @@ impl eframe::App for NvControlApp {
             }
             Tab::GameProfiles => {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.heading("🎮 Game Profile Auto-Application");
+                    ui.heading(format!("{} Game Profile Auto-Application", icons::GAME));
                     ui.add_space(10.0);
 
                     ui.label("Automatically apply GPU profiles when games are launched.");
@@ -3691,7 +3824,7 @@ impl eframe::App for NvControlApp {
             }
             Tab::RgbControl => {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.heading("💡 ASUS Aura RGB Control");
+                    ui.heading(format!("{} ASUS Aura RGB Control", icons::RGB));
 
                     ui.group(|ui| {
                         ui.label("🎨 RGB Mode");
@@ -3744,7 +3877,7 @@ impl eframe::App for NvControlApp {
             }
             Tab::Containers => {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.heading("🐳 GPU Container Management");
+                    ui.heading(format!("{} GPU Container Management", icons::CONTAINER));
 
                     ui.group(|ui| {
                         ui.label("📦 NVIDIA Container Toolkit Status");
@@ -3826,7 +3959,7 @@ impl eframe::App for NvControlApp {
             }
             Tab::Osd => {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.heading("📊 On-Screen Display (OSD)");
+                    ui.heading(format!("{} On-Screen Display (OSD)", icons::CHART));
                     ui.label(egui::RichText::new("Configure performance overlay • Future: envyhub integration").small().color(egui::Color32::GRAY));
                     ui.add_space(8.0);
 
@@ -4043,7 +4176,7 @@ impl eframe::App for NvControlApp {
             }
             Tab::Settings => {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.heading("⚙️ Settings");
+                    ui.heading(format!("{} Settings", icons::SETTINGS));
 
                     // Two-column layout for settings
                     ui.columns(2, |columns| {

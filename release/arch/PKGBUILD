@@ -3,7 +3,7 @@
 # Premier platform: Arch Linux
 
 pkgname=nvcontrol
-pkgver=0.7.1
+pkgver=0.7.2
 pkgrel=1
 pkgdesc="Modern NVIDIA Settings Manager for Linux + Wayland - Digital Vibrance, VRR, HDR, Overclocking"
 arch=('x86_64')
