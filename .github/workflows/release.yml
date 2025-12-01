@@ -10,8 +10,9 @@ jobs:
     runs-on: self-hosted
     name: Build Release (nv-osmium)
     timeout-minutes: 20
-    env:
-      PATH: /home/runner/.cargo/bin:/usr/local/bin:/usr/bin:/bin
+    defaults:
+      run:
+        shell: bash -l {0}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
