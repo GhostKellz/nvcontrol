@@ -18,7 +18,7 @@ jobs:
 
       - name: Verify Environment
         run: |
-          export PATH="/home/runner/.cargo/bin:$PATH"
+          source /home/runner/.cargo/env
           set -euo pipefail
           echo "=== Nightly Build $(date -u +%Y-%m-%d) ==="
           rustc --version
@@ -32,17 +32,17 @@ jobs:
 
       - name: Full build
         run: |
-          export PATH="/home/runner/.cargo/bin:$PATH"
+          source /home/runner/.cargo/env
           cargo build --release --no-default-features
 
       - name: Full test sweep
         run: |
-          export PATH="/home/runner/.cargo/bin:$PATH"
+          source /home/runner/.cargo/env
           cargo test --lib --no-default-features
 
       - name: Clippy strict
         run: |
-          export PATH="/home/runner/.cargo/bin:$PATH"
+          source /home/runner/.cargo/env
           cargo clippy --bin nvctl --lib --no-default-features -- \
             -W clippy::all \
             -W clippy::pedantic \
@@ -56,7 +56,7 @@ jobs:
 
       - name: Format check
         run: |
-          export PATH="/home/runner/.cargo/bin:$PATH"
+          source /home/runner/.cargo/env
           cargo fmt --check
 
       - name: GPU stress test
@@ -95,7 +95,7 @@ jobs:
 
       - name: Nightly Summary
         run: |
-          export PATH="/home/runner/.cargo/bin:$PATH"
+          source /home/runner/.cargo/env
           echo "### Nightly Build $(date -u +%Y-%m-%d) ✅" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY

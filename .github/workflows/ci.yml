@@ -25,20 +25,19 @@ jobs:
           echo "PWD: $(pwd)"
           echo "PATH: $PATH"
           echo ""
-          echo "=== Finding Rust ==="
-          find /home -name rustc 2>/dev/null || echo "Not in /home"
-          find /usr -name rustc 2>/dev/null || echo "Not in /usr"
+          echo "=== Finding rustup ==="
+          find /home -name rustup -type f 2>/dev/null | head -5
+          which rustup 2>/dev/null || echo "rustup not in PATH"
           ls -la /home/runner/.cargo/bin/ 2>/dev/null || echo "No /home/runner/.cargo/bin"
-          ls -la ~/.cargo/bin/ 2>/dev/null || echo "No ~/.cargo/bin"
-          cat /home/runner/.cargo/env 2>/dev/null || echo "No cargo env file"
+          echo ""
+          echo "=== Direct execution test ==="
+          /home/runner/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc --version 2>/dev/null || echo "Direct rustc failed"
 
       - name: Verify Environment
         run: |
-          # Source cargo env if it exists
-          [ -f /home/runner/.cargo/env ] && source /home/runner/.cargo/env
-          [ -f ~/.cargo/env ] && source ~/.cargo/env
-          export PATH="/home/runner/.cargo/bin:$HOME/.cargo/bin:$PATH"
           set -euo pipefail
+          # The symlinks in ~/.cargo/bin point to rustup, need to source env first
+          source /home/runner/.cargo/env
           echo "=== Rust Toolchain ==="
           rustc --version
           cargo --version
@@ -53,12 +52,12 @@ jobs:
 
       - name: Build CLI
         run: |
-          export PATH="/home/runner/.cargo/bin:$PATH"
+          source /home/runner/.cargo/env
           cargo build --bin nvctl --release --no-default-features
 
       - name: Clippy
         run: |
-          export PATH="/home/runner/.cargo/bin:$PATH"
+          source /home/runner/.cargo/env
           cargo clippy --bin nvctl --lib --no-default-features -- \
             -W clippy::all \
             -A clippy::needless-borrows-for-generic-args \
@@ -67,12 +66,12 @@ jobs:
 
       - name: Format Check
         run: |
-          export PATH="/home/runner/.cargo/bin:$PATH"
+          source /home/runner/.cargo/env
           cargo fmt --check || echo "::warning::Format issues found"
 
       - name: Unit Tests
         run: |
-          export PATH="/home/runner/.cargo/bin:$PATH"
+          source /home/runner/.cargo/env
           cargo test --lib --no-default-features
 
       - name: GPU Smoke Test
@@ -134,7 +133,7 @@ jobs:
 
       - name: Build Summary
         run: |
-          export PATH="/home/runner/.cargo/bin:$PATH"
+          source /home/runner/.cargo/env
           echo "### Build Complete ✅" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
