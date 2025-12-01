@@ -10,9 +10,6 @@ jobs:
     runs-on: self-hosted
     name: Build Release (nv-osmium)
     timeout-minutes: 20
-    defaults:
-      run:
-        shell: bash -l -c "source $HOME/.cargo/env && {0}"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,6 +18,7 @@ jobs:
 
       - name: Verify Environment
         run: |
+          source $HOME/.cargo/env
           set -euo pipefail
           echo "=== Release Build ==="
           echo "Tag: ${{ github.ref_name }}"
@@ -34,10 +32,13 @@ jobs:
           key: nvcontrol-release
 
       - name: Build Release (CLI only)
-        run: cargo build --bin nvctl --release --no-default-features
+        run: |
+          source $HOME/.cargo/env
+          cargo build --bin nvctl --release --no-default-features
 
       - name: Run Tests
         run: |
+          source $HOME/.cargo/env
           cargo test --lib --no-default-features
           NVCTL=$(find target -path "*/release/nvctl" -type f -executable | head -1)
           $NVCTL --version
@@ -74,6 +75,7 @@ jobs:
 
       - name: Release Summary
         run: |
+          source $HOME/.cargo/env
           echo "### Release ${{ github.ref_name }} ✅" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY

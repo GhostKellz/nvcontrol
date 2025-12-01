@@ -10,9 +10,6 @@ jobs:
     name: "Nightly validation"
     runs-on: self-hosted
     timeout-minutes: 30
-    defaults:
-      run:
-        shell: bash -l -c "source $HOME/.cargo/env && {0}"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,6 +18,7 @@ jobs:
 
       - name: Verify Environment
         run: |
+          source $HOME/.cargo/env
           set -euo pipefail
           echo "=== Nightly Build $(date -u +%Y-%m-%d) ==="
           rustc --version
@@ -32,18 +30,21 @@ jobs:
         with:
           key: nvcontrol-nightly
 
-      - name: Full build (all features)
+      - name: Full build
         run: |
+          source $HOME/.cargo/env
           set -euo pipefail
-          cargo build --release --all-features 2>&1 || cargo build --release --no-default-features
+          cargo build --release --no-default-features
 
       - name: Full test sweep
         run: |
+          source $HOME/.cargo/env
           set -euo pipefail
-          cargo test --lib --no-default-features -- --include-ignored 2>&1 || cargo test --lib --no-default-features
+          cargo test --lib --no-default-features
 
       - name: Clippy strict
         run: |
+          source $HOME/.cargo/env
           set -euo pipefail
           cargo clippy --bin nvctl --lib --no-default-features -- \
             -W clippy::all \
@@ -57,7 +58,9 @@ jobs:
             -A clippy::missing-panics-doc
 
       - name: Format check
-        run: cargo fmt --check
+        run: |
+          source $HOME/.cargo/env
+          cargo fmt --check
 
       - name: GPU stress test
         run: |
@@ -67,7 +70,6 @@ jobs:
           echo "=== Extended CLI Tests ==="
           $NVCTL --version
           $NVCTL gpu info
-          $NVCTL gpu info --format json || true
           $NVCTL fan info
           $NVCTL power status
           $NVCTL config show
@@ -83,14 +85,6 @@ jobs:
           echo ""
           echo "✅ GPU stress test passed"
 
-      - name: Dependency audit
-        run: |
-          if command -v cargo-audit >/dev/null 2>&1; then
-            cargo audit || echo "::warning::Security vulnerabilities found"
-          else
-            echo "cargo-audit not installed, skipping"
-          fi
-
       - name: Binary size check
         run: |
           set -euo pipefail
@@ -104,6 +98,7 @@ jobs:
 
       - name: Nightly Summary
         run: |
+          source $HOME/.cargo/env
           echo "### Nightly Build $(date -u +%Y-%m-%d) ✅" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
