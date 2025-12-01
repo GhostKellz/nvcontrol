@@ -237,7 +237,7 @@ Change theme with `t` in TUI or via Settings in GUI.
 
 ## Documentation
 
-- [COMMANDS.md](COMMANDS.md) - Complete CLI reference
+- [COMMANDS.md](docs/COMMANDS.md) - Complete CLI reference
 - [BUILDING.md](BUILDING.md) - Build instructions
 - [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
 - [ASTRAL_OWNERS.md](ASTRAL_OWNERS.md) - ASUS ROG Astral quick start
