@@ -373,7 +373,7 @@ mod tests {
     #[test]
     fn test_render_bar() {
         let data = MonitorData::new(0).unwrap_or_else(|_| {
-            let mut d = MonitorData {
+            let d = MonitorData {
                 gpu_id: 0,
                 gpu_name: "Test".to_string(),
                 driver_version: "1.0".to_string(),

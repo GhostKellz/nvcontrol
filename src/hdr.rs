@@ -57,19 +57,54 @@ pub fn get_hdr_status_cli() -> NvResult<()> {
 
     if hdr_supported {
         println!("  GPU Support: ✅ Yes");
-        println!("  Status: ⚠️  Check compositor settings");
-        println!("\n💡 To enable HDR:");
+
+        // Compositor-specific status
         match compositor.as_str() {
-            "kde" | "kwin" => {
+            "hyprland" => {
+                if let Ok(monitors) = get_hyprland_monitors() {
+                    println!("\n  Monitors:");
+                    for mon in &monitors {
+                        let hdr_status = if mon.hdr_enabled { "✅ HDR Active" } else { "❌ SDR" };
+                        println!("    {} ({}x{}@{}Hz): {}",
+                            mon.name, mon.width, mon.height, mon.refresh_rate, hdr_status);
+                    }
+                }
+                println!("\n💡 To enable HDR:");
+                println!("  nvctl display hdr enable");
+                println!("  OR add to hyprland.conf: monitor=DP-1,2560x1440@165,auto,1,hdr");
+            }
+            "kde" | "kwin" | "plasma" => {
+                if let Ok(displays) = get_kde_displays() {
+                    if !displays.is_empty() {
+                        println!("\n  Monitors:");
+                        for disp in &displays {
+                            let hdr_status = if disp.hdr_enabled { "✅ HDR Active" } else { "❌ SDR" };
+                            let vrr_status = match disp.vrr_policy {
+                                0 => "VRR Off",
+                                1 => "VRR Always",
+                                2 => "VRR Auto",
+                                _ => "VRR Unknown",
+                            };
+                            println!("    {}: {} | {}", disp.name, hdr_status, vrr_status);
+                        }
+                    }
+                }
+                println!("\n💡 To enable HDR:");
                 println!("  nvctl display hdr enable");
                 println!("  OR: System Settings → Display → Enable HDR");
             }
             "gnome" | "mutter" => {
+                let (hdr_feature, vrr_feature) = get_gnome_hdr_status();
+                println!("\n  Experimental Features:");
+                println!("    HDR: {}", if hdr_feature { "✅ Enabled" } else { "❌ Disabled" });
+                println!("    VRR: {}", if vrr_feature { "✅ Enabled" } else { "❌ Disabled" });
+                println!("\n💡 To enable HDR:");
                 println!("  nvctl display hdr enable");
-                println!("  OR: Settings → Displays → Enable HDR");
+                println!("  OR: Settings → Displays → Enable HDR (per display)");
             }
             _ => {
-                println!("  Check your compositor's display settings");
+                println!("  Status: ⚠️  Check compositor settings");
+                println!("\n💡 Check your compositor's display settings");
             }
         }
     } else {
@@ -119,91 +154,191 @@ fn is_process_running(name: &str) -> bool {
 fn enable_hdr_kde() -> NvResult<()> {
     use std::process::Command;
 
-    // KDE Plasma 6+ has HDR support via D-Bus
-    let output = Command::new("qdbus")
-        .args(&[
-            "org.kde.KWin",
-            "/KWin",
-            "org.kde.KWin.setHDREnabled",
-            "true",
-        ])
-        .output();
+    // Get KDE displays first
+    let displays = get_kde_displays()?;
 
-    match output {
-        Ok(out) if out.status.success() => {
-            println!("✅ HDR enabled in KDE");
-            println!("   📝 Note: Ensure your display supports HDR");
-            Ok(())
+    if displays.is_empty() {
+        // Fallback to D-Bus method
+        let output = Command::new("qdbus")
+            .args(["org.kde.KWin", "/KWin", "org.kde.KWin.setHDREnabled", "true"])
+            .output();
+
+        match output {
+            Ok(out) if out.status.success() => {
+                println!("✅ HDR enabled in KDE");
+                return Ok(());
+            }
+            _ => {}
         }
-        _ => {
-            // Fallback: use kscreen-doctor (Plasma 6)
-            let kscreen_output = Command::new("kscreen-doctor")
-                .args(&["output.1.hdr.enabled=true"])
-                .output();
 
-            match kscreen_output {
-                Ok(out) if out.status.success() => {
-                    println!("✅ HDR enabled via kscreen-doctor");
-                    Ok(())
-                }
-                _ => {
-                    println!("⚠️  Could not enable HDR automatically");
-                    println!("   Please enable manually:");
-                    println!("   System Settings → Display Configuration → Enable HDR");
-                    Ok(())
-                }
+        println!("⚠️  Could not enable HDR automatically");
+        println!("   System Settings → Display Configuration → Enable HDR");
+        return Ok(());
+    }
+
+    // Enable HDR on each connected display
+    let mut success_count = 0;
+    for display in &displays {
+        // kscreen-doctor format: output.<name>.hdr.enable
+        let output = Command::new("kscreen-doctor")
+            .arg(format!("output.{}.hdr.enable", display.name))
+            .output();
+
+        match output {
+            Ok(out) if out.status.success() => {
+                println!("✅ HDR enabled on {}", display.name);
+                success_count += 1;
+            }
+            _ => {
+                // Try with wcg (wide color gamut) as well
+                let _ = Command::new("kscreen-doctor")
+                    .arg(format!("output.{}.wcg.enable", display.name))
+                    .output();
+                println!("⚠️  HDR may require manual enable for {}", display.name);
             }
         }
     }
+
+    if success_count == 0 {
+        println!("\n💡 Enable HDR manually:");
+        println!("   System Settings → Display Configuration → Select display → Enable HDR");
+    }
+
+    Ok(())
 }
 
 fn disable_hdr_kde() -> NvResult<()> {
     use std::process::Command;
 
-    let output = Command::new("qdbus")
-        .args(&[
-            "org.kde.KWin",
-            "/KWin",
-            "org.kde.KWin.setHDREnabled",
-            "false",
-        ])
-        .output();
+    let displays = get_kde_displays()?;
 
-    match output {
-        Ok(out) if out.status.success() => {
-            println!("✅ HDR disabled in KDE");
-            Ok(())
-        }
-        _ => {
-            Command::new("kscreen-doctor")
-                .args(&["output.1.hdr.enabled=false"])
-                .output()
-                .ok();
-            println!("✅ HDR disabled");
-            Ok(())
+    if displays.is_empty() {
+        let _ = Command::new("qdbus")
+            .args(["org.kde.KWin", "/KWin", "org.kde.KWin.setHDREnabled", "false"])
+            .output();
+        println!("✅ HDR disabled in KDE");
+        return Ok(());
+    }
+
+    for display in &displays {
+        let _ = Command::new("kscreen-doctor")
+            .arg(format!("output.{}.hdr.disable", display.name))
+            .output();
+        println!("✅ HDR disabled on {}", display.name);
+    }
+
+    Ok(())
+}
+
+#[derive(Debug)]
+struct KdeDisplay {
+    name: String,
+    #[allow(dead_code)]
+    connected: bool,
+    #[allow(dead_code)]
+    hdr_enabled: bool,
+    #[allow(dead_code)]
+    vrr_policy: i32,
+}
+
+fn get_kde_displays() -> NvResult<Vec<KdeDisplay>> {
+    use std::process::Command;
+
+    let output = Command::new("kscreen-doctor")
+        .arg("-j")
+        .output()
+        .map_err(|e| crate::NvControlError::DisplayDetectionFailed(format!("kscreen-doctor failed: {}", e)))?;
+
+    if !output.status.success() {
+        return Ok(vec![]);
+    }
+
+    let json_str = String::from_utf8_lossy(&output.stdout);
+    let mut displays = Vec::new();
+
+    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&json_str) {
+        if let Some(outputs) = json.get("outputs").and_then(|o| o.as_array()) {
+            for out in outputs {
+                let connected = out.get("connected")
+                    .and_then(|c| c.as_bool())
+                    .unwrap_or(false);
+
+                if !connected {
+                    continue;
+                }
+
+                let name = out.get("name")
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("Unknown")
+                    .to_string();
+
+                // Plasma 6: "hdr" is the capability/enabled state
+                // Some versions use "hdrEnabled" separately
+                let hdr_enabled = out.get("hdr")
+                    .and_then(|h| h.as_bool())
+                    .or_else(|| out.get("hdrEnabled").and_then(|h| h.as_bool()))
+                    .unwrap_or(false);
+
+                // vrrPolicy: 0=Never, 1=Always, 2=Automatic
+                let vrr_policy = out.get("vrrPolicy")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0) as i32;
+
+                displays.push(KdeDisplay {
+                    name,
+                    connected,
+                    hdr_enabled,
+                    vrr_policy,
+                });
+            }
         }
     }
+
+    Ok(displays)
 }
 
 // GNOME/Mutter HDR control
 fn enable_hdr_gnome() -> NvResult<()> {
     use std::process::Command;
 
-    // GNOME 46+ has experimental HDR support
+    // Get current experimental features to preserve them
+    let current = Command::new("gsettings")
+        .args(["get", "org.gnome.mutter", "experimental-features"])
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .unwrap_or_default();
+
+    // Build new features list including HDR
+    let new_features = if current.contains("hdr") {
+        // Already has HDR
+        println!("✅ HDR already enabled in GNOME experimental features");
+        return Ok(());
+    } else if current.contains("variable-refresh-rate") {
+        // Has VRR, add HDR
+        "['variable-refresh-rate', 'hdr']"
+    } else if current.trim() == "@as []" || current.trim() == "[]" {
+        // Empty, just add HDR
+        "['hdr']"
+    } else {
+        // Has other features, add HDR (GNOME 46+ supports both)
+        "['variable-refresh-rate', 'hdr']"
+    };
+
     let output = Command::new("gsettings")
-        .args(&["set", "org.gnome.mutter.experimental-features", "['hdr']"])
+        .args(["set", "org.gnome.mutter", "experimental-features", new_features])
         .output();
 
     match output {
         Ok(out) if out.status.success() => {
             println!("✅ HDR experimental feature enabled in GNOME");
-            println!("   📝 Restart GNOME Shell: Alt+F2, type 'r', press Enter");
-            println!("   📝 Then enable HDR in Settings → Displays");
+            println!("   📝 You may need to log out and back in");
+            println!("   📝 Then enable HDR per-display in Settings → Displays");
             Ok(())
         }
         _ => {
             println!("⚠️  Could not enable HDR feature");
-            println!("   GNOME HDR is experimental (GNOME 46+)");
+            println!("   GNOME HDR requires GNOME 46+ with mutter HDR support");
             println!("   Check: Settings → Displays");
             Ok(())
         }
@@ -213,8 +348,23 @@ fn enable_hdr_gnome() -> NvResult<()> {
 fn disable_hdr_gnome() -> NvResult<()> {
     use std::process::Command;
 
+    // Get current features
+    let current = Command::new("gsettings")
+        .args(["get", "org.gnome.mutter", "experimental-features"])
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .unwrap_or_default();
+
+    // Keep VRR if it was enabled, just remove HDR
+    let new_features = if current.contains("variable-refresh-rate") {
+        "['variable-refresh-rate']"
+    } else {
+        "[]"
+    };
+
     Command::new("gsettings")
-        .args(&["set", "org.gnome.mutter.experimental-features", "[]"])
+        .args(["set", "org.gnome.mutter", "experimental-features", new_features])
         .output()
         .ok();
 
@@ -222,38 +372,156 @@ fn disable_hdr_gnome() -> NvResult<()> {
     Ok(())
 }
 
+fn get_gnome_hdr_status() -> (bool, bool) {
+    use std::process::Command;
+
+    let output = Command::new("gsettings")
+        .args(["get", "org.gnome.mutter", "experimental-features"])
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .unwrap_or_default();
+
+    let hdr_enabled = output.contains("hdr");
+    let vrr_enabled = output.contains("variable-refresh-rate");
+
+    (hdr_enabled, vrr_enabled)
+}
+
 // Hyprland HDR control
 fn enable_hdr_hyprland() -> NvResult<()> {
     use std::process::Command;
 
-    // Hyprland HDR via hyprctl
-    let output = Command::new("hyprctl")
-        .args(&["keyword", "monitor", ",highres,auto,1,hdr"])
-        .output();
+    // Get current monitors first
+    let monitors = get_hyprland_monitors()?;
 
-    match output {
-        Ok(out) if out.status.success() => {
-            println!("✅ HDR enabled in Hyprland");
-            Ok(())
-        }
-        _ => {
-            println!("⚠️  Add to hyprland.conf:");
-            println!("   monitor=,highres,auto,1,hdr");
-            Ok(())
+    if monitors.is_empty() {
+        println!("⚠️  No monitors detected");
+        println!("   Add to hyprland.conf:");
+        println!("   monitor=,preferred,auto,1,hdr");
+        return Ok(());
+    }
+
+    let mut success_count = 0;
+    for monitor in &monitors {
+        // Get current mode for this monitor
+        let mode = format!("{}x{}@{}", monitor.width, monitor.height, monitor.refresh_rate);
+
+        // Apply HDR with current settings
+        let output = Command::new("hyprctl")
+            .args(["keyword", "monitor", &format!("{},{},auto,1,hdr", monitor.name, mode)])
+            .output();
+
+        match output {
+            Ok(out) if out.status.success() => {
+                println!("✅ HDR enabled on {}", monitor.name);
+                success_count += 1;
+            }
+            _ => {
+                println!("⚠️  Could not enable HDR on {}", monitor.name);
+            }
         }
     }
+
+    if success_count == 0 {
+        println!("\n💡 Add to hyprland.conf manually:");
+        for monitor in &monitors {
+            println!("   monitor={},{}x{}@{},auto,1,hdr",
+                monitor.name, monitor.width, monitor.height, monitor.refresh_rate);
+        }
+    }
+
+    Ok(())
 }
 
 fn disable_hdr_hyprland() -> NvResult<()> {
     use std::process::Command;
 
-    Command::new("hyprctl")
-        .args(&["keyword", "monitor", ",highres,auto,1"])
-        .output()
-        .ok();
+    let monitors = get_hyprland_monitors()?;
 
-    println!("✅ HDR disabled in Hyprland");
+    for monitor in &monitors {
+        let mode = format!("{}x{}@{}", monitor.width, monitor.height, monitor.refresh_rate);
+
+        Command::new("hyprctl")
+            .args(["keyword", "monitor", &format!("{},{},auto,1", monitor.name, mode)])
+            .output()
+            .ok();
+
+        println!("✅ HDR disabled on {}", monitor.name);
+    }
+
+    if monitors.is_empty() {
+        println!("✅ HDR disabled in Hyprland");
+    }
+
     Ok(())
+}
+
+#[derive(Debug)]
+struct HyprlandMonitor {
+    name: String,
+    width: u32,
+    height: u32,
+    refresh_rate: u32,
+    #[allow(dead_code)]
+    hdr_enabled: bool,
+}
+
+fn get_hyprland_monitors() -> NvResult<Vec<HyprlandMonitor>> {
+    use std::process::Command;
+
+    let output = Command::new("hyprctl")
+        .args(["monitors", "-j"])
+        .output()
+        .map_err(|e| crate::NvControlError::DisplayDetectionFailed(format!("hyprctl failed: {}", e)))?;
+
+    if !output.status.success() {
+        return Ok(vec![]);
+    }
+
+    let json_str = String::from_utf8_lossy(&output.stdout);
+    let mut monitors = Vec::new();
+
+    if let Ok(monitor_array) = serde_json::from_str::<Vec<serde_json::Value>>(&json_str) {
+        for mon in monitor_array {
+            if mon.get("disabled").and_then(|d| d.as_bool()).unwrap_or(false) {
+                continue;
+            }
+
+            let name = mon.get("name")
+                .and_then(|n| n.as_str())
+                .unwrap_or("Unknown")
+                .to_string();
+
+            let width = mon.get("width")
+                .and_then(|w| w.as_u64())
+                .unwrap_or(1920) as u32;
+
+            let height = mon.get("height")
+                .and_then(|h| h.as_u64())
+                .unwrap_or(1080) as u32;
+
+            let refresh_rate = mon.get("refreshRate")
+                .and_then(|r| r.as_f64())
+                .unwrap_or(60.0) as u32;
+
+            // Check current format for HDR hint (XRGB2101010 = 10-bit HDR capable)
+            let current_format = mon.get("currentFormat")
+                .and_then(|f| f.as_str())
+                .unwrap_or("");
+            let hdr_enabled = current_format.contains("101010") || current_format.contains("16161616");
+
+            monitors.push(HyprlandMonitor {
+                name,
+                width,
+                height,
+                refresh_rate,
+                hdr_enabled,
+            });
+        }
+    }
+
+    Ok(monitors)
 }
 
 // Check HDR support via NVIDIA

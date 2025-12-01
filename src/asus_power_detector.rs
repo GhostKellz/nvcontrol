@@ -131,6 +131,7 @@ pub struct PowerConnectorStatus {
 /// All methods are read-only and cannot damage hardware.
 pub struct AsusPowerDetector {
     /// GPU PCI bus ID (e.g., "0000:01:00.0")
+    #[allow(dead_code)]
     pci_id: String,
     /// Detected card model
     model: AsusRogModel,
@@ -352,7 +353,7 @@ impl AsusPowerDetector {
         //
         // Under load, 12V-2x6 can handle ~9.2A per pin (55W per pin at 600W TDP)
         // So max expected swapped value would be around 4600 for 9.2A
-        Some((swapped as u32 * 2))
+        Some(swapped as u32 * 2)
     }
 
     /// Estimate total power from rail readings

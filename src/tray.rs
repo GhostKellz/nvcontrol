@@ -163,6 +163,7 @@ impl SystemTray {
 }
 
 /// Get current GPU statistics for tray display
+#[allow(dead_code)]
 fn get_gpu_stats() -> Result<GpuStats, Box<dyn std::error::Error>> {
     let nvml = Nvml::init()?;
     let device = nvml.device_by_index(0)?;
@@ -204,6 +205,7 @@ fn get_gpu_stats() -> Result<GpuStats, Box<dyn std::error::Error>> {
     })
 }
 
+#[allow(dead_code)]
 fn format_health_status(status: &fan::FanHealthStatus) -> &'static str {
     match status {
         fan::FanHealthStatus::Healthy => "OK",

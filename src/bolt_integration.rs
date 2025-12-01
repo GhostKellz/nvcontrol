@@ -9,7 +9,6 @@ use bolt::{BoltConfig as BoltConfigImpl, BoltRuntime as BoltRuntimeImpl};
 #[cfg(not(feature = "bolt-api"))]
 mod mock_bolt {
     use super::*;
-    use std::collections::HashMap;
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct BoltRuntimeImpl {

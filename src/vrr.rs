@@ -228,19 +228,66 @@ fn detect_vrr_hyprland() -> NvResult<Vec<DisplayVrrCapability>> {
 fn parse_hyprland_vrr_info(json_str: &str) -> NvResult<Vec<DisplayVrrCapability>> {
     let mut displays = Vec::new();
 
-    // Parse Hyprland monitor JSON for VRR info
-    for line in json_str.lines() {
-        if line.contains("\"name\":") {
-            // Extract display info from Hyprland JSON
-            // This would use proper JSON parsing in a real implementation
+    // Parse Hyprland monitor JSON array
+    // Format: [{"id":0,"name":"DP-1","width":2560,"height":1440,"refreshRate":165.0,"vrr":true,...}]
+    if let Ok(monitors) = serde_json::from_str::<Vec<serde_json::Value>>(json_str) {
+        for monitor in monitors {
+            // Skip disabled monitors
+            if monitor.get("disabled").and_then(|d| d.as_bool()).unwrap_or(false) {
+                continue;
+            }
+
+            let display_name = monitor
+                .get("name")
+                .and_then(|n| n.as_str())
+                .unwrap_or("Unknown")
+                .to_string();
+
+            // VRR status - can be bool or int (0=off, 1=on, 2=fullscreen-only)
+            let vrr_enabled = match monitor.get("vrr") {
+                Some(serde_json::Value::Bool(b)) => *b,
+                Some(serde_json::Value::Number(n)) => n.as_i64().unwrap_or(0) > 0,
+                _ => false,
+            };
+
+            // Get refresh rate
+            let refresh_rate = monitor
+                .get("refreshRate")
+                .and_then(|r| r.as_f64())
+                .unwrap_or(60.0) as u32;
+
+            // Get available modes for max refresh
+            let mut max_refresh = refresh_rate;
+            if let Some(modes) = monitor.get("availableModes").and_then(|m| m.as_array()) {
+                for mode in modes {
+                    if let Some(mode_str) = mode.as_str() {
+                        // Format: "2560x1440@165.00Hz"
+                        if let Some(hz_part) = mode_str.split('@').nth(1) {
+                            if let Ok(hz) = hz_part.trim_end_matches("Hz").parse::<f64>() {
+                                max_refresh = max_refresh.max(hz as u32);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // G-Sync typically on DisplayPort
+            let supports_gsync = display_name.starts_with("DP-");
+
             displays.push(DisplayVrrCapability {
-                display_name: "DP-1".to_string(), // Placeholder
-                supports_vrr: json_str.contains("\"vrr\":1"),
-                supports_gsync: false,
+                display_name,
+                supports_vrr: true, // If Hyprland reports it, assume capable
+                supports_gsync,
                 supports_freesync: true,
                 min_refresh: 48,
-                max_refresh: 165,
-                current_settings: VrrSettings::default(),
+                max_refresh,
+                current_settings: VrrSettings {
+                    enabled: vrr_enabled,
+                    min_refresh_rate: 48,
+                    max_refresh_rate: max_refresh,
+                    adaptive_sync: vrr_enabled,
+                    low_framerate_compensation: true,
+                },
             });
         }
     }

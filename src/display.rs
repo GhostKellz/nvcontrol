@@ -266,16 +266,47 @@ pub fn reset_gamma(display_id: usize) -> crate::NvResult<()> {
 
 /// Check if display supports HDR
 pub fn is_hdr_capable(display_name: &str) -> bool {
-    // Try to get display capabilities via kscreen-doctor
+    // Try kscreen-doctor with proper JSON parsing
     if let Ok(output) = std::process::Command::new("kscreen-doctor")
         .arg("-j")
         .output()
     {
         if output.status.success() {
-            let output_str = String::from_utf8_lossy(&output.stdout);
-            // Parse JSON output to check for HDR capabilities
-            return output_str.contains(&format!("\"name\":\"{display_name}\""))
-                && (output_str.contains("\"hdr\":true") || output_str.contains("\"hdr10\":true"));
+            let json_str = String::from_utf8_lossy(&output.stdout);
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&json_str) {
+                if let Some(outputs) = json.get("outputs").and_then(|o| o.as_array()) {
+                    for out in outputs {
+                        let name = out.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                        if name == display_name {
+                            // Check "hdr" field (indicates HDR capability/enabled in Plasma 6)
+                            // Also check "wcg" (wide color gamut) as HDR indicator
+                            let has_hdr = out.get("hdr").and_then(|h| h.as_bool()).unwrap_or(false);
+                            let has_wcg = out.get("wcg").and_then(|w| w.as_bool()).unwrap_or(false);
+                            return has_hdr || has_wcg;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Try Hyprland
+    if let Ok(output) = std::process::Command::new("hyprctl")
+        .args(["monitors", "-j"])
+        .output()
+    {
+        if output.status.success() {
+            let json_str = String::from_utf8_lossy(&output.stdout);
+            if let Ok(monitors) = serde_json::from_str::<Vec<serde_json::Value>>(&json_str) {
+                for mon in monitors {
+                    let name = mon.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                    if name == display_name {
+                        // HDR-capable if 10-bit format or explicit HDR support
+                        let format = mon.get("currentFormat").and_then(|f| f.as_str()).unwrap_or("");
+                        return format.contains("101010") || format.contains("16161616");
+                    }
+                }
+            }
         }
     }
 
@@ -287,23 +318,51 @@ pub fn is_hdr_capable(display_name: &str) -> bool {
         }
     }
 
-    // Default assumption for modern displays
+    // Default assumption for modern displays on DP or HDMI
     display_name.contains("DP") || display_name.contains("HDMI")
 }
 
 /// Get current HDR status for a display
 pub fn get_hdr_status(display_name: &str) -> bool {
-    // Try kscreen-doctor to get current status
+    // Try kscreen-doctor with proper JSON parsing
     if let Ok(output) = std::process::Command::new("kscreen-doctor")
         .arg("-j")
         .output()
     {
         if output.status.success() {
-            let output_str = String::from_utf8_lossy(&output.stdout);
-            // Look for HDR enabled status in JSON
-            if let Some(display_section) = find_display_in_json(&output_str, display_name) {
-                return display_section.contains("\"hdr\":true")
-                    || display_section.contains("\"hdrEnabled\":true");
+            let json_str = String::from_utf8_lossy(&output.stdout);
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&json_str) {
+                if let Some(outputs) = json.get("outputs").and_then(|o| o.as_array()) {
+                    for out in outputs {
+                        let name = out.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                        if name == display_name {
+                            // Plasma 6: "hdr" field indicates HDR is enabled
+                            let hdr = out.get("hdr").and_then(|h| h.as_bool()).unwrap_or(false);
+                            let hdr_enabled = out.get("hdrEnabled").and_then(|h| h.as_bool()).unwrap_or(false);
+                            return hdr || hdr_enabled;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Try Hyprland
+    if let Ok(output) = std::process::Command::new("hyprctl")
+        .args(["monitors", "-j"])
+        .output()
+    {
+        if output.status.success() {
+            let json_str = String::from_utf8_lossy(&output.stdout);
+            if let Ok(monitors) = serde_json::from_str::<Vec<serde_json::Value>>(&json_str) {
+                for mon in monitors {
+                    let name = mon.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                    if name == display_name {
+                        // Check pixel format for HDR hint (10-bit = HDR capable/active)
+                        let format = mon.get("currentFormat").and_then(|f| f.as_str()).unwrap_or("");
+                        return format.contains("101010") || format.contains("16161616");
+                    }
+                }
             }
         }
     }
@@ -324,19 +383,6 @@ pub fn get_hdr_status(display_name: &str) -> bool {
     }
 
     false
-}
-
-/// Helper function to find display section in kscreen-doctor JSON output
-fn find_display_in_json<'a>(json_str: &'a str, display_name: &str) -> Option<&'a str> {
-    // Simple JSON parsing - find the section for our display
-    if let Some(start) = json_str.find(&format!("\"name\":\"{display_name}\"")) {
-        if let Some(brace_start) = json_str[..start].rfind('{') {
-            if let Some(brace_end) = json_str[start..].find('}') {
-                return Some(&json_str[brace_start..start + brace_end + 1]);
-            }
-        }
-    }
-    None
 }
 
 /// Toggle HDR (KDE6 implementation)

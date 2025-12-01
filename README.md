@@ -161,7 +161,7 @@ nvctl power limit 90                 # Set power limit %
 |------------|----------|-----|-----|
 | KDE Plasma 6 | Native NVKMS | kscreen-doctor | Yes |
 | GNOME 45+ | Native NVKMS | gsettings | Yes |
-| Hyprland | Native NVKMS | hyprctl | Planned |
+| Hyprland | Native NVKMS | hyprctl | Yes |
 | Sway | Native NVKMS | swaymsg | No |
 | Pop!_OS COSMIC | Native NVKMS | cosmic-randr | Yes |
 
