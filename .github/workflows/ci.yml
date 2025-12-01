@@ -7,83 +7,111 @@ on:
     branches: [main]
 
 jobs:
-  build:
+  build-and-test:
     runs-on: self-hosted
-    name: Build on nv-palladium
+    name: Build & Test (nv-osmium)
+    timeout-minutes: 15
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Install minimal dependencies
+      - name: Verify Environment
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y \
-            pkg-config \
-            build-essential \
-            libssl-dev
-
-      - name: Set up Rust (self-hosted runner)
-        run: |
-          # Ensure Rust is available and up to date
-          if ! command -v rustc >/dev/null 2>&1; then
-            echo "Installing Rust..."
-            # Create temporary directory for Rust installation
-            TEMP_DIR=$(mktemp -d)
-            export CARGO_HOME="$TEMP_DIR/.cargo"
-            export RUSTUP_HOME="$TEMP_DIR/.rustup"
-            
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --no-modify-path
-            
-            # Copy to user directory with proper permissions
-            cp -r "$TEMP_DIR/.cargo" "$HOME/" || true
-            cp -r "$TEMP_DIR/.rustup" "$HOME/" || true
-            
-            # Clean up temp directory
-            rm -rf "$TEMP_DIR"
-          fi
-          
-          # Ensure PATH includes Rust
-          export PATH="$HOME/.cargo/bin:$PATH"
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-          
-          # Update Rust and install components
-          rustup update stable
-          rustup default stable
-          rustup component add clippy rustfmt
-          
-          # Verify installation
+          set -euo pipefail
+          echo "=== Rust Toolchain ==="
           rustc --version
           cargo --version
+          echo ""
+          echo "=== NVIDIA GPU ==="
+          nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          key: ci-cache
+          key: nvcontrol-ci
 
-      - name: Build CLI (no features)
-        run: cargo build --bin nvctl --no-default-features --verbose
+      - name: Build CLI
+        run: cargo build --bin nvctl --release --no-default-features
 
-
-      - name: Test (library only - no features)
-        run: cargo test --lib --no-default-features --verbose
-
-      - name: Clippy Check (CLI only - no features)
-        run: cargo clippy --bin nvctl --lib --no-default-features -- -W clippy::all -A clippy::needless-borrows-for-generic-args -A clippy::single-char-add-str -A clippy::redundant-field-names
-
-      - name: Format Check (skip if rustfmt hangs)
+      - name: Clippy
         run: |
-          if timeout 30 cargo fmt --check; then
-            echo "✅ Format check passed"
-          else
-            echo "⚠️ Format check skipped due to timeout or formatting issues"
-            exit 0
+          cargo clippy --bin nvctl --lib --no-default-features -- \
+            -W clippy::all \
+            -A clippy::needless-borrows-for-generic-args \
+            -A clippy::single-char-add-str \
+            -A clippy::redundant-field-names
+
+      - name: Format Check
+        run: cargo fmt --check || echo "::warning::Format issues found"
+
+      - name: Unit Tests
+        run: cargo test --lib --no-default-features
+
+      - name: GPU Smoke Test
+        run: |
+          set -euo pipefail
+          NVCTL="./target/release/nvctl"
+
+          echo "=== Basic Commands ==="
+          $NVCTL --version
+          $NVCTL --help > /dev/null
+
+          echo ""
+          echo "=== GPU Info ==="
+          $NVCTL gpu info
+
+          echo ""
+          echo "=== System Doctor ==="
+          $NVCTL doctor || true
+
+          echo ""
+          echo "✅ GPU smoke tests passed"
+
+      - name: CLI Test Suite
+        run: |
+          set -euo pipefail
+          NVCTL="./target/release/nvctl"
+          PASSED=0
+          FAILED=0
+
+          test_cmd() {
+            local name="$1"
+            local cmd="$2"
+            if $NVCTL $cmd > /dev/null 2>&1; then
+              echo "✅ $name"
+              ((PASSED++))
+            else
+              echo "❌ $name"
+              ((FAILED++))
+            fi
+          }
+
+          echo "=== CLI Commands ==="
+          test_cmd "version" "--version"
+          test_cmd "help" "--help"
+          test_cmd "gpu info" "gpu info"
+          test_cmd "gpu info json" "gpu info --format json"
+          test_cmd "fan info" "fan info"
+          test_cmd "power status" "power status"
+          test_cmd "display info" "display info"
+          test_cmd "config show" "config show"
+          test_cmd "doctor" "doctor"
+
+          echo ""
+          echo "Results: $PASSED passed, $FAILED failed"
+
+          if [[ $FAILED -gt 0 ]]; then
+            exit 1
           fi
 
-      - name: Verify Build Success
+      - name: Build Summary
         run: |
-          echo "✅ All builds completed successfully"
-          echo "Binary sizes:"
-          ls -lh target/debug/nvctl 2>/dev/null || echo "Binary not found in expected location"
-
+          echo "### Build Complete ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Binary | $(ls -lh target/release/nvctl | awk '{print $5}')" >> $GITHUB_STEP_SUMMARY
+          echo "| Rust | $(rustc --version | cut -d' ' -f2)" >> $GITHUB_STEP_SUMMARY
+          echo "| GPU | $(nvidia-smi --query-gpu=name --format=csv,noheader)" >> $GITHUB_STEP_SUMMARY

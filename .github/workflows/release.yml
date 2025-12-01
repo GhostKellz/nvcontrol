@@ -8,51 +8,71 @@ on:
 jobs:
   release:
     runs-on: self-hosted
-    name: Build Release on nv-palladium
+    name: Build Release (nv-osmium)
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-      - name: Install system dependencies
+      - name: Verify Environment
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y \
-            libgtk-3-dev \
-            libglib2.0-dev \
-            libgdk-pixbuf2.0-dev \
-            libpango1.0-dev \
-            libatk1.0-dev \
-            libcairo-gobject2 \
-            libcairo2-dev \
-            pkg-config \
-            build-essential \
-            libssl-dev
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+          set -euo pipefail
+          echo "=== Release Build ==="
+          echo "Tag: ${{ github.ref_name }}"
+          rustc --version
+          cargo --version
+          nvidia-smi --query-gpu=name --format=csv,noheader
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          key: release-cache
+          key: nvcontrol-release
 
-      - name: Build Release (all features)
-        run: cargo build --release --all-features
+      - name: Build Release (CLI only)
+        run: cargo build --bin nvctl --release --no-default-features
+
+      - name: Run Tests
+        run: |
+          cargo test --lib --no-default-features
+          ./target/release/nvctl --version
+          ./target/release/nvctl gpu info
 
       - name: Create Release Archive
         run: |
-          mkdir -p nvcontrol-${{ github.ref_name }}
-          cp target/release/nvcontrol nvcontrol-${{ github.ref_name }}/
-          cp target/release/nvctl nvcontrol-${{ github.ref_name }}/
-          cp README.md DOCS.md COMMANDS.md LICENSE nvcontrol-${{ github.ref_name }}/
-          tar -czf nvcontrol-${{ github.ref_name }}-linux-x86_64.tar.gz nvcontrol-${{ github.ref_name }}
+          set -euo pipefail
+          VERSION="${{ github.ref_name }}"
+          ARCHIVE_DIR="nvcontrol-${VERSION}"
+
+          mkdir -p "$ARCHIVE_DIR"
+          cp target/release/nvctl "$ARCHIVE_DIR/"
+          cp README.md LICENSE "$ARCHIVE_DIR/" 2>/dev/null || true
+          [ -f DOCS.md ] && cp DOCS.md "$ARCHIVE_DIR/"
+          [ -f COMMANDS.md ] && cp COMMANDS.md "$ARCHIVE_DIR/"
+
+          tar -czf "nvcontrol-${VERSION}-linux-x86_64.tar.gz" "$ARCHIVE_DIR"
+
+          echo "=== Archive Contents ==="
+          tar -tvf "nvcontrol-${VERSION}-linux-x86_64.tar.gz"
+          ls -lh "nvcontrol-${VERSION}-linux-x86_64.tar.gz"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: nvcontrol-${{ github.ref_name }}-linux-x86_64.tar.gz
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release Summary
+        run: |
+          echo "### Release ${{ github.ref_name }} ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Binary | nvctl $(ls -lh target/release/nvctl | awk '{print $5}')" >> $GITHUB_STEP_SUMMARY
+          echo "| Archive | $(ls -lh nvcontrol-${{ github.ref_name }}-linux-x86_64.tar.gz | awk '{print $5}')" >> $GITHUB_STEP_SUMMARY
+          echo "| GPU Tested | $(nvidia-smi --query-gpu=name --format=csv,noheader)" >> $GITHUB_STEP_SUMMARY
