@@ -19,7 +19,9 @@ RUN echo "deb http://archive.ubuntu.com/ubuntu noble main restricted universe mu
       libxkbcommon-dev libwayland-dev libxcb1-dev \
       libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
       libgtk-3-dev libatk1.0-dev libpango1.0-dev \
-      libglib2.0-dev libcairo2-dev libpango1.0-dev libgdk-pixbuf2.0-dev && \
+      libglib2.0-dev libcairo2-dev libpango1.0-dev libgdk-pixbuf2.0-dev \
+      # Protobuf compiler (for bolt crate)
+      protobuf-compiler && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ✅ NVIDIA Container Toolkit (use 22.04 source — 24.04 not available)
