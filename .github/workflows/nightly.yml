@@ -10,6 +10,9 @@ jobs:
     name: "Nightly validation"
     runs-on: self-hosted
     timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash -l -c "source $HOME/.cargo/env && {0}"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
