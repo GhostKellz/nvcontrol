@@ -10,6 +10,8 @@ jobs:
     runs-on: self-hosted
     name: Build Release (nv-osmium)
     timeout-minutes: 20
+    env:
+      PATH: /home/runner/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -18,7 +20,6 @@ jobs:
 
       - name: Verify Environment
         run: |
-          export PATH="/home/runner/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:$PATH"
           set -euo pipefail
           echo "=== Release Build ==="
           echo "Tag: ${{ github.ref_name }}"
@@ -32,13 +33,10 @@ jobs:
           key: nvcontrol-release
 
       - name: Build Release (CLI only)
-        run: |
-          export PATH="/home/runner/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:$PATH"
-          cargo build --bin nvctl --release --no-default-features
+        run: cargo build --bin nvctl --release --no-default-features
 
       - name: Run Tests
         run: |
-          export PATH="/home/runner/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:$PATH"
           cargo test --lib --no-default-features
           NVCTL=$(find target -path "*/release/nvctl" -type f -executable | head -1)
           $NVCTL --version
@@ -75,7 +73,6 @@ jobs:
 
       - name: Release Summary
         run: |
-          export PATH="/home/runner/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:$PATH"
           echo "### Release ${{ github.ref_name }} ✅" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY

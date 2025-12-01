@@ -11,6 +11,8 @@ jobs:
     runs-on: self-hosted
     name: Build & Test (nv-osmium)
     timeout-minutes: 15
+    env:
+      PATH: /home/runner/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,8 +22,6 @@ jobs:
       - name: Verify Environment
         run: |
           set -euo pipefail
-          # Use direct toolchain path - symlinks in ~/.cargo/bin are broken (missing rustup)
-          export PATH="/home/runner/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:$PATH"
           echo "=== Rust Toolchain ==="
           rustc --version
           cargo --version
@@ -35,13 +35,10 @@ jobs:
           key: nvcontrol-ci
 
       - name: Build CLI
-        run: |
-          export PATH="/home/runner/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:$PATH"
-          cargo build --bin nvctl --release --no-default-features
+        run: cargo build --bin nvctl --release --no-default-features
 
       - name: Clippy
         run: |
-          export PATH="/home/runner/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:$PATH"
           cargo clippy --bin nvctl --lib --no-default-features -- \
             -W clippy::all \
             -A clippy::needless-borrows-for-generic-args \
@@ -49,14 +46,10 @@ jobs:
             -A clippy::redundant-field-names
 
       - name: Format Check
-        run: |
-          export PATH="/home/runner/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:$PATH"
-          cargo fmt --check || echo "::warning::Format issues found"
+        run: cargo fmt --check || echo "::warning::Format issues found"
 
       - name: Unit Tests
-        run: |
-          export PATH="/home/runner/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:$PATH"
-          cargo test --lib --no-default-features
+        run: cargo test --lib --no-default-features
 
       - name: GPU Smoke Test
         run: |
@@ -117,7 +110,6 @@ jobs:
 
       - name: Build Summary
         run: |
-          export PATH="/home/runner/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:$PATH"
           echo "### Build Complete ✅" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
