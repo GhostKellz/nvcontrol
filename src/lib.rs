@@ -12,7 +12,9 @@ pub enum NvControlError {
     #[error("Vibrance control failed: {0}\n  → Try: nvidia-settings -q all | grep -i vibrance")]
     VibranceControlFailed(String),
 
-    #[error("Fan control not supported on this GPU\n  → Manual fan control requires GPU with controllable fans")]
+    #[error(
+        "Fan control not supported on this GPU\n  → Manual fan control requires GPU with controllable fans"
+    )]
     FanControlNotSupported,
 
     #[error("Power management failed: {0}\n  → Try running with sudo for power limit changes")]
@@ -21,7 +23,9 @@ pub enum NvControlError {
     #[error("Latency optimization failed: {0}")]
     LatencyOptimizationFailed(String),
 
-    #[error("Container operation failed: {0}\n  → Check Docker/Podman status and NVIDIA Container Toolkit")]
+    #[error(
+        "Container operation failed: {0}\n  → Check Docker/Podman status and NVIDIA Container Toolkit"
+    )]
     ContainerOperationFailed(String),
 
     #[error("GPU query failed: {0}\n  → Run 'nvidia-smi' to verify GPU status")]
@@ -33,7 +37,9 @@ pub enum NvControlError {
     #[error("Configuration error: {0}\n  → Check ~/.config/nvcontrol/ for config files")]
     ConfigError(String),
 
-    #[error("Unsupported feature: {0}\n  → This feature may require a different GPU or driver version")]
+    #[error(
+        "Unsupported feature: {0}\n  → This feature may require a different GPU or driver version"
+    )]
     UnsupportedFeature(String),
 
     #[error("Runtime error: {0}")]
@@ -46,36 +52,36 @@ pub fn add(left: u64, right: u64) -> u64 {
     left + right
 }
 
+pub mod benchmark;
 pub mod bolt_integration;
-pub mod nvbind_integration;
 pub mod config;
 pub mod display;
+pub mod display_controls;
+pub mod display_info;
 pub mod fan;
+pub mod game_detection;
+pub mod game_scanner;
 pub mod gpu;
+pub mod gui_widgets;
+pub mod hdr;
+pub mod notifications;
+pub mod nvbind_integration;
+pub mod nvkms_bindings;
+pub mod osd;
 pub mod profiles;
+pub mod setup;
 pub mod tray;
 pub mod vibrance;
 pub mod vibrance_native;
-pub mod nvkms_bindings;
-pub mod display_controls;
 pub mod vrr;
-pub mod osd;
-pub mod game_detection;
-pub mod game_scanner;
-pub mod notifications;
-pub mod benchmark;
-pub mod gui_widgets;
-pub mod hdr;
-pub mod setup;
-pub mod display_info;
 
 // New advanced modules
 pub mod container;
 pub mod container_runtime;
 pub mod dlss;
 pub mod drivers;
-pub mod gamescope;
 pub mod game_launcher;
+pub mod gamescope;
 pub mod gpu_passthrough;
 pub mod latency;
 pub mod overclocking;
@@ -91,33 +97,33 @@ pub mod cuda;
 
 // Phase 1: Core Stability & Safety
 pub mod error_recovery;
-pub mod hardware_safety;
 pub mod gpu_safe;
+pub mod hardware_safety;
 
 // Phase 2: Wayland-First Experience
 pub mod wayland_integration;
 
 // Phase 3: Advanced GPU Control
+pub mod advanced_multi_gpu;
+pub mod advanced_power;
 pub mod enhanced_overclock;
 pub mod intelligent_fan;
-pub mod advanced_power;
-pub mod advanced_multi_gpu;
 
 // Phase 4: Gaming & Performance
+pub mod advanced_display;
 pub mod gaming_integration;
 pub mod performance_monitoring;
 pub mod upscaling_tech;
-pub mod advanced_display;
 
 // Phase 5: Container & Virtualization
+pub mod container_specific;
 pub mod nvbind_api;
 pub mod virtualization;
-pub mod container_specific;
 
 // ASUS ROG Integration
-pub mod asus_gpu_tweak;
 pub mod asus_aura;
 pub mod asus_fan_control;
+pub mod asus_gpu_tweak;
 pub mod asus_power_detector;
 
 // Monitoring and TUI modules
@@ -125,12 +131,12 @@ pub mod monitoring;
 pub mod tui;
 
 // Arch KDE Wayland optimization modules
-pub mod wayland_nvidia;
-pub mod kde_optimizer;
-pub mod power_profiles_daemon;
 pub mod arch_integration;
 pub mod gsp_firmware;
+pub mod kde_optimizer;
 pub mod multimonitor;
+pub mod power_profiles_daemon;
+pub mod wayland_nvidia;
 
 // Profile management
 pub mod profile_manager;
@@ -169,10 +175,10 @@ pub mod kernel_driver;
 pub mod gaming_dashboard;
 
 // GPU Profiler and Monitoring (radeon-profile equivalent)
+pub mod gui_themes;
+pub mod gui_tuner;
 pub mod nvidia_profiler;
 pub mod tui_monitor;
-pub mod gui_tuner;
-pub mod gui_themes;
 
 // Unified state management
 pub mod state;

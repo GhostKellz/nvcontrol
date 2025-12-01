@@ -7,10 +7,10 @@ use std::sync::Mutex;
 // Conditional compilation - use real nvbind API when available, mock when not
 #[cfg(feature = "nvbind-api")]
 use nvbind::{
-    gpu::{discover_gpus, get_driver_info, GpuDetector},
+    container::{ContainerSpec, create_container_with_gpu},
+    gpu::{GpuDetector, discover_gpus, get_driver_info},
     metrics::MetricsCollector,
     runtime::PluginRegistry,
-    container::{create_container_with_gpu, ContainerSpec},
 };
 
 // Mock nvbind API types for when the library is not available
@@ -72,15 +72,13 @@ mod mock_nvbind {
         }
 
         pub async fn discover(&self) -> Result<Vec<GpuInfo>> {
-            Ok(vec![
-                GpuInfo {
-                    id: "0".to_string(),
-                    name: "Mock NVIDIA RTX 4090".to_string(),
-                    memory_mb: 24576,
-                    uuid: "GPU-12345678-1234-1234-1234-123456789012".to_string(),
-                    driver_version: "545.29.06".to_string(),
-                }
-            ])
+            Ok(vec![GpuInfo {
+                id: "0".to_string(),
+                name: "Mock NVIDIA RTX 4090".to_string(),
+                memory_mb: 24576,
+                uuid: "GPU-12345678-1234-1234-1234-123456789012".to_string(),
+                driver_version: "545.29.06".to_string(),
+            }])
         }
     }
 
@@ -91,14 +89,21 @@ mod mock_nvbind {
             }
         }
 
-        pub async fn get_container_performance(&self, container_id: &str) -> Result<ContainerMetrics> {
-            Ok(self.container_metrics.get(container_id).cloned().unwrap_or(ContainerMetrics {
-                gpu_utilization: 85.0,
-                memory_usage_mb: 8192,
-                power_draw_w: 250.0,
-                latency_us: 50, // Sub-microsecond latency!
-                fps: 120.0,
-            }))
+        pub async fn get_container_performance(
+            &self,
+            container_id: &str,
+        ) -> Result<ContainerMetrics> {
+            Ok(self
+                .container_metrics
+                .get(container_id)
+                .cloned()
+                .unwrap_or(ContainerMetrics {
+                    gpu_utilization: 85.0,
+                    memory_usage_mb: 8192,
+                    power_draw_w: 250.0,
+                    latency_us: 50, // Sub-microsecond latency!
+                    fps: 120.0,
+                }))
         }
 
         pub async fn get_performance_summary(&self) -> Result<ContainerMetrics> {
@@ -115,21 +120,22 @@ mod mock_nvbind {
     impl PluginRegistry {
         pub fn new() -> Self {
             Self {
-                active_plugins: vec!["gpu-passthrough".to_string(), "gaming-optimization".to_string()],
+                active_plugins: vec![
+                    "gpu-passthrough".to_string(),
+                    "gaming-optimization".to_string(),
+                ],
             }
         }
     }
 
     pub async fn discover_gpus() -> Result<Vec<GpuInfo>> {
-        Ok(vec![
-            GpuInfo {
-                id: "0".to_string(),
-                name: "Mock NVIDIA RTX 4090".to_string(),
-                memory_mb: 24576,
-                uuid: "GPU-12345678-1234-1234-1234-123456789012".to_string(),
-                driver_version: "545.29.06".to_string(),
-            }
-        ])
+        Ok(vec![GpuInfo {
+            id: "0".to_string(),
+            name: "Mock NVIDIA RTX 4090".to_string(),
+            memory_mb: 24576,
+            uuid: "GPU-12345678-1234-1234-1234-123456789012".to_string(),
+            driver_version: "545.29.06".to_string(),
+        }])
     }
 
     pub async fn get_driver_info() -> Result<DriverInfo> {
@@ -148,7 +154,11 @@ mod mock_nvbind {
             "Mock: Would create nvbind container '{}' with image '{}' and GPU devices {:?}",
             spec.name, spec.image, _gpu_devices
         );
-        Ok(format!("nvbind-{}-{}", spec.name, chrono::Utc::now().timestamp()))
+        Ok(format!(
+            "nvbind-{}-{}",
+            spec.name,
+            chrono::Utc::now().timestamp()
+        ))
     }
 }
 
@@ -314,7 +324,9 @@ impl NvcontrolNvbindBridge {
 
             // Get performance metrics for each container
             if let Some(ref metrics_collector) = self.metrics_collector {
-                let collector = metrics_collector.lock().map_err(|e| anyhow!("Metrics lock failed: {}", e))?;
+                let collector = metrics_collector
+                    .lock()
+                    .map_err(|e| anyhow!("Metrics lock failed: {}", e))?;
                 for container_id in &active_containers {
                     if let Ok(metrics) = collector.get_container_performance(container_id).await {
                         container_performance.insert(container_id.clone(), metrics);
@@ -344,23 +356,28 @@ impl NvcontrolNvbindBridge {
         nvcontrol_profile: NvcontrolGamingProfile,
     ) -> Result<String> {
         // Apply nvcontrol settings first
-        self.apply_nvcontrol_gaming_profile(&nvcontrol_profile).await?;
+        self.apply_nvcontrol_gaming_profile(&nvcontrol_profile)
+            .await?;
 
         // Launch container with nvbind
-        let container_id = create_container_with_gpu(
-            &game_config.container_spec,
-            &game_config.gpu_devices,
-        ).await?;
+        let container_id =
+            create_container_with_gpu(&game_config.container_spec, &game_config.gpu_devices)
+                .await?;
 
         // Start performance monitoring
         self.start_performance_monitoring(&container_id).await?;
 
         println!("✅ Optimized gaming container launched: {}", container_id);
         println!("   🎮 Game profile: {}", nvcontrol_profile.name);
-        println!("   🖥️ Digital vibrance: {}%", nvcontrol_profile.digital_vibrance);
-        println!("   ⚡ GPU overclock: +{}MHz core, +{}MHz memory",
-                 nvcontrol_profile.gpu_overclock.core_offset_mhz,
-                 nvcontrol_profile.gpu_overclock.memory_offset_mhz);
+        println!(
+            "   🖥️ Digital vibrance: {}%",
+            nvcontrol_profile.digital_vibrance
+        );
+        println!(
+            "   ⚡ GPU overclock: +{}MHz core, +{}MHz memory",
+            nvcontrol_profile.gpu_overclock.core_offset_mhz,
+            nvcontrol_profile.gpu_overclock.memory_offset_mhz
+        );
 
         Ok(container_id)
     }
@@ -369,11 +386,19 @@ impl NvcontrolNvbindBridge {
     async fn apply_nvcontrol_gaming_profile(&self, profile: &NvcontrolGamingProfile) -> Result<()> {
         // These would call actual nvcontrol APIs
         println!("Applying nvcontrol gaming profile: {}", profile.name);
-        println!("  Setting digital vibrance to {}%", profile.digital_vibrance);
-        println!("  Applying GPU overclock: +{}MHz core, +{}MHz memory",
-                 profile.gpu_overclock.core_offset_mhz, profile.gpu_overclock.memory_offset_mhz);
+        println!(
+            "  Setting digital vibrance to {}%",
+            profile.digital_vibrance
+        );
+        println!(
+            "  Applying GPU overclock: +{}MHz core, +{}MHz memory",
+            profile.gpu_overclock.core_offset_mhz, profile.gpu_overclock.memory_offset_mhz
+        );
         println!("  Setting power limit to {}%", profile.power_limit);
-        println!("  Configuring fan curve with {} points", profile.fan_curve.len());
+        println!(
+            "  Configuring fan curve with {} points",
+            profile.fan_curve.len()
+        );
 
         // In real implementation, these would be:
         // crate::vibrance::set_digital_vibrance(profile.digital_vibrance)?;
@@ -386,7 +411,10 @@ impl NvcontrolNvbindBridge {
 
     /// Start performance monitoring for a container
     async fn start_performance_monitoring(&self, container_id: &str) -> Result<()> {
-        println!("🔍 Starting performance monitoring for container: {}", container_id);
+        println!(
+            "🔍 Starting performance monitoring for container: {}",
+            container_id
+        );
 
         // In real implementation, this would spawn a monitoring task:
         // tokio::spawn(async move {
@@ -442,12 +470,18 @@ impl NvcontrolNvbindBridge {
 
     /// Apply unified configuration to both nvcontrol and nvbind
     pub async fn apply_unified_config(&self, config: &UnifiedGpuConfig) -> Result<()> {
-        println!("🔧 Applying unified GPU configuration for GPU {}", config.gpu_id);
+        println!(
+            "🔧 Applying unified GPU configuration for GPU {}",
+            config.gpu_id
+        );
 
         // Apply nvcontrol settings
         println!("  📊 nvcontrol settings:");
         println!("    Digital vibrance: {}%", config.digital_vibrance);
-        println!("    GPU overclock: +{}MHz core, +{}MHz memory", config.overclock_core, config.overclock_memory);
+        println!(
+            "    GPU overclock: +{}MHz core, +{}MHz memory",
+            config.overclock_core, config.overclock_memory
+        );
         println!("    Power limit: {}%", config.power_limit);
         println!("    Fan curve: {} points", config.fan_curve.len());
 
@@ -469,7 +503,9 @@ impl NvcontrolNvbindBridge {
     /// Get real-time performance dashboard data
     pub async fn get_live_performance(&self) -> Result<UnifiedPerformanceDashboard> {
         if let Some(ref metrics_collector) = self.metrics_collector {
-            let collector = metrics_collector.lock().map_err(|e| anyhow!("Metrics lock failed: {}", e))?;
+            let collector = metrics_collector
+                .lock()
+                .map_err(|e| anyhow!("Metrics lock failed: {}", e))?;
             let container_stats = collector.get_performance_summary().await?;
 
             // In real implementation, get actual GPU stats from nvcontrol

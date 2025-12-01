@@ -1,7 +1,6 @@
 /// Phase 4.2: Performance Monitoring
 ///
 /// FPS overlay, frame time analysis, 1%/0.1% lows, latency monitoring, performance regression detection
-
 use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
@@ -369,9 +368,9 @@ impl RegressionDetector {
         let baseline = self.baseline.as_ref()?;
 
         let fps_diff_percent = ((baseline.avg_fps - current.avg_fps) / baseline.avg_fps) * 100.0;
-        let frame_time_diff_percent =
-            ((current.avg_frame_time_ms - baseline.avg_frame_time_ms) / baseline.avg_frame_time_ms)
-                * 100.0;
+        let frame_time_diff_percent = ((current.avg_frame_time_ms - baseline.avg_frame_time_ms)
+            / baseline.avg_frame_time_ms)
+            * 100.0;
 
         if fps_diff_percent > self.threshold_percent {
             Some(RegressionReport {

@@ -24,7 +24,10 @@ pub fn get_gpu_spec(model_name: &str) -> Option<GpuModelSpec> {
     // RTX 50 Series (Blackwell)
     if model_lower.contains("rtx 5090") {
         // Check for ASUS ROG Astral variant
-        let (tdp, max_tdp, boost, safe_offset) = if model_lower.contains("asus") || model_lower.contains("rog") || model_lower.contains("astral") {
+        let (tdp, max_tdp, boost, safe_offset) = if model_lower.contains("asus")
+            || model_lower.contains("rog")
+            || model_lower.contains("astral")
+        {
             // ASUS ROG Astral OC Edition: Higher clocks, beefier 4-fan cooling
             (600, 630, 2610, 175) // Factory OC'd
         } else {
@@ -482,7 +485,10 @@ pub fn print_gpu_info(model_name: &str) {
         println!("CUDA Cores: {}", spec.cuda_cores);
         println!("Memory Type: {}", spec.memory_type);
         println!("Memory Bus: {}-bit", spec.memory_bus_width);
-        println!("Default TDP: {}W (Max: {}W)", spec.default_tdp, spec.max_tdp);
+        println!(
+            "Default TDP: {}W (Max: {}W)",
+            spec.default_tdp, spec.max_tdp
+        );
         println!(
             "Temp Limits: {}°C (Max: {}°C)",
             spec.default_temp_limit, spec.max_temp_limit

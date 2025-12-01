@@ -33,9 +33,8 @@ pub fn setup_permissions() -> NvResult<()> {
 
     // Create udev rules
     println!("📝 Creating udev rules at {}", UDEV_RULES_PATH);
-    fs::write(UDEV_RULES_PATH, UDEV_RULES_CONTENT).map_err(|e| {
-        NvControlError::ConfigError(format!("Failed to write udev rules: {}", e))
-    })?;
+    fs::write(UDEV_RULES_PATH, UDEV_RULES_CONTENT)
+        .map_err(|e| NvControlError::ConfigError(format!("Failed to write udev rules: {}", e)))?;
     println!("✅ Udev rules created");
 
     // Reload udev rules
@@ -50,9 +49,7 @@ pub fn setup_permissions() -> NvResult<()> {
     }
 
     // Trigger udev
-    let trigger_result = Command::new("udevadm")
-        .args(&["trigger"])
-        .status();
+    let trigger_result = Command::new("udevadm").args(&["trigger"]).status();
 
     match trigger_result {
         Ok(status) if status.success() => println!("✅ Udev triggered"),
@@ -137,7 +134,12 @@ fn check_device_perms(device: &str, name: &str) {
         if readable && writable {
             println!("  ✅ {}: {} (mode: {:o})", name, device, mode & 0o777);
         } else {
-            println!("  ⚠️  {}: {} (mode: {:o}) - Limited access", name, device, mode & 0o777);
+            println!(
+                "  ⚠️  {}: {} (mode: {:o}) - Limited access",
+                name,
+                device,
+                mode & 0o777
+            );
         }
     } else {
         println!("  ❌ {}: {} - Not found", name, device);

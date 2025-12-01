@@ -15,9 +15,9 @@ pub enum SystemPowerProfile {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum NvidiaPowerMode {
-    MaxPerformance,     // Highest clocks, no power saving
-    Adaptive,           // Balance performance and power
-    MaxPowerSaving,     // Lowest clocks, maximum power saving
+    MaxPerformance, // Highest clocks, no power saving
+    Adaptive,       // Balance performance and power
+    MaxPowerSaving, // Lowest clocks, maximum power saving
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,10 +62,7 @@ impl PowerProfileManager {
     /// Detect current system power profile
     pub fn detect_current_profile() -> NvResult<SystemPowerProfile> {
         // Try power-profiles-daemon first
-        if let Ok(output) = Command::new("powerprofilesctl")
-            .arg("get")
-            .output()
-        {
+        if let Ok(output) = Command::new("powerprofilesctl").arg("get").output() {
             let profile = String::from_utf8_lossy(&output.stdout);
             return match profile.trim() {
                 "performance" => Ok(SystemPowerProfile::Performance),
@@ -154,10 +151,7 @@ impl PowerProfileManager {
 
         // Use nvidia-settings to set power mode
         let status = Command::new("nvidia-settings")
-            .args(&[
-                "-a",
-                &format!("[gpu:0]/GPUPowerMizerMode={}", mode_value),
-            ])
+            .args(&["-a", &format!("[gpu:0]/GPUPowerMizerMode={}", mode_value)])
             .status();
 
         if let Err(e) = status {
@@ -168,7 +162,11 @@ impl PowerProfileManager {
     }
 
     /// Create KDE Activity-based profile
-    pub fn create_activity_profile(&mut self, activity: &str, config: PowerProfileConfig) -> NvResult<()> {
+    pub fn create_activity_profile(
+        &mut self,
+        activity: &str,
+        config: PowerProfileConfig,
+    ) -> NvResult<()> {
         println!("📝 Creating activity profile: {}", activity);
 
         self.activity_profiles.insert(activity.to_string(), config);
@@ -204,7 +202,10 @@ impl PowerProfileManager {
             println!("✅ Activity profile applied");
             Ok(())
         } else {
-            Err(NvControlError::ConfigError(format!("Activity profile not found: {}", activity)))
+            Err(NvControlError::ConfigError(format!(
+                "Activity profile not found: {}",
+                activity
+            )))
         }
     }
 
@@ -234,7 +235,10 @@ impl PowerProfileManager {
 
             if let Ok(current_activity) = Self::get_current_activity() {
                 if current_activity != last_activity && !current_activity.is_empty() {
-                    println!("🔄 Activity changed: {} -> {}", last_activity, current_activity);
+                    println!(
+                        "🔄 Activity changed: {} -> {}",
+                        last_activity, current_activity
+                    );
 
                     if let Err(e) = self.apply_activity_profile(&current_activity) {
                         eprintln!("⚠️  Failed to apply profile: {}", e);
@@ -258,7 +262,8 @@ impl PowerProfileManager {
 
             if let Ok(on_ac) = Self::is_on_ac_power() {
                 if on_ac != last_on_ac {
-                    println!("🔄 Power source changed: {} -> {}",
+                    println!(
+                        "🔄 Power source changed: {} -> {}",
                         if last_on_ac { "AC" } else { "Battery" },
                         if on_ac { "AC" } else { "Battery" }
                     );
@@ -281,7 +286,10 @@ impl PowerProfileManager {
 
     /// Detect idle state and reduce power
     pub fn idle_detection(&mut self, idle_timeout_secs: u64) -> NvResult<()> {
-        println!("💤 Idle detection enabled (timeout: {}s)", idle_timeout_secs);
+        println!(
+            "💤 Idle detection enabled (timeout: {}s)",
+            idle_timeout_secs
+        );
 
         let mut idle_start: Option<std::time::Instant> = None;
         let mut in_idle_mode = false;
@@ -329,17 +337,32 @@ impl PowerProfileManager {
 
     /// Apply GPU overclocking
     fn apply_gpu_overclocking(&self, gpu_offset: i32, mem_offset: i32) -> NvResult<()> {
-        println!("⚙️  Applying GPU overclocking: GPU +{} MHz, Memory +{} MHz", gpu_offset, mem_offset);
+        println!(
+            "⚙️  Applying GPU overclocking: GPU +{} MHz, Memory +{} MHz",
+            gpu_offset, mem_offset
+        );
 
         // Set GPU clock offset
         Command::new("nvidia-settings")
-            .args(&["-a", &format!("[gpu:0]/GPUGraphicsClockOffsetAllPerformanceLevels={}", gpu_offset)])
+            .args(&[
+                "-a",
+                &format!(
+                    "[gpu:0]/GPUGraphicsClockOffsetAllPerformanceLevels={}",
+                    gpu_offset
+                ),
+            ])
             .status()
             .ok();
 
         // Set memory clock offset
         Command::new("nvidia-settings")
-            .args(&["-a", &format!("[gpu:0]/GPUMemoryTransferRateOffsetAllPerformanceLevels={}", mem_offset)])
+            .args(&[
+                "-a",
+                &format!(
+                    "[gpu:0]/GPUMemoryTransferRateOffsetAllPerformanceLevels={}",
+                    mem_offset
+                ),
+            ])
             .status()
             .ok();
 
@@ -356,7 +379,10 @@ impl PowerProfileManager {
             .status();
 
         if let Err(e) = status {
-            return Err(NvControlError::CommandFailed(format!("Failed to set power limit: {}", e)));
+            return Err(NvControlError::CommandFailed(format!(
+                "Failed to set power limit: {}",
+                e
+            )));
         }
 
         Ok(())
@@ -392,16 +418,20 @@ impl PowerProfileManager {
     /// Save activity profiles to config
     fn save_activity_profiles(&self) -> NvResult<()> {
         let config_dir = dirs::config_dir()
-            .ok_or_else(|| NvControlError::ConfigError("Could not find config directory".to_string()))?
+            .ok_or_else(|| {
+                NvControlError::ConfigError("Could not find config directory".to_string())
+            })?
             .join("nvcontrol");
 
-        std::fs::create_dir_all(&config_dir)
-            .map_err(|e| NvControlError::ConfigError(format!("Failed to create config dir: {}", e)))?;
+        std::fs::create_dir_all(&config_dir).map_err(|e| {
+            NvControlError::ConfigError(format!("Failed to create config dir: {}", e))
+        })?;
 
         let config_file = config_dir.join("activity_profiles.toml");
 
-        let content = toml::to_string_pretty(&self.activity_profiles)
-            .map_err(|e| NvControlError::ConfigError(format!("Failed to serialize config: {}", e)))?;
+        let content = toml::to_string_pretty(&self.activity_profiles).map_err(|e| {
+            NvControlError::ConfigError(format!("Failed to serialize config: {}", e))
+        })?;
 
         std::fs::write(&config_file, content)
             .map_err(|e| NvControlError::ConfigError(format!("Failed to write config: {}", e)))?;
@@ -416,7 +446,10 @@ impl PowerProfileManager {
         println!("System Profile: {:?}", self.current_profile);
 
         if let Ok(on_ac) = Self::is_on_ac_power() {
-            println!("Power Source: {}", if on_ac { "AC 🔌" } else { "Battery 🔋" });
+            println!(
+                "Power Source: {}",
+                if on_ac { "AC 🔌" } else { "Battery 🔋" }
+            );
         }
 
         if let Ok(activity) = Self::get_current_activity() {

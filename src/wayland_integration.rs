@@ -1,7 +1,6 @@
 /// Phase 2: Wayland-First Experience
 ///
 /// Enhanced compositor integration for KDE Plasma, GNOME, Hyprland, Sway, and Cosmic
-
 use crate::{NvControlError, NvResult};
 use std::process::Command;
 
@@ -12,8 +11,8 @@ pub enum WaylandCompositor {
     Gnome,
     Hyprland,
     Sway,
-    Cosmic,     // Pop!_OS COSMIC desktop
-    Weston,     // Reference compositor
+    Cosmic, // Pop!_OS COSMIC desktop
+    Weston, // Reference compositor
     Unknown,
 }
 
@@ -83,11 +82,11 @@ impl WaylandCompositor {
     pub fn capabilities(&self) -> CompositorCapabilities {
         match self {
             Self::KdePlasma => CompositorCapabilities {
-                digital_vibrance: true,  // Via nVibrant or kwin-effects
-                vrr_control: true,       // Native KWin VRR
-                hdr_support: true,       // Plasma 6+
-                color_management: true,  // Native support
-                display_config: true,    // KScreen
+                digital_vibrance: true, // Via nVibrant or kwin-effects
+                vrr_control: true,      // Native KWin VRR
+                hdr_support: true,      // Plasma 6+
+                color_management: true, // Native support
+                display_config: true,   // KScreen
             },
             Self::Gnome => CompositorCapabilities {
                 digital_vibrance: false, // Limited support
@@ -111,11 +110,11 @@ impl WaylandCompositor {
                 display_config: true,    // swaymsg
             },
             Self::Cosmic => CompositorCapabilities {
-                digital_vibrance: true,  // Native NVKMS (like KDE)
-                vrr_control: true,       // cosmic-randr
-                hdr_support: true,       // COSMIC compositor supports HDR
-                color_management: true,  // Native support planned
-                display_config: true,    // cosmic-randr / cosmic-settings
+                digital_vibrance: true, // Native NVKMS (like KDE)
+                vrr_control: true,      // cosmic-randr
+                hdr_support: true,      // COSMIC compositor supports HDR
+                color_management: true, // Native support planned
+                display_config: true,   // cosmic-randr / cosmic-settings
             },
             Self::Weston => CompositorCapabilities {
                 digital_vibrance: false, // Reference compositor
@@ -155,7 +154,9 @@ impl VibranceController {
             WaylandCompositor::Sway => self.set_vibrance_sway(display, value),
             WaylandCompositor::Gnome => self.set_vibrance_gnome(display, value),
             WaylandCompositor::Cosmic => self.set_vibrance_cosmic(display, value),
-            WaylandCompositor::Weston | WaylandCompositor::Unknown => self.set_vibrance_nvibrant(display, value),
+            WaylandCompositor::Weston | WaylandCompositor::Unknown => {
+                self.set_vibrance_nvibrant(display, value)
+            }
         }
     }
 
@@ -270,10 +271,7 @@ impl VibranceController {
     }
 
     fn check_nvibrant(&self) -> bool {
-        Command::new("nvibrant")
-            .arg("--version")
-            .output()
-            .is_ok()
+        Command::new("nvibrant").arg("--version").output().is_ok()
     }
 }
 
@@ -303,9 +301,11 @@ impl VrrController {
             WaylandCompositor::Hyprland => self.enable_vrr_hyprland(display),
             WaylandCompositor::Sway => self.enable_vrr_sway(display),
             WaylandCompositor::Cosmic => self.enable_vrr_cosmic(display),
-            WaylandCompositor::Weston | WaylandCompositor::Unknown => Err(NvControlError::UnsupportedFeature(
-                "VRR not supported on this compositor".to_string(),
-            )),
+            WaylandCompositor::Weston | WaylandCompositor::Unknown => {
+                Err(NvControlError::UnsupportedFeature(
+                    "VRR not supported on this compositor".to_string(),
+                ))
+            }
         }
     }
 
@@ -314,9 +314,7 @@ impl VrrController {
         let output = Command::new("kscreen-doctor")
             .args(&[&format!("output.{}.vrr.enable", display)])
             .output()
-            .map_err(|e| {
-                NvControlError::RuntimeError(format!("kscreen-doctor failed: {}", e))
-            })?;
+            .map_err(|e| NvControlError::RuntimeError(format!("kscreen-doctor failed: {}", e)))?;
 
         if output.status.success() {
             println!("✓ VRR enabled for {} (KDE Plasma)", display);
@@ -399,7 +397,8 @@ impl VrrController {
                 // This uses /sys/class/drm for direct control
                 println!("⚠ cosmic-randr not available, trying DRM interface");
                 Err(NvControlError::RuntimeError(
-                    "COSMIC VRR requires cosmic-randr. Install it or use cosmic-settings.".to_string(),
+                    "COSMIC VRR requires cosmic-randr. Install it or use cosmic-settings."
+                        .to_string(),
                 ))
             }
         }
@@ -440,11 +439,46 @@ impl WaylandInfo {
         println!("  Desktop: {}", self.desktop);
         println!("  Compositor: {}", self.compositor.name());
         println!("\nCapabilities:");
-        println!("  Digital Vibrance: {}", if self.capabilities.digital_vibrance { "✓" } else { "✗" });
-        println!("  VRR Control: {}", if self.capabilities.vrr_control { "✓" } else { "✗" });
-        println!("  HDR Support: {}", if self.capabilities.hdr_support { "✓" } else { "✗" });
-        println!("  Color Management: {}", if self.capabilities.color_management { "✓" } else { "✗" });
-        println!("  Display Config: {}", if self.capabilities.display_config { "✓" } else { "✗" });
+        println!(
+            "  Digital Vibrance: {}",
+            if self.capabilities.digital_vibrance {
+                "✓"
+            } else {
+                "✗"
+            }
+        );
+        println!(
+            "  VRR Control: {}",
+            if self.capabilities.vrr_control {
+                "✓"
+            } else {
+                "✗"
+            }
+        );
+        println!(
+            "  HDR Support: {}",
+            if self.capabilities.hdr_support {
+                "✓"
+            } else {
+                "✗"
+            }
+        );
+        println!(
+            "  Color Management: {}",
+            if self.capabilities.color_management {
+                "✓"
+            } else {
+                "✗"
+            }
+        );
+        println!(
+            "  Display Config: {}",
+            if self.capabilities.display_config {
+                "✓"
+            } else {
+                "✗"
+            }
+        );
     }
 }
 

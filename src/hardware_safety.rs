@@ -2,7 +2,6 @@
 ///
 /// Prevents hardware damage through temperature monitoring, power limiting,
 /// and automatic emergency shutdown
-
 use crate::{NvControlError, NvResult};
 use nvml_wrapper::Nvml;
 use std::sync::{Arc, Mutex};
@@ -59,9 +58,8 @@ impl SafetyMonitor {
 
     /// Check GPU temperature and trigger safety measures if needed
     pub fn check_temperature(&self) -> NvResult<SafetyStatus> {
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::GpuQueryFailed(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::GpuQueryFailed(format!("NVML init failed: {}", e)))?;
 
         let device = nvml.device_by_index(self.gpu_id).map_err(|e| {
             NvControlError::GpuQueryFailed(format!("Failed to access GPU {}: {}", self.gpu_id, e))
@@ -114,11 +112,7 @@ impl SafetyMonitor {
     }
 
     /// Apply thermal throttling
-    fn apply_thermal_throttling(
-        &self,
-        _device: &nvml_wrapper::Device,
-        temp: i32,
-    ) -> NvResult<()> {
+    fn apply_thermal_throttling(&self, _device: &nvml_wrapper::Device, temp: i32) -> NvResult<()> {
         eprintln!(
             "⚠️  WARNING: GPU {} temperature high: {}°C (warning: {}°C)",
             self.gpu_id, temp, self.thresholds.temp_warning
@@ -145,9 +139,15 @@ impl SafetyMonitor {
             let _ = std::process::Command::new("nvidia-settings")
                 .args(&[
                     "-a",
-                    &format!("[gpu:{}]/GPUGraphicsClockOffsetAllPerformanceLevels=0", self.gpu_id),
+                    &format!(
+                        "[gpu:{}]/GPUGraphicsClockOffsetAllPerformanceLevels=0",
+                        self.gpu_id
+                    ),
                     "-a",
-                    &format!("[gpu:{}]/GPUMemoryTransferRateOffsetAllPerformanceLevels=0", self.gpu_id),
+                    &format!(
+                        "[gpu:{}]/GPUMemoryTransferRateOffsetAllPerformanceLevels=0",
+                        self.gpu_id
+                    ),
                 ])
                 .output();
         }
@@ -159,13 +159,12 @@ impl SafetyMonitor {
 
     /// Maximize fan speed for emergency cooling
     fn maximize_fan_speed(&self) -> NvResult<()> {
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::GpuQueryFailed(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::GpuQueryFailed(format!("NVML init failed: {}", e)))?;
 
-        let _device = nvml.device_by_index(self.gpu_id).map_err(|e| {
-            NvControlError::GpuQueryFailed(format!("Failed to access GPU: {}", e))
-        })?;
+        let _device = nvml
+            .device_by_index(self.gpu_id)
+            .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to access GPU: {}", e)))?;
 
         // Note: Fan control through NVML requires proper permissions and may not work on all GPUs
         eprintln!("Note: Fan speed control may require nvidia-settings or manual configuration");
@@ -342,11 +341,17 @@ mod tests {
 
         // Safe overclock
         let result = monitor.validate_overclock_safe(150, 500);
-        assert!(matches!(result, Ok(OverclockValidation::Safe) | Ok(OverclockValidation::Warning { .. }) | Err(_)));
+        assert!(matches!(
+            result,
+            Ok(OverclockValidation::Safe) | Ok(OverclockValidation::Warning { .. }) | Err(_)
+        ));
 
         // Unsafe overclock (too high)
         let result = monitor.validate_overclock_safe(600, 500);
-        assert!(matches!(result, Ok(OverclockValidation::Unsafe { .. }) | Err(_)));
+        assert!(matches!(
+            result,
+            Ok(OverclockValidation::Unsafe { .. }) | Err(_)
+        ));
     }
 
     #[test]

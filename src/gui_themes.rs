@@ -1,7 +1,6 @@
 /// GUI Themes for nvcontrol
 ///
 /// Modern theming system with dark/light modes and GPU manufacturer presets
-
 use serde::{Deserialize, Serialize};
 
 /// Color scheme definition
@@ -72,7 +71,7 @@ impl ThemePresets {
     /// NVIDIA GeForce (Dark Green)
     pub fn nvidia_dark() -> ColorScheme {
         ColorScheme {
-            primary: RgbaColor::rgb(118, 185, 0),      // NVIDIA Green
+            primary: RgbaColor::rgb(118, 185, 0), // NVIDIA Green
             secondary: RgbaColor::rgb(0, 0, 0),
             accent: RgbaColor::rgb(147, 209, 46),
 
@@ -106,7 +105,7 @@ impl ThemePresets {
     /// ASUS ROG (Red/Black)
     pub fn asus_rog() -> ColorScheme {
         ColorScheme {
-            primary: RgbaColor::rgb(255, 0, 0),        // ROG Red
+            primary: RgbaColor::rgb(255, 0, 0), // ROG Red
             secondary: RgbaColor::rgb(0, 0, 0),
             accent: RgbaColor::rgb(255, 69, 58),
 
@@ -140,7 +139,7 @@ impl ThemePresets {
     /// MSI Gaming (Red/Black)
     pub fn msi_gaming() -> ColorScheme {
         ColorScheme {
-            primary: RgbaColor::rgb(227, 6, 19),       // MSI Red
+            primary: RgbaColor::rgb(227, 6, 19), // MSI Red
             secondary: RgbaColor::rgb(0, 0, 0),
             accent: RgbaColor::rgb(255, 50, 50),
 
@@ -174,7 +173,7 @@ impl ThemePresets {
     /// EVGA Precision (Orange/Black)
     pub fn evga_precision() -> ColorScheme {
         ColorScheme {
-            primary: RgbaColor::rgb(255, 102, 0),      // EVGA Orange
+            primary: RgbaColor::rgb(255, 102, 0), // EVGA Orange
             secondary: RgbaColor::rgb(0, 0, 0),
             accent: RgbaColor::rgb(255, 140, 0),
 
@@ -208,7 +207,7 @@ impl ThemePresets {
     /// AMD Radeon (Red/Black) - for comparison/compatibility
     pub fn amd_radeon() -> ColorScheme {
         ColorScheme {
-            primary: RgbaColor::rgb(237, 28, 36),      // AMD Red
+            primary: RgbaColor::rgb(237, 28, 36), // AMD Red
             secondary: RgbaColor::rgb(0, 0, 0),
             accent: RgbaColor::rgb(255, 60, 60),
 
@@ -276,9 +275,9 @@ impl ThemePresets {
     /// Cyberpunk (Neon Blue/Purple)
     pub fn cyberpunk() -> ColorScheme {
         ColorScheme {
-            primary: RgbaColor::rgb(0, 255, 255),      // Cyan
-            secondary: RgbaColor::rgb(138, 43, 226),   // Purple
-            accent: RgbaColor::rgb(255, 0, 255),       // Magenta
+            primary: RgbaColor::rgb(0, 255, 255),    // Cyan
+            secondary: RgbaColor::rgb(138, 43, 226), // Purple
+            accent: RgbaColor::rgb(255, 0, 255),     // Magenta
 
             background: RgbaColor::rgb(8, 8, 16),
             surface: RgbaColor::rgb(16, 16, 32),

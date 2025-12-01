@@ -126,7 +126,10 @@ impl SystemValidation {
 
         // Parse size
         let size_human = if let Some(size_part) = parts.iter().find(|s| s.starts_with("[size=")) {
-            size_part.trim_start_matches("[size=").trim_end_matches(']').to_string()
+            size_part
+                .trim_start_matches("[size=")
+                .trim_end_matches(']')
+                .to_string()
         } else {
             "Unknown".to_string()
         };
@@ -179,7 +182,8 @@ impl SystemValidation {
                 if line.contains("LnkCap:") {
                     if let Some(speed_part) = line.split("Speed ").nth(1) {
                         if let Some(speed_str) = speed_part.split(',').next() {
-                            self.pcie_speed_gts = speed_str.trim_end_matches("GT/s").parse().unwrap_or(0.0);
+                            self.pcie_speed_gts =
+                                speed_str.trim_end_matches("GT/s").parse().unwrap_or(0.0);
                             self.pcie_generation = Self::speed_to_generation(self.pcie_speed_gts);
                         }
                     }
@@ -193,7 +197,8 @@ impl SystemValidation {
                 else if line.contains("LnkSta:") {
                     if let Some(speed_part) = line.split("Speed ").nth(1) {
                         if let Some(speed_str) = speed_part.split(',').next() {
-                            let actual_speed: f32 = speed_str.trim_end_matches("GT/s").parse().unwrap_or(0.0);
+                            let actual_speed: f32 =
+                                speed_str.trim_end_matches("GT/s").parse().unwrap_or(0.0);
                             self.pcie_speed_gts = actual_speed;
                             self.pcie_generation = Self::speed_to_generation(actual_speed);
                         }
@@ -224,13 +229,18 @@ impl SystemValidation {
     fn detect_iommu(&mut self) {
         // Check kernel command line for IOMMU
         if let Ok(cmdline) = std::fs::read_to_string("/proc/cmdline") {
-            self.iommu_enabled = cmdline.contains("iommu=on") || cmdline.contains("intel_iommu=on") || cmdline.contains("amd_iommu=on");
+            self.iommu_enabled = cmdline.contains("iommu=on")
+                || cmdline.contains("intel_iommu=on")
+                || cmdline.contains("amd_iommu=on");
         }
 
         // Also check dmesg
         if let Ok(output) = Command::new("dmesg").output() {
             let output_str = String::from_utf8_lossy(&output.stdout);
-            if output_str.contains("IOMMU enabled") || output_str.contains("AMD-Vi: ") || output_str.contains("DMAR: ") {
+            if output_str.contains("IOMMU enabled")
+                || output_str.contains("AMD-Vi: ")
+                || output_str.contains("DMAR: ")
+            {
                 self.iommu_enabled = true;
             }
         }
@@ -238,10 +248,7 @@ impl SystemValidation {
 
     /// Detect Secure Boot status
     fn detect_secure_boot(&mut self) {
-        if let Ok(output) = Command::new("mokutil")
-            .arg("--sb-state")
-            .output()
-        {
+        if let Ok(output) = Command::new("mokutil").arg("--sb-state").output() {
             let output_str = String::from_utf8_lossy(&output.stdout);
             self.secure_boot_enabled = output_str.contains("SecureBoot enabled");
         }
@@ -254,17 +261,18 @@ impl SystemValidation {
                 "RTX 50-series REQUIRES Resizable BAR! Enable in BIOS: Above 4G Decoding + Resizable BAR".to_string()
             );
             self.errors.push(
-                "Without ReBAR, RTX 5090 may fail to boot or perform very poorly".to_string()
+                "Without ReBAR, RTX 5090 may fail to boot or perform very poorly".to_string(),
             );
         } else if self.rebar_size_gb < 16 {
-            self.warnings.push(
-                format!("Resizable BAR size ({} GB) is smaller than VRAM. Recommend 32GB+ BAR for RTX 5090", self.rebar_size_gb)
-            );
+            self.warnings.push(format!(
+                "Resizable BAR size ({} GB) is smaller than VRAM. Recommend 32GB+ BAR for RTX 5090",
+                self.rebar_size_gb
+            ));
         }
 
         if !self.above_4g_decoding {
             self.errors.push(
-                "Above 4G Decoding NOT detected! This is REQUIRED for RTX 50-series".to_string()
+                "Above 4G Decoding NOT detected! This is REQUIRED for RTX 50-series".to_string(),
             );
         }
     }
@@ -272,9 +280,10 @@ impl SystemValidation {
     /// Validate PCIe configuration for Blackwell GPUs
     fn validate_pcie_for_blackwell(&mut self) {
         if self.pcie_generation < 4 {
-            self.warnings.push(
-                format!("PCIe Gen {} detected. RTX 5090 supports PCIe Gen 5 for optimal performance", self.pcie_generation)
-            );
+            self.warnings.push(format!(
+                "PCIe Gen {} detected. RTX 5090 supports PCIe Gen 5 for optimal performance",
+                self.pcie_generation
+            ));
         } else if self.pcie_generation == 4 {
             self.warnings.push(
                 "PCIe Gen 4 detected. RTX 5090 supports Gen 5 but Gen 4 will work fine (<2% perf loss)".to_string()
@@ -282,9 +291,10 @@ impl SystemValidation {
         }
 
         if self.pcie_lanes < 16 {
-            self.warnings.push(
-                format!("Only x{} PCIe lanes detected. Recommend x16 for RTX 5090", self.pcie_lanes)
-            );
+            self.warnings.push(format!(
+                "Only x{} PCIe lanes detected. Recommend x16 for RTX 5090",
+                self.pcie_lanes
+            ));
         }
     }
 
@@ -304,7 +314,8 @@ impl SystemValidation {
         if let Ok(cmdline) = std::fs::read_to_string("/proc/cmdline") {
             if !cmdline.contains("pci=realloc") && !self.rebar_enabled {
                 self.warnings.push(
-                    "Consider adding 'pci=realloc' to kernel cmdline if you encounter boot issues".to_string()
+                    "Consider adding 'pci=realloc' to kernel cmdline if you encounter boot issues"
+                        .to_string(),
                 );
             }
         }
@@ -345,7 +356,11 @@ impl SystemValidation {
                     bar.region_number,
                     bar.size_human,
                     bar.bits,
-                    if bar.prefetchable { "prefetchable" } else { "non-prefetchable" },
+                    if bar.prefetchable {
+                        "prefetchable"
+                    } else {
+                        "non-prefetchable"
+                    },
                     bar.address
                 );
             }
@@ -353,8 +368,22 @@ impl SystemValidation {
 
         // IOMMU & Secure Boot
         println!("\nBoot Configuration:");
-        println!("  IOMMU: {}", if self.iommu_enabled { "Enabled" } else { "Disabled" });
-        println!("  Secure Boot: {}", if self.secure_boot_enabled { "Enabled" } else { "Disabled" });
+        println!(
+            "  IOMMU: {}",
+            if self.iommu_enabled {
+                "Enabled"
+            } else {
+                "Disabled"
+            }
+        );
+        println!(
+            "  Secure Boot: {}",
+            if self.secure_boot_enabled {
+                "Enabled"
+            } else {
+                "Disabled"
+            }
+        );
 
         // Warnings
         if !self.warnings.is_empty() {
@@ -396,11 +425,13 @@ impl SystemValidation {
         }
 
         if self.secure_boot_enabled && self.iommu_enabled {
-            recommendations.push("If experiencing boot issues, try disabling Secure Boot or TPM".to_string());
+            recommendations
+                .push("If experiencing boot issues, try disabling Secure Boot or TPM".to_string());
         }
 
         if self.pcie_generation < 4 {
-            recommendations.push("Ensure GPU is in the primary PCIe x16 slot (Gen 4/5 capable)".to_string());
+            recommendations
+                .push("Ensure GPU is in the primary PCIe x16 slot (Gen 4/5 capable)".to_string());
         }
 
         recommendations
@@ -415,7 +446,10 @@ mod tests {
     fn test_parse_size() {
         assert_eq!(SystemValidation::parse_size_to_bytes("16M"), 16_777_216);
         assert_eq!(SystemValidation::parse_size_to_bytes("32G"), 34_359_738_368);
-        assert_eq!(SystemValidation::parse_size_to_bytes("1T"), 1_099_511_627_776);
+        assert_eq!(
+            SystemValidation::parse_size_to_bytes("1T"),
+            1_099_511_627_776
+        );
     }
 
     #[test]

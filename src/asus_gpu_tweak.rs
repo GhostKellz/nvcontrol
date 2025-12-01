@@ -2,7 +2,6 @@
 ///
 /// Replicate ASUS GPU Tweak III functionality on Linux for ASUS ROG cards
 /// Supports: Performance tuning, OC profiles, monitoring
-
 use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -10,10 +9,10 @@ use std::collections::HashMap;
 /// ASUS GPU Tweak operating mode
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum AsusMode {
-    SilentMode,      // Quiet operation, lower clocks
-    GamingMode,      // Balanced for gaming
-    OcMode,          // Maximum performance
-    Manual,          // User-defined settings
+    SilentMode, // Quiet operation, lower clocks
+    GamingMode, // Balanced for gaming
+    OcMode,     // Maximum performance
+    Manual,     // User-defined settings
 }
 
 /// ASUS OC Profile matching GPU Tweak
@@ -66,13 +65,12 @@ impl AsusGpuTweak {
     fn detect_asus_card(gpu_id: u32) -> NvResult<bool> {
         use nvml_wrapper::Nvml;
 
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
 
-        let device = nvml.device_by_index(gpu_id).map_err(|e| {
-            NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e))
-        })?;
+        let device = nvml
+            .device_by_index(gpu_id)
+            .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e)))?;
 
         let name = device.name().unwrap_or_default();
 
@@ -96,13 +94,7 @@ impl AsusGpuTweak {
                 temp_target_c: 75,
                 fan_profile: AsusFanProfile {
                     mode: FanMode::Quiet,
-                    curve: vec![
-                        (40, 0),
-                        (50, 30),
-                        (60, 40),
-                        (70, 55),
-                        (80, 70),
-                    ],
+                    curve: vec![(40, 0), (50, 30), (60, 40), (70, 55), (80, 70)],
                 },
             },
         );
@@ -120,13 +112,7 @@ impl AsusGpuTweak {
                 temp_target_c: 83,
                 fan_profile: AsusFanProfile {
                     mode: FanMode::Auto,
-                    curve: vec![
-                        (35, 0),
-                        (50, 40),
-                        (65, 60),
-                        (75, 80),
-                        (85, 100),
-                    ],
+                    curve: vec![(35, 0), (50, 40), (65, 60), (75, 80), (85, 100)],
                 },
             },
         );
@@ -144,13 +130,7 @@ impl AsusGpuTweak {
                 temp_target_c: 85,
                 fan_profile: AsusFanProfile {
                     mode: FanMode::Turbo,
-                    curve: vec![
-                        (30, 35),
-                        (50, 55),
-                        (65, 75),
-                        (75, 90),
-                        (85, 100),
-                    ],
+                    curve: vec![(30, 35), (50, 55), (65, 75), (75, 90), (85, 100)],
                 },
             },
         );
@@ -193,19 +173,21 @@ impl AsusGpuTweak {
 
         use nvml_wrapper::Nvml;
 
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
 
-        let mut device = nvml.device_by_index(self.gpu_id).map_err(|e| {
-            NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e))
-        })?;
+        let mut device = nvml
+            .device_by_index(self.gpu_id)
+            .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e)))?;
 
         // Apply power limit
         let constraints = device.power_management_limit_constraints().ok();
         if let Some(constraints) = constraints {
-            let default_power = device.power_management_limit_default().unwrap_or(constraints.max_limit);
-            let target_power = (default_power as f32 * profile.power_target_percent as f32 / 100.0) as u32;
+            let default_power = device
+                .power_management_limit_default()
+                .unwrap_or(constraints.max_limit);
+            let target_power =
+                (default_power as f32 * profile.power_target_percent as f32 / 100.0) as u32;
 
             device.set_power_management_limit(target_power).ok();
         }
@@ -270,20 +252,23 @@ impl AsusGpuTweak {
     pub fn get_monitoring_data(&self) -> NvResult<AsusMonitoringData> {
         use nvml_wrapper::Nvml;
 
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
 
-        let device = nvml.device_by_index(self.gpu_id).map_err(|e| {
-            NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e))
-        })?;
+        let device = nvml
+            .device_by_index(self.gpu_id)
+            .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e)))?;
 
         let gpu_temp = device
             .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
             .unwrap_or(0) as i32;
 
-        let gpu_clock = device.clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics).unwrap_or(0);
-        let mem_clock = device.clock_info(nvml_wrapper::enum_wrappers::device::Clock::Memory).unwrap_or(0);
+        let gpu_clock = device
+            .clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics)
+            .unwrap_or(0);
+        let mem_clock = device
+            .clock_info(nvml_wrapper::enum_wrappers::device::Clock::Memory)
+            .unwrap_or(0);
 
         let utilization = device.utilization_rates().ok();
         let gpu_load = utilization.as_ref().map(|u| u.gpu).unwrap_or(0);
@@ -294,8 +279,14 @@ impl AsusGpuTweak {
         let fan_speed = device.fan_speed(0).unwrap_or(0);
 
         let memory_info = device.memory_info().ok();
-        let vram_used = memory_info.as_ref().map(|m| m.used / 1024 / 1024).unwrap_or(0);
-        let vram_total = memory_info.as_ref().map(|m| m.total / 1024 / 1024).unwrap_or(0);
+        let vram_used = memory_info
+            .as_ref()
+            .map(|m| m.used / 1024 / 1024)
+            .unwrap_or(0);
+        let vram_total = memory_info
+            .as_ref()
+            .map(|m| m.total / 1024 / 1024)
+            .unwrap_or(0);
 
         Ok(AsusMonitoringData {
             gpu_temp,

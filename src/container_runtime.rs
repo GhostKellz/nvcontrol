@@ -825,7 +825,10 @@ build = "{}"
     }
 
     /// Get container status by name or ID
-    pub fn get_container_status(&self, container: &str) -> NvResult<super::container::ContainerGpuInfo> {
+    pub fn get_container_status(
+        &self,
+        container: &str,
+    ) -> NvResult<super::container::ContainerGpuInfo> {
         use super::container;
 
         // Try all runtimes to find the container
@@ -853,9 +856,10 @@ build = "{}"
             }
         }
 
-        Err(NvControlError::ContainerOperationFailed(
-            format!("Container '{}' not found", container)
-        ))
+        Err(NvControlError::ContainerOperationFailed(format!(
+            "Container '{}' not found",
+            container
+        )))
     }
 
     /// Create PhantomLink audio container configuration
@@ -920,7 +924,10 @@ build = "{}"
 
     /// Setup container runtime with NVIDIA GPU support
     pub fn setup_runtime(&self, runtime_name: &str) -> NvResult<()> {
-        println!("🔧 Setting up {} runtime with NVIDIA GPU support...", runtime_name);
+        println!(
+            "🔧 Setting up {} runtime with NVIDIA GPU support...",
+            runtime_name
+        );
 
         // Check if nvidia-container-toolkit is installed
         let toolkit_check = Command::new("nvidia-container-toolkit")
@@ -931,21 +938,31 @@ build = "{}"
             println!("⚠️  nvidia-container-toolkit not found");
             println!("📦 Installation instructions:");
             println!("   Ubuntu/Debian:");
-            println!("     curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg");
-            println!("     curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \\");
-            println!("       sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \\");
+            println!(
+                "     curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg"
+            );
+            println!(
+                "     curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \\"
+            );
+            println!(
+                "       sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \\"
+            );
             println!("       sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list");
-            println!("     sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit");
+            println!(
+                "     sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit"
+            );
             println!();
             println!("   Fedora/RHEL/CentOS:");
-            println!("     sudo dnf config-manager --add-repo https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo");
+            println!(
+                "     sudo dnf config-manager --add-repo https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo"
+            );
             println!("     sudo dnf install -y nvidia-container-toolkit");
             println!();
             println!("   Arch Linux:");
             println!("     yay -S nvidia-container-toolkit");
 
             return Err(NvControlError::ContainerOperationFailed(
-                "nvidia-container-toolkit not installed".to_string()
+                "nvidia-container-toolkit not installed".to_string(),
             ));
         }
 
@@ -953,9 +970,10 @@ build = "{}"
             "docker" => self.setup_docker_runtime(),
             "podman" => self.setup_podman_runtime(),
             "containerd" => self.setup_containerd_runtime(),
-            _ => Err(NvControlError::ContainerOperationFailed(
-                format!("Unsupported runtime: {}", runtime_name)
-            )),
+            _ => Err(NvControlError::ContainerOperationFailed(format!(
+                "Unsupported runtime: {}",
+                runtime_name
+            ))),
         }
     }
 
@@ -1003,7 +1021,12 @@ build = "{}"
         println!("📝 Generating CDI specification...");
 
         let cdi_result = Command::new("sudo")
-            .args(&["nvidia-ctk", "cdi", "generate", "--output=/etc/cdi/nvidia.yaml"])
+            .args(&[
+                "nvidia-ctk",
+                "cdi",
+                "generate",
+                "--output=/etc/cdi/nvidia.yaml",
+            ])
             .status();
 
         match cdi_result {
@@ -1012,7 +1035,9 @@ build = "{}"
             }
             _ => {
                 println!("⚠️  Failed to generate CDI specification");
-                println!("   Run manually: sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml");
+                println!(
+                    "   Run manually: sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml"
+                );
             }
         }
 
@@ -1044,8 +1069,9 @@ build = "{}"
         println!("⚙️  Configuring NVIDIA Container Runtime...");
 
         let config_dir = &self.config_path;
-        fs::create_dir_all(config_dir)
-            .map_err(|e| NvControlError::ConfigError(format!("Failed to create config dir: {}", e)))?;
+        fs::create_dir_all(config_dir).map_err(|e| {
+            NvControlError::ConfigError(format!("Failed to create config dir: {}", e))
+        })?;
 
         // Create runtime configuration
         let runtime_config = r#"# NVIDIA Container Runtime Configuration
@@ -1078,11 +1104,17 @@ compute-mode = "default"
         fs::write(&config_file, runtime_config)
             .map_err(|e| NvControlError::ConfigError(format!("Failed to write config: {}", e)))?;
 
-        println!("✅ Runtime configuration saved to: {}", config_file.display());
+        println!(
+            "✅ Runtime configuration saved to: {}",
+            config_file.display()
+        );
         println!();
         println!("📋 Current GPU devices:");
         for device in &self.gpu_devices {
-            println!("   [{}] {} - {} MB", device.index, device.name, device.memory_mb);
+            println!(
+                "   [{}] {} - {} MB",
+                device.index, device.name, device.memory_mb
+            );
         }
         println!();
         println!("🎯 Supported runtimes:");

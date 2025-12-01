@@ -1,7 +1,6 @@
 /// Phase 4.4: VRR & Display
 ///
 /// Per-game VRR profiles, adaptive refresh range, NVIDIA Reflex integration, display automation
-
 use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -93,15 +92,10 @@ impl ReflexIntegration {
         let output = Command::new("nvidia-settings")
             .args(&[
                 "-a",
-                &format!(
-                    "[gpu:{}]/GPUPowerMizerMode={}",
-                    self.gpu_id, mode_value
-                ),
+                &format!("[gpu:{}]/GPUPowerMizerMode={}", self.gpu_id, mode_value),
             ])
             .output()
-            .map_err(|e| {
-                NvControlError::CommandFailed(format!("nvidia-settings failed: {}", e))
-            })?;
+            .map_err(|e| NvControlError::CommandFailed(format!("nvidia-settings failed: {}", e)))?;
 
         if !output.status.success() {
             return Err(NvControlError::LatencyOptimizationFailed(
@@ -139,13 +133,12 @@ impl ReflexIntegration {
     pub fn is_supported(&self) -> NvResult<bool> {
         use nvml_wrapper::Nvml;
 
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
 
-        let device = nvml.device_by_index(self.gpu_id).map_err(|e| {
-            NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e))
-        })?;
+        let device = nvml
+            .device_by_index(self.gpu_id)
+            .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e)))?;
 
         let name = device.name().unwrap_or_default();
 
@@ -179,13 +172,11 @@ impl VrrProfileManager {
             return Ok(());
         }
 
-        let content = std::fs::read_to_string(&self.config_path).map_err(|e| {
-            NvControlError::ConfigError(format!("Failed to read profiles: {}", e))
-        })?;
+        let content = std::fs::read_to_string(&self.config_path)
+            .map_err(|e| NvControlError::ConfigError(format!("Failed to read profiles: {}", e)))?;
 
-        self.profiles = serde_json::from_str(&content).map_err(|e| {
-            NvControlError::ConfigError(format!("Failed to parse profiles: {}", e))
-        })?;
+        self.profiles = serde_json::from_str(&content)
+            .map_err(|e| NvControlError::ConfigError(format!("Failed to parse profiles: {}", e)))?;
 
         Ok(())
     }
@@ -202,9 +193,8 @@ impl VrrProfileManager {
             NvControlError::ConfigError(format!("Failed to serialize profiles: {}", e))
         })?;
 
-        std::fs::write(&self.config_path, content).map_err(|e| {
-            NvControlError::ConfigError(format!("Failed to write profiles: {}", e))
-        })?;
+        std::fs::write(&self.config_path, content)
+            .map_err(|e| NvControlError::ConfigError(format!("Failed to write profiles: {}", e)))?;
 
         Ok(())
     }
@@ -236,7 +226,10 @@ impl VrrProfileManager {
         vrr_controller.enable_vrr(display)?;
 
         println!("Applied VRR profile for game: {}", game);
-        println!("  Range: {}-{} Hz", profile.min_refresh_hz, profile.max_refresh_hz);
+        println!(
+            "  Range: {}-{} Hz",
+            profile.min_refresh_hz, profile.max_refresh_hz
+        );
 
         Ok(())
     }
@@ -283,13 +276,11 @@ impl DisplayConfigManager {
             return Ok(());
         }
 
-        let content = std::fs::read_to_string(&self.config_path).map_err(|e| {
-            NvControlError::ConfigError(format!("Failed to read configs: {}", e))
-        })?;
+        let content = std::fs::read_to_string(&self.config_path)
+            .map_err(|e| NvControlError::ConfigError(format!("Failed to read configs: {}", e)))?;
 
-        self.configs = serde_json::from_str(&content).map_err(|e| {
-            NvControlError::ConfigError(format!("Failed to parse configs: {}", e))
-        })?;
+        self.configs = serde_json::from_str(&content)
+            .map_err(|e| NvControlError::ConfigError(format!("Failed to parse configs: {}", e)))?;
 
         Ok(())
     }
@@ -306,9 +297,8 @@ impl DisplayConfigManager {
             NvControlError::ConfigError(format!("Failed to serialize configs: {}", e))
         })?;
 
-        std::fs::write(&self.config_path, content).map_err(|e| {
-            NvControlError::ConfigError(format!("Failed to write configs: {}", e))
-        })?;
+        std::fs::write(&self.config_path, content)
+            .map_err(|e| NvControlError::ConfigError(format!("Failed to write configs: {}", e)))?;
 
         Ok(())
     }
@@ -387,9 +377,7 @@ impl DisplayConfigManager {
                         ),
                     ])
                     .output()
-                    .map_err(|e| {
-                        NvControlError::CommandFailed(format!("hyprctl failed: {}", e))
-                    })?;
+                    .map_err(|e| NvControlError::CommandFailed(format!("hyprctl failed: {}", e)))?;
 
                 if !output.status.success() {
                     return Err(NvControlError::RuntimeError(
@@ -406,9 +394,7 @@ impl DisplayConfigManager {
                         &format!("{}x{}@{}Hz", resolution.0, resolution.1, refresh_rate),
                     ])
                     .output()
-                    .map_err(|e| {
-                        NvControlError::CommandFailed(format!("swaymsg failed: {}", e))
-                    })?;
+                    .map_err(|e| NvControlError::CommandFailed(format!("swaymsg failed: {}", e)))?;
 
                 if !output.status.success() {
                     return Err(NvControlError::RuntimeError(
@@ -419,7 +405,7 @@ impl DisplayConfigManager {
             _ => {
                 return Err(NvControlError::UnsupportedFeature(
                     "Display configuration not supported on this compositor".to_string(),
-                ))
+                ));
             }
         }
 
@@ -477,11 +463,7 @@ impl AdaptiveRefreshOptimizer {
             .iter()
             .copied()
             .fold(f32::INFINITY, f32::min);
-        let max_fps = self
-            .max_fps_history
-            .iter()
-            .copied()
-            .fold(0.0f32, f32::max);
+        let max_fps = self.max_fps_history.iter().copied().fold(0.0f32, f32::max);
 
         // Add 10% margin
         let min_range = (min_fps * 0.9) as u32;
@@ -571,7 +553,10 @@ mod tests {
         manager.set_profile(config);
 
         assert!(manager.get_profile("Test Game").is_some());
-        assert_eq!(manager.get_profile("Test Game").unwrap().max_refresh_hz, 165);
+        assert_eq!(
+            manager.get_profile("Test Game").unwrap().max_refresh_hz,
+            165
+        );
     }
 
     #[test]

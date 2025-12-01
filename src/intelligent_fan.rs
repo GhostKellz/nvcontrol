@@ -1,7 +1,6 @@
 /// Phase 3.2: Intelligent Fan Control
 ///
 /// ML-based fan curve optimization, acoustic optimization, per-fan control, zero RPM mode
-
 use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
@@ -37,11 +36,26 @@ impl AdvancedFanCurve {
     pub fn performance() -> Self {
         Self {
             points: vec![
-                FanCurvePoint { temp: 30, speed: 30 },
-                FanCurvePoint { temp: 50, speed: 50 },
-                FanCurvePoint { temp: 65, speed: 70 },
-                FanCurvePoint { temp: 75, speed: 90 },
-                FanCurvePoint { temp: 85, speed: 100 },
+                FanCurvePoint {
+                    temp: 30,
+                    speed: 30,
+                },
+                FanCurvePoint {
+                    temp: 50,
+                    speed: 50,
+                },
+                FanCurvePoint {
+                    temp: 65,
+                    speed: 70,
+                },
+                FanCurvePoint {
+                    temp: 75,
+                    speed: 90,
+                },
+                FanCurvePoint {
+                    temp: 85,
+                    speed: 100,
+                },
             ],
             hysteresis_temp: 3,
             zero_rpm_temp: None,
@@ -54,10 +68,22 @@ impl AdvancedFanCurve {
         Self {
             points: vec![
                 FanCurvePoint { temp: 40, speed: 0 },
-                FanCurvePoint { temp: 55, speed: 35 },
-                FanCurvePoint { temp: 70, speed: 55 },
-                FanCurvePoint { temp: 80, speed: 75 },
-                FanCurvePoint { temp: 90, speed: 100 },
+                FanCurvePoint {
+                    temp: 55,
+                    speed: 35,
+                },
+                FanCurvePoint {
+                    temp: 70,
+                    speed: 55,
+                },
+                FanCurvePoint {
+                    temp: 80,
+                    speed: 75,
+                },
+                FanCurvePoint {
+                    temp: 90,
+                    speed: 100,
+                },
             ],
             hysteresis_temp: 5,
             zero_rpm_temp: Some(40),
@@ -70,10 +96,22 @@ impl AdvancedFanCurve {
         Self {
             points: vec![
                 FanCurvePoint { temp: 35, speed: 0 },
-                FanCurvePoint { temp: 50, speed: 40 },
-                FanCurvePoint { temp: 65, speed: 60 },
-                FanCurvePoint { temp: 75, speed: 80 },
-                FanCurvePoint { temp: 85, speed: 100 },
+                FanCurvePoint {
+                    temp: 50,
+                    speed: 40,
+                },
+                FanCurvePoint {
+                    temp: 65,
+                    speed: 60,
+                },
+                FanCurvePoint {
+                    temp: 75,
+                    speed: 80,
+                },
+                FanCurvePoint {
+                    temp: 85,
+                    speed: 100,
+                },
             ],
             hysteresis_temp: 3,
             zero_rpm_temp: Some(35),
@@ -108,8 +146,7 @@ impl AdvancedFanCurve {
                 let speed_range = p2.speed as i32 - p1.speed as i32;
                 let temp_offset = adjusted_temp - p1.temp;
 
-                let interpolated_speed =
-                    p1.speed as i32 + (speed_range * temp_offset / temp_range);
+                let interpolated_speed = p1.speed as i32 + (speed_range * temp_offset / temp_range);
                 return interpolated_speed
                     .max(self.min_fan_speed as i32)
                     .min(self.max_fan_speed as i32) as u32;
@@ -209,22 +246,22 @@ impl FanOptimizer {
 
         let recent_samples: Vec<_> = self.temp_history.iter().rev().take(10).collect();
 
-        let avg_recent: f32 = recent_samples.iter().map(|s| s.temperature as f32).sum::<f32>()
+        let avg_recent: f32 = recent_samples
+            .iter()
+            .map(|s| s.temperature as f32)
+            .sum::<f32>()
             / recent_samples.len() as f32;
 
-        let older_samples: Vec<_> = self
-            .temp_history
-            .iter()
-            .rev()
-            .skip(10)
-            .take(10)
-            .collect();
+        let older_samples: Vec<_> = self.temp_history.iter().rev().skip(10).take(10).collect();
 
         if older_samples.is_empty() {
             return TempTrend::Stable;
         }
 
-        let avg_older: f32 = older_samples.iter().map(|s| s.temperature as f32).sum::<f32>()
+        let avg_older: f32 = older_samples
+            .iter()
+            .map(|s| s.temperature as f32)
+            .sum::<f32>()
             / older_samples.len() as f32;
 
         let diff = avg_recent - avg_older;
@@ -310,13 +347,12 @@ impl MultiFanController {
     fn detect_num_fans(gpu_id: u32) -> NvResult<u32> {
         use nvml_wrapper::Nvml;
 
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
 
-        let device = nvml.device_by_index(gpu_id).map_err(|e| {
-            NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e))
-        })?;
+        let device = nvml
+            .device_by_index(gpu_id)
+            .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e)))?;
 
         // Try to get number of fans
         // Note: NVML doesn't expose fan count directly, typically 1-3 fans
@@ -348,17 +384,9 @@ impl MultiFanController {
         use std::process::Command;
 
         let output = Command::new("nvidia-settings")
-            .args(&[
-                "-a",
-                &format!(
-                    "[gpu:{}]/GPUFanControlState=1",
-                    self.gpu_id
-                ),
-            ])
+            .args(&["-a", &format!("[gpu:{}]/GPUFanControlState=1", self.gpu_id)])
             .output()
-            .map_err(|e| {
-                NvControlError::CommandFailed(format!("nvidia-settings failed: {}", e))
-            })?;
+            .map_err(|e| NvControlError::CommandFailed(format!("nvidia-settings failed: {}", e)))?;
 
         if !output.status.success() {
             return Err(NvControlError::FanControlNotSupported);
@@ -367,15 +395,10 @@ impl MultiFanController {
         let output = Command::new("nvidia-settings")
             .args(&[
                 "-a",
-                &format!(
-                    "[fan:{}]/GPUTargetFanSpeed={}",
-                    fan_index, speed_percent
-                ),
+                &format!("[fan:{}]/GPUTargetFanSpeed={}", fan_index, speed_percent),
             ])
             .output()
-            .map_err(|e| {
-                NvControlError::CommandFailed(format!("nvidia-settings failed: {}", e))
-            })?;
+            .map_err(|e| NvControlError::CommandFailed(format!("nvidia-settings failed: {}", e)))?;
 
         if !output.status.success() {
             return Err(NvControlError::FanControlNotSupported);
@@ -388,17 +411,16 @@ impl MultiFanController {
     pub fn get_fan_speed(&self, fan_index: u32) -> NvResult<u32> {
         use nvml_wrapper::Nvml;
 
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
 
-        let device = nvml.device_by_index(self.gpu_id).map_err(|e| {
-            NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e))
-        })?;
+        let device = nvml
+            .device_by_index(self.gpu_id)
+            .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e)))?;
 
-        device.fan_speed(fan_index).map_err(|_| {
-            NvControlError::FanControlNotSupported
-        })
+        device
+            .fan_speed(fan_index)
+            .map_err(|_| NvControlError::FanControlNotSupported)
     }
 
     /// Set all fans to same speed

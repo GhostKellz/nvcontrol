@@ -11,11 +11,11 @@ use std::time::{Duration, Instant};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AlertConfig {
     pub enabled: bool,
-    pub temp_warning: u32,      // °C
-    pub temp_critical: u32,     // °C
-    pub power_warning: u32,      // Watts
+    pub temp_warning: u32,          // °C
+    pub temp_critical: u32,         // °C
+    pub power_warning: u32,         // Watts
     pub fan_failure_threshold: u32, // RPM (if below this, alert)
-    pub cooldown_seconds: u64,   // Minimum time between same alerts
+    pub cooldown_seconds: u64,      // Minimum time between same alerts
 }
 
 impl Default for AlertConfig {
@@ -72,8 +72,9 @@ impl NotificationManager {
     }
 
     pub fn save_config(&self) -> NvResult<()> {
-        let toml_str = toml::to_string_pretty(&self.config)
-            .map_err(|e| NvControlError::ConfigError(format!("Failed to serialize config: {}", e)))?;
+        let toml_str = toml::to_string_pretty(&self.config).map_err(|e| {
+            NvControlError::ConfigError(format!("Failed to serialize config: {}", e))
+        })?;
         fs::write(&self.config_path, toml_str)?;
         Ok(())
     }
@@ -113,7 +114,9 @@ impl NotificationManager {
             .urgency(urgency)
             .timeout(timeout)
             .show()
-            .map_err(|e| NvControlError::RuntimeError(format!("Failed to send notification: {}", e)))?;
+            .map_err(|e| {
+                NvControlError::RuntimeError(format!("Failed to send notification: {}", e))
+            })?;
 
         Ok(())
     }
@@ -227,10 +230,7 @@ impl NotificationManager {
         if self.should_alert(AlertType::OverclockApplied) {
             self.send_notification(
                 "⚡ Overclock Applied",
-                &format!(
-                    "GPU: {:+} MHz, Memory: {:+} MHz",
-                    gpu_offset, mem_offset
-                ),
+                &format!("GPU: {:+} MHz, Memory: {:+} MHz", gpu_offset, mem_offset),
                 Urgency::Low,
                 Timeout::Milliseconds(3000),
             )?;
@@ -239,12 +239,7 @@ impl NotificationManager {
     }
 
     /// Check all GPU metrics at once
-    pub fn check_all_metrics(
-        &mut self,
-        temp: f32,
-        power: f32,
-        fan_rpm: u32,
-    ) -> NvResult<()> {
+    pub fn check_all_metrics(&mut self, temp: f32, power: f32, fan_rpm: u32) -> NvResult<()> {
         self.check_temperature(temp)?;
         self.check_power(power)?;
         self.check_fan(fan_rpm)?;
@@ -329,7 +324,9 @@ impl AlertMonitorThread {
                     let fan_rpm = device.fan_speed(0).unwrap_or(0);
 
                     // Check all metrics
-                    let _ = self.notification_manager.check_all_metrics(temp, power, fan_rpm);
+                    let _ = self
+                        .notification_manager
+                        .check_all_metrics(temp, power, fan_rpm);
                 }
             }
 

@@ -78,9 +78,7 @@ impl GameLibraryScanner {
             let manifests = fs::read_dir(library_path)?
                 .filter_map(|e| e.ok())
                 .filter(|e| {
-                    e.file_name()
-                        .to_string_lossy()
-                        .starts_with("appmanifest_")
+                    e.file_name().to_string_lossy().starts_with("appmanifest_")
                         && e.file_name().to_string_lossy().ends_with(".acf")
                 });
 
@@ -106,23 +104,11 @@ impl GameLibraryScanner {
         for line in content.lines() {
             let trimmed = line.trim();
             if trimmed.starts_with("\"name\"") {
-                name = trimmed
-                    .split('"')
-                    .nth(3)
-                    .unwrap_or("")
-                    .to_string();
+                name = trimmed.split('"').nth(3).unwrap_or("").to_string();
             } else if trimmed.starts_with("\"installdir\"") {
-                install_dir = trimmed
-                    .split('"')
-                    .nth(3)
-                    .unwrap_or("")
-                    .to_string();
+                install_dir = trimmed.split('"').nth(3).unwrap_or("").to_string();
             } else if trimmed.starts_with("\"appid\"") {
-                app_id = trimmed
-                    .split('"')
-                    .nth(3)
-                    .unwrap_or("")
-                    .to_string();
+                app_id = trimmed.split('"').nth(3).unwrap_or("").to_string();
             }
         }
 
@@ -131,11 +117,7 @@ impl GameLibraryScanner {
         }
 
         // Try to find the executable
-        let install_path = path
-            .parent()
-            .unwrap()
-            .join("common")
-            .join(&install_dir);
+        let install_path = path.parent().unwrap().join("common").join(&install_dir);
 
         let executable = self.find_game_executable(&install_path, &name)?;
 
@@ -183,7 +165,9 @@ impl GameLibraryScanner {
     fn parse_lutris_game(&self, _path: &Path) -> NvResult<ScannedGame> {
         // For now, return a placeholder
         // TODO: Implement YAML parsing for Lutris configs
-        Err(NvControlError::UnsupportedFeature("Lutris parsing not yet implemented".into()))
+        Err(NvControlError::UnsupportedFeature(
+            "Lutris parsing not yet implemented".into(),
+        ))
     }
 
     /// Scan Heroic Games Launcher
@@ -196,7 +180,9 @@ impl GameLibraryScanner {
 
         // Heroic stores installed games info in JSON files
         let gog_library = self.heroic_config_path.join("gog_store/library.json");
-        let epic_library = self.heroic_config_path.join("legendaryConfig/installed.json");
+        let epic_library = self
+            .heroic_config_path
+            .join("legendaryConfig/installed.json");
 
         if gog_library.exists() {
             games.extend(self.parse_heroic_library(&gog_library, GameLauncher::Heroic)?);
@@ -210,7 +196,11 @@ impl GameLibraryScanner {
         Ok(games)
     }
 
-    fn parse_heroic_library(&self, _path: &Path, _launcher: GameLauncher) -> NvResult<Vec<ScannedGame>> {
+    fn parse_heroic_library(
+        &self,
+        _path: &Path,
+        _launcher: GameLauncher,
+    ) -> NvResult<Vec<ScannedGame>> {
         // TODO: Implement JSON parsing for Heroic configs
         Ok(Vec::new())
     }
@@ -328,10 +318,22 @@ impl ScanStatistics {
     pub fn from_games(games: &[ScannedGame]) -> Self {
         Self {
             total_games: games.len(),
-            steam_games: games.iter().filter(|g| g.launcher == GameLauncher::Steam).count(),
-            lutris_games: games.iter().filter(|g| g.launcher == GameLauncher::Lutris).count(),
-            heroic_games: games.iter().filter(|g| g.launcher == GameLauncher::Heroic).count(),
-            native_games: games.iter().filter(|g| g.launcher == GameLauncher::Native).count(),
+            steam_games: games
+                .iter()
+                .filter(|g| g.launcher == GameLauncher::Steam)
+                .count(),
+            lutris_games: games
+                .iter()
+                .filter(|g| g.launcher == GameLauncher::Lutris)
+                .count(),
+            heroic_games: games
+                .iter()
+                .filter(|g| g.launcher == GameLauncher::Heroic)
+                .count(),
+            native_games: games
+                .iter()
+                .filter(|g| g.launcher == GameLauncher::Native)
+                .count(),
         }
     }
 

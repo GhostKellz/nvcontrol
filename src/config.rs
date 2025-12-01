@@ -8,7 +8,7 @@ pub struct Config {
     pub hdr_enabled: bool,
     pub selected_icc_profile: String,
     #[serde(default)]
-    pub theme: String,  // Theme name (e.g., "tokyo_night", "dracula")
+    pub theme: String, // Theme name (e.g., "tokyo_night", "dracula")
     #[serde(default)]
     pub osd_enabled: bool,
     #[serde(default)]

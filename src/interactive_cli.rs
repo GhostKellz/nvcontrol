@@ -1,9 +1,8 @@
 /// Interactive CLI Mode for nvcontrol
 ///
 /// Menu-driven interface for users who prefer guided workflows
-
 use crate::NvResult;
-use console::{style, Key, Term};
+use console::{Key, Term, style};
 
 pub struct InteractiveCli {
     term: Term,
@@ -77,14 +76,15 @@ Select option (1-8): "#,
     fn gpu_info_menu(&mut self) -> NvResult<()> {
         self.term.clear_screen().ok();
         self.term
-            .write_line(&format!("\n{}\n", style("📊 GPU Information").cyan().bold()))
+            .write_line(&format!(
+                "\n{}\n",
+                style("📊 GPU Information").cyan().bold()
+            ))
             .ok();
 
         // Call GPU info command
         if let Err(e) = crate::gpu::get_gpu_info_with_format(crate::gpu::OutputFormat::Human) {
-            self.term
-                .write_line(&format!("❌ Error: {}", e))
-                .ok();
+            self.term.write_line(&format!("❌ Error: {}", e)).ok();
         }
 
         self.wait_for_key()?;
@@ -100,28 +100,18 @@ Select option (1-8): "#,
             ))
             .ok();
 
-        self.term
-            .write_line("[1] Launch TUI Monitor")
-            .ok();
-        self.term
-            .write_line("[2] Quick Stats (1 second)")
-            .ok();
-        self.term
-            .write_line("[3] Back to Main Menu")
-            .ok();
+        self.term.write_line("[1] Launch TUI Monitor").ok();
+        self.term.write_line("[2] Quick Stats (1 second)").ok();
+        self.term.write_line("[3] Back to Main Menu").ok();
         self.term.write_str("\nSelect: ").ok();
         self.term.flush().ok();
 
         match self.get_choice(1, 3)? {
             1 => {
                 // Launch TUI
-                self.term
-                    .write_line("\n📊 Launching TUI monitor...")
-                    .ok();
+                self.term.write_line("\n📊 Launching TUI monitor...").ok();
                 if let Err(e) = crate::tui::TuiApp::new().run() {
-                    self.term
-                        .write_line(&format!("❌ TUI error: {}", e))
-                        .ok();
+                    self.term.write_line(&format!("❌ TUI error: {}", e)).ok();
                     self.wait_for_key()?;
                 }
             }
@@ -143,24 +133,13 @@ Select option (1-8): "#,
     fn overclocking_menu(&mut self) -> NvResult<()> {
         self.term.clear_screen().ok();
         self.term
-            .write_line(&format!(
-                "\n{}\n",
-                style("⚡ Overclocking").cyan().bold()
-            ))
+            .write_line(&format!("\n{}\n", style("⚡ Overclocking").cyan().bold()))
             .ok();
 
-        self.term
-            .write_line("[1] Show Current Clocks")
-            .ok();
-        self.term
-            .write_line("[2] Apply Preset (Performance)")
-            .ok();
-        self.term
-            .write_line("[3] Reset to Stock")
-            .ok();
-        self.term
-            .write_line("[4] Back to Main Menu")
-            .ok();
+        self.term.write_line("[1] Show Current Clocks").ok();
+        self.term.write_line("[2] Apply Preset (Performance)").ok();
+        self.term.write_line("[3] Reset to Stock").ok();
+        self.term.write_line("[4] Back to Main Menu").ok();
         self.term.write_str("\nSelect: ").ok();
         self.term.flush().ok();
 
@@ -169,12 +148,46 @@ Select option (1-8): "#,
                 // Show current GPU capabilities/clocks
                 match crate::overclocking::get_gpu_capabilities() {
                     Ok(caps) => {
-                        self.term.write_line(&format!("Max GPU Clock Offset: +{} MHz", caps.max_gpu_clock_offset)).ok();
-                        self.term.write_line(&format!("Min GPU Clock Offset: {} MHz", caps.min_gpu_clock_offset)).ok();
-                        self.term.write_line(&format!("Max Memory Clock Offset: +{} MHz", caps.max_memory_clock_offset)).ok();
-                        self.term.write_line(&format!("Voltage Control: {}", if caps.supports_voltage_control { "Yes" } else { "No" })).ok();
-                        self.term.write_line(&format!("Power Limit Range: {}% - {}%", caps.min_power_limit, caps.max_power_limit)).ok();
-                        self.term.write_line(&format!("Default Temp Limit: {}°C", caps.default_temp_limit)).ok();
+                        self.term
+                            .write_line(&format!(
+                                "Max GPU Clock Offset: +{} MHz",
+                                caps.max_gpu_clock_offset
+                            ))
+                            .ok();
+                        self.term
+                            .write_line(&format!(
+                                "Min GPU Clock Offset: {} MHz",
+                                caps.min_gpu_clock_offset
+                            ))
+                            .ok();
+                        self.term
+                            .write_line(&format!(
+                                "Max Memory Clock Offset: +{} MHz",
+                                caps.max_memory_clock_offset
+                            ))
+                            .ok();
+                        self.term
+                            .write_line(&format!(
+                                "Voltage Control: {}",
+                                if caps.supports_voltage_control {
+                                    "Yes"
+                                } else {
+                                    "No"
+                                }
+                            ))
+                            .ok();
+                        self.term
+                            .write_line(&format!(
+                                "Power Limit Range: {}% - {}%",
+                                caps.min_power_limit, caps.max_power_limit
+                            ))
+                            .ok();
+                        self.term
+                            .write_line(&format!(
+                                "Default Temp Limit: {}°C",
+                                caps.default_temp_limit
+                            ))
+                            .ok();
                     }
                     Err(e) => {
                         self.term.write_line(&format!("❌ Error: {}", e)).ok();
@@ -196,13 +209,9 @@ Select option (1-8): "#,
                     fan_curve: vec![(30, 30), (50, 50), (70, 80), (85, 100)],
                 };
                 if let Err(e) = crate::overclocking::apply_overclock_profile(&profile) {
-                    self.term
-                        .write_line(&format!("❌ Error: {}", e))
-                        .ok();
+                    self.term.write_line(&format!("❌ Error: {}", e)).ok();
                 } else {
-                    self.term
-                        .write_line("✅ Performance preset applied")
-                        .ok();
+                    self.term.write_line("✅ Performance preset applied").ok();
                 }
                 self.wait_for_key()?;
             }
@@ -220,13 +229,9 @@ Select option (1-8): "#,
                     fan_curve: vec![(30, 20), (50, 40), (70, 70), (85, 100)],
                 };
                 if let Err(e) = crate::overclocking::apply_overclock_profile(&stock_profile) {
-                    self.term
-                        .write_line(&format!("❌ Error: {}", e))
-                        .ok();
+                    self.term.write_line(&format!("❌ Error: {}", e)).ok();
                 } else {
-                    self.term
-                        .write_line("✅ Reset to stock")
-                        .ok();
+                    self.term.write_line("✅ Reset to stock").ok();
                 }
                 self.wait_for_key()?;
             }
@@ -242,55 +247,37 @@ Select option (1-8): "#,
             .write_line(&format!("\n{}\n", style("🌀 Fan Control").cyan().bold()))
             .ok();
 
-        self.term
-            .write_line("[1] Set to Auto")
-            .ok();
-        self.term
-            .write_line("[2] Set Manual Speed (%)")
-.ok();
-        self.term
-            .write_line("[3] Apply Fan Curve")
-            .ok();
-        self.term
-            .write_line("[4] Back to Main Menu")
-            .ok();
+        self.term.write_line("[1] Set to Auto").ok();
+        self.term.write_line("[2] Set Manual Speed (%)").ok();
+        self.term.write_line("[3] Apply Fan Curve").ok();
+        self.term.write_line("[4] Back to Main Menu").ok();
         self.term.write_str("\nSelect: ").ok();
         self.term.flush().ok();
 
         match self.get_choice(1, 4)? {
             1 => {
                 if let Err(e) = crate::fan::reset_fan_to_auto(0) {
-                    self.term
-                        .write_line(&format!("❌ Error: {}", e))
-                        .ok();
+                    self.term.write_line(&format!("❌ Error: {}", e)).ok();
                 } else {
-                    self.term
-                        .write_line("✅ Fan control set to Auto")
-                        .ok();
+                    self.term.write_line("✅ Fan control set to Auto").ok();
                 }
                 self.wait_for_key()?;
             }
             2 => {
-                self.term
-                    .write_line("\nEnter fan speed (0-100%): ")
-                    .ok();
+                self.term.write_line("\nEnter fan speed (0-100%): ").ok();
                 self.term.flush().ok();
                 if let Ok(line) = self.term.read_line() {
                     if let Ok(speed) = line.trim().parse::<u8>() {
                         if speed <= 100 {
                             if let Err(e) = crate::fan::set_fan_speed(0, speed) {
-                                self.term
-                                    .write_line(&format!("❌ Error: {}", e))
-                                    .ok();
+                                self.term.write_line(&format!("❌ Error: {}", e)).ok();
                             } else {
                                 self.term
                                     .write_line(&format!("✅ Fan speed set to {}%", speed))
                                     .ok();
                             }
                         } else {
-                            self.term
-                                .write_line("❌ Speed must be 0-100")
-                                .ok();
+                            self.term.write_line("❌ Speed must be 0-100").ok();
                         }
                     }
                 }
@@ -308,18 +295,10 @@ Select option (1-8): "#,
             .write_line(&format!("\n{}\n", style("📋 Profiles").cyan().bold()))
             .ok();
 
-        self.term
-            .write_line("[1] List Profiles")
-            .ok();
-        self.term
-            .write_line("[2] Apply Profile")
-            .ok();
-        self.term
-            .write_line("[3] Create Profile")
-            .ok();
-        self.term
-            .write_line("[4] Back to Main Menu")
-            .ok();
+        self.term.write_line("[1] List Profiles").ok();
+        self.term.write_line("[2] Apply Profile").ok();
+        self.term.write_line("[3] Create Profile").ok();
+        self.term.write_line("[4] Back to Main Menu").ok();
         self.term.write_str("\nSelect: ").ok();
         self.term.flush().ok();
 
@@ -345,46 +324,33 @@ Select option (1-8): "#,
     fn gaming_menu(&mut self) -> NvResult<()> {
         self.term.clear_screen().ok();
         self.term
-            .write_line(&format!("\n{}\n", style("🎮 Gaming Optimization").cyan().bold()))
+            .write_line(&format!(
+                "\n{}\n",
+                style("🎮 Gaming Optimization").cyan().bold()
+            ))
             .ok();
 
-        self.term
-            .write_line("[1] Enable Gaming Mode")
-            .ok();
-        self.term
-            .write_line("[2] Disable Gaming Mode")
-            .ok();
-        self.term
-            .write_line("[3] Optimize Latency")
-            .ok();
-        self.term
-            .write_line("[4] Back to Main Menu")
-            .ok();
+        self.term.write_line("[1] Enable Gaming Mode").ok();
+        self.term.write_line("[2] Disable Gaming Mode").ok();
+        self.term.write_line("[3] Optimize Latency").ok();
+        self.term.write_line("[4] Back to Main Menu").ok();
         self.term.write_str("\nSelect: ").ok();
         self.term.flush().ok();
 
         match self.get_choice(1, 4)? {
             1 => {
                 if let Err(e) = crate::latency::optimize_latency() {
-                    self.term
-                        .write_line(&format!("❌ Error: {}", e))
-                        .ok();
+                    self.term.write_line(&format!("❌ Error: {}", e)).ok();
                 } else {
-                    self.term
-                        .write_line("✅ Gaming mode enabled")
-                        .ok();
+                    self.term.write_line("✅ Gaming mode enabled").ok();
                 }
                 self.wait_for_key()?;
             }
             3 => {
                 if let Err(e) = crate::latency::optimize_latency() {
-                    self.term
-                        .write_line(&format!("❌ Error: {}", e))
-                        .ok();
+                    self.term.write_line(&format!("❌ Error: {}", e)).ok();
                 } else {
-                    self.term
-                        .write_line("✅ Latency optimized")
-                        .ok();
+                    self.term.write_line("✅ Latency optimized").ok();
                 }
                 self.wait_for_key()?;
             }
@@ -426,9 +392,7 @@ Select option (1-8): "#,
     }
 
     fn wait_for_key(&mut self) -> NvResult<()> {
-        self.term
-            .write_line("\nPress any key to continue...")
-            .ok();
+        self.term.write_line("\nPress any key to continue...").ok();
         self.term.read_key().ok();
         Ok(())
     }

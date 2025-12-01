@@ -29,7 +29,9 @@ pub fn get_all_displays_info() -> NvResult<Vec<EnhancedDisplayInfo>> {
     let output = Command::new("nvidia-settings")
         .args(&["-q", "displays"])
         .output()
-        .map_err(|e| NvControlError::DisplayDetectionFailed(format!("nvidia-settings failed: {}", e)))?;
+        .map_err(|e| {
+            NvControlError::DisplayDetectionFailed(format!("nvidia-settings failed: {}", e))
+        })?;
 
     if !output.status.success() {
         return Err(NvControlError::DisplayDetectionFailed(
@@ -69,15 +71,32 @@ pub fn print_display_info_cli() -> NvResult<()> {
     for display in displays {
         println!("📺 {} (ID: {})", display.name, display.id);
         println!("   Connector: {}", display.connector_type);
-        println!("   Status: {}", if display.connected { "✅ Connected" } else { "❌ Disconnected" });
+        println!(
+            "   Status: {}",
+            if display.connected {
+                "✅ Connected"
+            } else {
+                "❌ Disconnected"
+            }
+        );
 
         if display.connected {
-            println!("   Resolution: {}x{} @ {:.2}Hz", display.resolution.0, display.resolution.1, display.refresh_rate);
+            println!(
+                "   Resolution: {}x{} @ {:.2}Hz",
+                display.resolution.0, display.resolution.1, display.refresh_rate
+            );
 
             // VRR Info
             print!("   VRR/G-SYNC: ");
             if display.vrr_capable {
-                println!("{}", if display.vrr_enabled { "✅ Enabled" } else { "⚪ Capable (Disabled)" });
+                println!(
+                    "{}",
+                    if display.vrr_enabled {
+                        "✅ Enabled"
+                    } else {
+                        "⚪ Capable (Disabled)"
+                    }
+                );
             } else {
                 println!("❌ Not Supported");
             }
@@ -85,14 +104,24 @@ pub fn print_display_info_cli() -> NvResult<()> {
             // HDR Info
             print!("   HDR: ");
             if display.hdr_capable {
-                println!("{}", if display.hdr_enabled { "✅ Enabled" } else { "⚪ Capable (Disabled)" });
+                println!(
+                    "{}",
+                    if display.hdr_enabled {
+                        "✅ Enabled"
+                    } else {
+                        "⚪ Capable (Disabled)"
+                    }
+                );
             } else {
                 println!("❌ Not Supported");
             }
 
             // Vibrance
             let vibrance_pct = vibrance_raw_to_percentage(display.current_vibrance);
-            println!("   Digital Vibrance: {}% (raw: {})", vibrance_pct, display.current_vibrance);
+            println!(
+                "   Digital Vibrance: {}% (raw: {})",
+                vibrance_pct, display.current_vibrance
+            );
 
             // Image Sharpening
             if let Some(sharpening) = display.image_sharpening {

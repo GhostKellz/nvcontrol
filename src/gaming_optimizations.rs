@@ -31,9 +31,9 @@ pub struct NvidiaGamingSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum PowerMizerMode {
-    Adaptive = 0,          // Balance performance and power
-    PreferMaxPerformance = 1, // Always max clocks
-    AdaptivePerformance = 2,  // Aggressive power saving
+    Adaptive = 0,                    // Balance performance and power
+    PreferMaxPerformance = 1,        // Always max clocks
+    AdaptivePerformance = 2,         // Aggressive power saving
     PreferConsistentPerformance = 3, // Consistent clocks
 }
 
@@ -313,10 +313,7 @@ impl GamingOptimizations {
 
         // Vulkan
         if self.vulkan_settings.nvidia_threaded_optimization {
-            env_vars.insert(
-                "__GL_THREADED_OPTIMIZATIONS".to_string(),
-                "1".to_string(),
-            );
+            env_vars.insert("__GL_THREADED_OPTIMIZATIONS".to_string(), "1".to_string());
         }
 
         // Shader caching
@@ -347,10 +344,7 @@ impl GamingOptimizations {
         println!("\nSystem Settings:");
         println!("CPU Governor: {:?}", self.system_settings.cpu_governor);
         println!("GameMode: {}", self.system_settings.enable_game_mode);
-        println!(
-            "LatencyFleX: {}",
-            self.system_settings.enable_latencyflex
-        );
+        println!("LatencyFleX: {}", self.system_settings.enable_latencyflex);
         println!("\nProton/Wine Settings:");
         println!("ESYNC: {}", self.proton_wine_settings.enable_esync);
         println!("FSYNC: {}", self.proton_wine_settings.enable_fsync);

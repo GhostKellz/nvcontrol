@@ -1,7 +1,6 @@
 /// ASUS ROG Fan Control
 ///
 /// Advanced fan control for ASUS ROG graphics cards with multi-fan support
-
 use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -9,10 +8,10 @@ use std::collections::HashMap;
 /// ASUS fan operating mode
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum AsusFanMode {
-    Silent,       // Minimum noise, 0 RPM mode enabled
-    Performance,  // Balanced cooling
-    Turbo,        // Maximum cooling
-    Manual,       // Custom fan curve
+    Silent,      // Minimum noise, 0 RPM mode enabled
+    Performance, // Balanced cooling
+    Turbo,       // Maximum cooling
+    Manual,      // Custom fan curve
 }
 
 /// ASUS fan curve preset
@@ -32,7 +31,7 @@ impl AsusFanCurve {
             name: "Silent".to_string(),
             mode: AsusFanMode::Silent,
             curve_points: vec![
-                (40, 0),   // 0 RPM below 40°C
+                (40, 0), // 0 RPM below 40°C
                 (50, 25),
                 (60, 35),
                 (70, 50),
@@ -49,13 +48,7 @@ impl AsusFanCurve {
         Self {
             name: "Performance".to_string(),
             mode: AsusFanMode::Performance,
-            curve_points: vec![
-                (35, 0),
-                (50, 40),
-                (65, 60),
-                (75, 80),
-                (85, 100),
-            ],
+            curve_points: vec![(35, 0), (50, 40), (65, 60), (75, 80), (85, 100)],
             zero_rpm_temp: Some(35),
             hysteresis: 3,
         }
@@ -67,7 +60,7 @@ impl AsusFanCurve {
             name: "Turbo".to_string(),
             mode: AsusFanMode::Turbo,
             curve_points: vec![
-                (30, 40),  // Always spinning
+                (30, 40), // Always spinning
                 (50, 60),
                 (65, 75),
                 (75, 90),
@@ -83,14 +76,7 @@ impl AsusFanCurve {
         Self {
             name: "ROG Astral 5090 OC".to_string(),
             mode: AsusFanMode::Performance,
-            curve_points: vec![
-                (30, 0),
-                (45, 35),
-                (60, 50),
-                (70, 65),
-                (80, 85),
-                (90, 100),
-            ],
+            curve_points: vec![(30, 0), (45, 35), (60, 50), (70, 65), (80, 85), (90, 100)],
             zero_rpm_temp: Some(30),
             hysteresis: 4,
         }
@@ -152,7 +138,10 @@ impl AsusMultiFanController {
         fan_curves.insert("Silent".to_string(), AsusFanCurve::silent());
         fan_curves.insert("Performance".to_string(), AsusFanCurve::performance());
         fan_curves.insert("Turbo".to_string(), AsusFanCurve::turbo());
-        fan_curves.insert("ROG Astral 5090".to_string(), AsusFanCurve::rog_astral_5090());
+        fan_curves.insert(
+            "ROG Astral 5090".to_string(),
+            AsusFanCurve::rog_astral_5090(),
+        );
 
         Ok(Self {
             gpu_id,
@@ -166,13 +155,12 @@ impl AsusMultiFanController {
     fn detect_fan_count(gpu_id: u32) -> NvResult<u32> {
         use nvml_wrapper::Nvml;
 
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
 
-        let device = nvml.device_by_index(gpu_id).map_err(|e| {
-            NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e))
-        })?;
+        let device = nvml
+            .device_by_index(gpu_id)
+            .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e)))?;
 
         // Try to detect number of fans
         // Most ASUS ROG cards have 2-3 fans
@@ -219,13 +207,12 @@ impl AsusMultiFanController {
         // Get current temperature
         use nvml_wrapper::Nvml;
 
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
 
-        let device = nvml.device_by_index(self.gpu_id).map_err(|e| {
-            NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e))
-        })?;
+        let device = nvml
+            .device_by_index(self.gpu_id)
+            .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e)))?;
 
         let temp = device
             .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
@@ -237,7 +224,10 @@ impl AsusMultiFanController {
         // Apply to all fans
         self.set_all_fans(target_speed)?;
 
-        println!("Applied fan curve: {} ({}% at {}°C)", curve_name, target_speed, temp);
+        println!(
+            "Applied fan curve: {} ({}% at {}°C)",
+            curve_name, target_speed, temp
+        );
 
         Ok(())
     }
@@ -255,14 +245,9 @@ impl AsusMultiFanController {
 
         // Enable manual fan control
         let output = Command::new("nvidia-settings")
-            .args(&[
-                "-a",
-                &format!("[gpu:{}]/GPUFanControlState=1", self.gpu_id),
-            ])
+            .args(&["-a", &format!("[gpu:{}]/GPUFanControlState=1", self.gpu_id)])
             .output()
-            .map_err(|e| {
-                NvControlError::CommandFailed(format!("nvidia-settings failed: {}", e))
-            })?;
+            .map_err(|e| NvControlError::CommandFailed(format!("nvidia-settings failed: {}", e)))?;
 
         if !output.status.success() {
             return Err(NvControlError::FanControlNotSupported);
@@ -275,9 +260,7 @@ impl AsusMultiFanController {
                 &format!("[fan:{}]/GPUTargetFanSpeed={}", fan_index, speed_percent),
             ])
             .output()
-            .map_err(|e| {
-                NvControlError::CommandFailed(format!("nvidia-settings failed: {}", e))
-            })?;
+            .map_err(|e| NvControlError::CommandFailed(format!("nvidia-settings failed: {}", e)))?;
 
         if output.status.success() {
             self.per_fan_speeds[fan_index as usize] = speed_percent;
@@ -299,13 +282,12 @@ impl AsusMultiFanController {
     pub fn get_fan_speeds(&self) -> NvResult<Vec<u32>> {
         use nvml_wrapper::Nvml;
 
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
 
-        let device = nvml.device_by_index(self.gpu_id).map_err(|e| {
-            NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e))
-        })?;
+        let device = nvml
+            .device_by_index(self.gpu_id)
+            .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e)))?;
 
         let mut speeds = Vec::new();
 
@@ -322,14 +304,9 @@ impl AsusMultiFanController {
         use std::process::Command;
 
         let output = Command::new("nvidia-settings")
-            .args(&[
-                "-a",
-                &format!("[gpu:{}]/GPUFanControlState=0", self.gpu_id),
-            ])
+            .args(&["-a", &format!("[gpu:{}]/GPUFanControlState=0", self.gpu_id)])
             .output()
-            .map_err(|e| {
-                NvControlError::CommandFailed(format!("nvidia-settings failed: {}", e))
-            })?;
+            .map_err(|e| NvControlError::CommandFailed(format!("nvidia-settings failed: {}", e)))?;
 
         if output.status.success() {
             println!("Reset to automatic fan control");

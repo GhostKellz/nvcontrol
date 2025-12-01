@@ -9,7 +9,6 @@
 ///
 /// Safety: This module ONLY performs READ operations on I2C.
 /// No writes are ever performed to prevent hardware damage.
-
 use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -85,10 +84,10 @@ impl PowerHealth {
 
     pub fn color_code(&self) -> &'static str {
         match self {
-            Self::Good => "\x1b[32m",      // Green
-            Self::Warning => "\x1b[33m",   // Yellow
-            Self::Critical => "\x1b[31m",  // Red
-            Self::Unknown => "\x1b[90m",   // Gray
+            Self::Good => "\x1b[32m",     // Green
+            Self::Warning => "\x1b[33m",  // Yellow
+            Self::Critical => "\x1b[31m", // Red
+            Self::Unknown => "\x1b[90m",  // Gray
         }
     }
 }
@@ -160,15 +159,17 @@ impl AsusPowerDetector {
         let vendor_path = format!("/sys/bus/pci/devices/{}/subsystem_vendor", pci_id);
         let device_path = format!("/sys/bus/pci/devices/{}/subsystem_device", pci_id);
 
-        let vendor_str = fs::read_to_string(&vendor_path)
-            .map_err(|e| NvControlError::GpuQueryFailed(format!("Cannot read subsystem vendor: {}", e)))?;
-        let device_str = fs::read_to_string(&device_path)
-            .map_err(|e| NvControlError::GpuQueryFailed(format!("Cannot read subsystem device: {}", e)))?;
+        let vendor_str = fs::read_to_string(&vendor_path).map_err(|e| {
+            NvControlError::GpuQueryFailed(format!("Cannot read subsystem vendor: {}", e))
+        })?;
+        let device_str = fs::read_to_string(&device_path).map_err(|e| {
+            NvControlError::GpuQueryFailed(format!("Cannot read subsystem device: {}", e))
+        })?;
 
-        let vendor = u16::from_str_radix(vendor_str.trim().trim_start_matches("0x"), 16)
-            .unwrap_or(0);
-        let device = u16::from_str_radix(device_str.trim().trim_start_matches("0x"), 16)
-            .unwrap_or(0);
+        let vendor =
+            u16::from_str_radix(vendor_str.trim().trim_start_matches("0x"), 16).unwrap_or(0);
+        let device =
+            u16::from_str_radix(device_str.trim().trim_start_matches("0x"), 16).unwrap_or(0);
 
         Ok(AsusRogModel::from_subsystem_id(vendor, device))
     }
@@ -206,7 +207,13 @@ impl AsusPowerDetector {
     fn probe_power_monitor(bus: u8, addr: u8) -> bool {
         // Try to read register 0x60 to verify the device exists
         let output = Command::new("i2cget")
-            .args(["-y", &bus.to_string(), &format!("0x{:02x}", addr), "0x60", "w"])
+            .args([
+                "-y",
+                &bus.to_string(),
+                &format!("0x{:02x}", addr),
+                "0x60",
+                "w",
+            ])
             .output();
 
         match output {
@@ -236,9 +243,10 @@ impl AsusPowerDetector {
         })?;
 
         if !self.model.supports_power_detector() {
-            return Err(NvControlError::UnsupportedFeature(
-                format!("Power Detector+ not supported on {}", self.model.name())
-            ));
+            return Err(NvControlError::UnsupportedFeature(format!(
+                "Power Detector+ not supported on {}",
+                self.model.name()
+            )));
         }
 
         let mut rails = Vec::new();
@@ -299,25 +307,30 @@ impl AsusPowerDetector {
             "w".to_string(),
         ];
 
-        let output = Command::new("i2cget")
-            .args(&args)
-            .output()
-            .map_err(|e| NvControlError::CommandFailed(format!("i2cget failed to execute: {}", e)))?;
+        let output = Command::new("i2cget").args(&args).output().map_err(|e| {
+            NvControlError::CommandFailed(format!("i2cget failed to execute: {}", e))
+        })?;
 
         if !output.status.success() {
-            return Err(NvControlError::CommandFailed(
-                format!("i2cget -y {} 0x{:02x} 0x{:02x} w failed: {}",
-                    bus, self.i2c_addr, register,
-                    String::from_utf8_lossy(&output.stderr))
-            ));
+            return Err(NvControlError::CommandFailed(format!(
+                "i2cget -y {} 0x{:02x} 0x{:02x} w failed: {}",
+                bus,
+                self.i2c_addr,
+                register,
+                String::from_utf8_lossy(&output.stderr)
+            )));
         }
 
         let value_str = String::from_utf8_lossy(&output.stdout);
         let value_str = value_str.trim();
 
         // Parse hex value (format: 0xNNNN)
-        u16::from_str_radix(value_str.trim_start_matches("0x"), 16)
-            .map_err(|e| NvControlError::RuntimeError(format!("Failed to parse I2C value '{}': {}", value_str, e)))
+        u16::from_str_radix(value_str.trim_start_matches("0x"), 16).map_err(|e| {
+            NvControlError::RuntimeError(format!(
+                "Failed to parse I2C value '{}': {}",
+                value_str, e
+            ))
+        })
     }
 
     /// Estimate current from raw register value
@@ -344,10 +357,7 @@ impl AsusPowerDetector {
 
     /// Estimate total power from rail readings
     fn estimate_total_power(rails: &[PowerRailReading]) -> Option<f32> {
-        let total_current_ma: u32 = rails
-            .iter()
-            .filter_map(|r| r.current_ma)
-            .sum();
+        let total_current_ma: u32 = rails.iter().filter_map(|r| r.current_ma).sum();
 
         if total_current_ma == 0 {
             return None;
@@ -401,14 +411,22 @@ impl AsusPowerDetector {
         output.push_str("═══════════════════════════════════════\n");
 
         // Health status prominently displayed
-        output.push_str(&format!("Connector Health: {}[{}]{}\n",
-            health_color, status.health.label(), reset));
-        output.push_str(&format!("I2C Bus: {} @ 0x{:02X}\n\n", status.i2c_bus, self.i2c_addr));
+        output.push_str(&format!(
+            "Connector Health: {}[{}]{}\n",
+            health_color,
+            status.health.label(),
+            reset
+        ));
+        output.push_str(&format!(
+            "I2C Bus: {} @ 0x{:02X}\n\n",
+            status.i2c_bus, self.i2c_addr
+        ));
 
         output.push_str("12V-2x6 Power Rails:\n");
         for rail in &status.rails {
             let warning_str = if rail.warning { " ⚠️ HIGH" } else { "" };
-            let current_str = rail.current_ma
+            let current_str = rail
+                .current_ma
                 .map(|c| format!("{:.2}A", c as f32 / 1000.0))
                 .unwrap_or_else(|| "N/A".to_string());
 
@@ -486,6 +504,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // Requires ASUS ROG 50-series GPU - run with: cargo test -- --ignored
     fn test_current_estimation() {
         // Test that estimation produces reasonable values
         let current = AsusPowerDetector::estimate_current(0x0200);

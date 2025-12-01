@@ -19,20 +19,20 @@ pub struct KernelDriverInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum DriverType {
-    Proprietary,     // nvidia.ko
-    OpenKernel,      // nvidia-open.ko
-    Nouveau,         // nouveau.ko
+    Proprietary, // nvidia.ko
+    OpenKernel,  // nvidia-open.ko
+    Nouveau,     // nouveau.ko
     Unknown,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DriverFeatures {
-    pub gsp_firmware: bool,           // GSP (GPU System Processor) firmware
+    pub gsp_firmware: bool, // GSP (GPU System Processor) firmware
     pub resizable_bar: bool,
-    pub confidential_compute: bool,   // GB202 feature
+    pub confidential_compute: bool, // GB202 feature
     pub nvlink: bool,
-    pub display_port_2_1a: bool,      // Blackwell feature
-    pub multi_instance_gpu: bool,     // MIG support
+    pub display_port_2_1a: bool,  // Blackwell feature
+    pub multi_instance_gpu: bool, // MIG support
 }
 
 impl KernelDriverInfo {
@@ -247,15 +247,58 @@ impl KernelDriverInfo {
         }
 
         println!("\nFeatures:");
-        println!("  GSP Firmware: {}", if self.features.gsp_firmware { "✅" } else { "❌" });
-        println!("  Resizable BAR: {}", if self.features.resizable_bar { "✅" } else { "❌" });
-        println!("  Confidential Compute: {}", if self.features.confidential_compute { "✅" } else { "❌" });
-        println!("  NVLink: {}", if self.features.nvlink { "✅" } else { "❌" });
-        println!("  DisplayPort 2.1a: {}", if self.features.display_port_2_1a { "✅" } else { "❌" });
-        println!("  Multi-Instance GPU: {}", if self.features.multi_instance_gpu { "✅" } else { "❌" });
+        println!(
+            "  GSP Firmware: {}",
+            if self.features.gsp_firmware {
+                "✅"
+            } else {
+                "❌"
+            }
+        );
+        println!(
+            "  Resizable BAR: {}",
+            if self.features.resizable_bar {
+                "✅"
+            } else {
+                "❌"
+            }
+        );
+        println!(
+            "  Confidential Compute: {}",
+            if self.features.confidential_compute {
+                "✅"
+            } else {
+                "❌"
+            }
+        );
+        println!(
+            "  NVLink: {}",
+            if self.features.nvlink { "✅" } else { "❌" }
+        );
+        println!(
+            "  DisplayPort 2.1a: {}",
+            if self.features.display_port_2_1a {
+                "✅"
+            } else {
+                "❌"
+            }
+        );
+        println!(
+            "  Multi-Instance GPU: {}",
+            if self.features.multi_instance_gpu {
+                "✅"
+            } else {
+                "❌"
+            }
+        );
 
-        println!("\nRTX 50-Series Support: {}",
-            if self.supports_rtx_50_series() { "✅ Yes" } else { "❌ No (requires driver 550+)" }
+        println!(
+            "\nRTX 50-Series Support: {}",
+            if self.supports_rtx_50_series() {
+                "✅ Yes"
+            } else {
+                "❌ No (requires driver 550+)"
+            }
         );
     }
 
@@ -301,7 +344,7 @@ impl KernelDriverInfo {
             }
         } else {
             recommendations.push(
-                "Create /etc/modprobe.d/nvidia.conf for kernel module optimization".to_string()
+                "Create /etc/modprobe.d/nvidia.conf for kernel module optimization".to_string(),
             );
         }
 
@@ -340,7 +383,8 @@ options nvidia_drm modeset=1
 
 # Enable NVIDIA runtime power management
 options nvidia_drm fbdev=1
-"#.to_string()
+"#
+    .to_string()
 }
 
 #[cfg(test)]

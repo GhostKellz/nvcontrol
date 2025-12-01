@@ -2,7 +2,6 @@
 ///
 /// Real-time terminal UI for monitoring GPU speeds and feeds
 /// Similar to nvidia-smi but with live graphs and detailed metrics
-
 use crate::{NvControlError, NvResult};
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
@@ -37,16 +36,17 @@ impl MonitorData {
     pub fn new(gpu_id: u32) -> NvResult<Self> {
         use nvml_wrapper::Nvml;
 
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
 
-        let device = nvml.device_by_index(gpu_id).map_err(|e| {
-            NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e))
-        })?;
+        let device = nvml
+            .device_by_index(gpu_id)
+            .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e)))?;
 
         let gpu_name = device.name().unwrap_or_else(|_| "Unknown GPU".to_string());
-        let driver_version = nvml.sys_driver_version().unwrap_or_else(|_| "Unknown".to_string());
+        let driver_version = nvml
+            .sys_driver_version()
+            .unwrap_or_else(|_| "Unknown".to_string());
 
         Ok(Self {
             gpu_id,
@@ -73,13 +73,12 @@ impl MonitorData {
     pub fn update(&mut self) -> NvResult<()> {
         use nvml_wrapper::Nvml;
 
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
 
-        let device = nvml.device_by_index(self.gpu_id).map_err(|e| {
-            NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e))
-        })?;
+        let device = nvml
+            .device_by_index(self.gpu_id)
+            .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e)))?;
 
         // Clocks
         self.gpu_clock_mhz = device
@@ -139,49 +138,115 @@ impl MonitorData {
         let mut output = String::new();
 
         // Header
-        output.push_str(&format!("\n╔════════════════════════════════════════════════════════════════╗\n"));
-        output.push_str(&format!("║  NVIDIA GPU Monitor - {} (GPU {})  ║\n", self.gpu_name, self.gpu_id));
-        output.push_str(&format!("║  Driver: {}                                        ║\n", self.driver_version));
-        output.push_str(&format!("╚════════════════════════════════════════════════════════════════╝\n\n"));
+        output.push_str(&format!(
+            "\n╔════════════════════════════════════════════════════════════════╗\n"
+        ));
+        output.push_str(&format!(
+            "║  NVIDIA GPU Monitor - {} (GPU {})  ║\n",
+            self.gpu_name, self.gpu_id
+        ));
+        output.push_str(&format!(
+            "║  Driver: {}                                        ║\n",
+            self.driver_version
+        ));
+        output.push_str(&format!(
+            "╚════════════════════════════════════════════════════════════════╝\n\n"
+        ));
 
         // Current stats
-        output.push_str(&format!("┌─ GPU Clocks ────────────────────────────────────────────────┐\n"));
-        output.push_str(&format!("│  GPU Clock:    {:>6} MHz  {:>40} │\n", self.gpu_clock_mhz, self.render_bar(self.gpu_clock_mhz, 3000)));
-        output.push_str(&format!("│  Memory Clock: {:>6} MHz  {:>40} │\n", self.memory_clock_mhz, self.render_bar(self.memory_clock_mhz, 12000)));
-        output.push_str(&format!("└─────────────────────────────────────────────────────────────┘\n\n"));
+        output.push_str(&format!(
+            "┌─ GPU Clocks ────────────────────────────────────────────────┐\n"
+        ));
+        output.push_str(&format!(
+            "│  GPU Clock:    {:>6} MHz  {:>40} │\n",
+            self.gpu_clock_mhz,
+            self.render_bar(self.gpu_clock_mhz, 3000)
+        ));
+        output.push_str(&format!(
+            "│  Memory Clock: {:>6} MHz  {:>40} │\n",
+            self.memory_clock_mhz,
+            self.render_bar(self.memory_clock_mhz, 12000)
+        ));
+        output.push_str(&format!(
+            "└─────────────────────────────────────────────────────────────┘\n\n"
+        ));
 
-        output.push_str(&format!("┌─ Temperature & Fan ─────────────────────────────────────────┐\n"));
-        output.push_str(&format!("│  Temperature:  {:>3}°C      {:>40} │\n", self.temperature_c, self.render_bar(self.temperature_c as u32, 100)));
-        output.push_str(&format!("│  Fan Speed:    {:>3}%       {:>40} │\n", self.fan_speed_percent, self.render_bar(self.fan_speed_percent, 100)));
-        output.push_str(&format!("└─────────────────────────────────────────────────────────────┘\n\n"));
+        output.push_str(&format!(
+            "┌─ Temperature & Fan ─────────────────────────────────────────┐\n"
+        ));
+        output.push_str(&format!(
+            "│  Temperature:  {:>3}°C      {:>40} │\n",
+            self.temperature_c,
+            self.render_bar(self.temperature_c as u32, 100)
+        ));
+        output.push_str(&format!(
+            "│  Fan Speed:    {:>3}%       {:>40} │\n",
+            self.fan_speed_percent,
+            self.render_bar(self.fan_speed_percent, 100)
+        ));
+        output.push_str(&format!(
+            "└─────────────────────────────────────────────────────────────┘\n\n"
+        ));
 
-        output.push_str(&format!("┌─ Utilization ───────────────────────────────────────────────┐\n"));
-        output.push_str(&format!("│  GPU Load:     {:>3}%       {:>40} │\n", self.gpu_load_percent, self.render_bar(self.gpu_load_percent, 100)));
-        output.push_str(&format!("│  Memory Load:  {:>3}%       {:>40} │\n", self.memory_load_percent, self.render_bar(self.memory_load_percent, 100)));
-        output.push_str(&format!("└─────────────────────────────────────────────────────────────┘\n\n"));
+        output.push_str(&format!(
+            "┌─ Utilization ───────────────────────────────────────────────┐\n"
+        ));
+        output.push_str(&format!(
+            "│  GPU Load:     {:>3}%       {:>40} │\n",
+            self.gpu_load_percent,
+            self.render_bar(self.gpu_load_percent, 100)
+        ));
+        output.push_str(&format!(
+            "│  Memory Load:  {:>3}%       {:>40} │\n",
+            self.memory_load_percent,
+            self.render_bar(self.memory_load_percent, 100)
+        ));
+        output.push_str(&format!(
+            "└─────────────────────────────────────────────────────────────┘\n\n"
+        ));
 
-        output.push_str(&format!("┌─ Memory ────────────────────────────────────────────────────┐\n"));
-        output.push_str(&format!("│  VRAM Used:    {:>5} MB / {:>5} MB ({:>3}%)           │\n",
+        output.push_str(&format!(
+            "┌─ Memory ────────────────────────────────────────────────────┐\n"
+        ));
+        output.push_str(&format!(
+            "│  VRAM Used:    {:>5} MB / {:>5} MB ({:>3}%)           │\n",
             self.vram_used_mb,
             self.vram_total_mb,
             (self.vram_used_mb as f32 / self.vram_total_mb as f32 * 100.0) as u32
         ));
-        output.push_str(&format!("│  {:>58} │\n", self.render_bar(self.vram_used_mb as u32, self.vram_total_mb as u32)));
-        output.push_str(&format!("└─────────────────────────────────────────────────────────────┘\n\n"));
+        output.push_str(&format!(
+            "│  {:>58} │\n",
+            self.render_bar(self.vram_used_mb as u32, self.vram_total_mb as u32)
+        ));
+        output.push_str(&format!(
+            "└─────────────────────────────────────────────────────────────┘\n\n"
+        ));
 
-        output.push_str(&format!("┌─ Power ─────────────────────────────────────────────────────┐\n"));
-        output.push_str(&format!("│  Power Draw:   {:>6.1} W / {:>4} W ({:>3}%)         │\n",
+        output.push_str(&format!(
+            "┌─ Power ─────────────────────────────────────────────────────┐\n"
+        ));
+        output.push_str(&format!(
+            "│  Power Draw:   {:>6.1} W / {:>4} W ({:>3}%)         │\n",
             self.power_draw_watts,
             self.power_limit_watts,
             (self.power_draw_watts / self.power_limit_watts as f32 * 100.0) as u32
         ));
-        output.push_str(&format!("│  {:>58} │\n", self.render_bar(self.power_draw_watts as u32, self.power_limit_watts)));
-        output.push_str(&format!("└─────────────────────────────────────────────────────────────┘\n\n"));
+        output.push_str(&format!(
+            "│  {:>58} │\n",
+            self.render_bar(self.power_draw_watts as u32, self.power_limit_watts)
+        ));
+        output.push_str(&format!(
+            "└─────────────────────────────────────────────────────────────┘\n\n"
+        ));
 
         // Temperature graph
-        output.push_str(&format!("┌─ Temperature History (last 60s) ────────────────────────────┐\n"));
+        output.push_str(&format!(
+            "┌─ Temperature History (last 60s) ────────────────────────────┐\n"
+        ));
         output.push_str(&self.render_graph(&self.temp_history, 0, 100));
-        output.push_str(&format!("└─────────────────────────────────────────────────────────────┘\n\n"));
+        output.push_str(&format!(
+            "└─────────────────────────────────────────────────────────────┘\n\n"
+        ));
 
         output.push_str(&format!("Press Ctrl+C to exit\n"));
 
@@ -205,7 +270,12 @@ impl MonitorData {
         bar
     }
 
-    fn render_graph<T: Clone + Into<i32>>(&self, history: &VecDeque<T>, min: i32, max: i32) -> String {
+    fn render_graph<T: Clone + Into<i32>>(
+        &self,
+        history: &VecDeque<T>,
+        min: i32,
+        max: i32,
+    ) -> String {
         let height = 8;
         let width = 60;
 

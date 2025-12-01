@@ -1,7 +1,6 @@
 /// MSI Afterburner / GPU Tweak Style Tuner GUI
 ///
 /// Professional GPU tuning interface with real-time graphs and controls
-
 use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
@@ -12,16 +11,16 @@ pub struct TunerState {
     pub gpu_id: u32,
 
     // Overclocking sliders
-    pub core_clock_offset: i32,      // -500 to +500 MHz
-    pub memory_clock_offset: i32,    // -1000 to +1500 MHz
-    pub power_limit: u32,             // % of TDP
-    pub temp_limit: i32,              // °C
-    pub voltage_offset: i32,          // mV (if supported)
+    pub core_clock_offset: i32,   // -500 to +500 MHz
+    pub memory_clock_offset: i32, // -1000 to +1500 MHz
+    pub power_limit: u32,         // % of TDP
+    pub temp_limit: i32,          // °C
+    pub voltage_offset: i32,      // mV (if supported)
 
     // Fan control
     pub fan_mode: FanControlMode,
-    pub fan_speed_manual: u32,        // % if manual mode
-    pub fan_curve: Vec<(i32, u32)>,   // (temp, speed) points
+    pub fan_speed_manual: u32,      // % if manual mode
+    pub fan_curve: Vec<(i32, u32)>, // (temp, speed) points
 
     // Monitoring
     pub gpu_clock: u32,
@@ -59,13 +58,7 @@ impl TunerState {
             voltage_offset: 0,
             fan_mode: FanControlMode::Auto,
             fan_speed_manual: 50,
-            fan_curve: vec![
-                (40, 30),
-                (55, 50),
-                (70, 70),
-                (80, 90),
-                (90, 100),
-            ],
+            fan_curve: vec![(40, 30), (55, 50), (70, 70), (80, 90), (90, 100)],
             gpu_clock: 0,
             memory_clock: 0,
             temperature: 0,
@@ -86,13 +79,12 @@ impl TunerState {
     pub fn update_monitoring(&mut self) -> NvResult<()> {
         use nvml_wrapper::Nvml;
 
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
 
-        let device = nvml.device_by_index(self.gpu_id).map_err(|e| {
-            NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e))
-        })?;
+        let device = nvml
+            .device_by_index(self.gpu_id)
+            .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e)))?;
 
         self.gpu_clock = device
             .clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics)
@@ -172,13 +164,12 @@ impl TunerState {
         // Apply power limit
         use nvml_wrapper::Nvml;
 
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
 
-        let mut device = nvml.device_by_index(self.gpu_id).map_err(|e| {
-            NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e))
-        })?;
+        let mut device = nvml
+            .device_by_index(self.gpu_id)
+            .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e)))?;
 
         let default_power = device.power_management_limit_default().ok();
         if let Some(default) = default_power {
@@ -202,10 +193,7 @@ impl TunerState {
             FanControlMode::Auto => {
                 // Reset to auto
                 Command::new("nvidia-settings")
-                    .args(&[
-                        "-a",
-                        &format!("[gpu:{}]/GPUFanControlState=0", self.gpu_id),
-                    ])
+                    .args(&["-a", &format!("[gpu:{}]/GPUFanControlState=0", self.gpu_id)])
                     .output()
                     .ok();
 
@@ -214,10 +202,7 @@ impl TunerState {
             FanControlMode::Manual => {
                 // Enable manual control
                 Command::new("nvidia-settings")
-                    .args(&[
-                        "-a",
-                        &format!("[gpu:{}]/GPUFanControlState=1", self.gpu_id),
-                    ])
+                    .args(&["-a", &format!("[gpu:{}]/GPUFanControlState=1", self.gpu_id)])
                     .output()
                     .ok();
 
@@ -235,10 +220,7 @@ impl TunerState {
             FanControlMode::Curve => {
                 // Enable manual control
                 Command::new("nvidia-settings")
-                    .args(&[
-                        "-a",
-                        &format!("[gpu:{}]/GPUFanControlState=1", self.gpu_id),
-                    ])
+                    .args(&["-a", &format!("[gpu:{}]/GPUFanControlState=1", self.gpu_id)])
                     .output()
                     .ok();
 
@@ -246,14 +228,14 @@ impl TunerState {
                 let target_speed = self.calculate_fan_speed_from_curve();
 
                 Command::new("nvidia-settings")
-                    .args(&[
-                        "-a",
-                        &format!("[fan:0]/GPUTargetFanSpeed={}", target_speed),
-                    ])
+                    .args(&["-a", &format!("[fan:0]/GPUTargetFanSpeed={}", target_speed)])
                     .output()
                     .ok();
 
-                println!("Fan control set to: Curve ({}% at {}°C)", target_speed, self.temperature);
+                println!(
+                    "Fan control set to: Curve ({}% at {}°C)",
+                    target_speed, self.temperature
+                );
             }
         }
 
@@ -305,10 +287,7 @@ impl TunerState {
             .ok();
 
         Command::new("nvidia-settings")
-            .args(&[
-                "-a",
-                &format!("[gpu:{}]/GPUFanControlState=0", self.gpu_id),
-            ])
+            .args(&["-a", &format!("[gpu:{}]/GPUFanControlState=0", self.gpu_id)])
             .output()
             .ok();
 
@@ -329,13 +308,7 @@ impl TunerPresets {
         state.power_limit = 85;
         state.temp_limit = 75;
         state.fan_mode = FanControlMode::Curve;
-        state.fan_curve = vec![
-            (40, 0),
-            (50, 25),
-            (60, 40),
-            (70, 60),
-            (80, 80),
-        ];
+        state.fan_curve = vec![(40, 0), (50, 25), (60, 40), (70, 60), (80, 80)];
         state
     }
 
@@ -356,12 +329,7 @@ impl TunerPresets {
         state.power_limit = 115;
         state.temp_limit = 85;
         state.fan_mode = FanControlMode::Curve;
-        state.fan_curve = vec![
-            (30, 40),
-            (50, 60),
-            (70, 80),
-            (80, 100),
-        ];
+        state.fan_curve = vec![(30, 40), (50, 60), (70, 80), (80, 100)];
         state
     }
 }
@@ -382,11 +350,7 @@ mod tests {
     fn test_fan_curve_calculation() {
         let mut state = TunerState::new(0);
         state.temperature = 60;
-        state.fan_curve = vec![
-            (40, 30),
-            (60, 50),
-            (80, 80),
-        ];
+        state.fan_curve = vec![(40, 30), (60, 50), (80, 80)];
 
         let speed = state.calculate_fan_speed_from_curve();
         assert_eq!(speed, 50);

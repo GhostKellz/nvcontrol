@@ -29,14 +29,14 @@ pub enum DlssVersion {
 pub struct DlssCapabilities {
     pub gpu_model: String,
     pub supports_dlss: bool,
-    pub supports_frame_generation: bool,        // RTX 40-series+
-    pub supports_multi_frame_generation: bool,  // RTX 50-series (DLSS 4)
-    pub max_frame_multiplier: u8,               // 2x, 3x, or 4x
-    pub supports_ray_reconstruction: bool,      // DLSS 3.5+
-    pub supports_reflex: bool,                  // NVIDIA Reflex
+    pub supports_frame_generation: bool,       // RTX 40-series+
+    pub supports_multi_frame_generation: bool, // RTX 50-series (DLSS 4)
+    pub max_frame_multiplier: u8,              // 2x, 3x, or 4x
+    pub supports_ray_reconstruction: bool,     // DLSS 3.5+
+    pub supports_reflex: bool,                 // NVIDIA Reflex
     pub tensor_cores: u32,
-    pub optical_flow_accelerator: bool,         // Required for Frame Generation
-    pub optical_flow_accelerator_version: u8,   // Gen 4 for RTX 50
+    pub optical_flow_accelerator: bool, // Required for Frame Generation
+    pub optical_flow_accelerator_version: u8, // Gen 4 for RTX 50
     pub driver_version: String,
     pub dlss_dll_version: Option<String>,
 }

@@ -1,7 +1,6 @@
 /// Phase 3.3: Power Optimization
 ///
 /// Dynamic power management, per-application power profiles, battery boost, power analytics
-
 use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -93,12 +92,7 @@ impl DynamicPowerManager {
         }
 
         // Calculate average load over recent history
-        let recent_samples: Vec<_> = self
-            .load_history
-            .iter()
-            .rev()
-            .take(10)
-            .collect();
+        let recent_samples: Vec<_> = self.load_history.iter().rev().take(10).collect();
 
         let avg_util: f32 = recent_samples
             .iter()
@@ -106,11 +100,8 @@ impl DynamicPowerManager {
             .sum::<f32>()
             / recent_samples.len() as f32;
 
-        let avg_power: f32 = recent_samples
-            .iter()
-            .map(|s| s.power_draw)
-            .sum::<f32>()
-            / recent_samples.len() as f32;
+        let avg_power: f32 =
+            recent_samples.iter().map(|s| s.power_draw).sum::<f32>() / recent_samples.len() as f32;
 
         // Classify workload
         if avg_util > 80.0 && avg_power > 200.0 {
@@ -128,20 +119,16 @@ impl DynamicPowerManager {
     pub fn apply_mode(&mut self, mode: PowerMode) -> NvResult<()> {
         use nvml_wrapper::Nvml;
 
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
 
-        let mut device = nvml.device_by_index(self.gpu_id).map_err(|e| {
-            NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e))
-        })?;
+        let mut device = nvml
+            .device_by_index(self.gpu_id)
+            .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e)))?;
 
         // Get base power limit
         let constraints = device.power_management_limit_constraints().map_err(|e| {
-            NvControlError::PowerManagementFailed(format!(
-                "Failed to get power constraints: {}",
-                e
-            ))
+            NvControlError::PowerManagementFailed(format!("Failed to get power constraints: {}", e))
         })?;
 
         let min_power = constraints.min_limit / 1000; // mW to W
@@ -248,19 +235,15 @@ impl BatteryBoost {
         // Set conservative power limit
         use nvml_wrapper::Nvml;
 
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
 
-        let mut device = nvml.device_by_index(self.gpu_id).map_err(|e| {
-            NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e))
-        })?;
+        let mut device = nvml
+            .device_by_index(self.gpu_id)
+            .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e)))?;
 
         let constraints = device.power_management_limit_constraints().map_err(|e| {
-            NvControlError::PowerManagementFailed(format!(
-                "Failed to get power constraints: {}",
-                e
-            ))
+            NvControlError::PowerManagementFailed(format!("Failed to get power constraints: {}", e))
         })?;
 
         // Set to 60% of max power for battery savings
@@ -285,13 +268,12 @@ impl BatteryBoost {
     pub fn disable(&mut self) -> NvResult<()> {
         use nvml_wrapper::Nvml;
 
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
 
-        let mut device = nvml.device_by_index(self.gpu_id).map_err(|e| {
-            NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e))
-        })?;
+        let mut device = nvml
+            .device_by_index(self.gpu_id)
+            .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e)))?;
 
         // Reset to default power limit
         let default_power = device.power_management_limit_default().map_err(|e| {
@@ -344,13 +326,11 @@ impl PowerProfileManager {
             return Ok(());
         }
 
-        let content = std::fs::read_to_string(&self.config_path).map_err(|e| {
-            NvControlError::ConfigError(format!("Failed to read profiles: {}", e))
-        })?;
+        let content = std::fs::read_to_string(&self.config_path)
+            .map_err(|e| NvControlError::ConfigError(format!("Failed to read profiles: {}", e)))?;
 
-        self.profiles = serde_json::from_str(&content).map_err(|e| {
-            NvControlError::ConfigError(format!("Failed to parse profiles: {}", e))
-        })?;
+        self.profiles = serde_json::from_str(&content)
+            .map_err(|e| NvControlError::ConfigError(format!("Failed to parse profiles: {}", e)))?;
 
         Ok(())
     }
@@ -367,9 +347,8 @@ impl PowerProfileManager {
             NvControlError::ConfigError(format!("Failed to serialize profiles: {}", e))
         })?;
 
-        std::fs::write(&self.config_path, content).map_err(|e| {
-            NvControlError::ConfigError(format!("Failed to write profiles: {}", e))
-        })?;
+        std::fs::write(&self.config_path, content)
+            .map_err(|e| NvControlError::ConfigError(format!("Failed to write profiles: {}", e)))?;
 
         Ok(())
     }
@@ -410,13 +389,12 @@ impl PowerProfileManager {
 
         use nvml_wrapper::Nvml;
 
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
 
-        let mut device = nvml.device_by_index(gpu_id).map_err(|e| {
-            NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e))
-        })?;
+        let mut device = nvml
+            .device_by_index(gpu_id)
+            .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e)))?;
 
         // Apply power limit
         device

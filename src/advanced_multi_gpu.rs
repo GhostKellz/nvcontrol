@@ -1,7 +1,6 @@
 /// Phase 3.4: Multi-GPU Management
 ///
 /// SLI/NVLink configuration, per-GPU profile assignment, load balancing, cross-GPU thermal management
-
 use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -55,9 +54,8 @@ impl MultiGpuCoordinator {
     fn detect_gpus() -> NvResult<Vec<u32>> {
         use nvml_wrapper::Nvml;
 
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
 
         let count = nvml.device_count().map_err(|e| {
             NvControlError::GpuQueryFailed(format!("Failed to get device count: {}", e))
@@ -70,9 +68,8 @@ impl MultiGpuCoordinator {
     pub fn detect_topology(&mut self) -> NvResult<()> {
         use nvml_wrapper::Nvml;
 
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
 
         let mut nodes = Vec::new();
         let mut links = Vec::new();
@@ -121,13 +118,12 @@ impl MultiGpuCoordinator {
     fn detect_link(&self, gpu1: u32, gpu2: u32) -> NvResult<Option<GpuLink>> {
         use nvml_wrapper::Nvml;
 
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
 
-        let _device1 = nvml.device_by_index(gpu1).map_err(|e| {
-            NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e))
-        })?;
+        let _device1 = nvml
+            .device_by_index(gpu1)
+            .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e)))?;
 
         // Try to detect NVLink (commented out due to nvml_wrapper API limitations)
         // Alternative: use nvidia-smi nvlink --status
@@ -141,7 +137,8 @@ impl MultiGpuCoordinator {
                         let device2 = nvml.device_by_index(gpu2).ok();
                         if let Some(_d2) = device2 {
                             if let Ok(_pci2) = _d2.pci_info() {
-                                if false { // Placeholder for bus comparison
+                                if false {
+                                    // Placeholder for bus comparison
                                     return Ok(Some(GpuLink {
                                         gpu1,
                                         gpu2,
@@ -251,9 +248,9 @@ impl PerGpuProfileManager {
 
     /// Apply profile to GPU
     pub fn apply_profile(&self, gpu_id: u32) -> NvResult<()> {
-        let profile = self.get_profile(gpu_id).ok_or_else(|| {
-            NvControlError::ConfigError(format!("No profile for GPU {}", gpu_id))
-        })?;
+        let profile = self
+            .get_profile(gpu_id)
+            .ok_or_else(|| NvControlError::ConfigError(format!("No profile for GPU {}", gpu_id)))?;
 
         use crate::gpu_safe::SafeGpuController;
 
@@ -397,9 +394,8 @@ impl ThermalBalancer {
     pub fn get_all_temps(&self) -> NvResult<Vec<(u32, i32)>> {
         use nvml_wrapper::Nvml;
 
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
 
         let mut temps = Vec::new();
 
@@ -445,9 +441,8 @@ impl ThermalBalancer {
         let avg_temp: f32 = temps.iter().map(|(_, t)| *t as f32).sum::<f32>() / temps.len() as f32;
 
         use nvml_wrapper::Nvml;
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
 
         for (gpu_id, temp) in temps {
             let mut device = nvml.device_by_index(gpu_id).map_err(|e| {

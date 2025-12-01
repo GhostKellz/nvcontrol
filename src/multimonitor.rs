@@ -44,8 +44,9 @@ pub struct MultiMonitorManager {
 impl MultiMonitorManager {
     pub fn new() -> NvResult<Self> {
         let layouts_dir = Self::get_layouts_dir();
-        fs::create_dir_all(&layouts_dir)
-            .map_err(|e| NvControlError::ConfigError(format!("Failed to create layouts dir: {}", e)))?;
+        fs::create_dir_all(&layouts_dir).map_err(|e| {
+            NvControlError::ConfigError(format!("Failed to create layouts dir: {}", e))
+        })?;
 
         Ok(Self {
             layouts_dir,
@@ -66,7 +67,9 @@ impl MultiMonitorManager {
         let output = Command::new("kscreen-doctor")
             .arg("-o")
             .output()
-            .map_err(|e| NvControlError::CommandFailed(format!("Failed to run kscreen-doctor: {}", e)))?;
+            .map_err(|e| {
+                NvControlError::CommandFailed(format!("Failed to run kscreen-doctor: {}", e))
+            })?;
 
         let info = String::from_utf8_lossy(&output.stdout);
         let mut displays = Vec::new();
@@ -129,8 +132,9 @@ impl MultiMonitorManager {
         layout.name = name.to_string();
 
         let layout_path = self.layouts_dir.join(format!("{}.toml", name));
-        let content = toml::to_string_pretty(&layout)
-            .map_err(|e| NvControlError::ConfigError(format!("Failed to serialize layout: {}", e)))?;
+        let content = toml::to_string_pretty(&layout).map_err(|e| {
+            NvControlError::ConfigError(format!("Failed to serialize layout: {}", e))
+        })?;
 
         fs::write(&layout_path, content)
             .map_err(|e| NvControlError::ConfigError(format!("Failed to write layout: {}", e)))?;
@@ -159,7 +163,10 @@ impl MultiMonitorManager {
 
     /// Apply a display layout
     fn apply_layout(&self, layout: &DisplayLayout) -> NvResult<()> {
-        println!("⚙️  Applying layout with {} displays", layout.displays.len());
+        println!(
+            "⚙️  Applying layout with {} displays",
+            layout.displays.len()
+        );
 
         for display in &layout.displays {
             self.apply_display_config(display)?;
@@ -177,26 +184,20 @@ impl MultiMonitorManager {
         // Resolution and refresh rate
         cmd_parts.push(format!(
             "output.{}.mode.{}x{}@{}",
-            config.connector,
-            config.resolution.0,
-            config.resolution.1,
-            config.refresh_rate
+            config.connector, config.resolution.0, config.resolution.1, config.refresh_rate
         ));
 
         // Position
         cmd_parts.push(format!(
             "output.{}.position.{},{}",
-            config.connector,
-            config.position.0,
-            config.position.1
+            config.connector, config.position.0, config.position.1
         ));
 
         // Scale
         if config.scale != 1.0 {
             cmd_parts.push(format!(
                 "output.{}.scale.{}",
-                config.connector,
-                config.scale
+                config.connector, config.scale
             ));
         }
 
@@ -204,15 +205,16 @@ impl MultiMonitorManager {
         cmd_parts.push(format!(
             "output.{}.vrrpolicy.{}",
             config.connector,
-            if config.vrr_enabled { "automatic" } else { "never" }
+            if config.vrr_enabled {
+                "automatic"
+            } else {
+                "never"
+            }
         ));
 
         // Apply via kscreen-doctor
         for part in cmd_parts {
-            Command::new("kscreen-doctor")
-                .arg(&part)
-                .status()
-                .ok();
+            Command::new("kscreen-doctor").arg(&part).status().ok();
         }
 
         // Apply digital vibrance if set
@@ -252,7 +254,11 @@ impl MultiMonitorManager {
 
     /// Set VRR per display
     pub fn set_display_vrr(&self, connector: &str, enabled: bool) -> NvResult<()> {
-        println!("🖥️  Setting VRR for {}: {}", connector, if enabled { "enabled" } else { "disabled" });
+        println!(
+            "🖥️  Setting VRR for {}: {}",
+            connector,
+            if enabled { "enabled" } else { "disabled" }
+        );
 
         let status = Command::new("kscreen-doctor")
             .arg(format!(
@@ -264,7 +270,9 @@ impl MultiMonitorManager {
             .map_err(|e| NvControlError::CommandFailed(format!("Failed to set VRR: {}", e)))?;
 
         if !status.success() {
-            return Err(NvControlError::CommandFailed("kscreen-doctor failed".to_string()));
+            return Err(NvControlError::CommandFailed(
+                "kscreen-doctor failed".to_string(),
+            ));
         }
 
         println!("✅ VRR updated");
@@ -303,8 +311,9 @@ impl MultiMonitorManager {
         cmd.args(command.split_whitespace());
 
         // Launch
-        cmd.spawn()
-            .map_err(|e| NvControlError::CommandFailed(format!("Failed to launch gamescope: {}", e)))?;
+        cmd.spawn().map_err(|e| {
+            NvControlError::CommandFailed(format!("Failed to launch gamescope: {}", e))
+        })?;
 
         println!("✅ Gamescope launched");
         Ok(())
@@ -474,12 +483,14 @@ impl MultiMonitorManager {
             println!("\n   Display {}:", i + 1);
             println!("      Connector: {}", display.connector);
             println!("      Enabled: {}", display.enabled);
-            println!("      Resolution: {}x{}@{}Hz",
-                display.resolution.0,
-                display.resolution.1,
-                display.refresh_rate
+            println!(
+                "      Resolution: {}x{}@{}Hz",
+                display.resolution.0, display.resolution.1, display.refresh_rate
             );
-            println!("      VRR: {}", if display.vrr_enabled { "✅" } else { "❌" });
+            println!(
+                "      VRR: {}",
+                if display.vrr_enabled { "✅" } else { "❌" }
+            );
         }
 
         let layouts = self.list_layouts();

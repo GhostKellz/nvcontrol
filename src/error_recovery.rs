@@ -1,7 +1,6 @@
 /// Error recovery and graceful degradation system
 ///
 /// Provides automatic fallback mechanisms and user-friendly error handling
-
 use crate::{NvControlError, NvResult};
 use std::process::Command;
 
@@ -247,27 +246,21 @@ pub fn handle_nvml_error<T>(
                         "NVML library not found. Install NVIDIA drivers.".to_string(),
                     )
                 }
-                nvml_wrapper::error::NvmlError::Uninitialized => {
-                    NvControlError::NvmlNotAvailable(
-                        "NVML not initialized. Check NVIDIA driver installation.".to_string(),
-                    )
-                }
-                nvml_wrapper::error::NvmlError::NotSupported => {
-                    NvControlError::UnsupportedFeature(format!(
-                        "{} not supported on this GPU",
-                        context.operation
-                    ))
-                }
+                nvml_wrapper::error::NvmlError::Uninitialized => NvControlError::NvmlNotAvailable(
+                    "NVML not initialized. Check NVIDIA driver installation.".to_string(),
+                ),
+                nvml_wrapper::error::NvmlError::NotSupported => NvControlError::UnsupportedFeature(
+                    format!("{} not supported on this GPU", context.operation),
+                ),
                 nvml_wrapper::error::NvmlError::NoPermission => {
                     NvControlError::RuntimeError(format!(
                         "{} requires elevated permissions. Try running with sudo.",
                         context.operation
                     ))
                 }
-                _ => NvControlError::GpuQueryFailed(format!(
-                    "{}: {}",
-                    context.operation, nvml_error
-                )),
+                _ => {
+                    NvControlError::GpuQueryFailed(format!("{}: {}", context.operation, nvml_error))
+                }
             };
 
             // Log error
@@ -311,7 +304,9 @@ mod tests {
         let result = handler.retry(|| {
             attempt_count += 1;
             if attempt_count < 2 {
-                Err(NvControlError::GpuQueryFailed("Transient error".to_string()))
+                Err(NvControlError::GpuQueryFailed(
+                    "Transient error".to_string(),
+                ))
             } else {
                 Ok(42)
             }

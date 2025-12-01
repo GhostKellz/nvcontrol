@@ -68,10 +68,16 @@ impl NativeVibranceController {
         // Fallback to nvidia-smi
         use std::process::Command;
         let output = Command::new("nvidia-smi")
-            .args(["--query-gpu=driver_version", "--format=csv,noheader,nounits"])
+            .args([
+                "--query-gpu=driver_version",
+                "--format=csv,noheader,nounits",
+            ])
             .output()
             .map_err(|e| {
-                NvControlError::VibranceControlFailed(format!("Failed to get driver version: {}", e))
+                NvControlError::VibranceControlFailed(format!(
+                    "Failed to get driver version: {}",
+                    e
+                ))
             })?;
 
         if output.status.success() {
@@ -115,7 +121,9 @@ impl NativeVibranceController {
         // Prepare version string (must match driver version exactly)
         let mut version_string = [0u8; NVKMS_NVIDIA_DRIVER_VERSION_STRING_LENGTH];
         let version_bytes = driver_version.as_bytes();
-        let copy_len = version_bytes.len().min(NVKMS_NVIDIA_DRIVER_VERSION_STRING_LENGTH - 1);
+        let copy_len = version_bytes
+            .len()
+            .min(NVKMS_NVIDIA_DRIVER_VERSION_STRING_LENGTH - 1);
         version_string[..copy_len].copy_from_slice(&version_bytes[..copy_len]);
 
         // Prepare registry keys (empty, like nvibrant)
@@ -156,7 +164,9 @@ impl NativeVibranceController {
         // Check status
         if alloc_params.reply.status != NvKmsAllocDeviceStatus::Success {
             let status_msg = match alloc_params.reply.status {
-                NvKmsAllocDeviceStatus::VersionMismatch => "Driver version mismatch - try rebooting",
+                NvKmsAllocDeviceStatus::VersionMismatch => {
+                    "Driver version mismatch - try rebooting"
+                }
                 NvKmsAllocDeviceStatus::BadDeviceId => "Bad device ID",
                 NvKmsAllocDeviceStatus::AlreadyAllocated => "Device already allocated",
                 _ => "Unknown error",
@@ -202,7 +212,15 @@ impl NativeVibranceController {
                 reply: unsafe { std::mem::zeroed() },
             };
 
-            if unsafe { nvkms_ioctl(fd, NvKmsIoctlCommand::QueryConnectorStaticData, &mut static_params) }.is_err() {
+            if unsafe {
+                nvkms_ioctl(
+                    fd,
+                    NvKmsIoctlCommand::QueryConnectorStaticData,
+                    &mut static_params,
+                )
+            }
+            .is_err()
+            {
                 continue;
             }
 
@@ -227,7 +245,15 @@ impl NativeVibranceController {
             dynamic_params.request.disp_handle = disp_handle;
             dynamic_params.request.dpy_id = dpy_id;
 
-            let connected = if unsafe { nvkms_ioctl(fd, NvKmsIoctlCommand::QueryDpyDynamicData, &mut dynamic_params) }.is_ok() {
+            let connected = if unsafe {
+                nvkms_ioctl(
+                    fd,
+                    NvKmsIoctlCommand::QueryDpyDynamicData,
+                    &mut dynamic_params,
+                )
+            }
+            .is_ok()
+            {
                 dynamic_params.reply.connected != 0
             } else {
                 false
@@ -274,9 +300,14 @@ impl NativeVibranceController {
         };
 
         unsafe {
-            nvkms_ioctl(self.modeset_fd, NvKmsIoctlCommand::SetDpyAttribute, &mut params).map_err(
-                |e| NvControlError::VibranceControlFailed(format!("Failed to set vibrance: {}", e)),
-            )?;
+            nvkms_ioctl(
+                self.modeset_fd,
+                NvKmsIoctlCommand::SetDpyAttribute,
+                &mut params,
+            )
+            .map_err(|e| {
+                NvControlError::VibranceControlFailed(format!("Failed to set vibrance: {}", e))
+            })?;
         }
 
         // Update stored value
@@ -304,7 +335,10 @@ impl NativeVibranceController {
         }
 
         if success_count > 0 {
-            println!("✅ Set {} displays to {}% vibrance", success_count, vibrance_percentage);
+            println!(
+                "✅ Set {} displays to {}% vibrance",
+                success_count, vibrance_percentage
+            );
             Ok(())
         } else if let Some(e) = last_error {
             Err(e)
@@ -329,15 +363,28 @@ impl NativeVibranceController {
     pub fn list_displays(&self) -> Vec<(u32, u32, String, bool)> {
         self.connectors
             .iter()
-            .map(|c| (0, c.connector_index, format!("{}: {}", c.connector_index, c.connector_type), c.connected))
+            .map(|c| {
+                (
+                    0,
+                    c.connector_index,
+                    format!("{}: {}", c.connector_index, c.connector_type),
+                    c.connected,
+                )
+            })
             .collect()
     }
 
     /// Get vibrance status
     pub fn get_vibrance_status(&self) -> HashMap<String, serde_json::Value> {
         let mut status = HashMap::new();
-        status.insert("driver_version".to_string(), serde_json::Value::String(self.driver_version.clone()));
-        status.insert("connectors".to_string(), serde_json::to_value(&self.connectors).unwrap_or(serde_json::Value::Null));
+        status.insert(
+            "driver_version".to_string(),
+            serde_json::Value::String(self.driver_version.clone()),
+        );
+        status.insert(
+            "connectors".to_string(),
+            serde_json::to_value(&self.connectors).unwrap_or(serde_json::Value::Null),
+        );
         status
     }
 
@@ -358,7 +405,11 @@ impl Drop for NativeVibranceController {
         };
 
         unsafe {
-            let _ = nvkms_ioctl(self.modeset_fd, NvKmsIoctlCommand::FreeDevice, &mut free_params);
+            let _ = nvkms_ioctl(
+                self.modeset_fd,
+                NvKmsIoctlCommand::FreeDevice,
+                &mut free_params,
+            );
         }
     }
 }
@@ -395,7 +446,8 @@ use std::sync::Mutex;
 static VIBRANCE_CONTROLLER: Mutex<Option<NativeVibranceController>> = Mutex::new(None);
 
 /// Get or initialize the vibrance controller
-pub fn get_vibrance_controller() -> NvResult<std::sync::MutexGuard<'static, Option<NativeVibranceController>>> {
+pub fn get_vibrance_controller()
+-> NvResult<std::sync::MutexGuard<'static, Option<NativeVibranceController>>> {
     let mut guard = VIBRANCE_CONTROLLER.lock().map_err(|_| {
         NvControlError::VibranceControlFailed("Failed to acquire vibrance lock".to_string())
     })?;
@@ -417,7 +469,11 @@ pub fn set_vibrance_all_native(percentage: u32) -> NvResult<()> {
     controller.set_vibrance_all(percentage)
 }
 
-pub fn set_display_vibrance_native(device_id: u32, display_id: u32, percentage: u32) -> NvResult<()> {
+pub fn set_display_vibrance_native(
+    device_id: u32,
+    display_id: u32,
+    percentage: u32,
+) -> NvResult<()> {
     let _ = device_id; // Ignored for now, single GPU support
     let mut guard = get_vibrance_controller()?;
     let controller = guard.as_mut().ok_or_else(|| {

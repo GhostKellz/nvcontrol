@@ -2,11 +2,10 @@
 ///
 /// This module wraps GPU operations with comprehensive error handling,
 /// automatic fallbacks, and hardware safety checks
-
 use crate::{
-    error_recovery::{handle_nvml_error, ErrorContext, NvmlFallback, RetryHandler},
-    hardware_safety::{SafetyMonitor, SafetyThresholds},
     NvControlError, NvResult,
+    error_recovery::{ErrorContext, NvmlFallback, RetryHandler, handle_nvml_error},
+    hardware_safety::{SafetyMonitor, SafetyThresholds},
 };
 use nvml_wrapper::Nvml;
 use serde::{Deserialize, Serialize};
@@ -68,7 +67,11 @@ impl SafeGpuController {
         }
 
         // Fallback to nvidia-smi
-        if self.fallback.available_methods().contains(&"nvidia-settings") {
+        if self
+            .fallback
+            .available_methods()
+            .contains(&"nvidia-settings")
+        {
             match self.get_info_nvidia_smi() {
                 Ok(info) => return Ok(info),
                 Err(e) => {
@@ -87,17 +90,20 @@ impl SafeGpuController {
     fn get_info_nvml(&self) -> NvResult<GpuInfoEnhanced> {
         let ctx = ErrorContext::new("NVML GPU query").with_gpu(self.gpu_id);
 
-        let nvml =
-            handle_nvml_error(Nvml::init(), ErrorContext::new("initialize NVML"))?;
+        let nvml = handle_nvml_error(Nvml::init(), ErrorContext::new("initialize NVML"))?;
 
         let device = handle_nvml_error(
             nvml.device_by_index(self.gpu_id),
-            ctx.clone().with_suggestion("Check GPU index with: nvidia-smi"),
+            ctx.clone()
+                .with_suggestion("Check GPU index with: nvidia-smi"),
         )?;
 
         let name = handle_nvml_error(device.name(), ctx.clone())?;
         let driver = handle_nvml_error(nvml.sys_driver_version(), ctx.clone())?;
-        let cuda = nvml.sys_cuda_driver_version().ok().map(|v| format!("{}", v));
+        let cuda = nvml
+            .sys_cuda_driver_version()
+            .ok()
+            .map(|v| format!("{}", v));
 
         let mem = handle_nvml_error(device.memory_info(), ctx.clone())?;
         let temp = handle_nvml_error(
@@ -114,13 +120,24 @@ impl SafeGpuController {
             .map(|u| (u.gpu, u.memory))
             .unwrap_or((0, 0));
 
-        let clock_gpu = device.clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics).unwrap_or(0);
-        let clock_memory = device.clock_info(nvml_wrapper::enum_wrappers::device::Clock::Memory).unwrap_or(0);
+        let clock_gpu = device
+            .clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics)
+            .unwrap_or(0);
+        let clock_memory = device
+            .clock_info(nvml_wrapper::enum_wrappers::device::Clock::Memory)
+            .unwrap_or(0);
 
-        let pci = device.pci_info().ok().map(|p| format!("{:04x}:{:02x}:{:02x}.{:x}",
-            p.domain, p.bus, p.device, p.pci_device_id));
+        let pci = device.pci_info().ok().map(|p| {
+            format!(
+                "{:04x}:{:02x}:{:02x}.{:x}",
+                p.domain, p.bus, p.device, p.pci_device_id
+            )
+        });
 
-        let compute_cap = device.cuda_compute_capability().ok().map(|c| (c.major as u32, c.minor as u32));
+        let compute_cap = device
+            .cuda_compute_capability()
+            .ok()
+            .map(|c| (c.major as u32, c.minor as u32));
         let arch = Self::detect_architecture(&name, compute_cap);
 
         Ok(GpuInfoEnhanced {
@@ -252,9 +269,8 @@ impl SafeGpuController {
         }
 
         // Apply overclock with retry
-        self.retry_handler.retry(|| {
-            self.apply_overclock_impl(gpu_offset, memory_offset)
-        })
+        self.retry_handler
+            .retry(|| self.apply_overclock_impl(gpu_offset, memory_offset))
     }
 
     fn apply_overclock_impl(&self, gpu_offset: i32, memory_offset: i32) -> NvResult<()> {
@@ -274,7 +290,9 @@ impl SafeGpuController {
                     ),
                 ])
                 .output()
-                .map_err(|e| NvControlError::CommandFailed(format!("nvidia-settings failed: {}", e)))?;
+                .map_err(|e| {
+                    NvControlError::CommandFailed(format!("nvidia-settings failed: {}", e))
+                })?;
 
             if output.status.success() {
                 println!(

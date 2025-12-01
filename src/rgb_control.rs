@@ -180,11 +180,7 @@ impl RgbController {
 
         let _ = Command::new("openrgb")
             .args([
-                "--mode",
-                mode_str,
-                "--color",
-                &color_str,
-                "--device",
+                "--mode", mode_str, "--color", &color_str, "--device",
                 "0", // GPU typically device 0
             ])
             .output();
@@ -246,13 +242,29 @@ impl RgbController {
         // Critical (> 80°C): Red
 
         if temp_celsius < 50.0 {
-            RgbColor { r: 0, g: 150, b: 255 } // Cyan
+            RgbColor {
+                r: 0,
+                g: 150,
+                b: 255,
+            } // Cyan
         } else if temp_celsius < 60.0 {
-            RgbColor { r: 0, g: 255, b: 100 } // Green
+            RgbColor {
+                r: 0,
+                g: 255,
+                b: 100,
+            } // Green
         } else if temp_celsius < 70.0 {
-            RgbColor { r: 200, g: 255, b: 0 } // Yellow
+            RgbColor {
+                r: 200,
+                g: 255,
+                b: 0,
+            } // Yellow
         } else if temp_celsius < 80.0 {
-            RgbColor { r: 255, g: 100, b: 0 } // Orange
+            RgbColor {
+                r: 255,
+                g: 100,
+                b: 0,
+            } // Orange
         } else {
             RgbColor { r: 255, g: 0, b: 0 } // Red
         }
@@ -288,12 +300,20 @@ pub fn get_astral_presets() -> Vec<(String, RgbMode, RgbColor)> {
         (
             "Cyberpunk Cyan".to_string(),
             RgbMode::Breathing,
-            RgbColor { r: 0, g: 255, b: 255 },
+            RgbColor {
+                r: 0,
+                g: 255,
+                b: 255,
+            },
         ),
         (
             "Purple Glow".to_string(),
             RgbMode::Breathing,
-            RgbColor { r: 128, g: 0, b: 255 },
+            RgbColor {
+                r: 128,
+                g: 0,
+                b: 255,
+            },
         ),
         (
             "Rainbow Wave".to_string(),

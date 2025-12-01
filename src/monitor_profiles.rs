@@ -1,5 +1,5 @@
-use crate::vibrance::EnhancedVibranceSettings;
 use crate::NvResult;
+use crate::vibrance::EnhancedVibranceSettings;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -63,9 +63,9 @@ impl MonitorProfile {
             is_primary,
             hdr_enabled: true,
             vibrance_settings: EnhancedVibranceSettings {
-                vibrance: 300,      // Lower for OLED (already saturated)
-                saturation: 1.0,    // No boost needed
-                contrast: 1.0,      // Perfect contrast on OLED
+                vibrance: 300,   // Lower for OLED (already saturated)
+                saturation: 1.0, // No boost needed
+                contrast: 1.0,   // Perfect contrast on OLED
                 brightness: 1.0,
                 gamma: 2.2,
                 hue_shift: 0.0,
@@ -90,9 +90,9 @@ impl MonitorProfile {
             is_primary,
             hdr_enabled: false,
             vibrance_settings: EnhancedVibranceSettings {
-                vibrance: 600,      // Boost for IPS
-                saturation: 1.15,   // Slight boost
-                contrast: 1.05,     // Slight boost
+                vibrance: 600,    // Boost for IPS
+                saturation: 1.15, // Slight boost
+                contrast: 1.05,   // Slight boost
                 brightness: 1.0,
                 gamma: 2.2,
                 hue_shift: 0.0,
@@ -127,7 +127,7 @@ impl MonitorProfile {
             hdr_enabled: false,
             vibrance_settings: EnhancedVibranceSettings {
                 vibrance: base_vibrance,
-                saturation: 1.2,    // Extra pop for gaming
+                saturation: 1.2, // Extra pop for gaming
                 contrast: 1.1,
                 brightness: 1.0,
                 gamma: 2.2,
@@ -153,11 +153,11 @@ impl MonitorProfile {
             is_primary: true,
             hdr_enabled: false,
             vibrance_settings: EnhancedVibranceSettings {
-                vibrance: 0,        // No boost, accurate colors
+                vibrance: 0, // No boost, accurate colors
                 saturation: 1.0,
                 contrast: 1.0,
                 brightness: 1.0,
-                gamma: 2.2,         // sRGB standard
+                gamma: 2.2, // sRGB standard
                 hue_shift: 0.0,
                 color_temperature: 6500, // D65 standard
                 enabled: true,
@@ -180,11 +180,11 @@ impl MonitorProfile {
             is_primary: true,
             hdr_enabled: true,
             vibrance_settings: EnhancedVibranceSettings {
-                vibrance: 250,      // Lower for HDR
-                saturation: 1.0,    // HDR handles saturation
+                vibrance: 250,   // Lower for HDR
+                saturation: 1.0, // HDR handles saturation
                 contrast: 1.0,
                 brightness: 1.0,
-                gamma: 2.4,         // HDR gamma
+                gamma: 2.4, // HDR gamma
                 hue_shift: 0.0,
                 color_temperature: 6500,
                 enabled: true,
@@ -199,14 +199,11 @@ impl MultiMonitorLayout {
     pub fn dual_oled_ips() -> Self {
         Self {
             name: "Dual OLED + IPS".to_string(),
-            monitors: vec![
-                MonitorProfile::oled_4k_preset("DP-0", true),
-                {
-                    let mut ips = MonitorProfile::ips_1440p_preset("DP-1", false);
-                    ips.position = MonitorPosition { x: 3840, y: 0 }; // To the right
-                    ips
-                },
-            ],
+            monitors: vec![MonitorProfile::oled_4k_preset("DP-0", true), {
+                let mut ips = MonitorProfile::ips_1440p_preset("DP-1", false);
+                ips.position = MonitorPosition { x: 3840, y: 0 }; // To the right
+                ips
+            }],
             auto_apply: true,
         }
     }
@@ -274,7 +271,10 @@ impl MultiMonitorLayout {
                 monitor.resolution.width, monitor.resolution.height, monitor.refresh_rate
             );
             println!("  HDR: {}", if monitor.hdr_enabled { "Yes" } else { "No" });
-            println!("  Primary: {}", if monitor.is_primary { "Yes" } else { "No" });
+            println!(
+                "  Primary: {}",
+                if monitor.is_primary { "Yes" } else { "No" }
+            );
             println!(
                 "  Position: ({}, {})",
                 monitor.position.x, monitor.position.y
@@ -297,7 +297,10 @@ impl MultiMonitorLayout {
 pub fn get_preset_layouts() -> HashMap<String, MultiMonitorLayout> {
     let mut layouts = HashMap::new();
 
-    layouts.insert("dual_oled_ips".to_string(), MultiMonitorLayout::dual_oled_ips());
+    layouts.insert(
+        "dual_oled_ips".to_string(),
+        MultiMonitorLayout::dual_oled_ips(),
+    );
     layouts.insert(
         "triple_monitors".to_string(),
         MultiMonitorLayout::triple_monitors(),

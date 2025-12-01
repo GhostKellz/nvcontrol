@@ -85,8 +85,9 @@ impl OsdManager {
 
         let config = if config_path.exists() {
             let contents = fs::read_to_string(&config_path)?;
-            toml::from_str(&contents)
-                .map_err(|e| NvControlError::ConfigError(format!("Failed to parse OSD config: {}", e)))?
+            toml::from_str(&contents).map_err(|e| {
+                NvControlError::ConfigError(format!("Failed to parse OSD config: {}", e))
+            })?
         } else {
             OsdConfig::default()
         };
@@ -98,8 +99,9 @@ impl OsdManager {
     }
 
     pub fn save_config(&self) -> NvResult<()> {
-        let toml_str = toml::to_string_pretty(&self.config)
-            .map_err(|e| NvControlError::ConfigError(format!("Failed to serialize config: {}", e)))?;
+        let toml_str = toml::to_string_pretty(&self.config).map_err(|e| {
+            NvControlError::ConfigError(format!("Failed to serialize config: {}", e))
+        })?;
         fs::write(&self.config_path, toml_str)?;
         Ok(())
     }
@@ -133,9 +135,9 @@ impl OsdManager {
     }
 
     pub fn remove_metric(&mut self, metric: &OsdMetric) -> NvResult<()> {
-        self.config.metrics.retain(|m| {
-            std::mem::discriminant(m) != std::mem::discriminant(metric)
-        });
+        self.config
+            .metrics
+            .retain(|m| std::mem::discriminant(m) != std::mem::discriminant(metric));
         self.save_config()
     }
 
@@ -201,8 +203,14 @@ impl OsdManager {
 
         // Appearance
         config_lines.push(format!("font_size={}", self.config.font_size));
-        config_lines.push(format!("background_alpha={}", self.config.background_opacity));
-        config_lines.push(format!("update_interval={}", self.config.update_interval_ms));
+        config_lines.push(format!(
+            "background_alpha={}",
+            self.config.background_opacity
+        ));
+        config_lines.push(format!(
+            "update_interval={}",
+            self.config.update_interval_ms
+        ));
 
         fs::write(mangohud_config_path, config_lines.join("\n"))?;
 
@@ -238,7 +246,8 @@ impl OsdManager {
          - Fedora: sudo dnf install mangohud\n\
          - Flatpak: flatpak install flathub org.freedesktop.Platform.VulkanLayer.MangoHud\n\
          \n\
-         Then enable OSD with: nvctl osd enable".to_string()
+         Then enable OSD with: nvctl osd enable"
+            .to_string()
     }
 
     pub fn get_config(&self) -> &OsdConfig {

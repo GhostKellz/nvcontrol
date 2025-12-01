@@ -31,7 +31,7 @@ pub struct BenchmarkResult {
 pub struct BenchmarkComparison {
     pub baseline: BenchmarkResult,
     pub current: BenchmarkResult,
-    pub performance_gain: f64,  // Percentage
+    pub performance_gain: f64, // Percentage
     pub temp_delta: f32,
     pub power_delta: f32,
 }
@@ -59,11 +59,13 @@ impl BenchmarkSuite {
 
         let nvml = nvml_wrapper::Nvml::init()
             .map_err(|e| NvControlError::GpuQueryFailed(format!("NVML init failed: {}", e)))?;
-        let device = nvml.device_by_index(0)
+        let device = nvml
+            .device_by_index(0)
             .map_err(|e| NvControlError::GpuQueryFailed(format!("Device not found: {}", e)))?;
 
         let gpu_name = device.name().unwrap_or_else(|_| "Unknown GPU".to_string());
-        let driver_version = nvml.sys_driver_version()
+        let driver_version = nvml
+            .sys_driver_version()
             .unwrap_or_else(|_| "Unknown".to_string());
 
         println!("   GPU: {}", gpu_name);
@@ -252,7 +254,8 @@ impl BenchmarkSuite {
         baseline: &BenchmarkResult,
         current: &BenchmarkResult,
     ) -> BenchmarkComparison {
-        let performance_gain = ((current.total_score - baseline.total_score) / baseline.total_score) * 100.0;
+        let performance_gain =
+            ((current.total_score - baseline.total_score) / baseline.total_score) * 100.0;
         let temp_delta = current.avg_temp - baseline.avg_temp;
         let power_delta = current.avg_power - baseline.avg_power;
 

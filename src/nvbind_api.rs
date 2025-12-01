@@ -2,7 +2,6 @@
 ///
 /// Unified GPU management API between nvcontrol and nvbind
 /// Container-aware monitoring for Docker, Podman, systemd-nspawn
-
 use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -80,7 +79,8 @@ impl UnifiedGpuApi {
 
         // Update internal cache
         for container in &containers {
-            self.containers.insert(container.id.clone(), container.clone());
+            self.containers
+                .insert(container.id.clone(), container.clone());
         }
 
         Ok(containers)
@@ -226,7 +226,12 @@ impl UnifiedGpuApi {
     fn get_container_gpu_docker(&self, container_id: &str) -> NvResult<Option<u32>> {
         // Check if container was started with --gpus flag
         let output = Command::new("docker")
-            .args(&["inspect", container_id, "--format", "{{.HostConfig.DeviceRequests}}"])
+            .args(&[
+                "inspect",
+                container_id,
+                "--format",
+                "{{.HostConfig.DeviceRequests}}",
+            ])
             .output()
             .map_err(|e| {
                 NvControlError::ContainerOperationFailed(format!("Docker inspect failed: {}", e))
@@ -245,7 +250,12 @@ impl UnifiedGpuApi {
 
     fn get_container_gpu_podman(&self, container_id: &str) -> NvResult<Option<u32>> {
         let output = Command::new("podman")
-            .args(&["inspect", container_id, "--format", "{{.HostConfig.Devices}}"])
+            .args(&[
+                "inspect",
+                container_id,
+                "--format",
+                "{{.HostConfig.Devices}}",
+            ])
             .output()
             .map_err(|e| {
                 NvControlError::ContainerOperationFailed(format!("Podman inspect failed: {}", e))
@@ -307,7 +317,11 @@ impl UnifiedGpuApi {
         })
     }
 
-    fn get_container_pids(&self, container_id: &str, runtime: ContainerRuntime) -> NvResult<Vec<u32>> {
+    fn get_container_pids(
+        &self,
+        container_id: &str,
+        runtime: ContainerRuntime,
+    ) -> NvResult<Vec<u32>> {
         let output = match runtime {
             ContainerRuntime::Docker => Command::new("docker")
                 .args(&["top", container_id, "-eo", "pid"])
@@ -347,9 +361,7 @@ impl UnifiedGpuApi {
                 "--format=csv,noheader,nounits",
             ])
             .output()
-            .map_err(|e| {
-                NvControlError::CommandFailed(format!("nvidia-smi failed: {}", e))
-            })?;
+            .map_err(|e| NvControlError::CommandFailed(format!("nvidia-smi failed: {}", e)))?;
 
         let stdout = String::from_utf8_lossy(&output.stdout);
 

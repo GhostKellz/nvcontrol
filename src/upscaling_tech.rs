@@ -1,7 +1,6 @@
 /// Phase 4.3: Upscaling Technology
 ///
 /// DLSS configuration, FSR integration, XeSS support, quality preset management, resolution scaling
-
 use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -206,13 +205,12 @@ impl DlssCapability {
     fn check_dlss_support(gpu_id: u32) -> NvResult<(bool, Option<String>)> {
         use nvml_wrapper::Nvml;
 
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
 
-        let device = nvml.device_by_index(gpu_id).map_err(|e| {
-            NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e))
-        })?;
+        let device = nvml
+            .device_by_index(gpu_id)
+            .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e)))?;
 
         let name = device.name().unwrap_or_default();
 
@@ -247,13 +245,12 @@ impl DlssCapability {
     pub fn supports_frame_generation(&self) -> NvResult<bool> {
         use nvml_wrapper::Nvml;
 
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
 
-        let device = nvml.device_by_index(self.gpu_id).map_err(|e| {
-            NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e))
-        })?;
+        let device = nvml
+            .device_by_index(self.gpu_id)
+            .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e)))?;
 
         let compute_cap = device.cuda_compute_capability().ok();
 
@@ -289,13 +286,11 @@ impl UpscalingProfileManager {
             return Ok(());
         }
 
-        let content = std::fs::read_to_string(&self.config_path).map_err(|e| {
-            NvControlError::ConfigError(format!("Failed to read profiles: {}", e))
-        })?;
+        let content = std::fs::read_to_string(&self.config_path)
+            .map_err(|e| NvControlError::ConfigError(format!("Failed to read profiles: {}", e)))?;
 
-        self.profiles = serde_json::from_str(&content).map_err(|e| {
-            NvControlError::ConfigError(format!("Failed to parse profiles: {}", e))
-        })?;
+        self.profiles = serde_json::from_str(&content)
+            .map_err(|e| NvControlError::ConfigError(format!("Failed to parse profiles: {}", e)))?;
 
         Ok(())
     }
@@ -312,9 +307,8 @@ impl UpscalingProfileManager {
             NvControlError::ConfigError(format!("Failed to serialize profiles: {}", e))
         })?;
 
-        std::fs::write(&self.config_path, content).map_err(|e| {
-            NvControlError::ConfigError(format!("Failed to write profiles: {}", e))
-        })?;
+        std::fs::write(&self.config_path, content)
+            .map_err(|e| NvControlError::ConfigError(format!("Failed to write profiles: {}", e)))?;
 
         Ok(())
     }
@@ -487,10 +481,7 @@ mod tests {
 
     #[test]
     fn test_upscaling_config() {
-        let config = UpscalingConfig::new_dlss(
-            "Cyberpunk 2077".to_string(),
-            DlssQuality::Quality,
-        );
+        let config = UpscalingConfig::new_dlss("Cyberpunk 2077".to_string(), DlssQuality::Quality);
 
         assert_eq!(config.tech, UpscalingTech::DLSS);
         assert_eq!(config.dlss_quality, Some(DlssQuality::Quality));
@@ -501,10 +492,7 @@ mod tests {
     fn test_resolution_scaler() {
         let scaler = ResolutionScaler::new(3840, 2160);
 
-        let config = UpscalingConfig::new_dlss(
-            "Test Game".to_string(),
-            DlssQuality::Performance,
-        );
+        let config = UpscalingConfig::new_dlss("Test Game".to_string(), DlssQuality::Performance);
 
         let (render_w, render_h) = scaler.calculate_render_resolution(&config);
 
@@ -545,10 +533,7 @@ mod tests {
     fn test_profile_manager() {
         let mut manager = UpscalingProfileManager::new();
 
-        let config = UpscalingConfig::new_dlss(
-            "Test Game".to_string(),
-            DlssQuality::Balanced,
-        );
+        let config = UpscalingConfig::new_dlss("Test Game".to_string(), DlssQuality::Balanced);
 
         manager.set_profile(config);
 

@@ -37,7 +37,7 @@ pub struct MonitoringData {
     pub mem_temp: Option<f32>,
 
     // Fan Control
-    pub fan_speed: Vec<u32>,      // ASUS Astral has 4 fans
+    pub fan_speed: Vec<u32>, // ASUS Astral has 4 fans
     pub fan_rpm: Vec<u32>,
     pub fan_mode: FanMode,
 
@@ -70,24 +70,24 @@ pub enum FanMode {
     Custom(Vec<(u8, u8)>), // (temp, fan_speed) curve
     Aggressive,
     Silent,
-    QuadFanOptimized,      // Special mode for ASUS Astral 4-fan
+    QuadFanOptimized, // Special mode for ASUS Astral 4-fan
 }
 
 /// Overclocking controls (like ASUS GPU Tweak II)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OverclockingControls {
     // Core
-    pub core_clock_offset: i32,        // MHz
-    pub core_voltage_offset: i32,      // mV
+    pub core_clock_offset: i32,   // MHz
+    pub core_voltage_offset: i32, // mV
     pub core_voltage_locked: bool,
 
     // Memory
-    pub mem_clock_offset: i32,         // MHz
-    pub mem_voltage_offset: i32,       // mV
+    pub mem_clock_offset: i32,   // MHz
+    pub mem_voltage_offset: i32, // mV
 
     // Power
-    pub power_limit: u8,               // Percentage (50-130%)
-    pub temp_limit: u8,                // Celsius
+    pub power_limit: u8, // Percentage (50-130%)
+    pub temp_limit: u8,  // Celsius
 
     // Advanced
     pub voltage_curve: Vec<(u32, u32)>, // (MHz, mV) points
@@ -100,10 +100,10 @@ pub struct OverclockingControls {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum GpuTweakMode {
-    Silent,       // Quiet, low power
-    Standard,     // Balanced
-    OC,           // Overclocked
-    Custom,       // User-defined
+    Silent,   // Quiet, low power
+    Standard, // Balanced
+    OC,       // Overclocked
+    Custom,   // User-defined
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -202,7 +202,7 @@ pub struct RecordingState {
 pub enum VideoEncoder {
     NvencH264,
     NvencH265,
-    NvencAv1,  // RTX 50-series
+    NvencAv1, // RTX 50-series
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -393,17 +393,13 @@ impl GamingDashboard {
                 mem_offset: -200,
                 power_limit: 85,
                 temp_limit: 75,
-                fan_curve: vec![
-                    (30, 20), (40, 25), (50, 30),
-                    (60, 35), (70, 45), (80, 60),
-                ],
+                fan_curve: vec![(30, 20), (40, 25), (50, 30), (60, 35), (70, 45), (80, 60)],
                 fan_mode: FanMode::Silent,
                 vibrance_level: 400,
                 rgb_preset: "Dim".to_string(),
                 auto_apply_games: vec![],
                 auto_apply_on_startup: false,
             },
-
             // Standard Mode
             PerformanceProfile {
                 name: "Standard".to_string(),
@@ -413,53 +409,39 @@ impl GamingDashboard {
                 mem_offset: 0,
                 power_limit: 100,
                 temp_limit: 85,
-                fan_curve: vec![
-                    (30, 30), (40, 35), (50, 45),
-                    (60, 55), (70, 70), (80, 85),
-                ],
+                fan_curve: vec![(30, 30), (40, 35), (50, 45), (60, 55), (70, 70), (80, 85)],
                 fan_mode: FanMode::Auto,
                 vibrance_level: 600,
                 rgb_preset: "ROG Red".to_string(),
                 auto_apply_games: vec![],
                 auto_apply_on_startup: true,
             },
-
             // OC Mode (ASUS Astral optimized)
             PerformanceProfile {
                 name: "OC Mode".to_string(),
                 description: "Factory overclock + headroom".to_string(),
                 icon: "🚀".to_string(),
-                core_offset: 175,  // ASUS Astral safe limit
-                mem_offset: 1500,  // GDDR7 can handle it
-                power_limit: 105,  // 630W max
+                core_offset: 175, // ASUS Astral safe limit
+                mem_offset: 1500, // GDDR7 can handle it
+                power_limit: 105, // 630W max
                 temp_limit: 90,
-                fan_curve: vec![
-                    (30, 35), (40, 45), (50, 55),
-                    (60, 65), (70, 80), (80, 95),
-                ],
+                fan_curve: vec![(30, 35), (40, 45), (50, 55), (60, 65), (70, 80), (80, 95)],
                 fan_mode: FanMode::QuadFanOptimized,
                 vibrance_level: 700,
                 rgb_preset: "Rainbow Wave".to_string(),
-                auto_apply_games: vec![
-                    "cyberpunk2077".to_string(),
-                    "starfield".to_string(),
-                ],
+                auto_apply_games: vec!["cyberpunk2077".to_string(), "starfield".to_string()],
                 auto_apply_on_startup: false,
             },
-
             // Extreme Mode (for benchmarking)
             PerformanceProfile {
                 name: "Extreme".to_string(),
                 description: "Maximum performance (loud!)".to_string(),
                 icon: "💥".to_string(),
-                core_offset: 210,  // 1.2x safe limit
+                core_offset: 210, // 1.2x safe limit
                 mem_offset: 1650,
                 power_limit: 105,
                 temp_limit: 92,
-                fan_curve: vec![
-                    (30, 50), (40, 60), (50, 70),
-                    (60, 80), (70, 90), (80, 100),
-                ],
+                fan_curve: vec![(30, 50), (40, 60), (50, 70), (60, 80), (70, 90), (80, 100)],
                 fan_mode: FanMode::Aggressive,
                 vibrance_level: 800,
                 rgb_preset: "Temperature Reactive".to_string(),
@@ -498,11 +480,15 @@ impl GamingDashboard {
         println!("  Temperature:  {:.1}°C", self.monitoring.gpu_temp);
         println!("  Usage:        {:.1}%", self.monitoring.gpu_usage);
         println!("  Core Clock:   {} MHz", self.monitoring.gpu_clock);
-        println!("  Memory:       {} / {} MB",
+        println!(
+            "  Memory:       {} / {} MB",
             self.monitoring.mem_usage / 1024 / 1024,
-            self.monitoring.mem_total / 1024 / 1024);
-        println!("  Power:        {:.1}W / {:.1}W",
-            self.monitoring.gpu_power, self.monitoring.gpu_power_limit);
+            self.monitoring.mem_total / 1024 / 1024
+        );
+        println!(
+            "  Power:        {:.1}W / {:.1}W",
+            self.monitoring.gpu_power, self.monitoring.gpu_power_limit
+        );
 
         if !self.monitoring.fan_speed.is_empty() {
             println!("\n🌀 Fan Speeds (Quad-Fan):");
@@ -512,8 +498,14 @@ impl GamingDashboard {
         }
 
         println!("\n⚡ Overclocking:");
-        println!("  Core Offset:  {:+} MHz", self.overclocking.core_clock_offset);
-        println!("  Memory Offset: {:+} MHz", self.overclocking.mem_clock_offset);
+        println!(
+            "  Core Offset:  {:+} MHz",
+            self.overclocking.core_clock_offset
+        );
+        println!(
+            "  Memory Offset: {:+} MHz",
+            self.overclocking.mem_clock_offset
+        );
         println!("  Power Limit:  {}%", self.overclocking.power_limit);
         println!("  Temp Limit:   {}°C", self.overclocking.temp_limit);
 

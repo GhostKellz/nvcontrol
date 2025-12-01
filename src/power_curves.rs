@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PowerCurve {
-    pub points: Vec<CurvePoint>,  // x = temperature (°C), y = power limit (%)
+    pub points: Vec<CurvePoint>, // x = temperature (°C), y = power limit (%)
     pub selected_point: Option<usize>,
 }
 
@@ -16,10 +16,10 @@ impl Default for PowerCurve {
     fn default() -> Self {
         Self {
             points: vec![
-                CurvePoint::new(40.0, 100.0),  // Cool: 100% power
-                CurvePoint::new(60.0, 90.0),   // Warm: 90% power
-                CurvePoint::new(75.0, 80.0),   // Hot: 80% power
-                CurvePoint::new(85.0, 70.0),   // Very hot: 70% power
+                CurvePoint::new(40.0, 100.0), // Cool: 100% power
+                CurvePoint::new(60.0, 90.0),  // Warm: 90% power
+                CurvePoint::new(75.0, 80.0),  // Hot: 80% power
+                CurvePoint::new(85.0, 70.0),  // Very hot: 70% power
             ],
             selected_point: None,
         }
@@ -34,7 +34,9 @@ impl PowerCurve {
     pub fn add_point(&mut self, temp: f64, power: f64) {
         let point = CurvePoint::new(temp, power);
 
-        let insert_pos = self.points.iter()
+        let insert_pos = self
+            .points
+            .iter()
             .position(|p| p.x > temp)
             .unwrap_or(self.points.len());
 
@@ -50,7 +52,7 @@ impl PowerCurve {
     pub fn update_point(&mut self, index: usize, temp: f64, power: f64) {
         if let Some(point) = self.points.get_mut(index) {
             point.x = temp.clamp(0.0, 100.0);
-            point.y = power.clamp(50.0, 120.0);  // 50-120% of TDP
+            point.y = power.clamp(50.0, 120.0); // 50-120% of TDP
         }
 
         self.points.sort_by(|a, b| a.x.partial_cmp(&b.x).unwrap());
@@ -98,9 +100,9 @@ pub struct PowerSchedule {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScheduleEntry {
-    pub start_hour: u8,      // 0-23
-    pub end_hour: u8,        // 0-23
-    pub power_limit: u32,    // Percentage of TDP
+    pub start_hour: u8,   // 0-23
+    pub end_hour: u8,     // 0-23
+    pub power_limit: u32, // Percentage of TDP
     pub days: Vec<Weekday>,
     pub name: String,
 }
@@ -179,8 +181,8 @@ impl PowerSchedule {
             return None;
         }
 
-        use chrono::Timelike;
         use chrono::Datelike;
+        use chrono::Timelike;
 
         let now = chrono::Local::now();
         let current_hour = now.hour() as u8;
@@ -213,7 +215,7 @@ impl PowerSchedule {
 /// Per-game power profiles
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GamePowerProfiles {
-    pub profiles: HashMap<String, u32>,  // game_executable -> power_limit (%)
+    pub profiles: HashMap<String, u32>, // game_executable -> power_limit (%)
 }
 
 impl Default for GamePowerProfiles {
@@ -290,8 +292,9 @@ impl PowerManagementConfig {
         let config_path = config_dir.join("power_management.toml");
 
         if config_path.exists() {
-            let contents = std::fs::read_to_string(&config_path)
-                .map_err(|e| NvControlError::ConfigError(format!("Failed to read config: {}", e)))?;
+            let contents = std::fs::read_to_string(&config_path).map_err(|e| {
+                NvControlError::ConfigError(format!("Failed to read config: {}", e))
+            })?;
 
             toml::from_str(&contents)
                 .map_err(|e| NvControlError::ConfigError(format!("Failed to parse config: {}", e)))
@@ -306,13 +309,15 @@ impl PowerManagementConfig {
             .ok_or_else(|| NvControlError::ConfigError("No config directory".into()))?
             .join("nvcontrol");
 
-        std::fs::create_dir_all(&config_dir)
-            .map_err(|e| NvControlError::ConfigError(format!("Failed to create config dir: {}", e)))?;
+        std::fs::create_dir_all(&config_dir).map_err(|e| {
+            NvControlError::ConfigError(format!("Failed to create config dir: {}", e))
+        })?;
 
         let config_path = config_dir.join("power_management.toml");
 
-        let toml = toml::to_string_pretty(self)
-            .map_err(|e| NvControlError::ConfigError(format!("Failed to serialize config: {}", e)))?;
+        let toml = toml::to_string_pretty(self).map_err(|e| {
+            NvControlError::ConfigError(format!("Failed to serialize config: {}", e))
+        })?;
 
         std::fs::write(&config_path, toml)
             .map_err(|e| NvControlError::ConfigError(format!("Failed to write config: {}", e)))?;

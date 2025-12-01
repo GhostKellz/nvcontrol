@@ -10,13 +10,13 @@ use std::process::Command;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GpuDevice {
-    pub pci_address: String,      // e.g., "0000:01:00.0"
-    pub vendor_id: String,         // e.g., "10de" (NVIDIA)
-    pub device_id: String,         // e.g., "2684" (RTX 4090)
+    pub pci_address: String, // e.g., "0000:01:00.0"
+    pub vendor_id: String,   // e.g., "10de" (NVIDIA)
+    pub device_id: String,   // e.g., "2684" (RTX 4090)
     pub subsystem_id: String,
-    pub name: String,              // e.g., "NVIDIA GeForce RTX 4090"
-    pub driver: Option<String>,    // Current driver bound
-    pub iommu_group: Option<u32>,  // IOMMU group number
+    pub name: String,             // e.g., "NVIDIA GeForce RTX 4090"
+    pub driver: Option<String>,   // Current driver bound
+    pub iommu_group: Option<u32>, // IOMMU group number
     pub numa_node: Option<u32>,
 }
 
@@ -32,10 +32,10 @@ pub struct VfioConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PassthroughMode {
-    VFIO,           // Full VFIO passthrough to VM
-    Container,      // Docker/Podman container with GPU
-    SplitDriver,    // nvidia-open module split mode
-    MIG,            // Multi-Instance GPU (A100/H100)
+    VFIO,        // Full VFIO passthrough to VM
+    Container,   // Docker/Podman container with GPU
+    SplitDriver, // nvidia-open module split mode
+    MIG,         // Multi-Instance GPU (A100/H100)
 }
 
 pub struct GpuPassthroughManager {
@@ -129,7 +129,9 @@ impl GpuPassthroughManager {
         link.file_name()
             .and_then(|n| n.to_str())
             .and_then(|s| s.parse().ok())
-            .ok_or_else(|| NvControlError::GpuQueryFailed("Failed to parse IOMMU group".to_string()))
+            .ok_or_else(|| {
+                NvControlError::GpuQueryFailed("Failed to parse IOMMU group".to_string())
+            })
     }
 
     fn get_numa_node(pci_address: &str) -> NvResult<u32> {
@@ -147,7 +149,9 @@ impl GpuPassthroughManager {
     pub fn check_iommu_enabled() -> bool {
         // Check kernel command line for iommu parameters
         if let Ok(cmdline) = fs::read_to_string("/proc/cmdline") {
-            return cmdline.contains("iommu=pt") || cmdline.contains("intel_iommu=on") || cmdline.contains("amd_iommu=on");
+            return cmdline.contains("iommu=pt")
+                || cmdline.contains("intel_iommu=on")
+                || cmdline.contains("amd_iommu=on");
         }
 
         // Check if IOMMU groups exist
@@ -173,11 +177,15 @@ impl GpuPassthroughManager {
             Command::new("sudo")
                 .args(&["modprobe", "vfio-pci"])
                 .status()
-                .map_err(|e| NvControlError::CommandFailed(format!("Failed to load vfio-pci: {}", e)))?;
+                .map_err(|e| {
+                    NvControlError::CommandFailed(format!("Failed to load vfio-pci: {}", e))
+                })?;
         }
 
         // Get vendor and device IDs
-        let device = self.devices.iter()
+        let device = self
+            .devices
+            .iter()
             .find(|d| d.pci_address == pci_address)
             .ok_or_else(|| NvControlError::GpuQueryFailed("Device not found".to_string()))?;
 
@@ -186,8 +194,9 @@ impl GpuPassthroughManager {
             if current_driver != "vfio-pci" {
                 println!("   Unbinding from current driver: {}", current_driver);
                 let unbind_path = format!("/sys/bus/pci/devices/{}/driver/unbind", pci_address);
-                fs::write(&unbind_path, pci_address)
-                    .map_err(|e| NvControlError::CommandFailed(format!("Failed to unbind: {}", e)))?;
+                fs::write(&unbind_path, pci_address).map_err(|e| {
+                    NvControlError::CommandFailed(format!("Failed to unbind: {}", e))
+                })?;
             }
         }
 
@@ -206,8 +215,9 @@ impl GpuPassthroughManager {
 
         // Unbind from VFIO
         let unbind_path = "/sys/bus/pci/drivers/vfio-pci/unbind";
-        fs::write(unbind_path, pci_address)
-            .map_err(|e| NvControlError::CommandFailed(format!("Failed to unbind from VFIO: {}", e)))?;
+        fs::write(unbind_path, pci_address).map_err(|e| {
+            NvControlError::CommandFailed(format!("Failed to unbind from VFIO: {}", e))
+        })?;
 
         // Rescan PCI bus to let nvidia driver claim it
         fs::write("/sys/bus/pci/rescan", "1")
@@ -221,7 +231,9 @@ impl GpuPassthroughManager {
     pub fn setup_persistent_vfio(&self, pci_address: &str) -> NvResult<()> {
         println!("🔧 Setting up persistent VFIO binding...");
 
-        let device = self.devices.iter()
+        let device = self
+            .devices
+            .iter()
             .find(|d| d.pci_address == pci_address)
             .ok_or_else(|| NvControlError::GpuQueryFailed("Device not found".to_string()))?;
 
@@ -237,7 +249,10 @@ impl GpuPassthroughManager {
 
         println!("   Writing config to: {}", config_path);
         println!("   Content:\n{}", config_content);
-        println!("\n⚠️  Run with sudo: sudo nvctl passthrough persistent {}", pci_address);
+        println!(
+            "\n⚠️  Run with sudo: sudo nvctl passthrough persistent {}",
+            pci_address
+        );
 
         Ok(())
     }
@@ -256,9 +271,15 @@ impl GpuPassthroughManager {
         );
 
         // Check Docker runtime
-        if let Ok(output) = Command::new("docker").args(&["info", "--format", "{{.Runtimes}}"]).output() {
+        if let Ok(output) = Command::new("docker")
+            .args(&["info", "--format", "{{.Runtimes}}"])
+            .output()
+        {
             let runtimes = String::from_utf8_lossy(&output.stdout);
-            status.insert("docker-nvidia-runtime".to_string(), runtimes.contains("nvidia"));
+            status.insert(
+                "docker-nvidia-runtime".to_string(),
+                runtimes.contains("nvidia"),
+            );
         }
 
         // Check Podman CDI
@@ -320,7 +341,10 @@ impl GpuPassthroughManager {
 
         // This requires root
         println!("   Run: sudo sysctl vm.nr_hugepages={}", num_pages);
-        println!("   For persistent: echo 'vm.nr_hugepages={}' | sudo tee -a /etc/sysctl.conf", num_pages);
+        println!(
+            "   For persistent: echo 'vm.nr_hugepages={}' | sudo tee -a /etc/sysctl.conf",
+            num_pages
+        );
 
         Ok(())
     }
@@ -403,11 +427,14 @@ impl GpuPassthroughManager {
 
     /// Generate QEMU command line for GPU passthrough
     pub fn generate_qemu_command(&self, pci_address: &str) -> NvResult<String> {
-        let device = self.devices.iter()
+        let device = self
+            .devices
+            .iter()
             .find(|d| d.pci_address == pci_address)
             .ok_or_else(|| NvControlError::GpuQueryFailed("Device not found".to_string()))?;
 
-        let _iommu_group = device.iommu_group
+        let _iommu_group = device
+            .iommu_group
             .ok_or_else(|| NvControlError::GpuQueryFailed("No IOMMU group".to_string()))?;
 
         let qemu_args = format!(

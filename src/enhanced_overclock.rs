@@ -1,7 +1,6 @@
 /// Phase 3.1: Enhanced Overclocking
 ///
 /// Per-game overclock profiles, automatic stability testing, voltage curves, and memory timing
-
 use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -47,9 +46,17 @@ pub struct FanPoint {
 /// Stability test result
 #[derive(Debug, Clone)]
 pub enum StabilityResult {
-    Stable { duration_secs: u64, max_temp: i32 },
-    Unstable { reason: String, failed_after_secs: u64 },
-    Aborted { reason: String },
+    Stable {
+        duration_secs: u64,
+        max_temp: i32,
+    },
+    Unstable {
+        reason: String,
+        failed_after_secs: u64,
+    },
+    Aborted {
+        reason: String,
+    },
 }
 
 /// Automatic stability tester
@@ -67,11 +74,7 @@ impl StabilityTester {
     }
 
     /// Run stability test with given overclock settings
-    pub fn test_stability(
-        &self,
-        gpu_offset: i32,
-        memory_offset: i32,
-    ) -> NvResult<StabilityResult> {
+    pub fn test_stability(&self, gpu_offset: i32, memory_offset: i32) -> NvResult<StabilityResult> {
         use std::process::Command;
         use std::time::{Duration, Instant};
 
@@ -94,9 +97,7 @@ impl StabilityTester {
 
         if stress_test.is_err() {
             // Try alternative stress test
-            let alt_stress = Command::new("glmark2")
-                .arg("--run-forever")
-                .spawn();
+            let alt_stress = Command::new("glmark2").arg("--run-forever").spawn();
 
             if alt_stress.is_err() {
                 return Err(NvControlError::RuntimeError(
@@ -201,13 +202,12 @@ impl StabilityTester {
     fn check_gpu_status(&self) -> NvResult<(i32, bool)> {
         use nvml_wrapper::Nvml;
 
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
 
-        let device = nvml.device_by_index(self.gpu_id).map_err(|e| {
-            NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e))
-        })?;
+        let device = nvml
+            .device_by_index(self.gpu_id)
+            .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e)))?;
 
         let temp = device
             .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
@@ -298,13 +298,11 @@ impl OverclockProfileManager {
             return Ok(());
         }
 
-        let content = std::fs::read_to_string(&self.config_path).map_err(|e| {
-            NvControlError::ConfigError(format!("Failed to read profiles: {}", e))
-        })?;
+        let content = std::fs::read_to_string(&self.config_path)
+            .map_err(|e| NvControlError::ConfigError(format!("Failed to read profiles: {}", e)))?;
 
-        self.profiles = serde_json::from_str(&content).map_err(|e| {
-            NvControlError::ConfigError(format!("Failed to parse profiles: {}", e))
-        })?;
+        self.profiles = serde_json::from_str(&content)
+            .map_err(|e| NvControlError::ConfigError(format!("Failed to parse profiles: {}", e)))?;
 
         Ok(())
     }
@@ -321,9 +319,8 @@ impl OverclockProfileManager {
             NvControlError::ConfigError(format!("Failed to serialize profiles: {}", e))
         })?;
 
-        std::fs::write(&self.config_path, content).map_err(|e| {
-            NvControlError::ConfigError(format!("Failed to write profiles: {}", e))
-        })?;
+        std::fs::write(&self.config_path, content)
+            .map_err(|e| NvControlError::ConfigError(format!("Failed to write profiles: {}", e)))?;
 
         Ok(())
     }
@@ -458,9 +455,7 @@ mod tests {
 
         manager.set_profile(profile);
 
-        assert!(manager
-            .get_profile_by_exe("/path/to/game.exe")
-            .is_some());
+        assert!(manager.get_profile_by_exe("/path/to/game.exe").is_some());
         assert!(manager.get_profile_by_exe("game.exe").is_some());
     }
 }

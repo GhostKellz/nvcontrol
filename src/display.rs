@@ -180,10 +180,7 @@ pub fn set_gamma(display_id: usize, gamma: f32) -> crate::NvResult<()> {
 
     // Try nvidia-settings first (works on X11)
     let result = Command::new("nvidia-settings")
-        .args(&[
-            "-a",
-            &format!("[gpu:0]/Gamma={}", gamma),
-        ])
+        .args(&["-a", &format!("[gpu:0]/Gamma={}", gamma)])
         .output();
 
     if let Ok(output) = result {
@@ -209,7 +206,10 @@ pub fn set_gamma(display_id: usize, gamma: f32) -> crate::NvResult<()> {
 
         if let Ok(output) = result {
             if output.status.success() {
-                println!("✅ Gamma set to {:.2} via xrandr for {}", gamma, display_name);
+                println!(
+                    "✅ Gamma set to {:.2} via xrandr for {}",
+                    gamma, display_name
+                );
                 return Ok(());
             }
         }
@@ -217,7 +217,12 @@ pub fn set_gamma(display_id: usize, gamma: f32) -> crate::NvResult<()> {
 
     // Wayland: Try wlr-randr for wlroots compositors
     let result = Command::new("wlr-randr")
-        .args(&["--output", &format!("HDMI-A-{}", display_id), "--gamma", &gamma.to_string()])
+        .args(&[
+            "--output",
+            &format!("HDMI-A-{}", display_id),
+            "--gamma",
+            &gamma.to_string(),
+        ])
         .output();
 
     if let Ok(output) = result {
@@ -228,7 +233,7 @@ pub fn set_gamma(display_id: usize, gamma: f32) -> crate::NvResult<()> {
     }
 
     Err(crate::NvControlError::DisplayDetectionFailed(
-        "Failed to set gamma - no supported method available".to_string()
+        "Failed to set gamma - no supported method available".to_string(),
     ))
 }
 

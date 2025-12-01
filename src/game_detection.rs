@@ -90,8 +90,9 @@ impl GameDetector {
         let filename = format!("{}.toml", profile.executable.replace("/", "_"));
         let path = self.profiles_dir.join(filename);
 
-        let toml_str = toml::to_string_pretty(profile)
-            .map_err(|e| NvControlError::ConfigError(format!("Failed to serialize profile: {}", e)))?;
+        let toml_str = toml::to_string_pretty(profile).map_err(|e| {
+            NvControlError::ConfigError(format!("Failed to serialize profile: {}", e))
+        })?;
 
         fs::write(path, toml_str)?;
         println!("✅ Saved profile for {}", profile.name);
@@ -118,20 +119,19 @@ impl GameDetector {
 
         for (pid, process) in self.system.processes() {
             let exe_name = process.name();
-            let exe_path = process.exe()
+            let exe_path = process
+                .exe()
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_default();
 
             // Check if this process matches any known game profile
             if let Some(profile) = self.profiles.get(exe_name).or_else(|| {
                 // Try matching by full path
-                self.profiles.iter().find_map(|(k, v)| {
-                    if exe_path.contains(k) {
-                        Some(v)
-                    } else {
-                        None
-                    }
-                })
+                self.profiles.iter().find_map(
+                    |(k, v)| {
+                        if exe_path.contains(k) { Some(v) } else { None }
+                    },
+                )
             }) {
                 self.active_games.push(DetectedGame {
                     name: profile.name.clone(),
@@ -228,7 +228,8 @@ impl GameDetector {
         // Apply fan curve
         if let Some(ref curve) = profile.fan_curve {
             println!("   🌀 Fan curve: {} points", curve.len());
-            let curve_points: Vec<(u8, u8)> = curve.iter()
+            let curve_points: Vec<(u8, u8)> = curve
+                .iter()
                 .map(|(temp, speed)| (*temp as u8, *speed as u8))
                 .collect();
             crate::fan::set_fan_curve(0, &curve_points)?;
@@ -250,7 +251,9 @@ impl GameDetector {
         #[cfg(target_os = "linux")]
         {
             // Find process by executable name
-            self.system.processes().iter()
+            self.system
+                .processes()
+                .iter()
                 .find(|(_, proc)| proc.name() == profile.executable.as_str())
                 .map(|(pid, _)| {
                     let nice_value = match profile.priority {

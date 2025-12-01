@@ -2,12 +2,10 @@ use clap::{Parser, Subcommand};
 use console::{Key, Term, style};
 use indicatif::{ProgressBar, ProgressStyle};
 use nvcontrol::{
-    asus_power_detector,
-    display, drivers, fan, gamescope,
+    arch_integration, asus_power_detector, display, drivers, fan, gamescope,
     gpu::{self, OutputFormat},
-    latency, monitoring, overclocking, power, recording, upscaling, vrr,
-    wayland_nvidia, kde_optimizer, power_profiles_daemon, arch_integration,
-    gsp_firmware, multimonitor,
+    gsp_firmware, kde_optimizer, latency, monitoring, multimonitor, overclocking, power,
+    power_profiles_daemon, recording, upscaling, vrr, wayland_nvidia,
 };
 use serde_json;
 use std::time::Duration;
@@ -1779,52 +1777,64 @@ fn main() {
                 Ok(()) => println!("✅ Stress test completed"),
                 Err(e) => eprintln!("❌ Stress test failed: {}", e),
             },
-            GpuSubcommand::List { format } => {
-                match nvcontrol::multi_gpu::detect_gpus() {
-                    Ok(gpus) => {
-                        match format {
-                            OutputFormat::Json => {
-                                println!("{}", serde_json::to_string_pretty(&gpus).unwrap());
+            GpuSubcommand::List { format } => match nvcontrol::multi_gpu::detect_gpus() {
+                Ok(gpus) => match format {
+                    OutputFormat::Json => {
+                        println!("{}", serde_json::to_string_pretty(&gpus).unwrap());
+                    }
+                    OutputFormat::Table => {
+                        println!(
+                            "\n┌─────────────────────────────────────────────────────────────────┐"
+                        );
+                        println!(
+                            "│                       Detected GPUs                             │"
+                        );
+                        println!(
+                            "├──────┬─────────────────────┬──────────┬────────────┬───────────┤"
+                        );
+                        println!(
+                            "│ Idx  │ Name                │ Temp(°C) │ Util(%)    │ VRAM(GB)  │"
+                        );
+                        println!(
+                            "├──────┼─────────────────────┼──────────┼────────────┼───────────┤"
+                        );
+                        for gpu in &gpus {
+                            println!(
+                                "│ {:4} │ {:19} │ {:8.1} │ {:10.1} │ {:9.1} │",
+                                gpu.index,
+                                &gpu.name[..gpu.name.len().min(19)],
+                                gpu.temperature,
+                                gpu.utilization,
+                                gpu.vram_total as f64 / 1024.0 / 1024.0 / 1024.0
+                            );
+                        }
+                        println!(
+                            "└──────┴─────────────────────┴──────────┴────────────┴───────────┘"
+                        );
+                    }
+                    OutputFormat::Human => {
+                        println!("\n📊 Detected GPUs:\n");
+                        for gpu in &gpus {
+                            println!("GPU {}:", gpu.index);
+                            println!("  Name: {}", gpu.name);
+                            println!("  Temperature: {:.1}°C", gpu.temperature);
+                            println!("  Utilization: {:.1}%", gpu.utilization);
+                            println!(
+                                "  VRAM: {:.2} GB",
+                                gpu.vram_total as f64 / 1024.0 / 1024.0 / 1024.0
+                            );
+                            if let Some(cuda) = gpu.cuda_cores {
+                                println!("  CUDA Cores: {}", cuda);
                             }
-                            OutputFormat::Table => {
-                                println!("\n┌─────────────────────────────────────────────────────────────────┐");
-                                println!("│                       Detected GPUs                             │");
-                                println!("├──────┬─────────────────────┬──────────┬────────────┬───────────┤");
-                                println!("│ Idx  │ Name                │ Temp(°C) │ Util(%)    │ VRAM(GB)  │");
-                                println!("├──────┼─────────────────────┼──────────┼────────────┼───────────┤");
-                                for gpu in &gpus {
-                                    println!("│ {:4} │ {:19} │ {:8.1} │ {:10.1} │ {:9.1} │",
-                                        gpu.index,
-                                        &gpu.name[..gpu.name.len().min(19)],
-                                        gpu.temperature,
-                                        gpu.utilization,
-                                        gpu.vram_total as f64 / 1024.0 / 1024.0 / 1024.0
-                                    );
-                                }
-                                println!("└──────┴─────────────────────┴──────────┴────────────┴───────────┘");
+                            if let Some(cc) = &gpu.compute_capability {
+                                println!("  Compute Capability: {}", cc);
                             }
-                            OutputFormat::Human => {
-                                println!("\n📊 Detected GPUs:\n");
-                                for gpu in &gpus {
-                                    println!("GPU {}:", gpu.index);
-                                    println!("  Name: {}", gpu.name);
-                                    println!("  Temperature: {:.1}°C", gpu.temperature);
-                                    println!("  Utilization: {:.1}%", gpu.utilization);
-                                    println!("  VRAM: {:.2} GB", gpu.vram_total as f64 / 1024.0 / 1024.0 / 1024.0);
-                                    if let Some(cuda) = gpu.cuda_cores {
-                                        println!("  CUDA Cores: {}", cuda);
-                                    }
-                                    if let Some(cc) = &gpu.compute_capability {
-                                        println!("  Compute Capability: {}", cc);
-                                    }
-                                    println!();
-                                }
-                            }
+                            println!();
                         }
                     }
-                    Err(e) => eprintln!("❌ Failed to detect GPUs: {}", e),
-                }
-            }
+                },
+                Err(e) => eprintln!("❌ Failed to detect GPUs: {}", e),
+            },
             GpuSubcommand::Select { index } => {
                 println!("🎯 Selected GPU {} for subsequent commands", index);
                 println!("⚠️  Note: GPU selection is not yet persistent across commands");
@@ -1880,10 +1890,9 @@ fn main() {
                     }
                     VibranceSubcommand::Set { percentage } => {
                         match vibrance_native::set_vibrance_all_native(percentage) {
-                            Ok(()) => println!(
-                                "✅ Set all displays to {}% digital vibrance",
-                                percentage
-                            ),
+                            Ok(()) => {
+                                println!("✅ Set all displays to {}% digital vibrance", percentage)
+                            }
                             Err(e) => eprintln!("❌ Failed to set vibrance: {}", e),
                         }
                     }
@@ -1956,9 +1965,7 @@ fn main() {
                         Err(e) => eprintln!("❌ Failed to list displays: {}", e),
                     },
                     VibranceSubcommand::Reset => match vibrance_native::reset_vibrance_native() {
-                        Ok(()) => println!(
-                            "✅ Reset all displays to default vibrance (100%)"
-                        ),
+                        Ok(()) => println!("✅ Reset all displays to default vibrance (100%)"),
                         Err(e) => eprintln!("❌ Failed to reset vibrance: {}", e),
                     },
                     VibranceSubcommand::Info => match vibrance_native::get_vibrance_status_native()
@@ -2056,9 +2063,11 @@ fn main() {
                         }
                         Err(e) => eprintln!("❌ Failed to set gamma: {}", e),
                     }
-                },
+                }
                 GammaSubcommand::Reset { display_id } => match display::reset_gamma(display_id) {
-                    Ok(()) => println!("✅ Gamma reset to 1.0 (neutral) for display {}", display_id),
+                    Ok(()) => {
+                        println!("✅ Gamma reset to 1.0 (neutral) for display {}", display_id)
+                    }
                     Err(e) => eprintln!("❌ Failed to reset gamma: {}", e),
                 },
             },
@@ -2069,7 +2078,10 @@ fn main() {
                     match get_image_sharpening_info_cli(0, display_id) {
                         Ok(info) => {
                             println!("🔍 Image Sharpening for display {}:", display_id);
-                            println!("   Available: {}", if info.available { "Yes" } else { "No" });
+                            println!(
+                                "   Available: {}",
+                                if info.available { "Yes" } else { "No" }
+                            );
                             if info.available {
                                 println!("   Current: {}", info.current_value);
                                 println!("   Default: {}", info.default_value);
@@ -2083,17 +2095,25 @@ fn main() {
                     use nvcontrol::display_controls::set_image_sharpening_cli;
 
                     match set_image_sharpening_cli(0, display_id, value) {
-                        Ok(()) => println!("✅ Image sharpening set to {} for display {}", value, display_id),
+                        Ok(()) => println!(
+                            "✅ Image sharpening set to {} for display {}",
+                            value, display_id
+                        ),
                         Err(e) => eprintln!("❌ Failed to set sharpening: {}", e),
                     }
                 }
                 SharpeningSubcommand::Reset { display_id } => {
-                    use nvcontrol::display_controls::{get_image_sharpening_info_cli, set_image_sharpening_cli};
+                    use nvcontrol::display_controls::{
+                        get_image_sharpening_info_cli, set_image_sharpening_cli,
+                    };
 
                     match get_image_sharpening_info_cli(0, display_id) {
                         Ok(info) => {
                             match set_image_sharpening_cli(0, display_id, info.default_value) {
-                                Ok(()) => println!("✅ Image sharpening reset to default ({}) for display {}", info.default_value, display_id),
+                                Ok(()) => println!(
+                                    "✅ Image sharpening reset to default ({}) for display {}",
+                                    info.default_value, display_id
+                                ),
                                 Err(e) => eprintln!("❌ Failed to reset sharpening: {}", e),
                             }
                         }
@@ -2105,7 +2125,10 @@ fn main() {
 
                     match get_image_sharpening_info_cli(0, display_id) {
                         Ok(info) => {
-                            println!("🔍 Image Sharpening Information for display {}:", display_id);
+                            println!(
+                                "🔍 Image Sharpening Information for display {}:",
+                                display_id
+                            );
                             println!();
                             if info.available {
                                 println!("   Status: Available ✅");
@@ -2114,12 +2137,20 @@ fn main() {
                                 println!("   Valid Range: {} - {}", info.range.0, info.range.1);
                                 println!();
                                 println!("💡 Usage:");
-                                println!("   nvctl display sharpening set --display-id {} <value>", display_id);
-                                println!("   nvctl display sharpening reset --display-id {}", display_id);
+                                println!(
+                                    "   nvctl display sharpening set --display-id {} <value>",
+                                    display_id
+                                );
+                                println!(
+                                    "   nvctl display sharpening reset --display-id {}",
+                                    display_id
+                                );
                             } else {
                                 println!("   Status: Not Available ❌");
                                 println!();
-                                println!("⚠️  Image sharpening is not supported on this display or driver");
+                                println!(
+                                    "⚠️  Image sharpening is not supported on this display or driver"
+                                );
                             }
                         }
                         Err(e) => eprintln!("❌ Failed to get sharpening info: {}", e),
@@ -2128,7 +2159,7 @@ fn main() {
             },
             DisplaySubcommand::ColorRange { subcommand } => match subcommand {
                 ColorRangeSubcommand::Get { display_id } => {
-                    use nvcontrol::display_controls::{DisplayControls, ColorRange};
+                    use nvcontrol::display_controls::{ColorRange, DisplayControls};
 
                     match DisplayControls::new(0, 0, display_id) {
                         Ok(controls) => match controls.get_color_range() {
@@ -2146,7 +2177,7 @@ fn main() {
                     }
                 }
                 ColorRangeSubcommand::Set { display_id, range } => {
-                    use nvcontrol::display_controls::{DisplayControls, ColorRange};
+                    use nvcontrol::display_controls::{ColorRange, DisplayControls};
 
                     let color_range = match range.to_lowercase().as_str() {
                         "full" => ColorRange::Full,
@@ -2159,7 +2190,10 @@ fn main() {
 
                     match DisplayControls::new(0, 0, display_id) {
                         Ok(controls) => match controls.set_color_range(color_range) {
-                            Ok(()) => println!("✅ Color range set to '{}' for display {}", range, display_id),
+                            Ok(()) => println!(
+                                "✅ Color range set to '{}' for display {}",
+                                range, display_id
+                            ),
                             Err(e) => eprintln!("❌ Failed to set color range: {}", e),
                         },
                         Err(e) => eprintln!("❌ Failed to open display: {}", e),
@@ -2168,7 +2202,7 @@ fn main() {
             },
             DisplaySubcommand::ColorSpace { subcommand } => match subcommand {
                 ColorSpaceSubcommand::Get { display_id } => {
-                    use nvcontrol::display_controls::{DisplayControls, ColorSpace};
+                    use nvcontrol::display_controls::{ColorSpace, DisplayControls};
 
                     match DisplayControls::new(0, 0, display_id) {
                         Ok(controls) => match controls.get_color_space() {
@@ -2187,21 +2221,26 @@ fn main() {
                     }
                 }
                 ColorSpaceSubcommand::Set { display_id, space } => {
-                    use nvcontrol::display_controls::{DisplayControls, ColorSpace};
+                    use nvcontrol::display_controls::{ColorSpace, DisplayControls};
 
                     let color_space = match space.to_lowercase().as_str() {
                         "rgb" => ColorSpace::RGB,
                         "ycbcr422" => ColorSpace::YCbCr422,
                         "ycbcr444" => ColorSpace::YCbCr444,
                         _ => {
-                            eprintln!("❌ Invalid color space. Use 'rgb', 'ycbcr422', or 'ycbcr444'");
+                            eprintln!(
+                                "❌ Invalid color space. Use 'rgb', 'ycbcr422', or 'ycbcr444'"
+                            );
                             return;
                         }
                     };
 
                     match DisplayControls::new(0, 0, display_id) {
                         Ok(controls) => match controls.set_color_space(color_space) {
-                            Ok(()) => println!("✅ Color space set to '{}' for display {}", space, display_id),
+                            Ok(()) => println!(
+                                "✅ Color space set to '{}' for display {}",
+                                space, display_id
+                            ),
                             Err(e) => eprintln!("❌ Failed to set color space: {}", e),
                         },
                         Err(e) => eprintln!("❌ Failed to open display: {}", e),
@@ -2210,7 +2249,9 @@ fn main() {
             },
             DisplaySubcommand::Dithering { subcommand } => match subcommand {
                 DitheringSubcommand::Get { display_id } => {
-                    use nvcontrol::display_controls::{DisplayControls, DitheringMode, DitheringDepth};
+                    use nvcontrol::display_controls::{
+                        DisplayControls, DitheringDepth, DitheringMode,
+                    };
 
                     match DisplayControls::new(0, 0, display_id) {
                         Ok(controls) => match controls.get_dithering_info() {
@@ -2238,8 +2279,14 @@ fn main() {
                         Err(e) => eprintln!("❌ Failed to open display: {}", e),
                     }
                 }
-                DitheringSubcommand::Enable { display_id, mode, depth } => {
-                    use nvcontrol::display_controls::{DisplayControls, DitheringMode, DitheringDepth};
+                DitheringSubcommand::Enable {
+                    display_id,
+                    mode,
+                    depth,
+                } => {
+                    use nvcontrol::display_controls::{
+                        DisplayControls, DitheringDepth, DitheringMode,
+                    };
 
                     let dither_mode = match mode.to_lowercase().as_str() {
                         "auto" => DitheringMode::Auto,
@@ -2247,7 +2294,9 @@ fn main() {
                         "static2x2" => DitheringMode::Static2x2,
                         "temporal" => DitheringMode::Temporal,
                         _ => {
-                            eprintln!("❌ Invalid dithering mode. Use 'auto', 'dynamic2x2', 'static2x2', or 'temporal'");
+                            eprintln!(
+                                "❌ Invalid dithering mode. Use 'auto', 'dynamic2x2', 'static2x2', or 'temporal'"
+                            );
                             return;
                         }
                     };
@@ -2263,18 +2312,29 @@ fn main() {
                     };
 
                     match DisplayControls::new(0, 0, display_id) {
-                        Ok(controls) => match controls.set_dithering(true, dither_mode, dither_depth) {
-                            Ok(()) => println!("✅ Dithering enabled (mode={}, depth={}) for display {}", mode, depth, display_id),
-                            Err(e) => eprintln!("❌ Failed to enable dithering: {}", e),
-                        },
+                        Ok(controls) => {
+                            match controls.set_dithering(true, dither_mode, dither_depth) {
+                                Ok(()) => println!(
+                                    "✅ Dithering enabled (mode={}, depth={}) for display {}",
+                                    mode, depth, display_id
+                                ),
+                                Err(e) => eprintln!("❌ Failed to enable dithering: {}", e),
+                            }
+                        }
                         Err(e) => eprintln!("❌ Failed to open display: {}", e),
                     }
                 }
                 DitheringSubcommand::Disable { display_id } => {
-                    use nvcontrol::display_controls::{DisplayControls, DitheringMode, DitheringDepth};
+                    use nvcontrol::display_controls::{
+                        DisplayControls, DitheringDepth, DitheringMode,
+                    };
 
                     match DisplayControls::new(0, 0, display_id) {
-                        Ok(controls) => match controls.set_dithering(false, DitheringMode::None, DitheringDepth::None) {
+                        Ok(controls) => match controls.set_dithering(
+                            false,
+                            DitheringMode::None,
+                            DitheringDepth::None,
+                        ) {
                             Ok(()) => println!("✅ Dithering disabled for display {}", display_id),
                             Err(e) => eprintln!("❌ Failed to disable dithering: {}", e),
                         },
@@ -2368,7 +2428,9 @@ fn main() {
                 max_power,
                 stability_duration,
             } => {
-                use nvcontrol::auto_overclock::{AutoOCConfig, AutoOCTarget, SafetyMode, AutoOverclocker};
+                use nvcontrol::auto_overclock::{
+                    AutoOCConfig, AutoOCTarget, AutoOverclocker, SafetyMode,
+                };
 
                 // Parse target
                 let parsed_target = match target.as_str() {
@@ -2376,7 +2438,10 @@ fn main() {
                     "balanced" | "balance" => AutoOCTarget::Balanced,
                     "efficiency" | "efficient" => AutoOCTarget::Efficiency,
                     _ => {
-                        eprintln!("❌ Invalid target: {}. Use: max-performance, balanced, or efficiency", target);
+                        eprintln!(
+                            "❌ Invalid target: {}. Use: max-performance, balanced, or efficiency",
+                            target
+                        );
                         return;
                     }
                 };
@@ -2387,7 +2452,10 @@ fn main() {
                     "moderate" | "medium" => SafetyMode::Moderate,
                     "aggressive" | "fast" => SafetyMode::Aggressive,
                     _ => {
-                        eprintln!("❌ Invalid safety mode: {}. Use: conservative, moderate, or aggressive", safety);
+                        eprintln!(
+                            "❌ Invalid safety mode: {}. Use: conservative, moderate, or aggressive",
+                            safety
+                        );
                         return;
                     }
                 };
@@ -2411,7 +2479,8 @@ fn main() {
 
                                 if result.successful {
                                     println!("\n💾 To save this profile, run:");
-                                    println!("   nvctl overclock apply --gpu-offset {} --memory-offset {} --power-limit {}",
+                                    println!(
+                                        "   nvctl overclock apply --gpu-offset {} --memory-offset {} --power-limit {}",
                                         result.final_profile.gpu_clock_offset,
                                         result.final_profile.memory_clock_offset,
                                         result.final_profile.power_limit
@@ -2756,15 +2825,23 @@ fn main() {
 
             match subcommand {
                 ShadersSubcommand::Stats => match shaders::get_shader_stats() {
-                    Ok(()) => {},
+                    Ok(()) => {}
                     Err(e) => eprintln!("❌ Failed to get shader stats: {}", e),
                 },
                 ShadersSubcommand::Clear { cache_type } => {
                     let result = match cache_type.as_str() {
-                        "nvidia" => shaders::clear_shader_cache_by_type(shaders::ShaderCacheType::Nvidia),
-                        "vulkan" => shaders::clear_shader_cache_by_type(shaders::ShaderCacheType::Vulkan),
-                        "steam" => shaders::clear_shader_cache_by_type(shaders::ShaderCacheType::Steam),
-                        "dxvk" => shaders::clear_shader_cache_by_type(shaders::ShaderCacheType::Dxvk),
+                        "nvidia" => {
+                            shaders::clear_shader_cache_by_type(shaders::ShaderCacheType::Nvidia)
+                        }
+                        "vulkan" => {
+                            shaders::clear_shader_cache_by_type(shaders::ShaderCacheType::Vulkan)
+                        }
+                        "steam" => {
+                            shaders::clear_shader_cache_by_type(shaders::ShaderCacheType::Steam)
+                        }
+                        "dxvk" => {
+                            shaders::clear_shader_cache_by_type(shaders::ShaderCacheType::Dxvk)
+                        }
                         "all" => shaders::clear_shader_cache(),
                         _ => {
                             eprintln!("❌ Unknown cache type: {}", cache_type);
@@ -2777,19 +2854,20 @@ fn main() {
                         Ok(()) => println!("\n✅ Shader cache cleared successfully"),
                         Err(e) => eprintln!("❌ Failed to clear shader cache: {}", e),
                     }
-                },
+                }
                 ShadersSubcommand::Optimize => match shaders::optimize_shader_compilation() {
                     Ok(()) => println!("\n✅ Shader compilation optimized"),
                     Err(e) => eprintln!("❌ Failed to optimize shader compilation: {}", e),
                 },
-                ShadersSubcommand::Precompile { game } => match shaders::precompile_shaders(&game) {
-                    Ok(()) => {},
-                    Err(e) => eprintln!("❌ Failed to precompile shaders: {}", e),
-                },
+                ShadersSubcommand::Precompile { game } => {
+                    match shaders::precompile_shaders(&game) {
+                        Ok(()) => {}
+                        Err(e) => eprintln!("❌ Failed to precompile shaders: {}", e),
+                    }
+                }
                 ShadersSubcommand::Open => {
                     use std::process::Command as Cmd;
-                    let cache_path = std::env::var("HOME")
-                        .unwrap_or_else(|_| "/tmp".to_string())
+                    let cache_path = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string())
                         + "/.nv/GLCache";
 
                     println!("📁 Opening shader cache folder: {}", cache_path);
@@ -2804,120 +2882,102 @@ fn main() {
                         Ok(_) => println!("✅ File manager opened"),
                         Err(e) => eprintln!("❌ Failed to open file manager: {}", e),
                     }
-                },
+                }
             }
         }
         Command::Passthrough { subcommand } => {
             use nvcontrol::gpu_passthrough::GpuPassthroughManager;
 
             match subcommand {
-                PassthroughSubcommand::Status => {
-                    match GpuPassthroughManager::new() {
-                        Ok(manager) => {
-                            if let Err(e) = manager.show_status() {
-                                eprintln!("❌ Failed to show status: {}", e);
-                            }
+                PassthroughSubcommand::Status => match GpuPassthroughManager::new() {
+                    Ok(manager) => {
+                        if let Err(e) = manager.show_status() {
+                            eprintln!("❌ Failed to show status: {}", e);
                         }
-                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
                     }
-                }
-                PassthroughSubcommand::List => {
-                    match GpuPassthroughManager::detect_nvidia_gpus() {
-                        Ok(devices) => {
-                            println!("📍 Detected NVIDIA GPUs:\n");
-                            for device in devices {
-                                println!("   PCI: {}", device.pci_address);
-                                println!("   Name: {}", device.name);
-                                println!("   IDs: {}:{}", device.vendor_id, device.device_id);
-                                if let Some(driver) = device.driver {
-                                    println!("   Driver: {}", driver);
+                    Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                },
+                PassthroughSubcommand::List => match GpuPassthroughManager::detect_nvidia_gpus() {
+                    Ok(devices) => {
+                        println!("📍 Detected NVIDIA GPUs:\n");
+                        for device in devices {
+                            println!("   PCI: {}", device.pci_address);
+                            println!("   Name: {}", device.name);
+                            println!("   IDs: {}:{}", device.vendor_id, device.device_id);
+                            if let Some(driver) = device.driver {
+                                println!("   Driver: {}", driver);
+                            }
+                            println!();
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Failed to detect GPUs: {}", e),
+                },
+                PassthroughSubcommand::Iommu => match GpuPassthroughManager::new() {
+                    Ok(manager) => match manager.list_iommu_groups() {
+                        Ok(groups) => {
+                            println!("🔒 IOMMU Groups:\n");
+                            let mut sorted_groups: Vec<_> = groups.iter().collect();
+                            sorted_groups.sort_by_key(|(k, _)| *k);
+
+                            for (group_num, devices) in sorted_groups {
+                                println!("   Group {}:", group_num);
+                                for device in devices {
+                                    println!("      {}", device);
                                 }
                                 println!();
                             }
                         }
-                        Err(e) => eprintln!("❌ Failed to detect GPUs: {}", e),
-                    }
-                }
-                PassthroughSubcommand::Iommu => {
-                    match GpuPassthroughManager::new() {
-                        Ok(manager) => {
-                            match manager.list_iommu_groups() {
-                                Ok(groups) => {
-                                    println!("🔒 IOMMU Groups:\n");
-                                    let mut sorted_groups: Vec<_> = groups.iter().collect();
-                                    sorted_groups.sort_by_key(|(k, _)| *k);
-
-                                    for (group_num, devices) in sorted_groups {
-                                        println!("   Group {}:", group_num);
-                                        for device in devices {
-                                            println!("      {}", device);
-                                        }
-                                        println!();
-                                    }
-                                }
-                                Err(e) => eprintln!("❌ {}", e),
-                            }
-                        }
-                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
-                    }
-                }
+                        Err(e) => eprintln!("❌ {}", e),
+                    },
+                    Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                },
                 PassthroughSubcommand::BindVfio { pci_address } => {
                     match GpuPassthroughManager::new() {
-                        Ok(manager) => {
-                            match manager.bind_to_vfio(&pci_address) {
-                                Ok(()) => println!("✅ Successfully bound {} to VFIO", pci_address),
-                                Err(e) => eprintln!("❌ Failed to bind to VFIO: {}", e),
-                            }
-                        }
+                        Ok(manager) => match manager.bind_to_vfio(&pci_address) {
+                            Ok(()) => println!("✅ Successfully bound {} to VFIO", pci_address),
+                            Err(e) => eprintln!("❌ Failed to bind to VFIO: {}", e),
+                        },
                         Err(e) => eprintln!("❌ Failed to initialize: {}", e),
                     }
                 }
                 PassthroughSubcommand::UnbindVfio { pci_address } => {
                     match GpuPassthroughManager::new() {
-                        Ok(manager) => {
-                            match manager.unbind_from_vfio(&pci_address) {
-                                Ok(()) => println!("✅ Successfully unbound {} from VFIO", pci_address),
-                                Err(e) => eprintln!("❌ Failed to unbind from VFIO: {}", e),
-                            }
-                        }
+                        Ok(manager) => match manager.unbind_from_vfio(&pci_address) {
+                            Ok(()) => println!("✅ Successfully unbound {} from VFIO", pci_address),
+                            Err(e) => eprintln!("❌ Failed to unbind from VFIO: {}", e),
+                        },
                         Err(e) => eprintln!("❌ Failed to initialize: {}", e),
                     }
                 }
                 PassthroughSubcommand::Persistent { pci_address } => {
                     match GpuPassthroughManager::new() {
-                        Ok(manager) => {
-                            match manager.setup_persistent_vfio(&pci_address) {
-                                Ok(()) => {},
-                                Err(e) => eprintln!("❌ Failed to setup persistent VFIO: {}", e),
-                            }
-                        }
+                        Ok(manager) => match manager.setup_persistent_vfio(&pci_address) {
+                            Ok(()) => {}
+                            Err(e) => eprintln!("❌ Failed to setup persistent VFIO: {}", e),
+                        },
                         Err(e) => eprintln!("❌ Failed to initialize: {}", e),
                     }
                 }
-                PassthroughSubcommand::TestContainer => {
-                    match GpuPassthroughManager::new() {
-                        Ok(manager) => {
-                            if let Err(e) = manager.test_container_passthrough() {
-                                eprintln!("❌ Test failed: {}", e);
-                            }
+                PassthroughSubcommand::TestContainer => match GpuPassthroughManager::new() {
+                    Ok(manager) => {
+                        if let Err(e) = manager.test_container_passthrough() {
+                            eprintln!("❌ Test failed: {}", e);
                         }
-                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
                     }
-                }
+                    Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                },
                 PassthroughSubcommand::QemuCommand { pci_address } => {
                     match GpuPassthroughManager::new() {
-                        Ok(manager) => {
-                            match manager.generate_qemu_command(&pci_address) {
-                                Ok(cmd) => {
-                                    println!("🖥️  QEMU Command for GPU Passthrough:\n");
-                                    println!("qemu-system-x86_64 \\");
-                                    println!("{}", cmd);
-                                    println!();
-                                    println!("💡 Add your disk, network, and other device options");
-                                }
-                                Err(e) => eprintln!("❌ Failed to generate command: {}", e),
+                        Ok(manager) => match manager.generate_qemu_command(&pci_address) {
+                            Ok(cmd) => {
+                                println!("🖥️  QEMU Command for GPU Passthrough:\n");
+                                println!("qemu-system-x86_64 \\");
+                                println!("{}", cmd);
+                                println!();
+                                println!("💡 Add your disk, network, and other device options");
                             }
-                        }
+                            Err(e) => eprintln!("❌ Failed to generate command: {}", e),
+                        },
                         Err(e) => eprintln!("❌ Failed to initialize: {}", e),
                     }
                 }
@@ -2937,55 +2997,47 @@ fn main() {
             use wayland_nvidia::WaylandNvidiaManager;
 
             match subcommand {
-                WaylandSubcommand::Status => {
-                    match WaylandNvidiaManager::new() {
-                        Ok(manager) => {
-                            if let Err(e) = manager.print_status() {
-                                eprintln!("❌ Failed to print status: {}", e);
-                            }
+                WaylandSubcommand::Status => match WaylandNvidiaManager::new() {
+                    Ok(manager) => {
+                        if let Err(e) = manager.print_status() {
+                            eprintln!("❌ Failed to print status: {}", e);
                         }
-                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
                     }
-                }
-                WaylandSubcommand::Optimize { backup } => {
-                    match WaylandNvidiaManager::new() {
-                        Ok(manager) => {
-                            if let Err(e) = manager.apply_wayland_optimization(backup) {
-                                eprintln!("❌ Failed to optimize: {}", e);
-                            }
+                    Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                },
+                WaylandSubcommand::Optimize { backup } => match WaylandNvidiaManager::new() {
+                    Ok(manager) => {
+                        if let Err(e) = manager.apply_wayland_optimization(backup) {
+                            eprintln!("❌ Failed to optimize: {}", e);
                         }
-                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
                     }
-                }
-                WaylandSubcommand::ExportEnv { config } => {
-                    match WaylandNvidiaManager::new() {
-                        Ok(manager) => {
-                            let path = std::path::PathBuf::from(config);
-                            if let Err(e) = manager.export_env_vars(&path) {
-                                eprintln!("❌ Failed to export env vars: {}", e);
-                            }
+                    Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                },
+                WaylandSubcommand::ExportEnv { config } => match WaylandNvidiaManager::new() {
+                    Ok(manager) => {
+                        let path = std::path::PathBuf::from(config);
+                        if let Err(e) = manager.export_env_vars(&path) {
+                            eprintln!("❌ Failed to export env vars: {}", e);
                         }
-                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
                     }
-                }
-                WaylandSubcommand::SwitchDriver { driver } => {
-                    match WaylandNvidiaManager::new() {
-                        Ok(manager) => {
-                            let target = match driver.as_str() {
-                                "open" => wayland_nvidia::NvidiaDriver::Open,
-                                "dkms" => wayland_nvidia::NvidiaDriver::Proprietary,
-                                _ => {
-                                    eprintln!("❌ Invalid driver type. Use 'open' or 'dkms'");
-                                    return;
-                                }
-                            };
-                            if let Err(e) = manager.switch_driver(target) {
-                                eprintln!("❌ Failed to switch driver: {}", e);
+                    Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                },
+                WaylandSubcommand::SwitchDriver { driver } => match WaylandNvidiaManager::new() {
+                    Ok(manager) => {
+                        let target = match driver.as_str() {
+                            "open" => wayland_nvidia::NvidiaDriver::Open,
+                            "dkms" => wayland_nvidia::NvidiaDriver::Proprietary,
+                            _ => {
+                                eprintln!("❌ Invalid driver type. Use 'open' or 'dkms'");
+                                return;
                             }
+                        };
+                        if let Err(e) = manager.switch_driver(target) {
+                            eprintln!("❌ Failed to switch driver: {}", e);
                         }
-                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
                     }
-                }
+                    Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                },
             }
         }
         Command::Kde { subcommand } => {
@@ -3037,115 +3089,109 @@ fn main() {
             }
         }
         Command::PowerProfile { subcommand } => {
-            use power_profiles_daemon::{PowerProfileManager, SystemPowerProfile, PowerProfileConfig, NvidiaPowerMode, FanMode};
+            use power_profiles_daemon::{
+                FanMode, NvidiaPowerMode, PowerProfileConfig, PowerProfileManager,
+                SystemPowerProfile,
+            };
 
             match subcommand {
-                PowerProfileSubcommand::Status => {
-                    match PowerProfileManager::new() {
-                        Ok(manager) => {
-                            if let Err(e) = manager.print_status() {
-                                eprintln!("❌ Failed to print status: {}", e);
-                            }
+                PowerProfileSubcommand::Status => match PowerProfileManager::new() {
+                    Ok(manager) => {
+                        if let Err(e) = manager.print_status() {
+                            eprintln!("❌ Failed to print status: {}", e);
                         }
-                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
                     }
-                }
-                PowerProfileSubcommand::Set { profile } => {
-                    match PowerProfileManager::new() {
-                        Ok(mut manager) => {
-                            let sys_profile = match profile.as_str() {
-                                "performance" => SystemPowerProfile::Performance,
-                                "balanced" => SystemPowerProfile::Balanced,
-                                "power-saver" => SystemPowerProfile::PowerSaver,
-                                _ => {
-                                    eprintln!("❌ Invalid profile. Use: performance, balanced, power-saver");
-                                    return;
-                                }
-                            };
-                            if let Err(e) = manager.set_system_profile(sys_profile) {
-                                eprintln!("❌ Failed to set profile: {}", e);
+                    Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                },
+                PowerProfileSubcommand::Set { profile } => match PowerProfileManager::new() {
+                    Ok(mut manager) => {
+                        let sys_profile = match profile.as_str() {
+                            "performance" => SystemPowerProfile::Performance,
+                            "balanced" => SystemPowerProfile::Balanced,
+                            "power-saver" => SystemPowerProfile::PowerSaver,
+                            _ => {
+                                eprintln!(
+                                    "❌ Invalid profile. Use: performance, balanced, power-saver"
+                                );
+                                return;
                             }
+                        };
+                        if let Err(e) = manager.set_system_profile(sys_profile) {
+                            eprintln!("❌ Failed to set profile: {}", e);
                         }
-                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
                     }
-                }
-                PowerProfileSubcommand::CreateActivity { activity, system_profile, gpu_offset, mem_offset } => {
-                    match PowerProfileManager::new() {
-                        Ok(mut manager) => {
-                            let sys_prof = match system_profile.as_str() {
-                                "performance" => SystemPowerProfile::Performance,
-                                "balanced" => SystemPowerProfile::Balanced,
-                                "power-saver" => SystemPowerProfile::PowerSaver,
-                                _ => {
-                                    eprintln!("❌ Invalid profile");
-                                    return;
-                                }
-                            };
-                            let config = PowerProfileConfig {
-                                system_profile: sys_prof,
-                                nvidia_mode: NvidiaPowerMode::Adaptive,
-                                gpu_clock_offset: gpu_offset,
-                                mem_clock_offset: mem_offset,
-                                power_limit: None,
-                                fan_control: FanMode::Auto,
-                            };
-                            if let Err(e) = manager.create_activity_profile(&activity, config) {
-                                eprintln!("❌ Failed to create profile: {}", e);
+                    Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                },
+                PowerProfileSubcommand::CreateActivity {
+                    activity,
+                    system_profile,
+                    gpu_offset,
+                    mem_offset,
+                } => match PowerProfileManager::new() {
+                    Ok(mut manager) => {
+                        let sys_prof = match system_profile.as_str() {
+                            "performance" => SystemPowerProfile::Performance,
+                            "balanced" => SystemPowerProfile::Balanced,
+                            "power-saver" => SystemPowerProfile::PowerSaver,
+                            _ => {
+                                eprintln!("❌ Invalid profile");
+                                return;
                             }
+                        };
+                        let config = PowerProfileConfig {
+                            system_profile: sys_prof,
+                            nvidia_mode: NvidiaPowerMode::Adaptive,
+                            gpu_clock_offset: gpu_offset,
+                            mem_clock_offset: mem_offset,
+                            power_limit: None,
+                            fan_control: FanMode::Auto,
+                        };
+                        if let Err(e) = manager.create_activity_profile(&activity, config) {
+                            eprintln!("❌ Failed to create profile: {}", e);
                         }
-                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
                     }
-                }
-                PowerProfileSubcommand::Apply { activity } => {
-                    match PowerProfileManager::new() {
-                        Ok(mut manager) => {
-                            if let Err(e) = manager.apply_activity_profile(&activity) {
-                                eprintln!("❌ Failed to apply profile: {}", e);
-                            }
+                    Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                },
+                PowerProfileSubcommand::Apply { activity } => match PowerProfileManager::new() {
+                    Ok(mut manager) => {
+                        if let Err(e) = manager.apply_activity_profile(&activity) {
+                            eprintln!("❌ Failed to apply profile: {}", e);
                         }
-                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
                     }
-                }
-                PowerProfileSubcommand::Monitor => {
-                    match PowerProfileManager::new() {
-                        Ok(mut manager) => {
-                            if let Err(e) = manager.monitor_activity_changes() {
-                                eprintln!("❌ Monitor failed: {}", e);
-                            }
+                    Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                },
+                PowerProfileSubcommand::Monitor => match PowerProfileManager::new() {
+                    Ok(mut manager) => {
+                        if let Err(e) = manager.monitor_activity_changes() {
+                            eprintln!("❌ Monitor failed: {}", e);
                         }
-                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
                     }
-                }
-                PowerProfileSubcommand::AutoPower => {
-                    match PowerProfileManager::new() {
-                        Ok(mut manager) => {
-                            if let Err(e) = manager.auto_switch_on_power_change() {
-                                eprintln!("❌ Auto-power failed: {}", e);
-                            }
+                    Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                },
+                PowerProfileSubcommand::AutoPower => match PowerProfileManager::new() {
+                    Ok(mut manager) => {
+                        if let Err(e) = manager.auto_switch_on_power_change() {
+                            eprintln!("❌ Auto-power failed: {}", e);
                         }
-                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
                     }
-                }
-                PowerProfileSubcommand::Idle { timeout } => {
-                    match PowerProfileManager::new() {
-                        Ok(mut manager) => {
-                            if let Err(e) = manager.idle_detection(timeout) {
-                                eprintln!("❌ Idle detection failed: {}", e);
-                            }
+                    Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                },
+                PowerProfileSubcommand::Idle { timeout } => match PowerProfileManager::new() {
+                    Ok(mut manager) => {
+                        if let Err(e) = manager.idle_detection(timeout) {
+                            eprintln!("❌ Idle detection failed: {}", e);
                         }
-                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
                     }
-                }
-                PowerProfileSubcommand::CreateDefaults => {
-                    match PowerProfileManager::new() {
-                        Ok(mut manager) => {
-                            if let Err(e) = manager.create_default_profiles() {
-                                eprintln!("❌ Failed to create defaults: {}", e);
-                            }
+                    Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                },
+                PowerProfileSubcommand::CreateDefaults => match PowerProfileManager::new() {
+                    Ok(mut manager) => {
+                        if let Err(e) = manager.create_default_profiles() {
+                            eprintln!("❌ Failed to create defaults: {}", e);
                         }
-                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
                     }
-                }
+                    Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                },
             }
         }
         Command::Arch { subcommand } => {
@@ -3179,21 +3225,19 @@ fn main() {
                         eprintln!("❌ Failed to regenerate initramfs: {}", e);
                     }
                 }
-                ArchSubcommand::CheckUpdates => {
-                    match ArchIntegration::check_pending_updates() {
-                        Ok(updates) => {
-                            if updates.is_empty() {
-                                println!("✅ No pending NVIDIA/kernel updates");
-                            } else {
-                                println!("⚠️  Pending updates:");
-                                for update in updates {
-                                    println!("   {}", update);
-                                }
+                ArchSubcommand::CheckUpdates => match ArchIntegration::check_pending_updates() {
+                    Ok(updates) => {
+                        if updates.is_empty() {
+                            println!("✅ No pending NVIDIA/kernel updates");
+                        } else {
+                            println!("⚠️  Pending updates:");
+                            for update in updates {
+                                println!("   {}", update);
                             }
                         }
-                        Err(e) => eprintln!("❌ Failed to check updates: {}", e),
                     }
-                }
+                    Err(e) => eprintln!("❌ Failed to check updates: {}", e),
+                },
                 ArchSubcommand::AurSuggestions => {
                     let suggestions = ArchIntegration::suggest_aur_optimizations();
                     if suggestions.is_empty() {
@@ -3233,18 +3277,16 @@ fn main() {
                         eprintln!("❌ Failed to run diagnostics: {}", e);
                     }
                 }
-                GspSubcommand::CheckUpdate => {
-                    match gsp.check_for_updates() {
-                        Ok(available) => {
-                            if available {
-                                println!("✅ Firmware update available!");
-                            } else {
-                                println!("ℹ️  No updates available");
-                            }
+                GspSubcommand::CheckUpdate => match gsp.check_for_updates() {
+                    Ok(available) => {
+                        if available {
+                            println!("✅ Firmware update available!");
+                        } else {
+                            println!("ℹ️  No updates available");
                         }
-                        Err(e) => eprintln!("❌ Failed to check updates: {}", e),
                     }
-                }
+                    Err(e) => eprintln!("❌ Failed to check updates: {}", e),
+                },
                 GspSubcommand::Update => {
                     if let Err(e) = gsp.update_firmware() {
                         eprintln!("❌ Failed to update firmware: {}", e);
@@ -3256,52 +3298,44 @@ fn main() {
             use multimonitor::MultiMonitorManager;
 
             match subcommand {
-                MultiMonitorSubcommand::Status => {
-                    match MultiMonitorManager::new() {
-                        Ok(manager) => {
-                            if let Err(e) = manager.print_status() {
-                                eprintln!("❌ Failed to print status: {}", e);
+                MultiMonitorSubcommand::Status => match MultiMonitorManager::new() {
+                    Ok(manager) => {
+                        if let Err(e) = manager.print_status() {
+                            eprintln!("❌ Failed to print status: {}", e);
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                },
+                MultiMonitorSubcommand::Save { name } => match MultiMonitorManager::new() {
+                    Ok(mut manager) => {
+                        if let Err(e) = manager.save_layout(&name) {
+                            eprintln!("❌ Failed to save layout: {}", e);
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                },
+                MultiMonitorSubcommand::Load { name } => match MultiMonitorManager::new() {
+                    Ok(mut manager) => {
+                        if let Err(e) = manager.load_layout(&name) {
+                            eprintln!("❌ Failed to load layout: {}", e);
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                },
+                MultiMonitorSubcommand::List => match MultiMonitorManager::new() {
+                    Ok(manager) => {
+                        let layouts = manager.list_layouts();
+                        if layouts.is_empty() {
+                            println!("No saved layouts");
+                        } else {
+                            println!("📂 Saved layouts:");
+                            for layout in layouts {
+                                println!("   • {}", layout);
                             }
                         }
-                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
                     }
-                }
-                MultiMonitorSubcommand::Save { name } => {
-                    match MultiMonitorManager::new() {
-                        Ok(mut manager) => {
-                            if let Err(e) = manager.save_layout(&name) {
-                                eprintln!("❌ Failed to save layout: {}", e);
-                            }
-                        }
-                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
-                    }
-                }
-                MultiMonitorSubcommand::Load { name } => {
-                    match MultiMonitorManager::new() {
-                        Ok(mut manager) => {
-                            if let Err(e) = manager.load_layout(&name) {
-                                eprintln!("❌ Failed to load layout: {}", e);
-                            }
-                        }
-                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
-                    }
-                }
-                MultiMonitorSubcommand::List => {
-                    match MultiMonitorManager::new() {
-                        Ok(manager) => {
-                            let layouts = manager.list_layouts();
-                            if layouts.is_empty() {
-                                println!("No saved layouts");
-                            } else {
-                                println!("📂 Saved layouts:");
-                                for layout in layouts {
-                                    println!("   • {}", layout);
-                                }
-                            }
-                        }
-                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
-                    }
-                }
+                    Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                },
                 MultiMonitorSubcommand::SetVrr { connector, enabled } => {
                     match MultiMonitorManager::new() {
                         Ok(manager) => {
@@ -3312,36 +3346,38 @@ fn main() {
                         Err(e) => eprintln!("❌ Failed to initialize: {}", e),
                     }
                 }
-                MultiMonitorSubcommand::Gamescope { connector, width, height, refresh, command } => {
-                    match MultiMonitorManager::new() {
-                        Ok(manager) => {
-                            if let Err(e) = manager.launch_gamescope_on_display(&connector, width, height, refresh, &command) {
-                                eprintln!("❌ Failed to launch gamescope: {}", e);
-                            }
+                MultiMonitorSubcommand::Gamescope {
+                    connector,
+                    width,
+                    height,
+                    refresh,
+                    command,
+                } => match MultiMonitorManager::new() {
+                    Ok(manager) => {
+                        if let Err(e) = manager.launch_gamescope_on_display(
+                            &connector, width, height, refresh, &command,
+                        ) {
+                            eprintln!("❌ Failed to launch gamescope: {}", e);
                         }
-                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
                     }
-                }
-                MultiMonitorSubcommand::Auto => {
-                    match MultiMonitorManager::new() {
-                        Ok(mut manager) => {
-                            if let Err(e) = manager.auto_apply_layout() {
-                                eprintln!("❌ Failed to auto-apply layout: {}", e);
-                            }
+                    Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                },
+                MultiMonitorSubcommand::Auto => match MultiMonitorManager::new() {
+                    Ok(mut manager) => {
+                        if let Err(e) = manager.auto_apply_layout() {
+                            eprintln!("❌ Failed to auto-apply layout: {}", e);
                         }
-                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
                     }
-                }
-                MultiMonitorSubcommand::CreateExamples => {
-                    match MultiMonitorManager::new() {
-                        Ok(mut manager) => {
-                            if let Err(e) = manager.create_example_layouts() {
-                                eprintln!("❌ Failed to create examples: {}", e);
-                            }
+                    Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                },
+                MultiMonitorSubcommand::CreateExamples => match MultiMonitorManager::new() {
+                    Ok(mut manager) => {
+                        if let Err(e) = manager.create_example_layouts() {
+                            eprintln!("❌ Failed to create examples: {}", e);
                         }
-                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
                     }
-                }
+                    Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                },
             }
         }
         Command::Drivers { subcommand } => match subcommand {
@@ -3453,83 +3489,87 @@ fn main() {
                 Err(e) => eprintln!("❌ Failed to setup automation: {}", e),
             },
             PowerSubcommand::Curve { action } => {
-                use nvcontrol::power_curves::{load_power_config, save_power_config};
                 use nvcontrol::gui_widgets::CurvePoint;
+                use nvcontrol::power_curves::{load_power_config, save_power_config};
 
                 match action {
-                    PowerCurveAction::Show => {
-                        match load_power_config() {
-                            Ok(config) => {
-                                println!("📈 Power Curve Configuration:\n");
-                                println!("Enabled: {}", if config.curve_enabled { "Yes ✅" } else { "No ❌" });
-                                println!("\nCurve Points:");
-                                for (i, point) in config.power_curve.points.iter().enumerate() {
-                                    println!("  {}: Temp={:.1}°C → Power={:.1}%", i, point.x, point.y);
+                    PowerCurveAction::Show => match load_power_config() {
+                        Ok(config) => {
+                            println!("📈 Power Curve Configuration:\n");
+                            println!(
+                                "Enabled: {}",
+                                if config.curve_enabled {
+                                    "Yes ✅"
+                                } else {
+                                    "No ❌"
                                 }
+                            );
+                            println!("\nCurve Points:");
+                            for (i, point) in config.power_curve.points.iter().enumerate() {
+                                println!("  {}: Temp={:.1}°C → Power={:.1}%", i, point.x, point.y);
                             }
-                            Err(e) => eprintln!("❌ Failed to load power config: {}", e),
                         }
-                    }
-                    PowerCurveAction::Add { temp, power } => {
-                        match load_power_config() {
-                            Ok(mut config) => {
-                                config.power_curve.points.push(CurvePoint { x: temp, y: power });
-                                config.power_curve.points.sort_by(|a, b| a.x.partial_cmp(&b.x).unwrap());
+                        Err(e) => eprintln!("❌ Failed to load power config: {}", e),
+                    },
+                    PowerCurveAction::Add { temp, power } => match load_power_config() {
+                        Ok(mut config) => {
+                            config
+                                .power_curve
+                                .points
+                                .push(CurvePoint { x: temp, y: power });
+                            config
+                                .power_curve
+                                .points
+                                .sort_by(|a, b| a.x.partial_cmp(&b.x).unwrap());
 
+                            if let Err(e) = save_power_config(&config) {
+                                eprintln!("❌ Failed to save: {}", e);
+                            } else {
+                                println!("✅ Added power curve point: {}°C → {}%", temp, power);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to load config: {}", e),
+                    },
+                    PowerCurveAction::Remove { index } => match load_power_config() {
+                        Ok(mut config) => {
+                            if index < config.power_curve.points.len() {
+                                config.power_curve.points.remove(index);
                                 if let Err(e) = save_power_config(&config) {
                                     eprintln!("❌ Failed to save: {}", e);
                                 } else {
-                                    println!("✅ Added power curve point: {}°C → {}%", temp, power);
+                                    println!("✅ Removed curve point {}", index);
                                 }
+                            } else {
+                                eprintln!("❌ Invalid index: {}", index);
                             }
-                            Err(e) => eprintln!("❌ Failed to load config: {}", e),
                         }
-                    }
-                    PowerCurveAction::Remove { index } => {
-                        match load_power_config() {
-                            Ok(mut config) => {
-                                if index < config.power_curve.points.len() {
-                                    config.power_curve.points.remove(index);
-                                    if let Err(e) = save_power_config(&config) {
-                                        eprintln!("❌ Failed to save: {}", e);
-                                    } else {
-                                        println!("✅ Removed curve point {}", index);
-                                    }
-                                } else {
-                                    eprintln!("❌ Invalid index: {}", index);
-                                }
+                        Err(e) => eprintln!("❌ Failed to load config: {}", e),
+                    },
+                    PowerCurveAction::Enable => match load_power_config() {
+                        Ok(mut config) => {
+                            config.curve_enabled = true;
+                            if let Err(e) = save_power_config(&config) {
+                                eprintln!("❌ Failed to save: {}", e);
+                            } else {
+                                println!("✅ Power curve enabled");
                             }
-                            Err(e) => eprintln!("❌ Failed to load config: {}", e),
                         }
-                    }
-                    PowerCurveAction::Enable => {
-                        match load_power_config() {
-                            Ok(mut config) => {
-                                config.curve_enabled = true;
-                                if let Err(e) = save_power_config(&config) {
-                                    eprintln!("❌ Failed to save: {}", e);
-                                } else {
-                                    println!("✅ Power curve enabled");
-                                }
+                        Err(e) => eprintln!("❌ Failed to load config: {}", e),
+                    },
+                    PowerCurveAction::Disable => match load_power_config() {
+                        Ok(mut config) => {
+                            config.curve_enabled = false;
+                            if let Err(e) = save_power_config(&config) {
+                                eprintln!("❌ Failed to save: {}", e);
+                            } else {
+                                println!("✅ Power curve disabled");
                             }
-                            Err(e) => eprintln!("❌ Failed to load config: {}", e),
                         }
-                    }
-                    PowerCurveAction::Disable => {
-                        match load_power_config() {
-                            Ok(mut config) => {
-                                config.curve_enabled = false;
-                                if let Err(e) = save_power_config(&config) {
-                                    eprintln!("❌ Failed to save: {}", e);
-                                } else {
-                                    println!("✅ Power curve disabled");
-                                }
-                            }
-                            Err(e) => eprintln!("❌ Failed to load config: {}", e),
-                        }
-                    }
+                        Err(e) => eprintln!("❌ Failed to load config: {}", e),
+                    },
                     PowerCurveAction::Reset => {
-                        let default_config = nvcontrol::power_curves::PowerManagementConfig::default();
+                        let default_config =
+                            nvcontrol::power_curves::PowerManagementConfig::default();
                         if let Err(e) = save_power_config(&default_config) {
                             eprintln!("❌ Failed to save: {}", e);
                         } else {
@@ -3698,17 +3738,15 @@ fn main() {
                     use nvcontrol::game_launcher::GameLauncher;
 
                     match GameLauncher::new() {
-                        Ok(launcher) => {
-                            match launcher.load_profile(&profile) {
-                                Ok(game_profile) => {
-                                    match launcher.launch_game(&game_profile, args.clone()) {
-                                        Ok(()) => println!("✅ Game exited successfully"),
-                                        Err(e) => eprintln!("❌ Game launch failed: {}", e),
-                                    }
+                        Ok(launcher) => match launcher.load_profile(&profile) {
+                            Ok(game_profile) => {
+                                match launcher.launch_game(&game_profile, args.clone()) {
+                                    Ok(()) => println!("✅ Game exited successfully"),
+                                    Err(e) => eprintln!("❌ Game launch failed: {}", e),
                                 }
-                                Err(e) => eprintln!("❌ Failed to load profile '{}': {}", profile, e),
                             }
-                        }
+                            Err(e) => eprintln!("❌ Failed to load profile '{}': {}", profile, e),
+                        },
                         Err(e) => eprintln!("❌ Failed to initialize game launcher: {}", e),
                     }
                 }
@@ -3720,7 +3758,9 @@ fn main() {
                             let profiles = launcher.list_profiles();
                             if profiles.is_empty() {
                                 println!("📂 No game profiles found");
-                                println!("   Create example profiles with: nvctl gaming launch examples");
+                                println!(
+                                    "   Create example profiles with: nvctl gaming launch examples"
+                                );
                             } else {
                                 println!("📂 Available game profiles:");
                                 for profile_name in profiles {
@@ -3735,53 +3775,57 @@ fn main() {
                     use nvcontrol::game_launcher::GameLauncher;
 
                     match GameLauncher::new() {
-                        Ok(launcher) => {
-                            match launcher.load_profile(&profile) {
-                                Ok(game_profile) => {
-                                    println!("🎮 Game Profile: {}", game_profile.name);
-                                    println!();
-                                    println!("   Executable: {}", game_profile.executable);
-                                    if let Some(dir) = &game_profile.working_dir {
-                                        println!("   Working Dir: {}", dir);
-                                    }
-                                    println!();
-
-                                    if game_profile.use_gamescope {
-                                        println!("   Gamescope:");
-                                        if let (Some(w), Some(h)) = (game_profile.gamescope_width, game_profile.gamescope_height) {
-                                            println!("      Resolution: {}x{}", w, h);
-                                        }
-                                        if let Some(r) = game_profile.gamescope_refresh {
-                                            println!("      Refresh: {}Hz", r);
-                                        }
-                                        println!("      HDR: {}", game_profile.gamescope_hdr);
-                                        println!("      VRR: {}", game_profile.gamescope_vrr);
-                                        println!();
-                                    }
-
-                                    if !game_profile.env_vars.is_empty() {
-                                        println!("   Environment Variables: ({} set)", game_profile.env_vars.len());
-                                        for (key, value) in &game_profile.env_vars {
-                                            println!("      {}={}", key, value);
-                                        }
-                                        println!();
-                                    }
-
-                                    if let Some(cache) = &game_profile.shader_cache_path {
-                                        println!("   Shader Cache: {}", cache);
-                                    }
-
-                                    if let Some(power) = &game_profile.power_profile {
-                                        println!("   Power Profile: {}", power);
-                                    }
-
-                                    if let Some(affinity) = &game_profile.cpu_affinity {
-                                        println!("   CPU Affinity: {:?}", affinity);
-                                    }
+                        Ok(launcher) => match launcher.load_profile(&profile) {
+                            Ok(game_profile) => {
+                                println!("🎮 Game Profile: {}", game_profile.name);
+                                println!();
+                                println!("   Executable: {}", game_profile.executable);
+                                if let Some(dir) = &game_profile.working_dir {
+                                    println!("   Working Dir: {}", dir);
                                 }
-                                Err(e) => eprintln!("❌ Failed to load profile '{}': {}", profile, e),
+                                println!();
+
+                                if game_profile.use_gamescope {
+                                    println!("   Gamescope:");
+                                    if let (Some(w), Some(h)) = (
+                                        game_profile.gamescope_width,
+                                        game_profile.gamescope_height,
+                                    ) {
+                                        println!("      Resolution: {}x{}", w, h);
+                                    }
+                                    if let Some(r) = game_profile.gamescope_refresh {
+                                        println!("      Refresh: {}Hz", r);
+                                    }
+                                    println!("      HDR: {}", game_profile.gamescope_hdr);
+                                    println!("      VRR: {}", game_profile.gamescope_vrr);
+                                    println!();
+                                }
+
+                                if !game_profile.env_vars.is_empty() {
+                                    println!(
+                                        "   Environment Variables: ({} set)",
+                                        game_profile.env_vars.len()
+                                    );
+                                    for (key, value) in &game_profile.env_vars {
+                                        println!("      {}={}", key, value);
+                                    }
+                                    println!();
+                                }
+
+                                if let Some(cache) = &game_profile.shader_cache_path {
+                                    println!("   Shader Cache: {}", cache);
+                                }
+
+                                if let Some(power) = &game_profile.power_profile {
+                                    println!("   Power Profile: {}", power);
+                                }
+
+                                if let Some(affinity) = &game_profile.cpu_affinity {
+                                    println!("   CPU Affinity: {:?}", affinity);
+                                }
                             }
-                        }
+                            Err(e) => eprintln!("❌ Failed to load profile '{}': {}", profile, e),
+                        },
                         Err(e) => eprintln!("❌ Failed to show profile: {}", e),
                     }
                 }
@@ -3789,22 +3833,20 @@ fn main() {
                     use nvcontrol::game_launcher::GameLauncher;
 
                     match GameLauncher::new() {
-                        Ok(launcher) => {
-                            match launcher.create_example_profiles() {
-                                Ok(()) => {
-                                    println!("✅ Example game profiles created!");
-                                    println!();
-                                    println!("Available profiles:");
-                                    println!("   • cyberpunk2077 - Cyberpunk 2077 with DLSS and RT");
-                                    println!("   • cs2 - Counter-Strike 2 competitive settings");
-                                    println!("   • eldenring - Elden Ring with Proton");
-                                    println!();
-                                    println!("Launch a game:");
-                                    println!("   nvctl gaming launch run cyberpunk2077");
-                                }
-                                Err(e) => eprintln!("❌ Failed to create examples: {}", e),
+                        Ok(launcher) => match launcher.create_example_profiles() {
+                            Ok(()) => {
+                                println!("✅ Example game profiles created!");
+                                println!();
+                                println!("Available profiles:");
+                                println!("   • cyberpunk2077 - Cyberpunk 2077 with DLSS and RT");
+                                println!("   • cs2 - Counter-Strike 2 competitive settings");
+                                println!("   • eldenring - Elden Ring with Proton");
+                                println!();
+                                println!("Launch a game:");
+                                println!("   nvctl gaming launch run cyberpunk2077");
                             }
-                        }
+                            Err(e) => eprintln!("❌ Failed to create examples: {}", e),
+                        },
                         Err(e) => eprintln!("❌ Failed to initialize launcher: {}", e),
                     }
                 }
@@ -3820,66 +3862,68 @@ fn main() {
                     GameAutoAction::Stop => {
                         println!("⚠️  Auto-profile service stop not yet implemented");
                     }
-                    GameAutoAction::Status => {
-                        match load_config() {
-                            Ok(config) => {
-                                println!("🎮 Game Profile Auto-Application Status:\n");
-                                println!("Enabled: {}", if config.enabled { "Yes ✅" } else { "No ❌" });
-                                println!("Poll Interval: {}s", config.poll_interval_secs);
-                                println!("Apply Delay: {}s", config.apply_delay_secs);
-                                println!("Restore on Exit: {}", if config.restore_on_exit { "Yes" } else { "No" });
-                            }
-                            Err(e) => eprintln!("❌ Failed to load config: {}", e),
+                    GameAutoAction::Status => match load_config() {
+                        Ok(config) => {
+                            println!("🎮 Game Profile Auto-Application Status:\n");
+                            println!(
+                                "Enabled: {}",
+                                if config.enabled { "Yes ✅" } else { "No ❌" }
+                            );
+                            println!("Poll Interval: {}s", config.poll_interval_secs);
+                            println!("Apply Delay: {}s", config.apply_delay_secs);
+                            println!(
+                                "Restore on Exit: {}",
+                                if config.restore_on_exit { "Yes" } else { "No" }
+                            );
                         }
-                    }
-                    GameAutoAction::Enable => {
-                        match load_config() {
-                            Ok(mut config) => {
-                                config.enabled = true;
-                                if let Err(e) = save_config(&config) {
-                                    eprintln!("❌ Failed to save: {}", e);
-                                } else {
-                                    println!("✅ Auto-profile application enabled");
-                                }
+                        Err(e) => eprintln!("❌ Failed to load config: {}", e),
+                    },
+                    GameAutoAction::Enable => match load_config() {
+                        Ok(mut config) => {
+                            config.enabled = true;
+                            if let Err(e) = save_config(&config) {
+                                eprintln!("❌ Failed to save: {}", e);
+                            } else {
+                                println!("✅ Auto-profile application enabled");
                             }
-                            Err(e) => eprintln!("❌ Failed to load config: {}", e),
                         }
-                    }
-                    GameAutoAction::Disable => {
-                        match load_config() {
-                            Ok(mut config) => {
-                                config.enabled = false;
-                                if let Err(e) = save_config(&config) {
-                                    eprintln!("❌ Failed to save: {}", e);
-                                } else {
-                                    println!("✅ Auto-profile application disabled");
-                                }
+                        Err(e) => eprintln!("❌ Failed to load config: {}", e),
+                    },
+                    GameAutoAction::Disable => match load_config() {
+                        Ok(mut config) => {
+                            config.enabled = false;
+                            if let Err(e) = save_config(&config) {
+                                eprintln!("❌ Failed to save: {}", e);
+                            } else {
+                                println!("✅ Auto-profile application disabled");
                             }
-                            Err(e) => eprintln!("❌ Failed to load config: {}", e),
                         }
-                    }
-                    GameAutoAction::Config { poll_interval, apply_delay, restore_on_exit } => {
-                        match load_config() {
-                            Ok(mut config) => {
-                                if let Some(interval) = poll_interval {
-                                    config.poll_interval_secs = interval;
-                                }
-                                if let Some(delay) = apply_delay {
-                                    config.apply_delay_secs = delay;
-                                }
-                                if let Some(restore) = restore_on_exit {
-                                    config.restore_on_exit = restore;
-                                }
+                        Err(e) => eprintln!("❌ Failed to load config: {}", e),
+                    },
+                    GameAutoAction::Config {
+                        poll_interval,
+                        apply_delay,
+                        restore_on_exit,
+                    } => match load_config() {
+                        Ok(mut config) => {
+                            if let Some(interval) = poll_interval {
+                                config.poll_interval_secs = interval;
+                            }
+                            if let Some(delay) = apply_delay {
+                                config.apply_delay_secs = delay;
+                            }
+                            if let Some(restore) = restore_on_exit {
+                                config.restore_on_exit = restore;
+                            }
 
-                                if let Err(e) = save_config(&config) {
-                                    eprintln!("❌ Failed to save: {}", e);
-                                } else {
-                                    println!("✅ Configuration updated");
-                                }
+                            if let Err(e) = save_config(&config) {
+                                eprintln!("❌ Failed to save: {}", e);
+                            } else {
+                                println!("✅ Configuration updated");
                             }
-                            Err(e) => eprintln!("❌ Failed to load config: {}", e),
                         }
-                    }
+                        Err(e) => eprintln!("❌ Failed to load config: {}", e),
+                    },
                 }
             }
         },
@@ -4456,7 +4500,7 @@ fn main() {
                 core_oc,
             } => {
                 use nvcontrol::nvbind_integration::{
-                    NvcontrolNvbindBridge, create_cyberpunk2077_profile, create_valorant_profile
+                    NvcontrolNvbindBridge, create_cyberpunk2077_profile, create_valorant_profile,
                 };
 
                 println!("🚀 Launching optimized gaming container with nvbind + nvcontrol");
@@ -4470,18 +4514,20 @@ fn main() {
                             let bridge = NvcontrolNvbindBridge::new().await?;
 
                             // Use predefined profiles or create custom
-                            let (container_config, mut nvcontrol_profile) = match game.to_lowercase().as_str() {
-                                "cyberpunk2077" | "cyberpunk" => create_cyberpunk2077_profile(),
-                                "valorant" => create_valorant_profile(),
-                                _ => {
-                                    println!("   Using custom profile for {}", game);
-                                    let (mut config, mut profile) = create_cyberpunk2077_profile();
-                                    config.container_spec.name = game.clone();
-                                    config.container_spec.image = image.clone();
-                                    profile.name = format!("{} Gaming Profile", game);
-                                    (config, profile)
-                                }
-                            };
+                            let (container_config, mut nvcontrol_profile) =
+                                match game.to_lowercase().as_str() {
+                                    "cyberpunk2077" | "cyberpunk" => create_cyberpunk2077_profile(),
+                                    "valorant" => create_valorant_profile(),
+                                    _ => {
+                                        println!("   Using custom profile for {}", game);
+                                        let (mut config, mut profile) =
+                                            create_cyberpunk2077_profile();
+                                        config.container_spec.name = game.clone();
+                                        config.container_spec.image = image.clone();
+                                        profile.name = format!("{} Gaming Profile", game);
+                                        (config, profile)
+                                    }
+                                };
 
                             if optimize {
                                 // Apply custom optimizations
@@ -4490,7 +4536,12 @@ fn main() {
                                 nvcontrol_profile.gpu_overclock.core_offset_mhz = core_oc;
                             }
 
-                            bridge.launch_optimized_gaming_container(container_config, nvcontrol_profile).await
+                            bridge
+                                .launch_optimized_gaming_container(
+                                    container_config,
+                                    nvcontrol_profile,
+                                )
+                                .await
                         }) {
                             Ok(container_id) => {
                                 println!("✅ Gaming container launched successfully!");
@@ -4499,7 +4550,10 @@ fn main() {
                                 println!("   🎯 nvcontrol: Gaming optimizations applied");
                                 if optimize {
                                     println!("   🌈 Digital vibrance: {}%", vibrance);
-                                    println!("   ⚡ GPU overclock: +{}MHz core, +{}MHz memory", core_oc, memory_oc);
+                                    println!(
+                                        "   ⚡ GPU overclock: +{}MHz core, +{}MHz memory",
+                                        core_oc, memory_oc
+                                    );
                                 }
                             }
                             Err(e) => eprintln!("❌ Failed to launch gaming container: {}", e),
@@ -4537,11 +4591,21 @@ fn main() {
                                     }
 
                                     if containers && !gpu_info.active_containers.is_empty() {
-                                        println!("   🐳 Active Containers: {}", gpu_info.active_containers.len());
+                                        println!(
+                                            "   🐳 Active Containers: {}",
+                                            gpu_info.active_containers.len()
+                                        );
                                         for container_id in &gpu_info.active_containers {
-                                            if let Some(metrics) = gpu_info.container_performance.get(container_id) {
-                                                println!("     {} - GPU: {:.1}%, Latency: {}μs, FPS: {:.1}",
-                                                    container_id, metrics.gpu_utilization, metrics.latency_us, metrics.fps);
+                                            if let Some(metrics) =
+                                                gpu_info.container_performance.get(container_id)
+                                            {
+                                                println!(
+                                                    "     {} - GPU: {:.1}%, Latency: {}μs, FPS: {:.1}",
+                                                    container_id,
+                                                    metrics.gpu_utilization,
+                                                    metrics.latency_us,
+                                                    metrics.fps
+                                                );
                                             }
                                         }
                                     }
@@ -4550,7 +4614,11 @@ fn main() {
                                 if let Some(fmt) = format {
                                     match fmt {
                                         OutputFormat::Json => {
-                                            println!("{}", serde_json::to_string_pretty(&gpu_infos).unwrap_or_default());
+                                            println!(
+                                                "{}",
+                                                serde_json::to_string_pretty(&gpu_infos)
+                                                    .unwrap_or_default()
+                                            );
                                         }
                                         OutputFormat::Human => {
                                             // Already printed in human-readable format above
@@ -4567,14 +4635,22 @@ fn main() {
                     Err(e) => eprintln!("❌ Failed to create async runtime: {}", e),
                 }
             }
-            NvbindSubcommand::Dashboard { interval, fps_overlay, latency } => {
+            NvbindSubcommand::Dashboard {
+                interval,
+                fps_overlay,
+                latency,
+            } => {
                 use nvcontrol::nvbind_integration::NvcontrolNvbindBridge;
 
                 println!("🎮 ULTIMATE GAMING PERFORMANCE DASHBOARD 🎮");
                 println!("📊 nvcontrol + nvbind unified monitoring");
                 println!("⚡ Update interval: {}s", interval);
-                if fps_overlay { println!("🎯 FPS overlay: enabled"); }
-                if latency { println!("⏱️ Latency tracking: enabled"); }
+                if fps_overlay {
+                    println!("🎯 FPS overlay: enabled");
+                }
+                if latency {
+                    println!("⏱️ Latency tracking: enabled");
+                }
                 println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
                 match tokio::runtime::Runtime::new() {
@@ -4649,14 +4725,25 @@ fn main() {
                             println!("   📦 No GPU containers found");
                             println!("   💡 Use 'docker run --gpus all' to launch GPU containers");
                         } else {
-                            println!("\n┌────────────────────────────────────────────────────────────────────┐");
-                            println!("│                       GPU Containers                               │");
-                            println!("├──────────────┬──────────────────────┬─────────────┬───────────────┤");
-                            println!("│ Container ID │ Name                 │ Image       │ GPU Devices   │");
-                            println!("├──────────────┼──────────────────────┼─────────────┼───────────────┤");
+                            println!(
+                                "\n┌────────────────────────────────────────────────────────────────────┐"
+                            );
+                            println!(
+                                "│                       GPU Containers                               │"
+                            );
+                            println!(
+                                "├──────────────┬──────────────────────┬─────────────┬───────────────┤"
+                            );
+                            println!(
+                                "│ Container ID │ Name                 │ Image       │ GPU Devices   │"
+                            );
+                            println!(
+                                "├──────────────┼──────────────────────┼─────────────┼───────────────┤"
+                            );
 
                             for container in &containers {
-                                let short_id = &container.container_id[..12.min(container.container_id.len())];
+                                let short_id =
+                                    &container.container_id[..12.min(container.container_id.len())];
                                 let short_name = if container.container_name.len() > 20 {
                                     format!("{}...", &container.container_name[..17])
                                 } else {
@@ -4673,17 +4760,28 @@ fn main() {
                                     container.gpu_devices.join(",")
                                 };
 
-                                println!("│ {:12} │ {:20} │ {:13} │ {:13} │",
-                                    short_id, short_name, short_image, gpu_list);
+                                println!(
+                                    "│ {:12} │ {:20} │ {:13} │ {:13} │",
+                                    short_id, short_name, short_image, gpu_list
+                                );
                             }
 
-                            println!("└──────────────┴──────────────────────┴─────────────┴───────────────┘");
+                            println!(
+                                "└──────────────┴──────────────────────┴─────────────┴───────────────┘"
+                            );
 
                             if show_metrics {
                                 println!("\n📊 Performance Metrics:");
                                 for container in &containers {
-                                    println!("   {} ({}):", container.container_name, &container.container_id[..12]);
-                                    println!("     GPU Utilization: {:.1}%", container.gpu_utilization);
+                                    println!(
+                                        "   {} ({}):",
+                                        container.container_name,
+                                        &container.container_id[..12]
+                                    );
+                                    println!(
+                                        "     GPU Utilization: {:.1}%",
+                                        container.gpu_utilization
+                                    );
                                     println!("     Power Usage: {:.1}W", container.power_usage);
                                 }
                             }
@@ -4733,7 +4831,7 @@ fn main() {
                     println!("🗑️ Delete nvbind profile");
                     println!("   Feature implementation in progress...");
                 }
-            }
+            },
         },
         Command::Container { subcommand } => match subcommand {
             ContainerSubcommand::List => {
@@ -4925,7 +5023,10 @@ fn main() {
                                     println!("  Status: {:?}", info.status);
                                     println!("  GPU Devices: {:?}", info.gpu_devices);
                                     if let Some(limit) = info.gpu_memory_limit {
-                                        println!("  GPU Memory Limit: {:.1} GB", limit as f64 / 1024.0 / 1024.0 / 1024.0);
+                                        println!(
+                                            "  GPU Memory Limit: {:.1} GB",
+                                            limit as f64 / 1024.0 / 1024.0 / 1024.0
+                                        );
                                     }
                                     println!("  GPU Utilization: {:.1}%", info.gpu_utilization);
                                     println!("  Power Usage: {:.1}W", info.power_usage);
@@ -4939,7 +5040,10 @@ fn main() {
                                     if containers.is_empty() {
                                         println!("ℹ️  No GPU containers running");
                                     } else {
-                                        println!("📊 GPU Containers ({} running):", containers.len());
+                                        println!(
+                                            "📊 GPU Containers ({} running):",
+                                            containers.len()
+                                        );
                                         println!("═══════════════════════════════════════");
                                         for info in containers {
                                             println!("\n🐳 {}", info.container_name);
@@ -4951,7 +5055,10 @@ fn main() {
                                             println!("   ID: {}", short_id);
                                             println!("   Status: {:?}", info.status);
                                             println!("   GPUs: {:?}", info.gpu_devices);
-                                            println!("   Utilization: {:.1}%", info.gpu_utilization);
+                                            println!(
+                                                "   Utilization: {:.1}%",
+                                                info.gpu_utilization
+                                            );
                                         }
                                     }
                                 }
@@ -4984,7 +5091,10 @@ fn main() {
                                     } else {
                                         &info.container_id
                                     };
-                                    println!("📊 Container: {} ({})", info.container_name, short_id);
+                                    println!(
+                                        "📊 Container: {} ({})",
+                                        info.container_name, short_id
+                                    );
                                     println!("═══════════════════════════════════════");
                                     println!("Status: {:?}", info.status);
                                     println!("GPUs: {:?}", info.gpu_devices);
@@ -5038,12 +5148,20 @@ fn main() {
                                     println!("   Power Limit: {} W", power);
                                 }
                                 if let Some(mem) = prof.memory_limit {
-                                    println!("   Memory Limit: {:.1} GB", mem as f64 / 1024.0 / 1024.0 / 1024.0);
+                                    println!(
+                                        "   Memory Limit: {:.1} GB",
+                                        mem as f64 / 1024.0 / 1024.0 / 1024.0
+                                    );
                                 }
                                 println!("   Compute Mode: {:?}", prof.compute_mode);
 
-                                println!("\n✅ Profile '{}' applied to container '{}'", prof.name, container);
-                                println!("   Note: Container may need restart for changes to take effect");
+                                println!(
+                                    "\n✅ Profile '{}' applied to container '{}'",
+                                    prof.name, container
+                                );
+                                println!(
+                                    "   Note: Container may need restart for changes to take effect"
+                                );
                             } else {
                                 eprintln!("❌ Profile '{}' not found", profile);
                                 println!("\n📋 Available profiles:");
@@ -5093,12 +5211,10 @@ fn main() {
                     use nvcontrol::container_runtime::NvContainerRuntime;
 
                     match NvContainerRuntime::new() {
-                        Ok(rt) => {
-                            match rt.setup_runtime(&runtime) {
-                                Ok(()) => println!("✅ Runtime setup completed successfully"),
-                                Err(e) => eprintln!("❌ Runtime setup failed: {}", e),
-                            }
-                        }
+                        Ok(rt) => match rt.setup_runtime(&runtime) {
+                            Ok(()) => println!("✅ Runtime setup completed successfully"),
+                            Err(e) => eprintln!("❌ Runtime setup failed: {}", e),
+                        },
                         Err(e) => eprintln!("❌ Failed to initialize runtime: {}", e),
                     }
                 }
@@ -5117,12 +5233,10 @@ fn main() {
                     use nvcontrol::container_runtime::NvContainerRuntime;
 
                     match NvContainerRuntime::new() {
-                        Ok(rt) => {
-                            match rt.configure_runtime() {
-                                Ok(()) => println!("✅ Runtime configuration completed successfully"),
-                                Err(e) => eprintln!("❌ Runtime configuration failed: {}", e),
-                            }
-                        }
+                        Ok(rt) => match rt.configure_runtime() {
+                            Ok(()) => println!("✅ Runtime configuration completed successfully"),
+                            Err(e) => eprintln!("❌ Runtime configuration failed: {}", e),
+                        },
                         Err(e) => eprintln!("❌ Failed to initialize runtime: {}", e),
                     }
                 }
@@ -5166,7 +5280,11 @@ fn main() {
                 println!("📤 Exporting profile '{}' to '{}'", profile, output);
                 println!("⚠️  Profile export not yet fully implemented");
             }
-            ConfigSubcommand::Import { input, name, skip_validation } => {
+            ConfigSubcommand::Import {
+                input,
+                name,
+                skip_validation,
+            } => {
                 let profile_name = name.unwrap_or_else(|| {
                     std::path::Path::new(&input)
                         .file_stem()
@@ -5174,7 +5292,10 @@ fn main() {
                         .unwrap_or("imported")
                         .to_string()
                 });
-                println!("📥 Importing profile from '{}' as '{}'", input, profile_name);
+                println!(
+                    "📥 Importing profile from '{}' as '{}'",
+                    input, profile_name
+                );
                 if skip_validation {
                     println!("⚠️  Skipping validation checks");
                 }
@@ -5189,172 +5310,165 @@ fn main() {
             use nvcontrol::osd::{OsdManager, OsdMetric, OsdPosition};
 
             match subcommand {
-                OsdSubcommand::Enable => {
-                    match OsdManager::new() {
-                        Ok(mut manager) => {
-                            if !OsdManager::check_mangohud_installed() {
-                                eprintln!("⚠️  MangoHud not found!");
-                                println!("{}", OsdManager::install_mangohud_instructions());
-                                return;
-                            }
+                OsdSubcommand::Enable => match OsdManager::new() {
+                    Ok(mut manager) => {
+                        if !OsdManager::check_mangohud_installed() {
+                            eprintln!("⚠️  MangoHud not found!");
+                            println!("{}", OsdManager::install_mangohud_instructions());
+                            return;
+                        }
 
-                            match manager.enable() {
-                                Ok(()) => {
-                                    println!("✅ OSD enabled successfully");
-                                    println!("💡 Launch games with: mangohud <game>");
-                                    println!("💡 Or set MANGOHUD=1 environment variable");
-                                }
-                                Err(e) => eprintln!("❌ Failed to enable OSD: {}", e),
+                        match manager.enable() {
+                            Ok(()) => {
+                                println!("✅ OSD enabled successfully");
+                                println!("💡 Launch games with: mangohud <game>");
+                                println!("💡 Or set MANGOHUD=1 environment variable");
                             }
+                            Err(e) => eprintln!("❌ Failed to enable OSD: {}", e),
                         }
-                        Err(e) => eprintln!("❌ Failed to initialize OSD manager: {}", e),
                     }
-                }
-                OsdSubcommand::Disable => {
-                    match OsdManager::new() {
-                        Ok(mut manager) => {
-                            match manager.disable() {
-                                Ok(()) => println!("✅ OSD disabled"),
-                                Err(e) => eprintln!("❌ Failed to disable OSD: {}", e),
-                            }
+                    Err(e) => eprintln!("❌ Failed to initialize OSD manager: {}", e),
+                },
+                OsdSubcommand::Disable => match OsdManager::new() {
+                    Ok(mut manager) => match manager.disable() {
+                        Ok(()) => println!("✅ OSD disabled"),
+                        Err(e) => eprintln!("❌ Failed to disable OSD: {}", e),
+                    },
+                    Err(e) => eprintln!("❌ Failed to initialize OSD manager: {}", e),
+                },
+                OsdSubcommand::Status => match OsdManager::new() {
+                    Ok(manager) => {
+                        let config = manager.get_config();
+                        println!("📊 OSD Status:");
+                        println!(
+                            "   Enabled: {}",
+                            if config.enabled { "✅ Yes" } else { "❌ No" }
+                        );
+                        println!("   Position: {:?}", config.position);
+                        println!("   Font Size: {}", config.font_size);
+                        println!("   Opacity: {:.2}", config.background_opacity);
+                        println!("   Update Interval: {}ms", config.update_interval_ms);
+                        println!("\n📈 Active Metrics:");
+                        for metric in &config.metrics {
+                            println!("   • {:?}", metric);
                         }
-                        Err(e) => eprintln!("❌ Failed to initialize OSD manager: {}", e),
                     }
-                }
-                OsdSubcommand::Status => {
-                    match OsdManager::new() {
-                        Ok(manager) => {
-                            let config = manager.get_config();
-                            println!("📊 OSD Status:");
-                            println!("   Enabled: {}", if config.enabled { "✅ Yes" } else { "❌ No" });
-                            println!("   Position: {:?}", config.position);
-                            println!("   Font Size: {}", config.font_size);
-                            println!("   Opacity: {:.2}", config.background_opacity);
-                            println!("   Update Interval: {}ms", config.update_interval_ms);
-                            println!("\n📈 Active Metrics:");
-                            for metric in &config.metrics {
-                                println!("   • {:?}", metric);
-                            }
-                        }
-                        Err(e) => eprintln!("❌ Failed to get OSD status: {}", e),
-                    }
-                }
+                    Err(e) => eprintln!("❌ Failed to get OSD status: {}", e),
+                },
                 OsdSubcommand::Config {
                     position,
                     font_size,
                     opacity,
                     interval,
-                } => {
-                    match OsdManager::new() {
-                        Ok(mut manager) => {
-                            let mut changed = false;
+                } => match OsdManager::new() {
+                    Ok(mut manager) => {
+                        let mut changed = false;
 
-                            if let Some(pos) = position {
-                                let osd_pos = match pos.as_str() {
-                                    "top-left" => OsdPosition::TopLeft,
-                                    "top-right" => OsdPosition::TopRight,
-                                    "bottom-left" => OsdPosition::BottomLeft,
-                                    "bottom-right" => OsdPosition::BottomRight,
-                                    _ => {
-                                        eprintln!("❌ Invalid position. Use: top-left, top-right, bottom-left, bottom-right");
-                                        return;
-                                    }
-                                };
-                                let _ = manager.set_position(osd_pos);
-                                changed = true;
-                            }
-
-                            if let Some(size) = font_size {
-                                manager.get_config_mut().font_size = size;
-                                changed = true;
-                            }
-
-                            if let Some(op) = opacity {
-                                if op >= 0.0 && op <= 1.0 {
-                                    manager.get_config_mut().background_opacity = op;
-                                    changed = true;
-                                } else {
-                                    eprintln!("❌ Opacity must be between 0.0 and 1.0");
+                        if let Some(pos) = position {
+                            let osd_pos = match pos.as_str() {
+                                "top-left" => OsdPosition::TopLeft,
+                                "top-right" => OsdPosition::TopRight,
+                                "bottom-left" => OsdPosition::BottomLeft,
+                                "bottom-right" => OsdPosition::BottomRight,
+                                _ => {
+                                    eprintln!(
+                                        "❌ Invalid position. Use: top-left, top-right, bottom-left, bottom-right"
+                                    );
+                                    return;
                                 }
-                            }
+                            };
+                            let _ = manager.set_position(osd_pos);
+                            changed = true;
+                        }
 
-                            if let Some(int) = interval {
-                                manager.get_config_mut().update_interval_ms = int;
+                        if let Some(size) = font_size {
+                            manager.get_config_mut().font_size = size;
+                            changed = true;
+                        }
+
+                        if let Some(op) = opacity {
+                            if op >= 0.0 && op <= 1.0 {
+                                manager.get_config_mut().background_opacity = op;
                                 changed = true;
-                            }
-
-                            if changed {
-                                match manager.save_config() {
-                                    Ok(()) => println!("✅ OSD configuration saved"),
-                                    Err(e) => eprintln!("❌ Failed to save config: {}", e),
-                                }
                             } else {
-                                println!("ℹ️  No changes made");
+                                eprintln!("❌ Opacity must be between 0.0 and 1.0");
                             }
                         }
-                        Err(e) => eprintln!("❌ Failed to initialize OSD manager: {}", e),
-                    }
-                }
-                OsdSubcommand::Add { metric } => {
-                    match OsdManager::new() {
-                        Ok(mut manager) => {
-                            let osd_metric = match metric.as_str() {
-                                "fps" => OsdMetric::Fps,
-                                "frametime" => OsdMetric::Frametime,
-                                "gpu-name" => OsdMetric::GpuName,
-                                "gpu-temp" => OsdMetric::GpuTemperature,
-                                "gpu-util" => OsdMetric::GpuUtilization,
-                                "vram" => OsdMetric::GpuMemoryUsed,
-                                "gpu-power" => OsdMetric::GpuPowerDraw,
-                                "gpu-fan" => OsdMetric::GpuFanSpeed,
-                                "gpu-clock" => OsdMetric::GpuClockSpeed,
-                                "cpu-temp" => OsdMetric::CpuTemperature,
-                                "cpu-util" => OsdMetric::CpuUtilization,
-                                "ram" => OsdMetric::RamUsed,
-                                _ => {
-                                    eprintln!("❌ Unknown metric. Use 'nvctl osd metrics' to list available metrics");
-                                    return;
-                                }
-                            };
 
-                            match manager.add_metric(osd_metric) {
-                                Ok(()) => println!("✅ Metric '{}' added to OSD", metric),
-                                Err(e) => eprintln!("❌ Failed to add metric: {}", e),
-                            }
+                        if let Some(int) = interval {
+                            manager.get_config_mut().update_interval_ms = int;
+                            changed = true;
                         }
-                        Err(e) => eprintln!("❌ Failed to initialize OSD manager: {}", e),
-                    }
-                }
-                OsdSubcommand::Remove { metric } => {
-                    match OsdManager::new() {
-                        Ok(mut manager) => {
-                            let osd_metric = match metric.as_str() {
-                                "fps" => OsdMetric::Fps,
-                                "frametime" => OsdMetric::Frametime,
-                                "gpu-name" => OsdMetric::GpuName,
-                                "gpu-temp" => OsdMetric::GpuTemperature,
-                                "gpu-util" => OsdMetric::GpuUtilization,
-                                "vram" => OsdMetric::GpuMemoryUsed,
-                                "gpu-power" => OsdMetric::GpuPowerDraw,
-                                "gpu-fan" => OsdMetric::GpuFanSpeed,
-                                "gpu-clock" => OsdMetric::GpuClockSpeed,
-                                "cpu-temp" => OsdMetric::CpuTemperature,
-                                "cpu-util" => OsdMetric::CpuUtilization,
-                                "ram" => OsdMetric::RamUsed,
-                                _ => {
-                                    eprintln!("❌ Unknown metric");
-                                    return;
-                                }
-                            };
 
-                            match manager.remove_metric(&osd_metric) {
-                                Ok(()) => println!("✅ Metric '{}' removed from OSD", metric),
-                                Err(e) => eprintln!("❌ Failed to remove metric: {}", e),
+                        if changed {
+                            match manager.save_config() {
+                                Ok(()) => println!("✅ OSD configuration saved"),
+                                Err(e) => eprintln!("❌ Failed to save config: {}", e),
                             }
+                        } else {
+                            println!("ℹ️  No changes made");
                         }
-                        Err(e) => eprintln!("❌ Failed to initialize OSD manager: {}", e),
                     }
-                }
+                    Err(e) => eprintln!("❌ Failed to initialize OSD manager: {}", e),
+                },
+                OsdSubcommand::Add { metric } => match OsdManager::new() {
+                    Ok(mut manager) => {
+                        let osd_metric = match metric.as_str() {
+                            "fps" => OsdMetric::Fps,
+                            "frametime" => OsdMetric::Frametime,
+                            "gpu-name" => OsdMetric::GpuName,
+                            "gpu-temp" => OsdMetric::GpuTemperature,
+                            "gpu-util" => OsdMetric::GpuUtilization,
+                            "vram" => OsdMetric::GpuMemoryUsed,
+                            "gpu-power" => OsdMetric::GpuPowerDraw,
+                            "gpu-fan" => OsdMetric::GpuFanSpeed,
+                            "gpu-clock" => OsdMetric::GpuClockSpeed,
+                            "cpu-temp" => OsdMetric::CpuTemperature,
+                            "cpu-util" => OsdMetric::CpuUtilization,
+                            "ram" => OsdMetric::RamUsed,
+                            _ => {
+                                eprintln!(
+                                    "❌ Unknown metric. Use 'nvctl osd metrics' to list available metrics"
+                                );
+                                return;
+                            }
+                        };
+
+                        match manager.add_metric(osd_metric) {
+                            Ok(()) => println!("✅ Metric '{}' added to OSD", metric),
+                            Err(e) => eprintln!("❌ Failed to add metric: {}", e),
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Failed to initialize OSD manager: {}", e),
+                },
+                OsdSubcommand::Remove { metric } => match OsdManager::new() {
+                    Ok(mut manager) => {
+                        let osd_metric = match metric.as_str() {
+                            "fps" => OsdMetric::Fps,
+                            "frametime" => OsdMetric::Frametime,
+                            "gpu-name" => OsdMetric::GpuName,
+                            "gpu-temp" => OsdMetric::GpuTemperature,
+                            "gpu-util" => OsdMetric::GpuUtilization,
+                            "vram" => OsdMetric::GpuMemoryUsed,
+                            "gpu-power" => OsdMetric::GpuPowerDraw,
+                            "gpu-fan" => OsdMetric::GpuFanSpeed,
+                            "gpu-clock" => OsdMetric::GpuClockSpeed,
+                            "cpu-temp" => OsdMetric::CpuTemperature,
+                            "cpu-util" => OsdMetric::CpuUtilization,
+                            "ram" => OsdMetric::RamUsed,
+                            _ => {
+                                eprintln!("❌ Unknown metric");
+                                return;
+                            }
+                        };
+
+                        match manager.remove_metric(&osd_metric) {
+                            Ok(()) => println!("✅ Metric '{}' removed from OSD", metric),
+                            Err(e) => eprintln!("❌ Failed to remove metric: {}", e),
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Failed to initialize OSD manager: {}", e),
+                },
                 OsdSubcommand::Metrics => {
                     println!("📊 Available OSD Metrics:");
                     println!("\n🎮 Performance:");
@@ -5442,7 +5556,8 @@ fn main() {
 
                     // Compositor info
                     println!("\n🖥️  Display Server:");
-                    let session = std::env::var("XDG_SESSION_TYPE").unwrap_or_else(|_| "unknown".into());
+                    let session =
+                        std::env::var("XDG_SESSION_TYPE").unwrap_or_else(|_| "unknown".into());
                     println!("   Session: {}", session);
 
                     let wayland_info = WaylandInfo::detect();
@@ -5451,15 +5566,30 @@ fn main() {
 
                     let caps = wayland_info.capabilities;
                     println!("\n   Capabilities:");
-                    println!("   • Digital Vibrance: {}", if caps.digital_vibrance { "✅" } else { "❌" });
-                    println!("   • VRR Control: {}", if caps.vrr_control { "✅" } else { "❌" });
-                    println!("   • HDR Support: {}", if caps.hdr_support { "✅" } else { "❌" });
-                    println!("   • Color Management: {}", if caps.color_management { "✅" } else { "❌" });
+                    println!(
+                        "   • Digital Vibrance: {}",
+                        if caps.digital_vibrance { "✅" } else { "❌" }
+                    );
+                    println!(
+                        "   • VRR Control: {}",
+                        if caps.vrr_control { "✅" } else { "❌" }
+                    );
+                    println!(
+                        "   • HDR Support: {}",
+                        if caps.hdr_support { "✅" } else { "❌" }
+                    );
+                    println!(
+                        "   • Color Management: {}",
+                        if caps.color_management { "✅" } else { "❌" }
+                    );
 
                     // Driver info
                     println!("\n🎮 NVIDIA Driver:");
                     if let Ok(output) = std::process::Command::new("nvidia-smi")
-                        .args(["--query-gpu=driver_version,name,memory.total", "--format=csv,noheader,nounits"])
+                        .args([
+                            "--query-gpu=driver_version,name,memory.total",
+                            "--format=csv,noheader,nounits",
+                        ])
                         .output()
                     {
                         if output.status.success() {
@@ -5478,8 +5608,12 @@ fn main() {
                     // Check for open kernel modules
                     if let Ok(modules) = std::fs::read_to_string("/proc/modules") {
                         if modules.contains("nvidia_modeset") {
-                            let driver_type = if std::path::Path::new("/sys/module/nvidia/parameters/OpenRmEnableUnsupportedGpus").exists()
-                                || modules.contains("nvidia_drm") {
+                            let driver_type = if std::path::Path::new(
+                                "/sys/module/nvidia/parameters/OpenRmEnableUnsupportedGpus",
+                            )
+                            .exists()
+                                || modules.contains("nvidia_drm")
+                            {
                                 "Open Kernel Modules ✅"
                             } else {
                                 "Proprietary"
@@ -5506,7 +5640,8 @@ fn main() {
                                 || line.starts_with("NAME=")
                                 || line.starts_with("VERSION=")
                                 || line.starts_with("ID=")
-                                || line.starts_with("ID_LIKE=") {
+                                || line.starts_with("ID_LIKE=")
+                            {
                                 let (key, value) = line.split_once('=').unwrap_or(("", ""));
                                 println!("   {}: {}", key, value.trim_matches('"'));
                             }
@@ -5540,13 +5675,17 @@ fn main() {
                         match compositor {
                             WaylandCompositor::KdePlasma => {
                                 println!("\n🔧 KDE Plasma Optimizations:");
-                                println!("   • Enable VRR: kscreen-doctor output.<name>.vrr.enable");
+                                println!(
+                                    "   • Enable VRR: kscreen-doctor output.<name>.vrr.enable"
+                                );
                                 println!("   • HDR: System Settings → Display → HDR");
                                 println!("   • Compositor: kwin_wayland with explicit sync");
                             }
                             WaylandCompositor::Gnome => {
                                 println!("\n🔧 GNOME Optimizations:");
-                                println!("   • Enable VRR: gsettings set org.gnome.mutter experimental-features \"['variable-refresh-rate']\"");
+                                println!(
+                                    "   • Enable VRR: gsettings set org.gnome.mutter experimental-features \"['variable-refresh-rate']\""
+                                );
                                 println!("   • GNOME 47+ recommended for HDR");
                             }
                             WaylandCompositor::Hyprland => {
@@ -5680,7 +5819,12 @@ fn main() {
                     }
                 }
             }
-            AsusSubcommand::Power { gpu, json, watch, interval } => {
+            AsusSubcommand::Power {
+                gpu,
+                json,
+                watch,
+                interval,
+            } => {
                 // Auto-detect GPU if not specified
                 let pci_id = match gpu {
                     Some(id) => id,
@@ -5723,7 +5867,10 @@ fn main() {
                         } else if json {
                             match detector.read_power_rails() {
                                 Ok(status) => {
-                                    println!("{}", serde_json::to_string_pretty(&status).unwrap_or_default());
+                                    println!(
+                                        "{}",
+                                        serde_json::to_string_pretty(&status).unwrap_or_default()
+                                    );
                                 }
                                 Err(e) => {
                                     eprintln!("{{\"error\": \"{}\"}}", e);
@@ -5784,22 +5931,20 @@ fn main() {
                     println!();
                 }
             }
-            AsusSubcommand::Aura { action } => {
-                match action {
-                    AsusAuraAction::Status => {
-                        println!("🌈 ASUS Aura RGB Status");
-                        println!("   (Aura control coming soon)");
-                    }
-                    AsusAuraAction::Mode { mode } => {
-                        println!("🌈 Setting Aura mode to: {}", mode);
-                        println!("   (Aura control coming soon)");
-                    }
-                    AsusAuraAction::Color { color } => {
-                        println!("🌈 Setting Aura color to: #{}", color);
-                        println!("   (Aura control coming soon)");
-                    }
+            AsusSubcommand::Aura { action } => match action {
+                AsusAuraAction::Status => {
+                    println!("🌈 ASUS Aura RGB Status");
+                    println!("   (Aura control coming soon)");
                 }
-            }
+                AsusAuraAction::Mode { mode } => {
+                    println!("🌈 Setting Aura mode to: {}", mode);
+                    println!("   (Aura control coming soon)");
+                }
+                AsusAuraAction::Color { color } => {
+                    println!("🌈 Setting Aura color to: #{}", color);
+                    println!("   (Aura control coming soon)");
+                }
+            },
         },
     }
 }

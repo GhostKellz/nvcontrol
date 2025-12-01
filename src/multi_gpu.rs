@@ -11,7 +11,7 @@ pub struct GpuInfo {
     pub uuid: String,
     pub pci_bus_id: String,
     pub driver_version: String,
-    pub vram_total: u64,  // bytes
+    pub vram_total: u64, // bytes
     pub cuda_cores: Option<u32>,
     pub compute_capability: Option<String>,
     pub temperature: f32,
@@ -26,8 +26,8 @@ pub struct GpuInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MultiGpuConfig {
     pub selected_gpu: u32,
-    pub sync_settings: bool,  // Apply same settings to all GPUs
-    pub per_gpu_profiles: std::collections::HashMap<u32, String>,  // GPU index -> profile name
+    pub sync_settings: bool, // Apply same settings to all GPUs
+    pub per_gpu_profiles: std::collections::HashMap<u32, String>, // GPU index -> profile name
 }
 
 impl Default for MultiGpuConfig {
@@ -45,8 +45,9 @@ pub fn detect_gpus() -> NvResult<Vec<GpuInfo>> {
     let nvml = nvml_wrapper::Nvml::init()
         .map_err(|e| NvControlError::GpuQueryFailed(format!("NVML init failed: {}", e)))?;
 
-    let device_count = nvml.device_count()
-        .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device count: {}", e)))?;
+    let device_count = nvml.device_count().map_err(|e| {
+        NvControlError::GpuQueryFailed(format!("Failed to get device count: {}", e))
+    })?;
 
     let mut gpus = Vec::new();
 
@@ -60,7 +61,8 @@ pub fn detect_gpus() -> NvResult<Vec<GpuInfo>> {
                 .map(|p| format!("{:04x}:{:02x}:{:02x}.0", p.domain, p.bus, p.device))
                 .unwrap_or_else(|| "Unknown".to_string());
 
-            let driver_version = nvml.sys_driver_version()
+            let driver_version = nvml
+                .sys_driver_version()
                 .unwrap_or_else(|_| "Unknown".to_string());
 
             let memory_info = device.memory_info().ok();
@@ -70,15 +72,18 @@ pub fn detect_gpus() -> NvResult<Vec<GpuInfo>> {
                 .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
                 .unwrap_or(0) as f32;
 
-            let power_draw = device.power_usage()
+            let power_draw = device
+                .power_usage()
                 .map(|p| p as f32 / 1000.0)
                 .unwrap_or(0.0);
 
-            let power_limit = device.power_management_limit()
+            let power_limit = device
+                .power_management_limit()
                 .map(|p| p / 1000)
                 .unwrap_or(0);
 
-            let utilization = device.utilization_rates()
+            let utilization = device
+                .utilization_rates()
                 .map(|u| u.gpu as f32)
                 .unwrap_or(0.0);
 
@@ -88,7 +93,8 @@ pub fn detect_gpus() -> NvResult<Vec<GpuInfo>> {
 
             // Query CUDA cores and compute capability
             let cuda_cores = device.num_cores().ok();
-            let compute_capability = device.cuda_compute_capability()
+            let compute_capability = device
+                .cuda_compute_capability()
                 .ok()
                 .map(|cc| format!("{}.{}", cc.major, cc.minor));
 
@@ -122,18 +128,22 @@ pub fn get_gpu_info(index: u32) -> NvResult<GpuInfo> {
     let nvml = nvml_wrapper::Nvml::init()
         .map_err(|e| NvControlError::GpuQueryFailed(format!("NVML init failed: {}", e)))?;
 
-    let device = nvml.device_by_index(index)
+    let device = nvml
+        .device_by_index(index)
         .map_err(|e| NvControlError::GpuQueryFailed(format!("GPU {} not found: {}", index, e)))?;
 
     let name = device.name().unwrap_or_else(|_| format!("GPU {}", index));
-    let uuid = device.uuid().unwrap_or_else(|_| format!("unknown-{}", index));
+    let uuid = device
+        .uuid()
+        .unwrap_or_else(|_| format!("unknown-{}", index));
     let pci_info = device.pci_info().ok();
     let pci_bus_id = pci_info
         .as_ref()
         .map(|p| format!("{:04x}:{:02x}:{:02x}.0", p.domain, p.bus, p.device))
         .unwrap_or_else(|| "Unknown".to_string());
 
-    let driver_version = nvml.sys_driver_version()
+    let driver_version = nvml
+        .sys_driver_version()
         .unwrap_or_else(|_| "Unknown".to_string());
 
     let memory_info = device.memory_info().ok();
@@ -143,15 +153,18 @@ pub fn get_gpu_info(index: u32) -> NvResult<GpuInfo> {
         .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
         .unwrap_or(0) as f32;
 
-    let power_draw = device.power_usage()
+    let power_draw = device
+        .power_usage()
         .map(|p| p as f32 / 1000.0)
         .unwrap_or(0.0);
 
-    let power_limit = device.power_management_limit()
+    let power_limit = device
+        .power_management_limit()
         .map(|p| p / 1000)
         .unwrap_or(0);
 
-    let utilization = device.utilization_rates()
+    let utilization = device
+        .utilization_rates()
         .map(|u| u.gpu as f32)
         .unwrap_or(0.0);
 
@@ -228,7 +241,10 @@ pub fn print_gpu_info(gpu: &GpuInfo) {
     println!("  Driver:       {}", gpu.driver_version);
     println!("  VRAM:         {:.2} GB", gpu.vram_total as f64 / 1e9);
     println!("  Temperature:  {:.1}°C", gpu.temperature);
-    println!("  Power:        {:.1}W / {}W", gpu.power_draw, gpu.power_limit);
+    println!(
+        "  Power:        {:.1}W / {}W",
+        gpu.power_draw, gpu.power_limit
+    );
     println!("  Utilization:  {:.0}%", gpu.utilization);
 
     if gpu.is_primary {

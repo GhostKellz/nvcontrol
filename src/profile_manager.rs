@@ -1,8 +1,8 @@
 // Profile Import/Export Manager
 // Save and load fan curves, overclock profiles, and game profiles
 
-use crate::gui_widgets::{FanCurve, VoltageCurve};
 use crate::game_detection::GameProfile;
+use crate::gui_widgets::{FanCurve, VoltageCurve};
 use crate::overclocking::OverclockProfile;
 use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
@@ -38,20 +38,26 @@ impl ProfileManager {
             .join("nvcontrol")
             .join("profiles");
 
-        fs::create_dir_all(&profiles_dir)
-            .map_err(|e| NvControlError::ConfigError(format!("Failed to create profiles directory: {}", e)))?;
+        fs::create_dir_all(&profiles_dir).map_err(|e| {
+            NvControlError::ConfigError(format!("Failed to create profiles directory: {}", e))
+        })?;
 
         Ok(Self { profiles_dir })
     }
 
     /// Export a complete profile bundle to JSON
-    pub fn export_profile(&self, bundle: &ProfileBundle, filename: Option<&str>) -> NvResult<PathBuf> {
+    pub fn export_profile(
+        &self,
+        bundle: &ProfileBundle,
+        filename: Option<&str>,
+    ) -> NvResult<PathBuf> {
         let filename = filename.unwrap_or(&bundle.name);
         let safe_filename = self.sanitize_filename(filename);
         let path = self.profiles_dir.join(format!("{}.json", safe_filename));
 
-        let json = serde_json::to_string_pretty(bundle)
-            .map_err(|e| NvControlError::ConfigError(format!("Failed to serialize profile: {}", e)))?;
+        let json = serde_json::to_string_pretty(bundle).map_err(|e| {
+            NvControlError::ConfigError(format!("Failed to serialize profile: {}", e))
+        })?;
 
         fs::write(&path, json)
             .map_err(|e| NvControlError::ConfigError(format!("Failed to write profile: {}", e)))?;
@@ -63,7 +69,10 @@ impl ProfileManager {
     /// Import a profile bundle from JSON
     pub fn import_profile(&self, path: &Path) -> NvResult<ProfileBundle> {
         if !path.exists() {
-            return Err(NvControlError::ConfigError(format!("Profile file not found: {}", path.display())));
+            return Err(NvControlError::ConfigError(format!(
+                "Profile file not found: {}",
+                path.display()
+            )));
         }
 
         let json = fs::read_to_string(path)
@@ -84,10 +93,12 @@ impl ProfileManager {
             return Ok(profiles);
         }
 
-        for entry in fs::read_dir(&self.profiles_dir)
-            .map_err(|e| NvControlError::ConfigError(format!("Failed to read profiles directory: {}", e)))?
-        {
-            let entry = entry.map_err(|e| NvControlError::ConfigError(format!("Failed to read directory entry: {}", e)))?;
+        for entry in fs::read_dir(&self.profiles_dir).map_err(|e| {
+            NvControlError::ConfigError(format!("Failed to read profiles directory: {}", e))
+        })? {
+            let entry = entry.map_err(|e| {
+                NvControlError::ConfigError(format!("Failed to read directory entry: {}", e))
+            })?;
             let path = entry.path();
 
             if path.extension().and_then(|s| s.to_str()) == Some("json") {
@@ -109,8 +120,9 @@ impl ProfileManager {
         let path = self.profiles_dir.join(format!("{}.json", safe_filename));
 
         if path.exists() {
-            fs::remove_file(&path)
-                .map_err(|e| NvControlError::ConfigError(format!("Failed to delete profile: {}", e)))?;
+            fs::remove_file(&path).map_err(|e| {
+                NvControlError::ConfigError(format!("Failed to delete profile: {}", e))
+            })?;
             println!("✅ Profile deleted: {}", name);
         }
 
@@ -175,7 +187,10 @@ impl ProfileManager {
     ) -> NvResult<PathBuf> {
         let bundle = ProfileBundle {
             name: name.to_string(),
-            description: format!("Quick save - {}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S")),
+            description: format!(
+                "Quick save - {}",
+                chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
+            ),
             created_at: chrono::Utc::now(),
             fan_curve,
             voltage_curve,

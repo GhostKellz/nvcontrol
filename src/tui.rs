@@ -1,6 +1,11 @@
-use crate::{NvResult, NvControlError, vrr, themes, gui_tuner, nvidia_profiler, asus_power_detector};
+use crate::{
+    NvControlError, NvResult, asus_power_detector, gui_tuner, nvidia_profiler, themes, vrr,
+};
 use crossterm::{
-    event::{self, Event, KeyCode, KeyModifiers, MouseEvent, MouseEventKind, EnableMouseCapture, DisableMouseCapture},
+    event::{
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers, MouseEvent,
+        MouseEventKind,
+    },
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -53,8 +58,8 @@ pub struct TuiApp {
     current_theme: themes::ThemeVariant,
     theme: themes::ColorPalette,
     // OC controls
-    gpu_offset: i32,        // -200 to +200 MHz
-    memory_offset: i32,     // -1000 to +1000 MHz
+    gpu_offset: i32,          // -200 to +200 MHz
+    memory_offset: i32,       // -1000 to +1000 MHz
     power_limit_percent: u32, // 50 to 100%
     oc_preset: OcPreset,
     // Fan curve editing
@@ -83,10 +88,10 @@ enum Tab {
     Overclocking,
     FanControl,
     Profiles,
-    Tuner,      // MSI Afterburner-style tuner
-    Profiler,   // GPU profiler (radeon-profile equivalent)
-    Osd,        // MangoHud OSD configuration
-    Settings,   // Settings panel
+    Tuner,    // MSI Afterburner-style tuner
+    Profiler, // GPU profiler (radeon-profile equivalent)
+    Osd,      // MangoHud OSD configuration
+    Settings, // Settings panel
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -166,11 +171,11 @@ impl TuiApp {
 
         // Default fan curve (performance)
         let fan_curve_points = vec![
-            (30, 20),   // 30°C -> 20%
-            (50, 40),   // 50°C -> 40%
-            (70, 60),   // 70°C -> 60%
-            (80, 80),   // 80°C -> 80%
-            (90, 100),  // 90°C -> 100%
+            (30, 20),  // 30°C -> 20%
+            (50, 40),  // 50°C -> 40%
+            (70, 60),  // 70°C -> 60%
+            (80, 80),  // 80°C -> 80%
+            (90, 100), // 90°C -> 100%
         ];
 
         // Initialize tuner states for each GPU
@@ -249,36 +254,55 @@ impl TuiApp {
                 // Handle keyboard events
                 if let Event::Key(key) = event {
                     // Handle OC mode controls first
-                    if self.oc_control_mode && self.current_tab == 6 { // Tab 6 is Overclocking
+                    if self.oc_control_mode && self.current_tab == 6 {
+                        // Tab 6 is Overclocking
                         match key.code {
                             KeyCode::Left => {
                                 self.gpu_offset = (self.gpu_offset - 10).max(-200);
-                                self.set_status_message(format!("GPU Offset: {:+} MHz", self.gpu_offset));
+                                self.set_status_message(format!(
+                                    "GPU Offset: {:+} MHz",
+                                    self.gpu_offset
+                                ));
                                 continue;
                             }
                             KeyCode::Right => {
                                 self.gpu_offset = (self.gpu_offset + 10).min(200);
-                                self.set_status_message(format!("GPU Offset: {:+} MHz", self.gpu_offset));
+                                self.set_status_message(format!(
+                                    "GPU Offset: {:+} MHz",
+                                    self.gpu_offset
+                                ));
                                 continue;
                             }
                             KeyCode::Up => {
                                 self.memory_offset = (self.memory_offset + 50).min(1000);
-                                self.set_status_message(format!("Memory Offset: {:+} MHz", self.memory_offset));
+                                self.set_status_message(format!(
+                                    "Memory Offset: {:+} MHz",
+                                    self.memory_offset
+                                ));
                                 continue;
                             }
                             KeyCode::Down => {
                                 self.memory_offset = (self.memory_offset - 50).max(-1000);
-                                self.set_status_message(format!("Memory Offset: {:+} MHz", self.memory_offset));
+                                self.set_status_message(format!(
+                                    "Memory Offset: {:+} MHz",
+                                    self.memory_offset
+                                ));
                                 continue;
                             }
                             KeyCode::Char('+') | KeyCode::Char('=') => {
                                 self.power_limit_percent = (self.power_limit_percent + 5).min(100);
-                                self.set_status_message(format!("Power Limit: {}%", self.power_limit_percent));
+                                self.set_status_message(format!(
+                                    "Power Limit: {}%",
+                                    self.power_limit_percent
+                                ));
                                 continue;
                             }
                             KeyCode::Char('-') | KeyCode::Char('_') => {
                                 self.power_limit_percent = (self.power_limit_percent - 5).max(50);
-                                self.set_status_message(format!("Power Limit: {}%", self.power_limit_percent));
+                                self.set_status_message(format!(
+                                    "Power Limit: {}%",
+                                    self.power_limit_percent
+                                ));
                                 continue;
                             }
                             KeyCode::Char('1') => {
@@ -311,7 +335,8 @@ impl TuiApp {
                     }
 
                     // Handle fan control mode
-                    if self.fan_control_mode && self.current_tab == 7 { // Tab 7 is Fan Control
+                    if self.fan_control_mode && self.current_tab == 7 {
+                        // Tab 7 is Fan Control
                         match key.code {
                             KeyCode::Left => {
                                 if self.selected_curve_point > 0 {
@@ -331,7 +356,10 @@ impl TuiApp {
                                     point.1 = (point.1 + 5).min(100);
                                     let temp = point.0;
                                     let fan = point.1;
-                                    self.set_status_message(format!("Fan curve point: {}°C -> {}%", temp, fan));
+                                    self.set_status_message(format!(
+                                        "Fan curve point: {}°C -> {}%",
+                                        temp, fan
+                                    ));
                                 }
                                 continue;
                             }
@@ -341,7 +369,10 @@ impl TuiApp {
                                     point.1 = (point.1.saturating_sub(5)).max(0);
                                     let temp = point.0;
                                     let fan = point.1;
-                                    self.set_status_message(format!("Fan curve point: {}°C -> {}%", temp, fan));
+                                    self.set_status_message(format!(
+                                        "Fan curve point: {}°C -> {}%",
+                                        temp, fan
+                                    ));
                                 }
                                 continue;
                             }
@@ -432,7 +463,11 @@ impl TuiApp {
 
         // Cleanup
         disable_raw_mode()?;
-        execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
+        execute!(
+            terminal.backend_mut(),
+            LeaveAlternateScreen,
+            DisableMouseCapture
+        )?;
         terminal.show_cursor()?;
 
         Ok(())
@@ -549,19 +584,22 @@ impl TuiApp {
 
     fn draw_header(&self, f: &mut Frame, area: Rect) {
         let uptime = self.start_time.elapsed().as_secs();
-        let status = if self.paused { "󰏤 PAUSED" } else { "󰐊 LIVE" };
+        let status = if self.paused {
+            "󰏤 PAUSED"
+        } else {
+            "󰐊 LIVE"
+        };
 
         // Get current GPU stats for header display
-        let gpu_stats = self.metrics_history
+        let gpu_stats = self
+            .metrics_history
             .get(self.selected_gpu)
             .and_then(|h| h.back());
 
         let stats_str = if let Some(m) = gpu_stats {
             format!(
                 "{}°C | {}% | {:.0}W",
-                m.temperature as i32,
-                m.gpu_utilization as i32,
-                m.power_draw
+                m.temperature as i32, m.gpu_utilization as i32, m.power_draw
             )
         } else {
             "-- | -- | --".to_string()
@@ -578,9 +616,17 @@ impl TuiApp {
         );
 
         let header = Paragraph::new(title)
-            .block(Block::default().borders(Borders::ALL).style(Style::default().fg(self.theme.border.to_ratatui())))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .style(Style::default().fg(self.theme.border.to_ratatui())),
+            )
             .alignment(Alignment::Center)
-            .style(Style::default().fg(self.theme.primary().to_ratatui()).add_modifier(Modifier::BOLD));
+            .style(
+                Style::default()
+                    .fg(self.theme.primary().to_ratatui())
+                    .add_modifier(Modifier::BOLD),
+            );
 
         f.render_widget(header, area);
     }
@@ -588,36 +634,44 @@ impl TuiApp {
     fn draw_tabs(&self, f: &mut Frame, area: Rect) {
         // Tab titles with icons for better visual identification
         let tab_icons = [
-            "󰍹 Overview",     // 0
-            "󰓅 Performance",  // 1
-            "󰍛 Memory",       // 2
-            "󱃂 Temperature",  // 3
-            "󰚥 Power",        // 4
-            "󰕮 Processes",    // 5
-            "󰓸 Overclock",    // 6
-            "󰈐 Fan Control",  // 7
-            "󰆼 Profiles",     // 8
-            "󰔎 Tuner",        // 9
-            "󰄪 Profiler",     // 10
-            "󰕧 OSD",          // 11
-            "󰒓 Settings",     // 12
+            "󰍹 Overview",    // 0
+            "󰓅 Performance", // 1
+            "󰍛 Memory",      // 2
+            "󱃂 Temperature", // 3
+            "󰚥 Power",       // 4
+            "󰕮 Processes",   // 5
+            "󰓸 Overclock",   // 6
+            "󰈐 Fan Control", // 7
+            "󰆼 Profiles",    // 8
+            "󰔎 Tuner",       // 9
+            "󰄪 Profiler",    // 10
+            "󰕧 OSD",         // 11
+            "󰒓 Settings",    // 12
         ];
 
         let titles: Vec<String> = tab_icons.iter().map(|s| s.to_string()).collect();
 
         // Use different divider style for better visual separation
         let tabs = Tabs::new(titles)
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .title(format!(" {} Navigation ", themes::icons::TAB))
-                .title_style(Style::default().fg(self.theme.primary().to_ratatui()).add_modifier(Modifier::BOLD))
-                .style(Style::default().fg(self.theme.border.to_ratatui())))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(format!(" {} Navigation ", themes::icons::TAB))
+                    .title_style(
+                        Style::default()
+                            .fg(self.theme.primary().to_ratatui())
+                            .add_modifier(Modifier::BOLD),
+                    )
+                    .style(Style::default().fg(self.theme.border.to_ratatui())),
+            )
             .select(self.current_tab)
             .style(Style::default().fg(self.theme.text().to_ratatui()))
-            .highlight_style(Style::default()
-                .fg(Color::Black)
-                .bg(self.theme.accent().to_ratatui())
-                .add_modifier(Modifier::BOLD))
+            .highlight_style(
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(self.theme.accent().to_ratatui())
+                    .add_modifier(Modifier::BOLD),
+            )
             .divider("│");
 
         f.render_widget(tabs, area);
@@ -722,10 +776,12 @@ impl TuiApp {
             self.theme.usage_low.to_ratatui()
         };
         let gpu_gauge = Gauge::default()
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .title(format!("{} GPU", themes::icons::GPU))
-                .style(Style::default().fg(self.theme.border.to_ratatui())))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(format!("{} GPU", themes::icons::GPU))
+                    .style(Style::default().fg(self.theme.border.to_ratatui())),
+            )
             .gauge_style(Style::default().fg(gpu_color))
             .ratio(metrics.gpu_utilization / 100.0)
             .label(format!("{:.0}%", metrics.gpu_utilization));
@@ -740,10 +796,12 @@ impl TuiApp {
             self.theme.usage_low.to_ratatui()
         };
         let mem_gauge = Gauge::default()
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .title(format!("{} VRAM", themes::icons::MEMORY))
-                .style(Style::default().fg(self.theme.border.to_ratatui())))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(format!("{} VRAM", themes::icons::MEMORY))
+                    .style(Style::default().fg(self.theme.border.to_ratatui())),
+            )
             .gauge_style(Style::default().fg(mem_color))
             .ratio(metrics.memory_utilization / 100.0)
             .label(format!("{:.0}%", metrics.memory_utilization));
@@ -760,10 +818,12 @@ impl TuiApp {
             self.theme.temp_cold.to_ratatui()
         };
         let temp_gauge = Gauge::default()
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .title(format!("{} Temp", themes::icons::TEMP))
-                .style(Style::default().fg(self.theme.border.to_ratatui())))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(format!("{} Temp", themes::icons::TEMP))
+                    .style(Style::default().fg(self.theme.border.to_ratatui())),
+            )
             .gauge_style(Style::default().fg(temp_color))
             .ratio((metrics.temperature / 100.0).min(1.0))
             .label(format!("{:.0}°C", metrics.temperature));
@@ -778,10 +838,12 @@ impl TuiApp {
             self.theme.power_efficient.to_ratatui()
         };
         let power_gauge = Gauge::default()
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .title(format!("{} Power", themes::icons::POWER))
-                .style(Style::default().fg(self.theme.border.to_ratatui())))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(format!("{} Power", themes::icons::POWER))
+                    .style(Style::default().fg(self.theme.border.to_ratatui())),
+            )
             .gauge_style(Style::default().fg(power_color))
             .ratio((metrics.power_draw / 600.0).min(1.0)) // RTX 5090 max
             .label(format!("{:.0}W", metrics.power_draw));
@@ -1303,11 +1365,17 @@ impl TuiApp {
                                 asus_power_detector::PowerHealth::Unknown => "? UNKNOWN",
                             };
 
-                            let rails_str: Vec<String> = status.rails.iter().map(|r| {
-                                let current = r.current_ma.map(|c| format!("{:.2}A", c as f32 / 1000.0))
-                                    .unwrap_or_else(|| "N/A".to_string());
-                                format!("Rail {}: {}", r.rail_id, current)
-                            }).collect();
+                            let rails_str: Vec<String> = status
+                                .rails
+                                .iter()
+                                .map(|r| {
+                                    let current = r
+                                        .current_ma
+                                        .map(|c| format!("{:.2}A", c as f32 / 1000.0))
+                                        .unwrap_or_else(|| "N/A".to_string());
+                                    format!("Rail {}: {}", r.rail_id, current)
+                                })
+                                .collect();
 
                             format!(
                                 "12V-2x6 Connector Health: {}\n\n{}\n\nTotal Power: {:.1}W",
@@ -1480,14 +1548,21 @@ impl TuiApp {
             .split(area);
 
         // Header
-        let header = Paragraph::new(format!("{} Overclocking & Performance Tuning", themes::icons::OC))
-            .block(Block::default()
+        let header = Paragraph::new(format!(
+            "{} Overclocking & Performance Tuning",
+            themes::icons::OC
+        ))
+        .block(
+            Block::default()
                 .borders(Borders::ALL)
-                .style(Style::default().fg(self.theme.border.to_ratatui())))
-            .alignment(Alignment::Center)
-            .style(Style::default()
+                .style(Style::default().fg(self.theme.border.to_ratatui())),
+        )
+        .alignment(Alignment::Center)
+        .style(
+            Style::default()
                 .fg(self.theme.warning().to_ratatui())
-                .add_modifier(Modifier::BOLD));
+                .add_modifier(Modifier::BOLD),
+        );
         f.render_widget(header, chunks[0]);
 
         // Current OC status
@@ -1495,31 +1570,52 @@ impl TuiApp {
             if let Ok(device) = nvml.device_by_index(self.selected_gpu as u32) {
                 let mut oc_info = Vec::new();
 
-                oc_info.push(format!("{} Current Overclocking Status:", themes::icons::GPU));
+                oc_info.push(format!(
+                    "{} Current Overclocking Status:",
+                    themes::icons::GPU
+                ));
                 oc_info.push(String::new());
 
                 // Current clocks
-                if let Ok(gpu_clock) = device.clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics) {
-                    if let Ok(max_clock) = device.max_clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics) {
-                        oc_info.push(format!("  {} GPU Clock: {} MHz (Max: {} MHz)",
-                            themes::icons::CLOCK, gpu_clock, max_clock));
+                if let Ok(gpu_clock) =
+                    device.clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics)
+                {
+                    if let Ok(max_clock) =
+                        device.max_clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics)
+                    {
+                        oc_info.push(format!(
+                            "  {} GPU Clock: {} MHz (Max: {} MHz)",
+                            themes::icons::CLOCK,
+                            gpu_clock,
+                            max_clock
+                        ));
                     }
                 }
 
-                if let Ok(mem_clock) = device.clock_info(nvml_wrapper::enum_wrappers::device::Clock::Memory) {
-                    if let Ok(max_mem) = device.max_clock_info(nvml_wrapper::enum_wrappers::device::Clock::Memory) {
-                        oc_info.push(format!("  {} Memory Clock: {} MHz (Max: {} MHz)",
-                            themes::icons::MEMORY, mem_clock, max_mem));
+                if let Ok(mem_clock) =
+                    device.clock_info(nvml_wrapper::enum_wrappers::device::Clock::Memory)
+                {
+                    if let Ok(max_mem) =
+                        device.max_clock_info(nvml_wrapper::enum_wrappers::device::Clock::Memory)
+                    {
+                        oc_info.push(format!(
+                            "  {} Memory Clock: {} MHz (Max: {} MHz)",
+                            themes::icons::MEMORY,
+                            mem_clock,
+                            max_mem
+                        ));
                     }
                 }
 
                 // Power limit
                 if let Ok(power_limit) = device.power_management_limit() {
                     if let Ok(max_power) = device.power_management_limit_constraints() {
-                        oc_info.push(format!("  {} Power Limit: {:.0}W / {:.0}W",
+                        oc_info.push(format!(
+                            "  {} Power Limit: {:.0}W / {:.0}W",
                             themes::icons::POWER,
                             power_limit as f32 / 1000.0,
-                            max_power.max_limit as f32 / 1000.0));
+                            max_power.max_limit as f32 / 1000.0
+                        ));
                     }
                 }
 
@@ -1532,10 +1628,12 @@ impl TuiApp {
 
                 let oc_list: Vec<ListItem> = oc_info.into_iter().map(ListItem::new).collect();
                 let oc_widget = List::new(oc_list)
-                    .block(Block::default()
-                        .borders(Borders::ALL)
-                        .title("Overclocking Status")
-                        .style(Style::default().fg(self.theme.border.to_ratatui())))
+                    .block(
+                        Block::default()
+                            .borders(Borders::ALL)
+                            .title("Overclocking Status")
+                            .style(Style::default().fg(self.theme.border.to_ratatui())),
+                    )
                     .style(Style::default().fg(self.theme.text().to_ratatui()));
                 f.render_widget(oc_widget, chunks[1]);
             }
@@ -1547,7 +1645,10 @@ impl TuiApp {
         let power_slider = self.render_slider(self.power_limit_percent as i32, 50, 100, 40);
 
         let mode_indicator = if self.oc_control_mode {
-            format!("{} OC MODE ACTIVE - Use arrow keys to adjust", themes::icons::WARNING)
+            format!(
+                "{} OC MODE ACTIVE - Use arrow keys to adjust",
+                themes::icons::WARNING
+            )
         } else {
             "Press 'o' to enter OC mode".to_string()
         };
@@ -1577,10 +1678,12 @@ impl TuiApp {
         );
 
         let controls = Paragraph::new(controls_text)
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .title("Overclock Controls")
-                .style(Style::default().fg(self.theme.border.to_ratatui())))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Overclock Controls")
+                    .style(Style::default().fg(self.theme.border.to_ratatui())),
+            )
             .style(Style::default().fg(self.theme.text().to_ratatui()))
             .wrap(ratatui::widgets::Wrap { trim: false });
         f.render_widget(controls, chunks[2]);
@@ -1602,22 +1705,26 @@ impl TuiApp {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),  // Header
-                Constraint::Length(8),  // Current fan status
-                Constraint::Min(10),    // Fan curve editor
-                Constraint::Length(4),  // Presets
+                Constraint::Length(3), // Header
+                Constraint::Length(8), // Current fan status
+                Constraint::Min(10),   // Fan curve editor
+                Constraint::Length(4), // Presets
             ])
             .split(area);
 
         // Header
         let header = Paragraph::new(format!("{} Fan Control & Curves", themes::icons::FAN))
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .style(Style::default().fg(self.theme.border.to_ratatui())))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .style(Style::default().fg(self.theme.border.to_ratatui())),
+            )
             .alignment(Alignment::Center)
-            .style(Style::default()
-                .fg(self.theme.primary().to_ratatui())
-                .add_modifier(Modifier::BOLD));
+            .style(
+                Style::default()
+                    .fg(self.theme.primary().to_ratatui())
+                    .add_modifier(Modifier::BOLD),
+            );
         f.render_widget(header, chunks[0]);
 
         // Current fan status
@@ -1635,8 +1742,13 @@ impl TuiApp {
                         } else {
                             "󰈐" // Low speed
                         };
-                        fan_info.push(format!("  {} Fan {}: {}% ({} RPM est.)",
-                            fan_icon, fan_id, fan_speed, fan_speed * 25));
+                        fan_info.push(format!(
+                            "  {} Fan {}: {}% ({} RPM est.)",
+                            fan_icon,
+                            fan_id,
+                            fan_speed,
+                            fan_speed * 25
+                        ));
                     }
                 }
 
@@ -1645,21 +1757,26 @@ impl TuiApp {
                 }
 
                 fan_info.push(String::new());
-                if let Some(latest) = self.metrics_history.get(self.selected_gpu).and_then(|h| h.back()) {
-                    let temp_icon = if latest.temperature > 80.0 {
-                        ""
-                    } else {
-                        ""
-                    };
-                    fan_info.push(format!("  {} Current Temperature: {:.1}°C", temp_icon, latest.temperature));
+                if let Some(latest) = self
+                    .metrics_history
+                    .get(self.selected_gpu)
+                    .and_then(|h| h.back())
+                {
+                    let temp_icon = if latest.temperature > 80.0 { "" } else { "" };
+                    fan_info.push(format!(
+                        "  {} Current Temperature: {:.1}°C",
+                        temp_icon, latest.temperature
+                    ));
                 }
 
                 let fan_list: Vec<ListItem> = fan_info.into_iter().map(ListItem::new).collect();
                 let fan_widget = List::new(fan_list)
-                    .block(Block::default()
-                        .borders(Borders::ALL)
-                        .title("Current Fan Status")
-                        .style(Style::default().fg(self.theme.border.to_ratatui())))
+                    .block(
+                        Block::default()
+                            .borders(Borders::ALL)
+                            .title("Current Fan Status")
+                            .style(Style::default().fg(self.theme.border.to_ratatui())),
+                    )
                     .style(Style::default().fg(self.theme.text().to_ratatui()));
                 f.render_widget(fan_widget, chunks[1]);
             }
@@ -1682,7 +1799,10 @@ impl TuiApp {
 
         curve_display.push(String::new());
         let mode_indicator = if self.fan_control_mode {
-            format!("{} FAN MODE ACTIVE - Use arrow keys to adjust selected point", themes::icons::WARNING)
+            format!(
+                "{} FAN MODE ACTIVE - Use arrow keys to adjust selected point",
+                themes::icons::WARNING
+            )
         } else {
             "Press 'f' to enter fan curve mode".to_string()
         };
@@ -1697,10 +1817,12 @@ impl TuiApp {
         let curve_text = curve_display.join("\n");
 
         let curve = Paragraph::new(curve_text)
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .title("Fan Curve Configuration")
-                .style(Style::default().fg(self.theme.border.to_ratatui())))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Fan Curve Configuration")
+                    .style(Style::default().fg(self.theme.border.to_ratatui())),
+            )
             .style(Style::default().fg(self.theme.text().to_ratatui()))
             .wrap(ratatui::widgets::Wrap { trim: false });
         f.render_widget(curve, chunks[2]);
@@ -1710,11 +1832,13 @@ impl TuiApp {
             "{} Quick Presets: [Silent] [Auto] [Performance] [Aggressive] [0 RPM Mode]",
             themes::icons::PROFILE
         ))
-            .block(Block::default()
+        .block(
+            Block::default()
                 .borders(Borders::ALL)
-                .style(Style::default().fg(self.theme.border.to_ratatui())))
-            .style(Style::default().fg(self.theme.accent().to_ratatui()))
-            .alignment(Alignment::Center);
+                .style(Style::default().fg(self.theme.border.to_ratatui())),
+        )
+        .style(Style::default().fg(self.theme.accent().to_ratatui()))
+        .alignment(Alignment::Center);
         f.render_widget(presets, chunks[3]);
     }
 
@@ -1722,51 +1846,74 @@ impl TuiApp {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),  // Header
-                Constraint::Min(12),    // Profile list
-                Constraint::Length(8),  // Current profile details
-                Constraint::Length(4),  // Actions
+                Constraint::Length(3), // Header
+                Constraint::Min(12),   // Profile list
+                Constraint::Length(8), // Current profile details
+                Constraint::Length(4), // Actions
             ])
             .split(area);
 
         // Header
         let header = Paragraph::new(format!("{} Performance Profiles", themes::icons::PROFILE))
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .style(Style::default().fg(self.theme.border.to_ratatui())))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .style(Style::default().fg(self.theme.border.to_ratatui())),
+            )
             .alignment(Alignment::Center)
-            .style(Style::default()
-                .fg(self.theme.primary().to_ratatui())
-                .add_modifier(Modifier::BOLD));
+            .style(
+                Style::default()
+                    .fg(self.theme.primary().to_ratatui())
+                    .add_modifier(Modifier::BOLD),
+            );
         f.render_widget(header, chunks[0]);
 
         // Profile list
         let profiles = vec![
-            format!("{} Silent - Low power, quiet operation (50% power, stock clocks)", themes::icons::SUCCESS),
-            format!("{} Balanced - Default balanced performance", themes::icons::INFO),
-            format!("{} Performance - Higher clocks, increased power limit", themes::icons::OC),
-            format!("{} Extreme - Maximum overclock for RTX 5090 (+200 GPU, +1500 MEM, 100% power)", themes::icons::WARNING),
+            format!(
+                "{} Silent - Low power, quiet operation (50% power, stock clocks)",
+                themes::icons::SUCCESS
+            ),
+            format!(
+                "{} Balanced - Default balanced performance",
+                themes::icons::INFO
+            ),
+            format!(
+                "{} Performance - Higher clocks, increased power limit",
+                themes::icons::OC
+            ),
+            format!(
+                "{} Extreme - Maximum overclock for RTX 5090 (+200 GPU, +1500 MEM, 100% power)",
+                themes::icons::WARNING
+            ),
             String::new(),
             "Game-Specific Profiles:".to_string(),
             "  Cyberpunk 2077 - DLSS 4 enabled, 4K Ultra preset".to_string(),
             "  Counter-Strike 2 - Competitive mode, low latency".to_string(),
             "  Stable Diffusion - Power limit 90%, memory OC".to_string(),
             String::new(),
-            format!("{} Press Enter to apply selected profile", themes::icons::POWER),
+            format!(
+                "{} Press Enter to apply selected profile",
+                themes::icons::POWER
+            ),
             format!("{} Press 'n' to create new profile", themes::icons::PROFILE),
             format!("{} Press 'd' to delete profile", themes::icons::WARNING),
         ];
 
         let profile_items: Vec<ListItem> = profiles.into_iter().map(ListItem::new).collect();
         let profile_list = List::new(profile_items)
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .title("Available Profiles")
-                .style(Style::default().fg(self.theme.border.to_ratatui())))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Available Profiles")
+                    .style(Style::default().fg(self.theme.border.to_ratatui())),
+            )
             .style(Style::default().fg(self.theme.text().to_ratatui()))
-            .highlight_style(Style::default()
-                .fg(self.theme.accent().to_ratatui())
-                .add_modifier(Modifier::BOLD));
+            .highlight_style(
+                Style::default()
+                    .fg(self.theme.accent().to_ratatui())
+                    .add_modifier(Modifier::BOLD),
+            );
         f.render_widget(profile_list, chunks[1]);
 
         // Current profile details
@@ -1781,10 +1928,12 @@ impl TuiApp {
         );
 
         let details = Paragraph::new(details_text)
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .title("Active Profile Settings")
-                .style(Style::default().fg(self.theme.border.to_ratatui())))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Active Profile Settings")
+                    .style(Style::default().fg(self.theme.border.to_ratatui())),
+            )
             .style(Style::default().fg(self.theme.text().to_ratatui()));
         f.render_widget(details, chunks[2]);
 
@@ -1866,7 +2015,11 @@ impl TuiApp {
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(self.theme.accent().to_ratatui()))
                     .title(" 󰋖 Help & Keybindings ")
-                    .title_style(Style::default().fg(self.theme.primary().to_ratatui()).add_modifier(Modifier::BOLD)),
+                    .title_style(
+                        Style::default()
+                            .fg(self.theme.primary().to_ratatui())
+                            .add_modifier(Modifier::BOLD),
+                    ),
             )
             .style(Style::default().fg(self.theme.text().to_ratatui()))
             .alignment(Alignment::Left);
@@ -1973,8 +2126,16 @@ impl TuiApp {
         f.render_widget(status_bar, chunks[0]);
 
         // Middle section: feature status
-        let vrr_icon = if self.vrr_enabled { themes::icons::VRR } else { "" };
-        let gaming_icon = if self.gaming_mode_enabled { themes::icons::GAMING } else { "" };
+        let vrr_icon = if self.vrr_enabled {
+            themes::icons::VRR
+        } else {
+            ""
+        };
+        let gaming_icon = if self.gaming_mode_enabled {
+            themes::icons::GAMING
+        } else {
+            ""
+        };
 
         let vrr_status = if self.vrr_enabled {
             format!("{} VRR", vrr_icon)
@@ -2001,7 +2162,12 @@ impl TuiApp {
 
         // Right section: GPU selection
         let gpu_info = if self.device_count > 1 {
-            format!("{} GPU {}/{}", themes::icons::GPU, self.selected_gpu + 1, self.device_count)
+            format!(
+                "{} GPU {}/{}",
+                themes::icons::GPU,
+                self.selected_gpu + 1,
+                self.device_count
+            )
         } else {
             format!("{} GPU 1/1", themes::icons::GPU)
         };
@@ -2200,9 +2366,9 @@ impl TuiApp {
         let mut slider = String::new();
         for i in 0..width {
             if i == position {
-                slider.push('●');  // Current position marker
+                slider.push('●'); // Current position marker
             } else {
-                slider.push('─');  // Slider bar
+                slider.push('─'); // Slider bar
             }
         }
         slider
@@ -2221,17 +2387,21 @@ impl TuiApp {
                 self.gpu_offset = 75;
                 self.memory_offset = 500;
                 self.power_limit_percent = 90;
-                self.set_status_message("Applied Mild OC preset (+75 GPU, +500 MEM, 90% power)".to_string());
+                self.set_status_message(
+                    "Applied Mild OC preset (+75 GPU, +500 MEM, 90% power)".to_string(),
+                );
             }
             OcPreset::Performance => {
                 self.gpu_offset = 150;
                 self.memory_offset = 1000;
                 self.power_limit_percent = 95;
-                self.set_status_message("Applied Performance preset (+150 GPU, +1000 MEM, 95% power)".to_string());
+                self.set_status_message(
+                    "Applied Performance preset (+150 GPU, +1000 MEM, 95% power)".to_string(),
+                );
             }
             OcPreset::Extreme => {
                 self.gpu_offset = 200;
-                self.memory_offset = 1500;  // GDDR7 safe for RTX 5090
+                self.memory_offset = 1500; // GDDR7 safe for RTX 5090
                 self.power_limit_percent = 100;
                 self.set_status_message("Applied Extreme preset - RTX 5090 Max OC!".to_string());
             }
@@ -2290,19 +2460,25 @@ impl TuiApp {
 
         // Export all GPU metrics
         for (gpu_id, history) in self.metrics_history.iter().enumerate() {
-            let gpu_data: Vec<_> = history.iter().map(|m| {
-                serde_json::json!({
-                    "temperature": m.temperature,
-                    "gpu_utilization": m.gpu_utilization,
-                    "memory_utilization": m.memory_utilization,
-                    "power_draw": m.power_draw,
-                    "fan_speed": m.fan_speed,
-                    "gpu_clock": m.gpu_clock,
-                    "memory_clock": m.memory_clock,
+            let gpu_data: Vec<_> = history
+                .iter()
+                .map(|m| {
+                    serde_json::json!({
+                        "temperature": m.temperature,
+                        "gpu_utilization": m.gpu_utilization,
+                        "memory_utilization": m.memory_utilization,
+                        "power_draw": m.power_draw,
+                        "fan_speed": m.fan_speed,
+                        "gpu_clock": m.gpu_clock,
+                        "memory_clock": m.memory_clock,
+                    })
                 })
-            }).collect();
+                .collect();
 
-            export_data.insert(format!("gpu_{}", gpu_id), serde_json::Value::Array(gpu_data));
+            export_data.insert(
+                format!("gpu_{}", gpu_id),
+                serde_json::Value::Array(gpu_data),
+            );
         }
 
         match File::create(&filename) {
@@ -2349,38 +2525,53 @@ impl TuiApp {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),  // Title
-                Constraint::Min(0),     // Content
+                Constraint::Length(3), // Title
+                Constraint::Min(0),    // Content
             ])
             .split(area);
 
         // Title
-        let title = Paragraph::new(format!("🎛️  GPU Tuner - GPU {} (MSI Afterburner Style)", self.selected_gpu))
-            .style(Style::default().fg(self.theme.cyan.to_ratatui()))
-            .block(Block::default().borders(Borders::ALL));
+        let title = Paragraph::new(format!(
+            "🎛️  GPU Tuner - GPU {} (MSI Afterburner Style)",
+            self.selected_gpu
+        ))
+        .style(Style::default().fg(self.theme.cyan.to_ratatui()))
+        .block(Block::default().borders(Borders::ALL));
         f.render_widget(title, chunks[0]);
 
         // Content
         let content_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Percentage(50),  // Controls
-                Constraint::Percentage(50),  // Monitoring
+                Constraint::Percentage(50), // Controls
+                Constraint::Percentage(50), // Monitoring
             ])
             .split(chunks[1]);
 
         // Controls
         let controls_text = vec![
             format!("┌─ Overclocking ────────────────────┐"),
-            format!("│ Core Clock:   {:+4} MHz  [±500]  │", tuner_state.core_clock_offset),
-            format!("│ Memory Clock: {:+4} MHz  [±1500] │", tuner_state.memory_clock_offset),
-            format!("│ Power Limit:  {:3}%  TDP         │", tuner_state.power_limit),
+            format!(
+                "│ Core Clock:   {:+4} MHz  [±500]  │",
+                tuner_state.core_clock_offset
+            ),
+            format!(
+                "│ Memory Clock: {:+4} MHz  [±1500] │",
+                tuner_state.memory_clock_offset
+            ),
+            format!(
+                "│ Power Limit:  {:3}%  TDP         │",
+                tuner_state.power_limit
+            ),
             format!("│ Temp Limit:   {}°C             │", tuner_state.temp_limit),
             format!("└───────────────────────────────────┘"),
             format!(""),
             format!("┌─ Fan Control ─────────────────────┐"),
             format!("│ Mode: {:?}                 │", tuner_state.fan_mode),
-            format!("│ Speed: {}%                    │", tuner_state.fan_speed_manual),
+            format!(
+                "│ Speed: {}%                    │",
+                tuner_state.fan_speed_manual
+            ),
             format!("└───────────────────────────────────┘"),
             format!(""),
             format!("📋 Presets:"),
@@ -2399,12 +2590,27 @@ impl TuiApp {
         let monitoring_text = vec![
             format!("┌─ Live Monitoring ─────────────────┐"),
             format!("│ GPU Clock:    {} MHz           │", tuner_state.gpu_clock),
-            format!("│ Memory Clock: {} MHz           │", tuner_state.memory_clock),
-            format!("│ Temperature:  {}°C             │", tuner_state.temperature),
+            format!(
+                "│ Memory Clock: {} MHz           │",
+                tuner_state.memory_clock
+            ),
+            format!(
+                "│ Temperature:  {}°C             │",
+                tuner_state.temperature
+            ),
             format!("│ GPU Load:     {}%              │", tuner_state.gpu_load),
-            format!("│ Memory Load:  {}%              │", tuner_state.memory_load),
-            format!("│ VRAM Used:    {} / {} MB      │", tuner_state.vram_used, tuner_state.vram_total),
-            format!("│ Power Draw:   {:.1} W            │", tuner_state.power_draw),
+            format!(
+                "│ Memory Load:  {}%              │",
+                tuner_state.memory_load
+            ),
+            format!(
+                "│ VRAM Used:    {} / {} MB      │",
+                tuner_state.vram_used, tuner_state.vram_total
+            ),
+            format!(
+                "│ Power Draw:   {:.1} W            │",
+                tuner_state.power_draw
+            ),
             format!("│ Fan Speed:    {}%              │", tuner_state.fan_speed),
             format!("└───────────────────────────────────┘"),
             format!(""),
@@ -2425,8 +2631,8 @@ impl TuiApp {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),  // Title
-                Constraint::Min(0),     // Content
+                Constraint::Length(3), // Title
+                Constraint::Min(0),    // Content
             ])
             .split(area);
 
@@ -2437,7 +2643,11 @@ impl TuiApp {
             format!("📊 GPU Profiler - Ready (GPU {})", self.selected_gpu)
         };
         let title = Paragraph::new(title_text)
-            .style(Style::default().fg(if self.profiler_recording { Color::Red } else { self.theme.cyan.to_ratatui() }))
+            .style(Style::default().fg(if self.profiler_recording {
+                Color::Red
+            } else {
+                self.theme.cyan.to_ratatui()
+            }))
             .block(Block::default().borders(Borders::ALL));
         f.render_widget(title, chunks[0]);
 
@@ -2445,12 +2655,22 @@ impl TuiApp {
         let content_text = if let Some(ref profiler) = self.profiler {
             let stats = profiler.get_statistics();
             let sample_count = profiler.current_samples();
-            let recording_status = if profiler.is_recording() { "RECORDING" } else { "STOPPED" };
+            let recording_status = if profiler.is_recording() {
+                "RECORDING"
+            } else {
+                "STOPPED"
+            };
 
             let mut lines = vec![
                 format!("┌─ Session Status ──────────────────────────────────────┐"),
-                format!("│ Status: {}                                    │", recording_status),
-                format!("│ Samples: {}                                         │", sample_count),
+                format!(
+                    "│ Status: {}                                    │",
+                    recording_status
+                ),
+                format!(
+                    "│ Samples: {}                                         │",
+                    sample_count
+                ),
                 format!("│ Sample Interval: 100ms                              │"),
                 format!("│ Max Samples: 10,000                                  │"),
                 format!("└─────────────────────────────────────────────────────┘"),
@@ -2460,14 +2680,26 @@ impl TuiApp {
             if let Some(stats) = stats {
                 lines.extend(vec![
                     format!("┌─ Statistics ──────────────────────────────────────────┐"),
-                    format!("│ GPU Clock:    Avg {}  Max {}  Min {} MHz    │",
-                        stats.avg_gpu_clock, stats.max_gpu_clock, stats.min_gpu_clock),
-                    format!("│ Memory Clock: Avg {} MHz                        │", stats.avg_memory_clock),
-                    format!("│ Temperature:  Avg {}°C  Max {}°C  Min {}°C    │",
-                        stats.avg_temperature, stats.max_temperature, stats.min_temperature),
-                    format!("│ GPU Load:     Avg {}%                            │", stats.avg_gpu_load),
-                    format!("│ Power Draw:   Avg {:.1}W  Max {:.1}W           │",
-                        stats.avg_power_draw, stats.max_power_draw),
+                    format!(
+                        "│ GPU Clock:    Avg {}  Max {}  Min {} MHz    │",
+                        stats.avg_gpu_clock, stats.max_gpu_clock, stats.min_gpu_clock
+                    ),
+                    format!(
+                        "│ Memory Clock: Avg {} MHz                        │",
+                        stats.avg_memory_clock
+                    ),
+                    format!(
+                        "│ Temperature:  Avg {}°C  Max {}°C  Min {}°C    │",
+                        stats.avg_temperature, stats.max_temperature, stats.min_temperature
+                    ),
+                    format!(
+                        "│ GPU Load:     Avg {}%                            │",
+                        stats.avg_gpu_load
+                    ),
+                    format!(
+                        "│ Power Draw:   Avg {:.1}W  Max {:.1}W           │",
+                        stats.avg_power_draw, stats.max_power_draw
+                    ),
                     format!("└─────────────────────────────────────────────────────┘"),
                 ]);
             } else {
@@ -2487,7 +2719,9 @@ impl TuiApp {
 
             lines.join("\n")
         } else {
-            format!("❌ No profiler available\n\nNo GPU detected or profiler initialization failed.")
+            format!(
+                "❌ No profiler available\n\nNo GPU detected or profiler initialization failed."
+            )
         };
 
         let content = Paragraph::new(content_text)
@@ -2546,8 +2780,8 @@ impl TuiApp {
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Percentage(50),  // Left panel
-                Constraint::Percentage(50),  // Right panel
+                Constraint::Percentage(50), // Left panel
+                Constraint::Percentage(50), // Right panel
             ])
             .split(area);
 
@@ -2570,14 +2804,20 @@ impl TuiApp {
              Launch: mangohud %command%\n\
              Steam:  MANGOHUD=1 %command%",
             status_icon,
-            if mangohud_installed { "Installed" } else { "Not Found" }
+            if mangohud_installed {
+                "Installed"
+            } else {
+                "Not Found"
+            }
         );
         let status = Paragraph::new(status_text)
             .style(Style::default().fg(self.theme.fg.to_ratatui()))
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .title("📊 MangoHud Status")
-                .border_style(Style::default().fg(self.theme.cyan.to_ratatui())));
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("📊 MangoHud Status")
+                    .border_style(Style::default().fg(self.theme.cyan.to_ratatui())),
+            );
         f.render_widget(status, left_chunks[0]);
 
         // Current metrics (read from config if exists)
@@ -2589,10 +2829,12 @@ impl TuiApp {
                                • vram (VRAM Usage)";
         let current = Paragraph::new(current_metrics)
             .style(Style::default().fg(self.theme.fg.to_ratatui()))
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .title("Active Metrics")
-                .border_style(Style::default().fg(self.theme.green.to_ratatui())));
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Active Metrics")
+                    .border_style(Style::default().fg(self.theme.green.to_ratatui())),
+            );
         f.render_widget(current, left_chunks[1]);
 
         // Presets
@@ -2605,10 +2847,12 @@ impl TuiApp {
                                         clocks, power";
         let presets = Paragraph::new(presets_text)
             .style(Style::default().fg(self.theme.fg.to_ratatui()))
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .title("⚡ Presets")
-                .border_style(Style::default().fg(self.theme.yellow.to_ratatui())));
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("⚡ Presets")
+                    .border_style(Style::default().fg(self.theme.yellow.to_ratatui())),
+            );
         f.render_widget(presets, left_chunks[2]);
 
         // Right panel - Available Metrics and Commands
@@ -2634,10 +2878,12 @@ impl TuiApp {
             ListItem::new(" cpu_load     CPU Utilization"),
         ];
         let metrics_list = List::new(metrics_items)
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .title("📈 Available Metrics")
-                .border_style(Style::default().fg(self.theme.magenta.to_ratatui())))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("📈 Available Metrics")
+                    .border_style(Style::default().fg(self.theme.magenta.to_ratatui())),
+            )
             .style(Style::default().fg(self.theme.fg.to_ratatui()));
         f.render_widget(metrics_list, right_chunks[0]);
 
@@ -2652,10 +2898,12 @@ impl TuiApp {
                              💡 For GUI config: nvcontrol";
         let commands = Paragraph::new(commands_text)
             .style(Style::default().fg(self.theme.fg.to_ratatui()))
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .title("🔧 Commands")
-                .border_style(Style::default().fg(self.theme.border.to_ratatui())));
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("🔧 Commands")
+                    .border_style(Style::default().fg(self.theme.border.to_ratatui())),
+            );
         f.render_widget(commands, right_chunks[1]);
     }
 
@@ -2664,8 +2912,8 @@ impl TuiApp {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),  // Title
-                Constraint::Min(0),     // Content
+                Constraint::Length(3), // Title
+                Constraint::Min(0),    // Content
             ])
             .split(area);
 
@@ -2678,22 +2926,56 @@ impl TuiApp {
         // Settings content
         let settings_text = vec![
             format!("┌─ Display Settings ────────────────────────────────────┐"),
-            format!("│ Theme: {:?}                               │", self.current_theme),
-            format!("│ Update Interval: {}s                               │", self.update_interval.as_secs()),
-            format!("│ Selected GPU: {}                                    │", self.selected_gpu),
+            format!(
+                "│ Theme: {:?}                               │",
+                self.current_theme
+            ),
+            format!(
+                "│ Update Interval: {}s                               │",
+                self.update_interval.as_secs()
+            ),
+            format!(
+                "│ Selected GPU: {}                                    │",
+                self.selected_gpu
+            ),
             format!("└─────────────────────────────────────────────────────┘"),
             format!(""),
             format!("┌─ Features ────────────────────────────────────────────┐"),
-            format!("│ VRR Enabled: {}                                    │", if self.vrr_enabled { "Yes" } else { "No" }),
-            format!("│ Gaming Mode: {}                                    │", if self.gaming_mode_enabled { "Yes" } else { "No" }),
-            format!("│ Fan Control: {}                                    │", if self.fan_control_mode { "Yes" } else { "No" }),
-            format!("│ OC Control:  {}                                    │", if self.oc_control_mode { "Yes" } else { "No" }),
+            format!(
+                "│ VRR Enabled: {}                                    │",
+                if self.vrr_enabled { "Yes" } else { "No" }
+            ),
+            format!(
+                "│ Gaming Mode: {}                                    │",
+                if self.gaming_mode_enabled {
+                    "Yes"
+                } else {
+                    "No"
+                }
+            ),
+            format!(
+                "│ Fan Control: {}                                    │",
+                if self.fan_control_mode { "Yes" } else { "No" }
+            ),
+            format!(
+                "│ OC Control:  {}                                    │",
+                if self.oc_control_mode { "Yes" } else { "No" }
+            ),
             format!("└─────────────────────────────────────────────────────┘"),
             format!(""),
             format!("┌─ System ──────────────────────────────────────────────┐"),
-            format!("│ GPUs Detected: {}                                   │", self.device_count),
-            format!("│ NVML Available: {}                                 │", if self.nvml.is_some() { "Yes" } else { "No" }),
-            format!("│ Uptime: {:.0}s                                      │", self.start_time.elapsed().as_secs()),
+            format!(
+                "│ GPUs Detected: {}                                   │",
+                self.device_count
+            ),
+            format!(
+                "│ NVML Available: {}                                 │",
+                if self.nvml.is_some() { "Yes" } else { "No" }
+            ),
+            format!(
+                "│ Uptime: {:.0}s                                      │",
+                self.start_time.elapsed().as_secs()
+            ),
             format!("└─────────────────────────────────────────────────────┘"),
             format!(""),
             format!("🎨 Themes Available:"),

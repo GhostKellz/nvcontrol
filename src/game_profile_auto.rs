@@ -14,7 +14,7 @@ pub struct AutoProfileConfig {
     pub enabled: bool,
     pub poll_interval_secs: u64,
     pub restore_on_exit: bool,
-    pub apply_delay_secs: u64,  // Wait before applying (in case game crashes immediately)
+    pub apply_delay_secs: u64, // Wait before applying (in case game crashes immediately)
 }
 
 impl Default for AutoProfileConfig {
@@ -108,7 +108,10 @@ impl GameProfileAutoApplier {
 
                         // Wait before applying (anti-crash protection)
                         if config.apply_delay_secs > 0 {
-                            println!("   ⏳ Waiting {} seconds before applying profile...", config.apply_delay_secs);
+                            println!(
+                                "   ⏳ Waiting {} seconds before applying profile...",
+                                config.apply_delay_secs
+                            );
                             thread::sleep(Duration::from_secs(config.apply_delay_secs));
                         }
 
@@ -117,7 +120,9 @@ impl GameProfileAutoApplier {
                             println!("   ✅ Applying profile for {}", game.name);
 
                             // Apply GPU overclock
-                            if let (Some(gpu), Some(mem)) = (profile.gpu_offset, profile.memory_offset) {
+                            if let (Some(gpu), Some(mem)) =
+                                (profile.gpu_offset, profile.memory_offset)
+                            {
                                 let oc_profile = crate::overclocking::OverclockProfile {
                                     name: profile.name.clone(),
                                     gpu_clock_offset: gpu,
@@ -127,7 +132,9 @@ impl GameProfileAutoApplier {
                                     temp_limit: 85,
                                     fan_curve: Vec::new(),
                                 };
-                                if let Err(e) = crate::overclocking::apply_overclock_profile(&oc_profile) {
+                                if let Err(e) =
+                                    crate::overclocking::apply_overclock_profile(&oc_profile)
+                                {
                                     println!("   ⚠️  Failed to apply overclock: {}", e);
                                 }
                             }
@@ -167,7 +174,9 @@ impl GameProfileAutoApplier {
                         if config.restore_on_exit {
                             if let Some(ref default) = default_profile {
                                 println!("   🔄 Restoring default profile");
-                                if let Err(e) = crate::overclocking::apply_overclock_profile(default) {
+                                if let Err(e) =
+                                    crate::overclocking::apply_overclock_profile(default)
+                                {
                                     println!("   ⚠️  Failed to restore default profile: {}", e);
                                 }
                             }

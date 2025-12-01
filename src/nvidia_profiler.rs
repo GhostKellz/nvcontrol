@@ -2,7 +2,6 @@
 ///
 /// Equivalent to Radeon GPU Profiler - comprehensive GPU profiling and monitoring
 /// Provides detailed telemetry, power metrics, and performance analysis
-
 use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
@@ -17,7 +16,7 @@ fn instant_now() -> Instant {
 pub struct ProfileDataPoint {
     #[serde(skip, default = "instant_now")]
     pub timestamp: Instant,
-    pub timestamp_ms: u64,  // Milliseconds since session start
+    pub timestamp_ms: u64, // Milliseconds since session start
     pub gpu_clock_mhz: u32,
     pub memory_clock_mhz: u32,
     pub gpu_voltage_mv: Option<u32>,
@@ -101,13 +100,12 @@ impl NvidiaProfiler {
     pub fn sample(&mut self) -> NvResult<ProfileDataPoint> {
         use nvml_wrapper::Nvml;
 
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
 
-        let device = nvml.device_by_index(self.gpu_id).map_err(|e| {
-            NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e))
-        })?;
+        let device = nvml
+            .device_by_index(self.gpu_id)
+            .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e)))?;
 
         // Clock speeds
         let gpu_clock = device
@@ -129,8 +127,14 @@ impl NvidiaProfiler {
 
         // Memory
         let memory_info = device.memory_info().ok();
-        let vram_used = memory_info.as_ref().map(|m| m.used / 1024 / 1024).unwrap_or(0);
-        let vram_total = memory_info.as_ref().map(|m| m.total / 1024 / 1024).unwrap_or(0);
+        let vram_used = memory_info
+            .as_ref()
+            .map(|m| m.used / 1024 / 1024)
+            .unwrap_or(0);
+        let vram_total = memory_info
+            .as_ref()
+            .map(|m| m.total / 1024 / 1024)
+            .unwrap_or(0);
 
         // Fan
         let fan_speed = device.fan_speed(0).unwrap_or(0);
@@ -188,9 +192,8 @@ impl NvidiaProfiler {
             NvControlError::RuntimeError(format!("JSON serialization failed: {}", e))
         })?;
 
-        std::fs::write(path, json).map_err(|e| {
-            NvControlError::RuntimeError(format!("Failed to write file: {}", e))
-        })?;
+        std::fs::write(path, json)
+            .map_err(|e| NvControlError::RuntimeError(format!("Failed to write file: {}", e)))?;
 
         println!("Exported profiling session to: {}", path);
 
@@ -204,10 +207,22 @@ impl NvidiaProfiler {
         }
 
         let gpu_clocks: Vec<u32> = self.data_buffer.iter().map(|d| d.gpu_clock_mhz).collect();
-        let mem_clocks: Vec<u32> = self.data_buffer.iter().map(|d| d.memory_clock_mhz).collect();
+        let mem_clocks: Vec<u32> = self
+            .data_buffer
+            .iter()
+            .map(|d| d.memory_clock_mhz)
+            .collect();
         let temps: Vec<i32> = self.data_buffer.iter().map(|d| d.temperature_c).collect();
-        let gpu_loads: Vec<u32> = self.data_buffer.iter().map(|d| d.gpu_load_percent).collect();
-        let powers: Vec<f32> = self.data_buffer.iter().map(|d| d.power_draw_watts).collect();
+        let gpu_loads: Vec<u32> = self
+            .data_buffer
+            .iter()
+            .map(|d| d.gpu_load_percent)
+            .collect();
+        let powers: Vec<f32> = self
+            .data_buffer
+            .iter()
+            .map(|d| d.power_draw_watts)
+            .collect();
 
         Some(ProfileStatistics {
             avg_gpu_clock: avg(&gpu_clocks),
@@ -298,9 +313,10 @@ impl WorkloadCapture {
         // Wait a bit for metrics to settle
         std::thread::sleep(Duration::from_millis(500));
 
-        let session = self.profiler.stop_recording().ok_or_else(|| {
-            NvControlError::RuntimeError("Failed to capture session".to_string())
-        })?;
+        let session = self
+            .profiler
+            .stop_recording()
+            .ok_or_else(|| NvControlError::RuntimeError("Failed to capture session".to_string()))?;
 
         workload_result?;
 

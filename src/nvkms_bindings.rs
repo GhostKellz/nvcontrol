@@ -43,20 +43,24 @@ pub const NVKMS_IOCTL_MAGIC: u8 = b'm';
 pub const NVKMS_IOCTL_CMD: u8 = 0;
 
 // ioctl request code: _IOWR(NVKMS_IOCTL_MAGIC, NVKMS_IOCTL_CMD, NvKmsIoctlParams)
-pub const NVKMS_IOCTL_IOWR: c_ulong = nix::request_code_readwrite!(NVKMS_IOCTL_MAGIC, NVKMS_IOCTL_CMD, std::mem::size_of::<NvKmsIoctlParams>());
+pub const NVKMS_IOCTL_IOWR: c_ulong = nix::request_code_readwrite!(
+    NVKMS_IOCTL_MAGIC,
+    NVKMS_IOCTL_CMD,
+    std::mem::size_of::<NvKmsIoctlParams>()
+);
 
 // ===== NVKMS Ioctl Commands from nvkms-api.h =====
 // These MUST match the enum order in the NVIDIA open source driver
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum NvKmsIoctlCommand {
-    AllocDevice = 0,                   // NVKMS_IOCTL_ALLOC_DEVICE
-    FreeDevice = 1,                    // NVKMS_IOCTL_FREE_DEVICE
-    QueryDisp = 2,                     // NVKMS_IOCTL_QUERY_DISP
-    QueryConnectorStaticData = 3,      // NVKMS_IOCTL_QUERY_CONNECTOR_STATIC_DATA
-    QueryConnectorDynamicData = 4,     // NVKMS_IOCTL_QUERY_CONNECTOR_DYNAMIC_DATA
-    QueryDpyStaticData = 5,            // NVKMS_IOCTL_QUERY_DPY_STATIC_DATA
-    QueryDpyDynamicData = 6,           // NVKMS_IOCTL_QUERY_DPY_DYNAMIC_DATA
+    AllocDevice = 0,               // NVKMS_IOCTL_ALLOC_DEVICE
+    FreeDevice = 1,                // NVKMS_IOCTL_FREE_DEVICE
+    QueryDisp = 2,                 // NVKMS_IOCTL_QUERY_DISP
+    QueryConnectorStaticData = 3,  // NVKMS_IOCTL_QUERY_CONNECTOR_STATIC_DATA
+    QueryConnectorDynamicData = 4, // NVKMS_IOCTL_QUERY_CONNECTOR_DYNAMIC_DATA
+    QueryDpyStaticData = 5,        // NVKMS_IOCTL_QUERY_DPY_STATIC_DATA
+    QueryDpyDynamicData = 6,       // NVKMS_IOCTL_QUERY_DPY_DYNAMIC_DATA
     ValidateModeIndex = 7,
     ValidateMode = 8,
     SetMode = 9,
@@ -72,9 +76,9 @@ pub enum NvKmsIoctlCommand {
     GrantSurface = 19,
     AcquireSurface = 20,
     ReleaseSurface = 21,
-    SetDpyAttribute = 22,              // NVKMS_IOCTL_SET_DPY_ATTRIBUTE
-    GetDpyAttribute = 23,              // NVKMS_IOCTL_GET_DPY_ATTRIBUTE
-    GetDpyAttributeValidValues = 24,   // NVKMS_IOCTL_GET_DPY_ATTRIBUTE_VALID_VALUES
+    SetDpyAttribute = 22,            // NVKMS_IOCTL_SET_DPY_ATTRIBUTE
+    GetDpyAttribute = 23,            // NVKMS_IOCTL_GET_DPY_ATTRIBUTE
+    GetDpyAttributeValidValues = 24, // NVKMS_IOCTL_GET_DPY_ATTRIBUTE_VALID_VALUES
     SetDispAttribute = 25,
     GetDispAttribute = 26,
     GetDispAttributeValidValues = 27,
@@ -251,11 +255,11 @@ pub struct NvKmsQueryDispRequest {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct NvKmsQueryDispReply {
-    pub valid_dpys: NVDpyIdList,      // offset 0
-    pub boot_dpys: NVDpyIdList,       // offset 4
-    pub mux_dpys: NVDpyIdList,        // offset 8
-    pub frame_lock_handle: NvU32,     // offset 12
-    pub num_connectors: NvU32,        // offset 16
+    pub valid_dpys: NVDpyIdList,  // offset 0
+    pub boot_dpys: NVDpyIdList,   // offset 4
+    pub mux_dpys: NVDpyIdList,    // offset 8
+    pub frame_lock_handle: NvU32, // offset 12
+    pub num_connectors: NvU32,    // offset 16
     pub connector_handles: [NvKmsConnectorHandle; NVKMS_MAX_CONNECTORS_PER_DISP], // offset 20
     // Remaining fields (gpu_string is actually 80 bytes starting at 84)
     pub _padding: [u8; 164 - 20 - (NVKMS_MAX_CONNECTORS_PER_DISP * 4)], // 164 - 20 - 64 = 80
@@ -310,17 +314,17 @@ pub struct NvKmsQueryConnectorStaticDataRequest {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct NvKmsQueryConnectorStaticDataReply {
-    pub dpy_id: NVDpyId,                          // offset 0
-    pub is_dp: NvBool,                            // offset 4
-    pub is_lvds: NvBool,                          // offset 5
-    pub location_on_chip: NvBool,                 // offset 6
-    pub _pad1: NvBool,                            // offset 7 (alignment)
-    pub legacy_type_index: NvU32,                 // offset 8
-    pub connector_type: NvKmsConnectorType,       // offset 12
-    pub type_index: NvU32,                        // offset 16
+    pub dpy_id: NVDpyId,                           // offset 0
+    pub is_dp: NvBool,                             // offset 4
+    pub is_lvds: NvBool,                           // offset 5
+    pub location_on_chip: NvBool,                  // offset 6
+    pub _pad1: NvBool,                             // offset 7 (alignment)
+    pub legacy_type_index: NvU32,                  // offset 8
+    pub connector_type: NvKmsConnectorType,        // offset 12
+    pub type_index: NvU32,                         // offset 16
     pub signal_format: NvKmsConnectorSignalFormat, // offset 20
-    pub physical_index: NvU32,                    // offset 24
-    pub physical_location: NvU32,                 // offset 28
+    pub physical_index: NvU32,                     // offset 24
+    pub physical_location: NvU32,                  // offset 28
 }
 
 #[repr(C)]
@@ -418,11 +422,11 @@ pub enum NvKmsAllocDeviceStatus {
 #[repr(C, align(8))]
 #[derive(Copy, Clone)]
 pub struct NvKmsAllocDeviceReply {
-    pub status: NvKmsAllocDeviceStatus,    // offset 0
-    pub device_handle: NvKmsDeviceHandle,  // offset 4
-    pub sub_device_mask: NvU32,            // offset 8
-    pub num_heads: NvU32,                  // offset 12
-    pub num_disps: NvU32,                  // offset 16
+    pub status: NvKmsAllocDeviceStatus,   // offset 0
+    pub device_handle: NvKmsDeviceHandle, // offset 4
+    pub sub_device_mask: NvU32,           // offset 8
+    pub num_heads: NvU32,                 // offset 12
+    pub num_disps: NvU32,                 // offset 16
     pub disp_handles: [NvKmsDispHandle; NVKMS_MAX_SUBDEVICES], // offset 20
     // Remaining fields (caps, layer info, etc.)
     pub _padding: [u8; 888 - 20 - (NVKMS_MAX_SUBDEVICES * 4)], // 888 - 20 - 32 = 836
@@ -475,9 +479,7 @@ pub unsafe fn nvkms_ioctl<T>(
     let ioctl_params = create_ioctl_params(cmd, params);
 
     // SAFETY: Caller ensures fd is valid and params matches the ioctl command
-    let result = unsafe {
-        libc::ioctl(fd, NVKMS_IOCTL_IOWR as c_ulong, &ioctl_params as *const _)
-    };
+    let result = unsafe { libc::ioctl(fd, NVKMS_IOCTL_IOWR as c_ulong, &ioctl_params as *const _) };
 
     if result == -1 {
         Err(std::io::Error::last_os_error())

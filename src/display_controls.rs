@@ -98,7 +98,8 @@ impl DisplayControls {
 
     pub fn get_image_sharpening_info(&self) -> NvResult<ImageSharpeningInfo> {
         // Check if image sharpening is available
-        let available = self.get_display_attribute_i64(NvKmsDpyAttribute::ImageSharpeningAvailable)?;
+        let available =
+            self.get_display_attribute_i64(NvKmsDpyAttribute::ImageSharpeningAvailable)?;
 
         let default_value = if available != 0 {
             self.get_display_attribute_i64(NvKmsDpyAttribute::ImageSharpeningDefault)?
@@ -113,7 +114,8 @@ impl DisplayControls {
         };
 
         // Get valid range
-        let range = self.get_attribute_range(NvKmsDpyAttribute::ImageSharpening)
+        let range = self
+            .get_attribute_range(NvKmsDpyAttribute::ImageSharpening)
             .unwrap_or((0, 100));
 
         Ok(ImageSharpeningInfo {
@@ -190,7 +192,8 @@ impl DisplayControls {
     pub fn get_dithering_info(&self) -> NvResult<DitheringInfo> {
         let enabled_value = self.get_display_attribute_i64(NvKmsDpyAttribute::CurrentDithering)?;
         let mode_value = self.get_display_attribute_i64(NvKmsDpyAttribute::CurrentDitheringMode)?;
-        let depth_value = self.get_display_attribute_i64(NvKmsDpyAttribute::CurrentDitheringDepth)?;
+        let depth_value =
+            self.get_display_attribute_i64(NvKmsDpyAttribute::CurrentDitheringDepth)?;
 
         let mode = match mode_value {
             0 => DitheringMode::None,
@@ -214,7 +217,12 @@ impl DisplayControls {
         })
     }
 
-    pub fn set_dithering(&self, enabled: bool, mode: DitheringMode, depth: DitheringDepth) -> NvResult<()> {
+    pub fn set_dithering(
+        &self,
+        enabled: bool,
+        mode: DitheringMode,
+        depth: DitheringDepth,
+    ) -> NvResult<()> {
         // Set dithering enabled/disabled
         let enabled_value = if enabled { 1 } else { 2 };
         self.set_display_attribute_i64(NvKmsDpyAttribute::RequestedDithering, enabled_value)?;
@@ -256,7 +264,10 @@ impl DisplayControls {
 
         unsafe {
             nvkms_ioctl(self.fd, NvKmsIoctlCommand::GetDpyAttribute, &mut params).map_err(|e| {
-                NvControlError::DisplayDetectionFailed(format!("Failed to get display attribute: {}", e))
+                NvControlError::DisplayDetectionFailed(format!(
+                    "Failed to get display attribute: {}",
+                    e
+                ))
             })?;
         }
 
@@ -277,7 +288,10 @@ impl DisplayControls {
 
         unsafe {
             nvkms_ioctl(self.fd, NvKmsIoctlCommand::SetDpyAttribute, &mut params).map_err(|e| {
-                NvControlError::DisplayDetectionFailed(format!("Failed to set display attribute: {}", e))
+                NvControlError::DisplayDetectionFailed(format!(
+                    "Failed to set display attribute: {}",
+                    e
+                ))
             })?;
         }
 
@@ -296,8 +310,16 @@ impl DisplayControls {
         };
 
         unsafe {
-            nvkms_ioctl(self.fd, NvKmsIoctlCommand::GetDpyAttributeValidValues, &mut params).map_err(|e| {
-                NvControlError::DisplayDetectionFailed(format!("Failed to get attribute range: {}", e))
+            nvkms_ioctl(
+                self.fd,
+                NvKmsIoctlCommand::GetDpyAttributeValidValues,
+                &mut params,
+            )
+            .map_err(|e| {
+                NvControlError::DisplayDetectionFailed(format!(
+                    "Failed to get attribute range: {}",
+                    e
+                ))
             })?;
 
             if params.reply.attr_type == NvKmsAttributeType::Range {
@@ -318,11 +340,17 @@ pub fn set_image_sharpening_cli(_device_id: u32, display_id: u32, value: i64) ->
     // For now, use placeholder values
     let controls = DisplayControls::new(0, 0, display_id)?;
     controls.set_image_sharpening(value)?;
-    println!("✅ Set image sharpening to {} for display {}", value, display_id);
+    println!(
+        "✅ Set image sharpening to {} for display {}",
+        value, display_id
+    );
     Ok(())
 }
 
-pub fn get_image_sharpening_info_cli(_device_id: u32, display_id: u32) -> NvResult<ImageSharpeningInfo> {
+pub fn get_image_sharpening_info_cli(
+    _device_id: u32,
+    display_id: u32,
+) -> NvResult<ImageSharpeningInfo> {
     let controls = DisplayControls::new(0, 0, display_id)?;
     controls.get_image_sharpening_info()
 }
@@ -330,14 +358,20 @@ pub fn get_image_sharpening_info_cli(_device_id: u32, display_id: u32) -> NvResu
 pub fn set_color_range_cli(_device_id: u32, display_id: u32, range: ColorRange) -> NvResult<()> {
     let controls = DisplayControls::new(0, 0, display_id)?;
     controls.set_color_range(range)?;
-    println!("✅ Set color range to {:?} for display {}", range, display_id);
+    println!(
+        "✅ Set color range to {:?} for display {}",
+        range, display_id
+    );
     Ok(())
 }
 
 pub fn set_color_space_cli(_device_id: u32, display_id: u32, space: ColorSpace) -> NvResult<()> {
     let controls = DisplayControls::new(0, 0, display_id)?;
     controls.set_color_space(space)?;
-    println!("✅ Set color space to {:?} for display {}", space, display_id);
+    println!(
+        "✅ Set color space to {:?} for display {}",
+        space, display_id
+    );
     Ok(())
 }
 
@@ -350,6 +384,9 @@ pub fn set_dithering_cli(
 ) -> NvResult<()> {
     let controls = DisplayControls::new(0, 0, display_id)?;
     controls.set_dithering(enabled, mode, depth)?;
-    println!("✅ Set dithering (enabled={}, mode={:?}, depth={:?}) for display {}", enabled, mode, depth, display_id);
+    println!(
+        "✅ Set dithering (enabled={}, mode={:?}, depth={:?}) for display {}",
+        enabled, mode, depth, display_id
+    );
     Ok(())
 }

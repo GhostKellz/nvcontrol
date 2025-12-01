@@ -1,7 +1,6 @@
 /// Phase 4.1: Gaming Integration
 ///
 /// Steam integration, Lutris integration, GameMode integration, automatic profile application
-
 use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -154,7 +153,8 @@ impl SteamScanner {
                     let name = path.file_name()?.to_str()?;
 
                     // Windows executables (via Proton)
-                    if name.ends_with(".exe") && !name.contains("unins") && !name.contains("crash") {
+                    if name.ends_with(".exe") && !name.contains("unins") && !name.contains("crash")
+                    {
                         return Some(path);
                     }
 
@@ -207,10 +207,7 @@ pub struct LutrisScanner {
 impl LutrisScanner {
     pub fn new() -> Self {
         let home = std::env::var("HOME").ok();
-        let lutris_db = home.map(|h| {
-            PathBuf::from(h)
-                .join(".local/share/lutris/pga.db")
-        });
+        let lutris_db = home.map(|h| PathBuf::from(h).join(".local/share/lutris/pga.db"));
 
         Self { lutris_db }
     }
@@ -307,10 +304,7 @@ impl GameModeIntegration {
     }
 
     fn is_gamemode_available() -> bool {
-        Command::new("gamemoded")
-            .arg("--version")
-            .output()
-            .is_ok()
+        Command::new("gamemoded").arg("--version").output().is_ok()
     }
 
     /// Check if GameMode is available
@@ -376,7 +370,10 @@ impl GameProfileAutomation {
     }
 
     /// Detect running game
-    pub fn detect_running_game<'a>(&mut self, games: &'a [DetectedGame]) -> Option<&'a DetectedGame> {
+    pub fn detect_running_game<'a>(
+        &mut self,
+        games: &'a [DetectedGame],
+    ) -> Option<&'a DetectedGame> {
         // Check running processes
         let output = Command::new("ps").arg("aux").output().ok()?;
         let ps_output = String::from_utf8_lossy(&output.stdout);
@@ -452,7 +449,10 @@ impl LaunchOptimizer {
         // NVIDIA specific
         env.insert("__GL_THREADED_OPTIMIZATIONS".to_string(), "1".to_string());
         env.insert("__GL_SHADER_DISK_CACHE".to_string(), "1".to_string());
-        env.insert("__GL_SHADER_DISK_CACHE_SKIP_CLEANUP".to_string(), "1".to_string());
+        env.insert(
+            "__GL_SHADER_DISK_CACHE_SKIP_CLEANUP".to_string(),
+            "1".to_string(),
+        );
 
         // Proton/Wine optimizations
         if self.fsync_enabled {
@@ -530,7 +530,10 @@ mod tests {
         let env = optimizer.build_env_vars();
 
         assert!(env.contains_key("__GL_THREADED_OPTIMIZATIONS"));
-        assert_eq!(env.get("__GL_THREADED_OPTIMIZATIONS"), Some(&"1".to_string()));
+        assert_eq!(
+            env.get("__GL_THREADED_OPTIMIZATIONS"),
+            Some(&"1".to_string())
+        );
     }
 
     #[test]

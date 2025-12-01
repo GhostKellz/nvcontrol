@@ -1,7 +1,6 @@
 /// Phase 5.3: Virtualization Support
 ///
 /// vGPU configuration, SR-IOV support, GPU passthrough optimization, virtual display management
-
 use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -83,9 +82,8 @@ impl SriovManager {
         let pci_addr = self.get_pci_address()?;
         let sriov_path = format!("/sys/bus/pci/devices/{}/sriov_numvfs", pci_addr);
 
-        std::fs::write(&sriov_path, num_vfs.to_string()).map_err(|e| {
-            NvControlError::RuntimeError(format!("Failed to enable SR-IOV: {}", e))
-        })?;
+        std::fs::write(&sriov_path, num_vfs.to_string())
+            .map_err(|e| NvControlError::RuntimeError(format!("Failed to enable SR-IOV: {}", e)))?;
 
         self.num_vfs = num_vfs;
 
@@ -113,13 +111,12 @@ impl SriovManager {
     fn get_pci_address(&self) -> NvResult<String> {
         use nvml_wrapper::Nvml;
 
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
 
-        let device = nvml.device_by_index(self.gpu_id).map_err(|e| {
-            NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e))
-        })?;
+        let device = nvml
+            .device_by_index(self.gpu_id)
+            .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e)))?;
 
         let pci_info = device.pci_info().map_err(|e| {
             NvControlError::GpuQueryFailed(format!("Failed to get PCI info: {}", e))
@@ -152,9 +149,8 @@ impl PassthroughManager {
     pub fn detect_passthrough_gpus(&mut self) -> NvResult<Vec<PassthroughConfig>> {
         use nvml_wrapper::Nvml;
 
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
 
         let count = nvml.device_count().map_err(|e| {
             NvControlError::GpuQueryFailed(format!("Failed to get device count: {}", e))
@@ -170,10 +166,8 @@ impl PassthroughManager {
             let pci_info = device.pci_info().ok();
 
             if let Some(pci) = pci_info {
-                let pci_address = format!(
-                    "{:04x}:{:02x}:{:02x}.0",
-                    pci.domain, pci.bus, pci.device
-                );
+                let pci_address =
+                    format!("{:04x}:{:02x}:{:02x}.0", pci.domain, pci.bus, pci.device);
 
                 let iommu_group = self.get_iommu_group(&pci_address)?;
                 let (vendor_id, device_id) = self.get_device_ids(&pci_address)?;
@@ -244,9 +238,10 @@ impl PassthroughManager {
 
     /// Bind GPU to VFIO driver for passthrough
     pub fn bind_to_vfio(&self, gpu_id: u32) -> NvResult<()> {
-        let config = self.configs.get(&gpu_id).ok_or_else(|| {
-            NvControlError::RuntimeError(format!("GPU {} not found", gpu_id))
-        })?;
+        let config = self
+            .configs
+            .get(&gpu_id)
+            .ok_or_else(|| NvControlError::RuntimeError(format!("GPU {} not found", gpu_id)))?;
 
         if config.vfio_bound {
             println!("GPU {} already bound to VFIO", gpu_id);
@@ -254,10 +249,7 @@ impl PassthroughManager {
         }
 
         // Unbind from current driver
-        let unbind_path = format!(
-            "/sys/bus/pci/devices/{}/driver/unbind",
-            config.pci_address
-        );
+        let unbind_path = format!("/sys/bus/pci/devices/{}/driver/unbind", config.pci_address);
         if Path::new(&unbind_path).exists() {
             std::fs::write(&unbind_path, &config.pci_address).map_err(|e| {
                 NvControlError::RuntimeError(format!("Failed to unbind driver: {}", e))
@@ -272,9 +264,8 @@ impl PassthroughManager {
             config.device_id.trim_start_matches("0x")
         );
 
-        std::fs::write(new_id_path, id_string).map_err(|e| {
-            NvControlError::RuntimeError(format!("Failed to bind to VFIO: {}", e))
-        })?;
+        std::fs::write(new_id_path, id_string)
+            .map_err(|e| NvControlError::RuntimeError(format!("Failed to bind to VFIO: {}", e)))?;
 
         println!("GPU {} bound to VFIO for passthrough", gpu_id);
 
@@ -288,9 +279,10 @@ impl PassthroughManager {
 
     /// Generate libvirt XML for GPU passthrough
     pub fn generate_libvirt_xml(&self, gpu_id: u32) -> NvResult<String> {
-        let config = self.configs.get(&gpu_id).ok_or_else(|| {
-            NvControlError::RuntimeError(format!("GPU {} not found", gpu_id))
-        })?;
+        let config = self
+            .configs
+            .get(&gpu_id)
+            .ok_or_else(|| NvControlError::RuntimeError(format!("GPU {} not found", gpu_id)))?;
 
         let xml = format!(
             r#"<hostdev mode='subsystem' type='pci' managed='yes'>
@@ -328,9 +320,7 @@ impl VGpuManager {
     /// Detect available vGPU profiles
     pub fn detect_profiles(&mut self, gpu_id: u32) -> NvResult<Vec<VGpuProfile>> {
         // Query mdevctl for available vGPU types
-        let output = Command::new("mdevctl")
-            .args(&["types"])
-            .output();
+        let output = Command::new("mdevctl").args(&["types"]).output();
 
         if output.is_err() {
             return Err(NvControlError::UnsupportedFeature(
@@ -371,9 +361,7 @@ impl VGpuManager {
         let output = Command::new("mdevctl")
             .args(&["start", "-t", profile_name])
             .output()
-            .map_err(|e| {
-                NvControlError::RuntimeError(format!("Failed to create vGPU: {}", e))
-            })?;
+            .map_err(|e| NvControlError::RuntimeError(format!("Failed to create vGPU: {}", e)))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);

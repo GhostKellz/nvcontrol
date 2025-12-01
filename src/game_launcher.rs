@@ -93,14 +93,17 @@ impl GameProfile {
 
     /// Add DXVK environment variables
     pub fn with_dxvk(mut self, enable_async: bool) -> Self {
-        self.env_vars.insert("DXVK_STATE_CACHE".to_string(), "1".to_string());
+        self.env_vars
+            .insert("DXVK_STATE_CACHE".to_string(), "1".to_string());
 
         if enable_async {
-            self.env_vars.insert("DXVK_ASYNC".to_string(), "1".to_string());
+            self.env_vars
+                .insert("DXVK_ASYNC".to_string(), "1".to_string());
         }
 
         if let Some(cache_path) = &self.shader_cache_path {
-            self.env_vars.insert("DXVK_STATE_CACHE_PATH".to_string(), cache_path.clone());
+            self.env_vars
+                .insert("DXVK_STATE_CACHE_PATH".to_string(), cache_path.clone());
         }
 
         self
@@ -109,26 +112,33 @@ impl GameProfile {
     /// Add VKD3D-Proton environment variables
     pub fn with_vkd3d(mut self) -> Self {
         if let Some(cache_path) = &self.shader_cache_path {
-            self.env_vars.insert("VKD3D_SHADER_CACHE_PATH".to_string(), cache_path.clone());
+            self.env_vars
+                .insert("VKD3D_SHADER_CACHE_PATH".to_string(), cache_path.clone());
         }
 
-        self.env_vars.insert("VKD3D_CONFIG".to_string(), "dxr11,dxr".to_string());
+        self.env_vars
+            .insert("VKD3D_CONFIG".to_string(), "dxr11,dxr".to_string());
         self
     }
 
     /// Enable NVIDIA DLSS/RTX features
     pub fn with_dlss(mut self) -> Self {
-        self.env_vars.insert("PROTON_ENABLE_NGX_UPDATER".to_string(), "1".to_string());
-        self.env_vars.insert("PROTON_ENABLE_NVAPI".to_string(), "1".to_string());
+        self.env_vars
+            .insert("PROTON_ENABLE_NGX_UPDATER".to_string(), "1".to_string());
+        self.env_vars
+            .insert("PROTON_ENABLE_NVAPI".to_string(), "1".to_string());
         self
     }
 
     /// Set shader cache path
     pub fn with_shader_cache(mut self, path: String) -> Self {
         self.shader_cache_path = Some(path.clone());
-        self.env_vars.insert("__GL_SHADER_DISK_CACHE_PATH".to_string(), path.clone());
-        self.env_vars.insert("DXVK_STATE_CACHE_PATH".to_string(), path.clone());
-        self.env_vars.insert("VKD3D_SHADER_CACHE_PATH".to_string(), path);
+        self.env_vars
+            .insert("__GL_SHADER_DISK_CACHE_PATH".to_string(), path.clone());
+        self.env_vars
+            .insert("DXVK_STATE_CACHE_PATH".to_string(), path.clone());
+        self.env_vars
+            .insert("VKD3D_SHADER_CACHE_PATH".to_string(), path);
         self
     }
 }
@@ -141,14 +151,16 @@ pub struct GameLauncher {
 impl GameLauncher {
     pub fn new() -> NvResult<Self> {
         let profiles_dir = Self::get_profiles_dir();
-        fs::create_dir_all(&profiles_dir)
-            .map_err(|e| NvControlError::ConfigError(format!("Failed to create profiles dir: {}", e)))?;
+        fs::create_dir_all(&profiles_dir).map_err(|e| {
+            NvControlError::ConfigError(format!("Failed to create profiles dir: {}", e))
+        })?;
 
         Ok(Self { profiles_dir })
     }
 
     fn get_profiles_dir() -> PathBuf {
-        if let Some(project_dirs) = directories::ProjectDirs::from("com", "ghostkellz", "nvcontrol") {
+        if let Some(project_dirs) = directories::ProjectDirs::from("com", "ghostkellz", "nvcontrol")
+        {
             project_dirs.config_dir().join("game_profiles")
         } else {
             PathBuf::from("game_profiles")
@@ -158,8 +170,9 @@ impl GameLauncher {
     /// Save a game profile
     pub fn save_profile(&self, profile: &GameProfile) -> NvResult<()> {
         let profile_path = self.profiles_dir.join(format!("{}.toml", profile.name));
-        let content = toml::to_string_pretty(profile)
-            .map_err(|e| NvControlError::ConfigError(format!("Failed to serialize profile: {}", e)))?;
+        let content = toml::to_string_pretty(profile).map_err(|e| {
+            NvControlError::ConfigError(format!("Failed to serialize profile: {}", e))
+        })?;
 
         fs::write(&profile_path, content)
             .map_err(|e| NvControlError::ConfigError(format!("Failed to write profile: {}", e)))?;
@@ -312,9 +325,11 @@ impl GameLauncher {
     fn build_proton_command(&self, profile: &GameProfile) -> NvResult<Command> {
         // Find Proton installation
         let proton_path = if let Some(version) = &profile.proton_version {
-            format!("/home/{}/.steam/steam/steamapps/common/Proton {}/proton",
+            format!(
+                "/home/{}/.steam/steam/steamapps/common/Proton {}/proton",
                 std::env::var("USER").unwrap_or_else(|_| "user".to_string()),
-                version)
+                version
+            )
         } else {
             "proton".to_string()
         };
@@ -333,7 +348,8 @@ impl GameLauncher {
     fn set_cpu_affinity(&self, cpu_list: &[usize]) -> NvResult<()> {
         // Note: This would require calling sched_setaffinity via libc
         // For now, we'll use taskset command
-        let cpu_mask = cpu_list.iter()
+        let cpu_mask = cpu_list
+            .iter()
             .map(|c| c.to_string())
             .collect::<Vec<_>>()
             .join(",");
@@ -372,10 +388,7 @@ impl GameLauncher {
         // Kill the process
         #[cfg(unix)]
         {
-            Command::new("kill")
-                .arg(pid.to_string())
-                .status()
-                .ok();
+            Command::new("kill").arg(pid.to_string()).status().ok();
         }
 
         println!("   ✅ Warm-start complete, shader cache primed");
@@ -387,14 +400,12 @@ impl GameLauncher {
         println!("📝 Creating example game profiles...");
 
         // Cyberpunk 2077
-        let cyberpunk = GameProfile::new(
-            "cyberpunk2077".to_string(),
-            "Cyberpunk2077.exe".to_string(),
-        )
-        .with_shader_cache("/fastcache/cyberpunk2077".to_string())
-        .with_dxvk(true)
-        .with_vkd3d()
-        .with_dlss();
+        let cyberpunk =
+            GameProfile::new("cyberpunk2077".to_string(), "Cyberpunk2077.exe".to_string())
+                .with_shader_cache("/fastcache/cyberpunk2077".to_string())
+                .with_dxvk(true)
+                .with_vkd3d()
+                .with_dlss();
 
         let mut cyberpunk = cyberpunk;
         cyberpunk.use_gamescope = true;
@@ -408,11 +419,8 @@ impl GameLauncher {
         self.save_profile(&cyberpunk)?;
 
         // CS2 / Counter-Strike 2
-        let cs2 = GameProfile::new(
-            "cs2".to_string(),
-            "cs2".to_string(),
-        )
-        .with_shader_cache("/fastcache/cs2".to_string());
+        let cs2 = GameProfile::new("cs2".to_string(), "cs2".to_string())
+            .with_shader_cache("/fastcache/cs2".to_string());
 
         let mut cs2 = cs2;
         cs2.use_gamescope = true;
@@ -426,12 +434,9 @@ impl GameLauncher {
         self.save_profile(&cs2)?;
 
         // Elden Ring
-        let elden_ring = GameProfile::new(
-            "eldenring".to_string(),
-            "eldenring.exe".to_string(),
-        )
-        .with_shader_cache("/fastcache/eldenring".to_string())
-        .with_dxvk(true);
+        let elden_ring = GameProfile::new("eldenring".to_string(), "eldenring.exe".to_string())
+            .with_shader_cache("/fastcache/eldenring".to_string())
+            .with_dxvk(true);
 
         let mut elden_ring = elden_ring;
         elden_ring.use_proton = true;

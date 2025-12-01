@@ -2,12 +2,11 @@
 ///
 /// Tests error handling, hardware safety validation, and graceful degradation
 /// when GPU or NVML is unavailable.
-
 use nvcontrol::{
-    error_recovery::{ErrorContext, NvmlFallback, RetryHandler},
-    hardware_safety::{SafetyMonitor, SafetyThresholds, OverclockValidation, PowerValidation},
-    gpu_safe::SafeGpuController,
     NvControlError,
+    error_recovery::{ErrorContext, NvmlFallback, RetryHandler},
+    gpu_safe::SafeGpuController,
+    hardware_safety::{OverclockValidation, PowerValidation, SafetyMonitor, SafetyThresholds},
 };
 
 #[test]
@@ -204,30 +203,24 @@ fn test_architecture_detection_blackwell() {
     let controller = SafeGpuController::new(0);
 
     // Test detection from compute capability
-    let arch = nvcontrol::gpu_safe::SafeGpuController::detect_architecture(
-        "RTX 5090",
-        Some((10, 0))
-    );
+    let arch =
+        nvcontrol::gpu_safe::SafeGpuController::detect_architecture("RTX 5090", Some((10, 0)));
 
     assert_eq!(arch, Some("Blackwell".to_string()));
 }
 
 #[test]
 fn test_architecture_detection_ada() {
-    let arch = nvcontrol::gpu_safe::SafeGpuController::detect_architecture(
-        "RTX 4090",
-        Some((8, 9))
-    );
+    let arch =
+        nvcontrol::gpu_safe::SafeGpuController::detect_architecture("RTX 4090", Some((8, 9)));
 
     assert_eq!(arch, Some("Ada Lovelace".to_string()));
 }
 
 #[test]
 fn test_architecture_detection_ampere() {
-    let arch = nvcontrol::gpu_safe::SafeGpuController::detect_architecture(
-        "RTX 3090",
-        Some((8, 6))
-    );
+    let arch =
+        nvcontrol::gpu_safe::SafeGpuController::detect_architecture("RTX 3090", Some((8, 6)));
 
     assert_eq!(arch, Some("Ampere".to_string()));
 }
@@ -237,7 +230,7 @@ fn test_architecture_detection_from_name_fallback() {
     // Test name-based detection when compute capability unknown
     let arch = nvcontrol::gpu_safe::SafeGpuController::detect_architecture(
         "NVIDIA GeForce RTX 5090",
-        None
+        None,
     );
 
     assert_eq!(arch, Some("Blackwell".to_string()));
@@ -265,7 +258,10 @@ fn test_rapid_gpu_queries() {
     for i in 0..10 {
         match controller.get_info() {
             Ok(info) => {
-                println!("Query {}: Temp={}°C, Util={}%", i, info.temperature, info.gpu_utilization);
+                println!(
+                    "Query {}: Temp={}°C, Util={}%",
+                    i, info.temperature, info.gpu_utilization
+                );
             }
             Err(_) => {
                 println!("Query {} skipped (GPU not available)", i);
@@ -285,7 +281,10 @@ fn test_graceful_degradation() {
     if !fallback.has_any_method() {
         println!("⚠️  No GPU control methods available (expected in some environments)");
     } else {
-        println!("✓ At least one control method available: {:?}", fallback.available_methods());
+        println!(
+            "✓ At least one control method available: {:?}",
+            fallback.available_methods()
+        );
     }
 
     // Should not panic even without GPU

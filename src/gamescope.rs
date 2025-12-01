@@ -621,8 +621,8 @@ pub fn get_recording_presets() -> NvResult<Vec<crate::recording::RecordingSettin
 
 /// Apply a Gamescope configuration (saves to config file for persistence)
 pub fn apply_gamescope_config(config: &GamescopeConfig) -> NvResult<()> {
-    use std::fs;
     use crate::NvControlError;
+    use std::fs;
 
     // Get config directory
     let config_dir = dirs::config_dir()
@@ -630,8 +630,9 @@ pub fn apply_gamescope_config(config: &GamescopeConfig) -> NvResult<()> {
         .join("nvcontrol");
 
     // Create directory if it doesn't exist
-    fs::create_dir_all(&config_dir)
-        .map_err(|e| NvControlError::ConfigError(format!("Failed to create config directory: {}", e)))?;
+    fs::create_dir_all(&config_dir).map_err(|e| {
+        NvControlError::ConfigError(format!("Failed to create config directory: {}", e))
+    })?;
 
     let config_path = config_dir.join("gamescope.toml");
 
@@ -652,23 +653,41 @@ pub fn apply_gamescope_config(config: &GamescopeConfig) -> NvResult<()> {
         }
     }
 
-    println!("✅ Gamescope configuration saved to: {}", config_path.display());
-    println!("   Resolution: {}x{}@{}Hz",
+    println!(
+        "✅ Gamescope configuration saved to: {}",
+        config_path.display()
+    );
+    println!(
+        "   Resolution: {}x{}@{}Hz",
         config.width,
         config.height,
         config.refresh_rate.unwrap_or(60)
     );
     println!("   Upscaling: {:?}", config.upscaling);
-    println!("   HDR: {}", if config.hdr_enabled { "enabled" } else { "disabled" });
-    println!("   Adaptive Sync: {}", if config.adaptive_sync { "enabled" } else { "disabled" });
+    println!(
+        "   HDR: {}",
+        if config.hdr_enabled {
+            "enabled"
+        } else {
+            "disabled"
+        }
+    );
+    println!(
+        "   Adaptive Sync: {}",
+        if config.adaptive_sync {
+            "enabled"
+        } else {
+            "disabled"
+        }
+    );
 
     Ok(())
 }
 
 /// Load the saved Gamescope configuration
 pub fn load_gamescope_config() -> NvResult<GamescopeConfig> {
-    use std::fs;
     use crate::NvControlError;
+    use std::fs;
 
     let config_path = dirs::config_dir()
         .ok_or_else(|| NvControlError::ConfigError("Failed to get config directory".to_string()))?
@@ -690,8 +709,8 @@ pub fn load_gamescope_config() -> NvResult<GamescopeConfig> {
 
 /// Launch an application with Gamescope using the current config
 pub fn launch_with_gamescope(command: &str, config: Option<&GamescopeConfig>) -> NvResult<()> {
-    use std::process::Command;
     use crate::NvControlError;
+    use std::process::Command;
 
     let config = match config {
         Some(c) => c.clone(),
@@ -757,18 +776,23 @@ pub fn launch_with_gamescope(command: &str, config: Option<&GamescopeConfig>) ->
     cmd.args(command.split_whitespace());
 
     println!("🚀 Launching with Gamescope: {}", command);
-    println!("   Config: {}x{}@{}Hz",
+    println!(
+        "   Config: {}x{}@{}Hz",
         config.width,
         config.height,
         config.refresh_rate.unwrap_or(60)
     );
 
     // Execute
-    let status = cmd.status()
+    let status = cmd
+        .status()
         .map_err(|e| NvControlError::CommandFailed(format!("Failed to launch gamescope: {}", e)))?;
 
     if !status.success() {
-        return Err(NvControlError::CommandFailed(format!("Gamescope exited with error code: {:?}", status.code())));
+        return Err(NvControlError::CommandFailed(format!(
+            "Gamescope exited with error code: {:?}",
+            status.code()
+        )));
     }
 
     Ok(())

@@ -1,7 +1,6 @@
 /// Enhanced Error Messages with Solutions
 ///
 /// Provides user-friendly error messages with actionable solutions
-
 use crate::NvControlError;
 use console::style;
 
@@ -23,9 +22,15 @@ impl ErrorWithSolution for NvControlError {
                     "• nvidia-smi not in PATH",
                     "• Permissions issue",
                     style("💡 Solutions:").green().bold(),
-                    format!("{} Install NVIDIA drivers: sudo pacman -S nvidia-utils", style("1.").cyan().bold()),
+                    format!(
+                        "{} Install NVIDIA drivers: sudo pacman -S nvidia-utils",
+                        style("1.").cyan().bold()
+                    ),
                     format!("{} Reboot your system", style("2.").cyan().bold()),
-                    format!("{} Run: nvctl doctor (to diagnose issues)", style("3.").cyan().bold())
+                    format!(
+                        "{} Run: nvctl doctor (to diagnose issues)",
+                        style("3.").cyan().bold()
+                    )
                 )
             }
             NvControlError::DisplayDetectionFailed(msg) => {
@@ -38,9 +43,15 @@ impl ErrorWithSolution for NvControlError {
                     "• Wayland compositor not providing display info",
                     "• X11 server not running",
                     style("💡 Solutions:").green().bold(),
-                    format!("{} Check if Wayland/X11 is running: echo $XDG_SESSION_TYPE", style("1.").cyan().bold()),
+                    format!(
+                        "{} Check if Wayland/X11 is running: echo $XDG_SESSION_TYPE",
+                        style("1.").cyan().bold()
+                    ),
                     format!("{} Restart your compositor", style("2.").cyan().bold()),
-                    format!("{} Try running with X11 if on Wayland", style("3.").cyan().bold())
+                    format!(
+                        "{} Try running with X11 if on Wayland",
+                        style("3.").cyan().bold()
+                    )
                 )
             }
             NvControlError::VibranceControlFailed(msg) => {
@@ -53,9 +64,18 @@ impl ErrorWithSolution for NvControlError {
                     "• nvidia-settings not installed",
                     "• Compositor doesn't support vibrance",
                     style("💡 Solutions:").green().bold(),
-                    format!("{} Install nvidia-settings: sudo pacman -S nvidia-settings", style("1.").cyan().bold()),
-                    format!("{} For Wayland: Use nvcontrol's native vibrance (no X11 needed)", style("2.").cyan().bold()),
-                    format!("{} For KDE: nvctl will use kwriteconfig6 automatically", style("3.").cyan().bold())
+                    format!(
+                        "{} Install nvidia-settings: sudo pacman -S nvidia-settings",
+                        style("1.").cyan().bold()
+                    ),
+                    format!(
+                        "{} For Wayland: Use nvcontrol's native vibrance (no X11 needed)",
+                        style("2.").cyan().bold()
+                    ),
+                    format!(
+                        "{} For KDE: nvctl will use kwriteconfig6 automatically",
+                        style("3.").cyan().bold()
+                    )
                 )
             }
             NvControlError::FanControlNotSupported => {
@@ -67,9 +87,15 @@ impl ErrorWithSolution for NvControlError {
                     "• GPU doesn't support manual fan control",
                     "• nvidia-settings not configured",
                     style("💡 Solutions:").green().bold(),
-                    format!("{} Enable CoolBits in X11: nvidia-xconfig --cool-bits=12", style("1.").cyan().bold()),
+                    format!(
+                        "{} Enable CoolBits in X11: nvidia-xconfig --cool-bits=12",
+                        style("1.").cyan().bold()
+                    ),
                     format!("{} Reboot or restart X11", style("2.").cyan().bold()),
-                    format!("{} Check GPU model supports fan control (most modern GPUs do)", style("3.").cyan().bold())
+                    format!(
+                        "{} Check GPU model supports fan control (most modern GPUs do)",
+                        style("3.").cyan().bold()
+                    )
                 )
             }
             NvControlError::PowerManagementFailed(msg) => {
@@ -82,9 +108,18 @@ impl ErrorWithSolution for NvControlError {
                     "• Insufficient permissions",
                     "• GPU locked by another process",
                     style("💡 Solutions:").green().bold(),
-                    format!("{} Run with sudo for power limit changes", style("1.").cyan().bold()),
-                    format!("{} Check if any GPU monitoring tools are running", style("2.").cyan().bold()),
-                    format!("{} Ensure nvidia-smi works: nvidia-smi -pl <power_limit>", style("3.").cyan().bold())
+                    format!(
+                        "{} Run with sudo for power limit changes",
+                        style("1.").cyan().bold()
+                    ),
+                    format!(
+                        "{} Check if any GPU monitoring tools are running",
+                        style("2.").cyan().bold()
+                    ),
+                    format!(
+                        "{} Ensure nvidia-smi works: nvidia-smi -pl <power_limit>",
+                        style("3.").cyan().bold()
+                    )
                 )
             }
             NvControlError::LatencyOptimizationFailed(msg) => {
@@ -97,9 +132,18 @@ impl ErrorWithSolution for NvControlError {
                     "• GameMode not installed",
                     "• CPU governor not accessible",
                     style("💡 Solutions:").green().bold(),
-                    format!("{} Install GameMode: sudo pacman -S gamemode", style("1.").cyan().bold()),
-                    format!("{} Enable user permissions: usermod -aG gamemode $USER", style("2.").cyan().bold()),
-                    format!("{} Reboot to apply group changes", style("3.").cyan().bold())
+                    format!(
+                        "{} Install GameMode: sudo pacman -S gamemode",
+                        style("1.").cyan().bold()
+                    ),
+                    format!(
+                        "{} Enable user permissions: usermod -aG gamemode $USER",
+                        style("2.").cyan().bold()
+                    ),
+                    format!(
+                        "{} Reboot to apply group changes",
+                        style("3.").cyan().bold()
+                    )
                 )
             }
             NvControlError::ContainerOperationFailed(msg) => {
@@ -113,10 +157,22 @@ impl ErrorWithSolution for NvControlError {
                     "• NVIDIA Container Toolkit not installed",
                     "• Insufficient permissions",
                     style("💡 Solutions:").green().bold(),
-                    format!("{} Install nvidia-container-toolkit", style("1.").cyan().bold()),
-                    format!("{} Start Docker: sudo systemctl start docker", style("2.").cyan().bold()),
-                    format!("{} Add user to docker group: sudo usermod -aG docker $USER", style("3.").cyan().bold()),
-                    format!("{} Test with: docker run --rm --gpus all nvidia/cuda:12.0-base nvidia-smi", style("4.").cyan().bold())
+                    format!(
+                        "{} Install nvidia-container-toolkit",
+                        style("1.").cyan().bold()
+                    ),
+                    format!(
+                        "{} Start Docker: sudo systemctl start docker",
+                        style("2.").cyan().bold()
+                    ),
+                    format!(
+                        "{} Add user to docker group: sudo usermod -aG docker $USER",
+                        style("3.").cyan().bold()
+                    ),
+                    format!(
+                        "{} Test with: docker run --rm --gpus all nvidia/cuda:12.0-base nvidia-smi",
+                        style("4.").cyan().bold()
+                    )
                 )
             }
             NvControlError::GpuQueryFailed(msg) => {
@@ -129,9 +185,18 @@ impl ErrorWithSolution for NvControlError {
                     "• GPU not detected",
                     "• Driver not loaded",
                     style("💡 Solutions:").green().bold(),
-                    format!("{} Check GPU is detected: lspci | grep -i nvidia", style("1.").cyan().bold()),
-                    format!("{} Load nvidia driver: sudo modprobe nvidia", style("2.").cyan().bold()),
-                    format!("{} Verify driver version: nvidia-smi", style("3.").cyan().bold())
+                    format!(
+                        "{} Check GPU is detected: lspci | grep -i nvidia",
+                        style("1.").cyan().bold()
+                    ),
+                    format!(
+                        "{} Load nvidia driver: sudo modprobe nvidia",
+                        style("2.").cyan().bold()
+                    ),
+                    format!(
+                        "{} Verify driver version: nvidia-smi",
+                        style("3.").cyan().bold()
+                    )
                 )
             }
             NvControlError::CommandFailed(msg) => {
@@ -144,8 +209,14 @@ impl ErrorWithSolution for NvControlError {
                     "• Command not found in PATH",
                     "• Insufficient permissions",
                     style("💡 Solutions:").green().bold(),
-                    format!("{} Ensure all NVIDIA tools are installed", style("1.").cyan().bold()),
-                    format!("{} Check command exists: which <command>", style("2.").cyan().bold())
+                    format!(
+                        "{} Ensure all NVIDIA tools are installed",
+                        style("1.").cyan().bold()
+                    ),
+                    format!(
+                        "{} Check command exists: which <command>",
+                        style("2.").cyan().bold()
+                    )
                 )
             }
             NvControlError::ConfigError(msg) => {
@@ -158,8 +229,14 @@ impl ErrorWithSolution for NvControlError {
                     "• Invalid configuration file",
                     "• Missing required fields",
                     style("💡 Solutions:").green().bold(),
-                    format!("{} Check config file: ~/.config/nvcontrol/config.toml", style("1.").cyan().bold()),
-                    format!("{} Reset to defaults: nvctl config reset", style("2.").cyan().bold())
+                    format!(
+                        "{} Check config file: ~/.config/nvcontrol/config.toml",
+                        style("1.").cyan().bold()
+                    ),
+                    format!(
+                        "{} Reset to defaults: nvctl config reset",
+                        style("2.").cyan().bold()
+                    )
                 )
             }
             NvControlError::UnsupportedFeature(msg) => {
@@ -172,8 +249,14 @@ impl ErrorWithSolution for NvControlError {
                     "• Feature not available on this GPU",
                     "• Feature requires newer drivers",
                     style("💡 Solutions:").green().bold(),
-                    format!("{} Update NVIDIA drivers to the latest version", style("1.").cyan().bold()),
-                    format!("{} Check GPU capabilities: nvctl gpu info", style("2.").cyan().bold())
+                    format!(
+                        "{} Update NVIDIA drivers to the latest version",
+                        style("1.").cyan().bold()
+                    ),
+                    format!(
+                        "{} Check GPU capabilities: nvctl gpu info",
+                        style("2.").cyan().bold()
+                    )
                 )
             }
             NvControlError::RuntimeError(msg) => {
@@ -184,8 +267,14 @@ impl ErrorWithSolution for NvControlError {
                     style("Details:").yellow(),
                     msg,
                     style("💡 Solutions:").green().bold(),
-                    format!("{} Check system logs: journalctl -xe", style("1.").cyan().bold()),
-                    format!("{} Report issue: https://github.com/ghostkellz/nvcontrol/issues", style("2.").cyan().bold())
+                    format!(
+                        "{} Check system logs: journalctl -xe",
+                        style("1.").cyan().bold()
+                    ),
+                    format!(
+                        "{} Report issue: https://github.com/ghostkellz/nvcontrol/issues",
+                        style("2.").cyan().bold()
+                    )
                 )
             }
         }
@@ -201,12 +290,17 @@ pub fn print_error_with_solution(error: &NvControlError) {
 pub fn run_diagnostics() -> String {
     let mut output = String::new();
 
-    output.push_str(&format!("\n{}\n\n", style("🔍 nvcontrol Diagnostics").cyan().bold()));
+    output.push_str(&format!(
+        "\n{}\n\n",
+        style("🔍 nvcontrol Diagnostics").cyan().bold()
+    ));
 
     // Check NVIDIA drivers
-    output.push_str(&format!("{}\n", style("1. NVIDIA Drivers:").yellow().bold()));
-    let nvidia_smi_check = std::process::Command::new("nvidia-smi")
-        .output();
+    output.push_str(&format!(
+        "{}\n",
+        style("1. NVIDIA Drivers:").yellow().bold()
+    ));
+    let nvidia_smi_check = std::process::Command::new("nvidia-smi").output();
     match nvidia_smi_check {
         Ok(result) if result.status.success() => {
             output.push_str("   ✅ nvidia-smi found and working\n");
@@ -218,7 +312,10 @@ pub fn run_diagnostics() -> String {
     }
 
     // Check nvidia-settings
-    output.push_str(&format!("\n{}\n", style("2. NVIDIA Settings:").yellow().bold()));
+    output.push_str(&format!(
+        "\n{}\n",
+        style("2. NVIDIA Settings:").yellow().bold()
+    ));
     let settings_check = std::process::Command::new("nvidia-settings")
         .arg("--version")
         .output();
@@ -233,7 +330,10 @@ pub fn run_diagnostics() -> String {
     }
 
     // Check display server
-    output.push_str(&format!("\n{}\n", style("3. Display Server:").yellow().bold()));
+    output.push_str(&format!(
+        "\n{}\n",
+        style("3. Display Server:").yellow().bold()
+    ));
     if let Ok(session_type) = std::env::var("XDG_SESSION_TYPE") {
         output.push_str(&format!("   ✅ Running on: {}\n", session_type));
     } else {
@@ -256,7 +356,10 @@ pub fn run_diagnostics() -> String {
     }
 
     // Check Docker/Podman
-    output.push_str(&format!("\n{}\n", style("5. Container Runtimes:").yellow().bold()));
+    output.push_str(&format!(
+        "\n{}\n",
+        style("5. Container Runtimes:").yellow().bold()
+    ));
     let docker_check = std::process::Command::new("docker")
         .arg("--version")
         .output();
@@ -269,7 +372,10 @@ pub fn run_diagnostics() -> String {
         }
     }
 
-    output.push_str(&format!("\n{}\n", style("━━━━━━━━━━━━━━━━━━━━━━━━━━━━").cyan()));
+    output.push_str(&format!(
+        "\n{}\n",
+        style("━━━━━━━━━━━━━━━━━━━━━━━━━━━━").cyan()
+    ));
 
     output
 }

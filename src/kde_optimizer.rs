@@ -18,23 +18,23 @@ pub struct KdeCompositorConfig {
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum LatencyPolicy {
-    Low,      // Gaming/responsive
-    Medium,   // Balanced
-    High,     // Power saving
+    Low,    // Gaming/responsive
+    Medium, // Balanced
+    High,   // Power saving
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum RenderLoop {
-    Immediate,  // Lowest latency
-    Queued,     // Balanced
-    Adaptive,   // Power saving
+    Immediate, // Lowest latency
+    Queued,    // Balanced
+    Adaptive,  // Power saving
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum GlYield {
-    Usleep,   // Best for NVIDIA
-    Yield,    // Alternative
-    Nothing,  // Legacy
+    Usleep,  // Best for NVIDIA
+    Yield,   // Alternative
+    Nothing, // Legacy
 }
 
 impl Default for KdeCompositorConfig {
@@ -66,7 +66,9 @@ impl KdeOptimizer {
         let output = Command::new("plasmashell")
             .arg("--version")
             .output()
-            .map_err(|e| NvControlError::CommandFailed(format!("Failed to detect KDE version: {}", e)))?;
+            .map_err(|e| {
+                NvControlError::CommandFailed(format!("Failed to detect KDE version: {}", e))
+            })?;
 
         let version = String::from_utf8_lossy(&output.stdout);
         Ok(version.trim().to_string())
@@ -158,7 +160,11 @@ impl KdeOptimizer {
             "kwinrc",
             "Compositing",
             "AllowTearing",
-            if self.config.vrr_enabled { "true" } else { "false" }
+            if self.config.vrr_enabled {
+                "true"
+            } else {
+                "false"
+            },
         )?;
 
         // Animation speed
@@ -166,7 +172,7 @@ impl KdeOptimizer {
             "kdeglobals",
             "KDE",
             "AnimationDurationFactor",
-            &self.config.animation_speed.to_string()
+            &self.config.animation_speed.to_string(),
         )?;
 
         // OpenGL settings
@@ -202,12 +208,17 @@ impl KdeOptimizer {
                 "kwinrc",
                 "Plugins",
                 effect,
-                if enable_effects { "true" } else { "false" }
+                if enable_effects { "true" } else { "false" },
             )?;
         }
 
         // Always keep essential effects
-        self.kwriteconfig("kwinrc", "Plugins", "kwin4_effect_translucencyEnabled", "true")?;
+        self.kwriteconfig(
+            "kwinrc",
+            "Plugins",
+            "kwin4_effect_translucencyEnabled",
+            "true",
+        )?;
 
         println!("   ✅ Effects configured");
         Ok(())
@@ -236,7 +247,9 @@ impl KdeOptimizer {
         let status = Command::new("kwriteconfig6")
             .args(&["--file", file, "--group", group, "--key", key, value])
             .status()
-            .map_err(|e| NvControlError::CommandFailed(format!("Failed to run kwriteconfig6: {}", e)))?;
+            .map_err(|e| {
+                NvControlError::CommandFailed(format!("Failed to run kwriteconfig6: {}", e))
+            })?;
 
         if !status.success() {
             return Err(NvControlError::CommandFailed(format!(
@@ -253,7 +266,9 @@ impl KdeOptimizer {
         let output = Command::new("kreadconfig6")
             .args(&["--file", file, "--group", group, "--key", key])
             .output()
-            .map_err(|e| NvControlError::CommandFailed(format!("Failed to run kreadconfig6: {}", e)))?;
+            .map_err(|e| {
+                NvControlError::CommandFailed(format!("Failed to run kreadconfig6: {}", e))
+            })?;
 
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     }
@@ -263,13 +278,16 @@ impl KdeOptimizer {
         println!("🔧 Setting up KDE environment variables for NVIDIA...\n");
 
         let env_file = dirs::home_dir()
-            .ok_or_else(|| NvControlError::ConfigError("Could not find home directory".to_string()))?
+            .ok_or_else(|| {
+                NvControlError::ConfigError("Could not find home directory".to_string())
+            })?
             .join(".config/plasma-workspace/env/nvidia-wayland.sh");
 
         // Create parent directory
         if let Some(parent) = env_file.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| NvControlError::ConfigError(format!("Failed to create env dir: {}", e)))?;
+            std::fs::create_dir_all(parent).map_err(|e| {
+                NvControlError::ConfigError(format!("Failed to create env dir: {}", e))
+            })?;
         }
 
         let mut content = String::new();
@@ -308,11 +326,14 @@ impl KdeOptimizer {
         {
             use std::os::unix::fs::PermissionsExt;
             let mut perms = std::fs::metadata(&env_file)
-                .map_err(|e| NvControlError::ConfigError(format!("Failed to get file metadata: {}", e)))?
+                .map_err(|e| {
+                    NvControlError::ConfigError(format!("Failed to get file metadata: {}", e))
+                })?
                 .permissions();
             perms.set_mode(0o755);
-            std::fs::set_permissions(&env_file, perms)
-                .map_err(|e| NvControlError::ConfigError(format!("Failed to set permissions: {}", e)))?;
+            std::fs::set_permissions(&env_file, perms).map_err(|e| {
+                NvControlError::ConfigError(format!("Failed to set permissions: {}", e))
+            })?;
         }
 
         println!("✅ Environment variables written to {}", env_file.display());
@@ -327,15 +348,27 @@ impl KdeOptimizer {
 
         // Use kscreen-doctor for per-display VRR
         let status = Command::new("kscreen-doctor")
-            .arg(format!("output.{}.vrrpolicy={}", display, if enabled { "automatic" } else { "never" }))
+            .arg(format!(
+                "output.{}.vrrpolicy={}",
+                display,
+                if enabled { "automatic" } else { "never" }
+            ))
             .status()
-            .map_err(|e| NvControlError::CommandFailed(format!("Failed to run kscreen-doctor: {}", e)))?;
+            .map_err(|e| {
+                NvControlError::CommandFailed(format!("Failed to run kscreen-doctor: {}", e))
+            })?;
 
         if !status.success() {
-            return Err(NvControlError::CommandFailed("kscreen-doctor failed".to_string()));
+            return Err(NvControlError::CommandFailed(
+                "kscreen-doctor failed".to_string(),
+            ));
         }
 
-        println!("   ✅ VRR {} for {}", if enabled { "enabled" } else { "disabled" }, display);
+        println!(
+            "   ✅ VRR {} for {}",
+            if enabled { "enabled" } else { "disabled" },
+            display
+        );
 
         Ok(())
     }
@@ -372,7 +405,14 @@ impl KdeOptimizer {
             println!("KDE Version: {}", version);
         }
 
-        println!("Session Type: {}", if Self::is_wayland() { "Wayland ✅" } else { "X11" });
+        println!(
+            "Session Type: {}",
+            if Self::is_wayland() {
+                "Wayland ✅"
+            } else {
+                "X11"
+            }
+        );
 
         let status = self.get_compositor_status()?;
 

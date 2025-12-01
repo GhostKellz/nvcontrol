@@ -2,7 +2,6 @@
 ///
 /// RGB lighting control for ASUS ROG graphics cards via OpenRGB integration
 /// Reference: asusctl aura implementation for ASUS laptops
-
 use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
 use std::process::Command;
@@ -33,7 +32,11 @@ impl RgbColor {
     }
 
     pub fn white() -> Self {
-        Self { r: 255, g: 255, b: 255 }
+        Self {
+            r: 255,
+            g: 255,
+            b: 255,
+        }
     }
 
     pub fn off() -> Self {
@@ -116,10 +119,7 @@ impl AsusAuraController {
     }
 
     fn check_openrgb() -> bool {
-        Command::new("openrgb")
-            .arg("--version")
-            .output()
-            .is_ok()
+        Command::new("openrgb").arg("--version").output().is_ok()
     }
 
     /// Detect ASUS GPU device in OpenRGB
@@ -134,9 +134,7 @@ impl AsusAuraController {
         let output = Command::new("openrgb")
             .args(&["--list-devices"])
             .output()
-            .map_err(|e| {
-                NvControlError::CommandFailed(format!("OpenRGB list failed: {}", e))
-            })?;
+            .map_err(|e| NvControlError::CommandFailed(format!("OpenRGB list failed: {}", e)))?;
 
         let stdout = String::from_utf8_lossy(&output.stdout);
 
@@ -176,12 +174,7 @@ impl AsusAuraController {
         };
 
         let output = Command::new("openrgb")
-            .args(&[
-                "--device",
-                &device_id.to_string(),
-                "--mode",
-                mode_name,
-            ])
+            .args(&["--device", &device_id.to_string(), "--mode", mode_name])
             .output()
             .map_err(|e| {
                 NvControlError::CommandFailed(format!("OpenRGB mode set failed: {}", e))

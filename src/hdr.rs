@@ -191,11 +191,7 @@ fn enable_hdr_gnome() -> NvResult<()> {
 
     // GNOME 46+ has experimental HDR support
     let output = Command::new("gsettings")
-        .args(&[
-            "set",
-            "org.gnome.mutter.experimental-features",
-            "['hdr']",
-        ])
+        .args(&["set", "org.gnome.mutter.experimental-features", "['hdr']"])
         .output();
 
     match output {
@@ -218,11 +214,7 @@ fn disable_hdr_gnome() -> NvResult<()> {
     use std::process::Command;
 
     Command::new("gsettings")
-        .args(&[
-            "set",
-            "org.gnome.mutter.experimental-features",
-            "[]",
-        ])
+        .args(&["set", "org.gnome.mutter.experimental-features", "[]"])
         .output()
         .ok();
 
@@ -287,9 +279,9 @@ fn check_hdr_support() -> NvResult<bool> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HdrConfig {
     pub enabled: bool,
-    pub peak_brightness: u32,      // nits (100-10000)
-    pub min_brightness: f32,        // nits (0.0001-0.1)
-    pub max_frame_average: u32,     // nits
+    pub peak_brightness: u32,         // nits (100-10000)
+    pub min_brightness: f32,          // nits (0.0001-0.1)
+    pub max_frame_average: u32,       // nits
     pub max_content_light_level: u32, // nits
     pub tone_mapping: ToneMappingMode,
     pub color_space: ColorSpace,
@@ -307,16 +299,16 @@ pub enum ToneMappingMode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum ColorSpace {
-    BT709,    // SDR
-    BT2020,   // HDR
-    DciP3,    // Wide gamut (DCI-P3)
+    BT709,  // SDR
+    BT2020, // HDR
+    DciP3,  // Wide gamut (DCI-P3)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum Eotf {
-    Gamma22,   // SDR
-    PQ,        // Perceptual Quantizer (HDR10)
-    HLG,       // Hybrid Log-Gamma (HDR10+)
+    Gamma22, // SDR
+    PQ,      // Perceptual Quantizer (HDR10)
+    HLG,     // Hybrid Log-Gamma (HDR10+)
 }
 
 impl Default for HdrConfig {
@@ -348,11 +340,13 @@ impl HdrConfig {
         let config_path = config_dir.join("hdr_config.toml");
 
         if config_path.exists() {
-            let contents = std::fs::read_to_string(&config_path)
-                .map_err(|e| crate::NvControlError::ConfigError(format!("Failed to read config: {}", e)))?;
+            let contents = std::fs::read_to_string(&config_path).map_err(|e| {
+                crate::NvControlError::ConfigError(format!("Failed to read config: {}", e))
+            })?;
 
-            toml::from_str(&contents)
-                .map_err(|e| crate::NvControlError::ConfigError(format!("Failed to parse config: {}", e)))
+            toml::from_str(&contents).map_err(|e| {
+                crate::NvControlError::ConfigError(format!("Failed to parse config: {}", e))
+            })
         } else {
             Ok(Self::default())
         }
@@ -364,16 +358,19 @@ impl HdrConfig {
             .ok_or_else(|| crate::NvControlError::ConfigError("No config directory".into()))?
             .join("nvcontrol");
 
-        std::fs::create_dir_all(&config_dir)
-            .map_err(|e| crate::NvControlError::ConfigError(format!("Failed to create config dir: {}", e)))?;
+        std::fs::create_dir_all(&config_dir).map_err(|e| {
+            crate::NvControlError::ConfigError(format!("Failed to create config dir: {}", e))
+        })?;
 
         let config_path = config_dir.join("hdr_config.toml");
 
-        let toml = toml::to_string_pretty(self)
-            .map_err(|e| crate::NvControlError::ConfigError(format!("Failed to serialize config: {}", e)))?;
+        let toml = toml::to_string_pretty(self).map_err(|e| {
+            crate::NvControlError::ConfigError(format!("Failed to serialize config: {}", e))
+        })?;
 
-        std::fs::write(&config_path, toml)
-            .map_err(|e| crate::NvControlError::ConfigError(format!("Failed to write config: {}", e)))?;
+        std::fs::write(&config_path, toml).map_err(|e| {
+            crate::NvControlError::ConfigError(format!("Failed to write config: {}", e))
+        })?;
 
         Ok(())
     }
@@ -403,9 +400,9 @@ impl HdrConfig {
 /// Get display HDR capabilities
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HdrCapabilities {
-    pub max_luminance: u32,        // nits
-    pub min_luminance: f32,        // nits
-    pub max_fall: u32,             // Frame Average Light Level
+    pub max_luminance: u32, // nits
+    pub min_luminance: f32, // nits
+    pub max_fall: u32,      // Frame Average Light Level
     pub supports_hdr10: bool,
     pub supports_hdr10_plus: bool,
     pub supports_dolby_vision: bool,

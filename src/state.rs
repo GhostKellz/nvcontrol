@@ -2,7 +2,6 @@
 ///
 /// Persists user settings, profiles, and session data across application restarts
 /// Saves to ~/.config/nvcontrol/state.json
-
 use crate::NvResult;
 use serde::{Deserialize, Serialize};
 use std::fs;

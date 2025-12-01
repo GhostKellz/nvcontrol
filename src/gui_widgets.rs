@@ -44,7 +44,9 @@ impl FanCurve {
         let point = CurvePoint::new(temp, speed);
 
         // Insert in sorted order by temperature
-        let insert_pos = self.points.iter()
+        let insert_pos = self
+            .points
+            .iter()
             .position(|p| p.x > temp)
             .unwrap_or(self.points.len());
 
@@ -144,11 +146,17 @@ impl TimeSeriesData {
     }
 
     pub fn min_value(&self) -> Option<f64> {
-        self.values.iter().copied().min_by(|a, b| a.partial_cmp(b).unwrap())
+        self.values
+            .iter()
+            .copied()
+            .min_by(|a, b| a.partial_cmp(b).unwrap())
     }
 
     pub fn max_value(&self) -> Option<f64> {
-        self.values.iter().copied().max_by(|a, b| a.partial_cmp(b).unwrap())
+        self.values
+            .iter()
+            .copied()
+            .max_by(|a, b| a.partial_cmp(b).unwrap())
     }
 
     pub fn avg_value(&self) -> Option<f64> {
@@ -188,7 +196,9 @@ impl VoltageCurve {
     pub fn add_point(&mut self, freq: f64, voltage: f64) {
         let point = CurvePoint::new(freq, voltage);
 
-        let insert_pos = self.points.iter()
+        let insert_pos = self
+            .points
+            .iter()
             .position(|p| p.x > freq)
             .unwrap_or(self.points.len());
 

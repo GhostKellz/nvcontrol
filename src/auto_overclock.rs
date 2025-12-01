@@ -13,21 +13,21 @@ pub struct AutoOCConfig {
     pub safety_mode: SafetyMode,
     pub max_temp: f32,
     pub max_power: u32,
-    pub stability_test_duration: u64,  // seconds
+    pub stability_test_duration: u64, // seconds
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum AutoOCTarget {
-    MaxPerformance,   // Push as hard as possible
-    Balanced,         // Balance performance and power
-    Efficiency,       // Best performance per watt
+    MaxPerformance, // Push as hard as possible
+    Balanced,       // Balance performance and power
+    Efficiency,     // Best performance per watt
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum SafetyMode {
-    Conservative,  // Small steps, thorough testing
-    Moderate,      // Balanced approach
-    Aggressive,    // Larger steps, faster tuning
+    Conservative, // Small steps, thorough testing
+    Moderate,     // Balanced approach
+    Aggressive,   // Larger steps, faster tuning
 }
 
 impl Default for AutoOCConfig {
@@ -48,7 +48,7 @@ pub struct AutoOCResult {
     pub final_profile: OverclockProfile,
     pub baseline_score: f64,
     pub final_score: f64,
-    pub improvement: f64,  // Percentage
+    pub improvement: f64, // Percentage
     pub iterations: usize,
     pub time_taken: Duration,
     pub errors: Vec<String>,
@@ -86,7 +86,10 @@ impl AutoOverclocker {
                 result
             }
             Err(e) => {
-                return Err(NvControlError::RuntimeError(format!("Baseline benchmark failed: {}", e)));
+                return Err(NvControlError::RuntimeError(format!(
+                    "Baseline benchmark failed: {}",
+                    e
+                )));
             }
         };
 
@@ -122,7 +125,10 @@ impl AutoOverclocker {
             iterations += 1;
             current_profile.gpu_clock_offset += gpu_step;
 
-            println!("      Testing GPU +{} MHz...", current_profile.gpu_clock_offset);
+            println!(
+                "      Testing GPU +{} MHz...",
+                current_profile.gpu_clock_offset
+            );
 
             // Apply and test
             if let Err(e) = crate::overclocking::apply_overclock_profile(&current_profile) {
@@ -132,8 +138,11 @@ impl AutoOverclocker {
 
             // Quick stability check
             if !self.test_stability(10)? {
-                println!("      ❌ Unstable at +{} MHz", current_profile.gpu_clock_offset);
-                current_profile.gpu_clock_offset -= gpu_step;  // Roll back
+                println!(
+                    "      ❌ Unstable at +{} MHz",
+                    current_profile.gpu_clock_offset
+                );
+                current_profile.gpu_clock_offset -= gpu_step; // Roll back
                 break;
             }
 
@@ -141,7 +150,8 @@ impl AutoOverclocker {
             match self.benchmark_suite.run_full_benchmark(30) {
                 Ok(result) => {
                     if result.total_score > best_score {
-                        println!("      ✅ Improved score: {:.2} (+{:.1}%)",
+                        println!(
+                            "      ✅ Improved score: {:.2} (+{:.1}%)",
                             result.total_score,
                             ((result.total_score - best_score) / best_score) * 100.0
                         );
@@ -154,7 +164,10 @@ impl AutoOverclocker {
 
                     // Safety checks
                     if result.max_temp > self.config.max_temp {
-                        println!("      🌡️  Temperature limit reached ({:.1}°C)", result.max_temp);
+                        println!(
+                            "      🌡️  Temperature limit reached ({:.1}°C)",
+                            result.max_temp
+                        );
                         break;
                     }
                 }
@@ -179,7 +192,10 @@ impl AutoOverclocker {
             iterations += 1;
             current_profile.memory_clock_offset += mem_step;
 
-            println!("      Testing Memory +{} MHz...", current_profile.memory_clock_offset);
+            println!(
+                "      Testing Memory +{} MHz...",
+                current_profile.memory_clock_offset
+            );
 
             // Apply and test
             if let Err(e) = crate::overclocking::apply_overclock_profile(&current_profile) {
@@ -189,7 +205,10 @@ impl AutoOverclocker {
 
             // Quick stability check
             if !self.test_stability(10)? {
-                println!("      ❌ Unstable at +{} MHz", current_profile.memory_clock_offset);
+                println!(
+                    "      ❌ Unstable at +{} MHz",
+                    current_profile.memory_clock_offset
+                );
                 current_profile.memory_clock_offset -= mem_step;
                 break;
             }
@@ -198,7 +217,8 @@ impl AutoOverclocker {
             match self.benchmark_suite.run_full_benchmark(30) {
                 Ok(result) => {
                     if result.total_score > best_score {
-                        println!("      ✅ Improved score: {:.2} (+{:.1}%)",
+                        println!(
+                            "      ✅ Improved score: {:.2} (+{:.1}%)",
                             result.total_score,
                             ((result.total_score - best_score) / best_score) * 100.0
                         );
@@ -261,7 +281,8 @@ impl AutoOverclocker {
 
         println!("   ✅ Stability test passed!");
 
-        let improvement = ((best_score - baseline_result.total_score) / baseline_result.total_score) * 100.0;
+        let improvement =
+            ((best_score - baseline_result.total_score) / baseline_result.total_score) * 100.0;
 
         Ok(AutoOCResult {
             successful: true,
@@ -277,18 +298,21 @@ impl AutoOverclocker {
 
     /// Test system stability
     fn test_stability(&self, duration_secs: u64) -> NvResult<bool> {
-        match self.benchmark_suite.run_stability_test(duration_secs as u32) {
+        match self
+            .benchmark_suite
+            .run_stability_test(duration_secs as u32)
+        {
             Ok(stable) => Ok(stable),
-            Err(_) => Ok(false),  // Treat errors as instability
+            Err(_) => Ok(false), // Treat errors as instability
         }
     }
 
     /// Get step sizes based on safety mode
     fn get_step_sizes(&self) -> (i32, i32) {
         match self.config.safety_mode {
-            SafetyMode::Conservative => (10, 50),   // Small steps
-            SafetyMode::Moderate => (25, 100),      // Medium steps
-            SafetyMode::Aggressive => (50, 200),    // Large steps
+            SafetyMode::Conservative => (10, 50), // Small steps
+            SafetyMode::Moderate => (25, 100),    // Medium steps
+            SafetyMode::Aggressive => (50, 200),  // Large steps
         }
     }
 
@@ -305,12 +329,24 @@ impl AutoOverclocker {
             println!("  Final Score:        {:.2}", result.final_score);
             println!("  Improvement:        +{:.1}%", result.improvement);
             println!("\n⚡ Optimal Settings:");
-            println!("  GPU Clock Offset:   {:+} MHz", result.final_profile.gpu_clock_offset);
-            println!("  Memory Offset:      {:+} MHz", result.final_profile.memory_clock_offset);
-            println!("  Power Limit:        {}%", result.final_profile.power_limit);
+            println!(
+                "  GPU Clock Offset:   {:+} MHz",
+                result.final_profile.gpu_clock_offset
+            );
+            println!(
+                "  Memory Offset:      {:+} MHz",
+                result.final_profile.memory_clock_offset
+            );
+            println!(
+                "  Power Limit:        {}%",
+                result.final_profile.power_limit
+            );
             println!("\n📈 Statistics:");
             println!("  Iterations:         {}", result.iterations);
-            println!("  Time Taken:         {:.1} minutes", result.time_taken.as_secs_f64() / 60.0);
+            println!(
+                "  Time Taken:         {:.1} minutes",
+                result.time_taken.as_secs_f64() / 60.0
+            );
         } else {
             println!("❌ Status: FAILED");
             println!("\nAuto-tuning was unable to find stable overclocking settings.");

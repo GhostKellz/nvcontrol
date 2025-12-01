@@ -1,7 +1,6 @@
 /// Phase 5.4: Container-Specific Features
 ///
 /// Docker GPU control, Podman rootless optimization, Kubernetes device plugin, per-container power limits
-
 use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -66,8 +65,13 @@ impl DockerGpuController {
         if gpu_ids.is_empty() {
             cmd.args(&["--gpus", "all"]);
         } else {
-            let gpu_spec = format!("\"device={}\"",
-                gpu_ids.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",")
+            let gpu_spec = format!(
+                "\"device={}\"",
+                gpu_ids
+                    .iter()
+                    .map(|id| id.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",")
             );
             cmd.args(&["--gpus", &gpu_spec]);
         }
@@ -186,11 +190,7 @@ impl PodmanRootlessController {
     }
 
     /// Run rootless container with GPU
-    pub fn run_rootless_with_gpu(
-        &self,
-        image: &str,
-        gpu_ids: &[u32],
-    ) -> NvResult<String> {
+    pub fn run_rootless_with_gpu(&self, image: &str, gpu_ids: &[u32]) -> NvResult<String> {
         if !self.cdi_config.enabled {
             return Err(NvControlError::ContainerOperationFailed(
                 "CDI not configured".to_string(),
@@ -270,10 +270,7 @@ impl K8sDevicePlugin {
             .args(&["apply", "-f", yaml_url, "-n", &self.namespace])
             .output()
             .map_err(|e| {
-                NvControlError::ContainerOperationFailed(format!(
-                    "kubectl apply failed: {}",
-                    e
-                ))
+                NvControlError::ContainerOperationFailed(format!("kubectl apply failed: {}", e))
             })?;
 
         if !output.status.success() {
@@ -305,10 +302,7 @@ impl K8sDevicePlugin {
             ])
             .output()
             .map_err(|e| {
-                NvControlError::ContainerOperationFailed(format!(
-                    "kubectl get failed: {}",
-                    e
-                ))
+                NvControlError::ContainerOperationFailed(format!("kubectl get failed: {}", e))
             })?;
 
         let status = String::from_utf8_lossy(&output.stdout).to_string();
@@ -361,25 +355,26 @@ impl ContainerPowerController {
     }
 
     /// Set power limit for container's GPU
-    pub fn set_limit(&mut self, container_id: String, gpu_id: u32, power_watts: u32) -> NvResult<()> {
+    pub fn set_limit(
+        &mut self,
+        container_id: String,
+        gpu_id: u32,
+        power_watts: u32,
+    ) -> NvResult<()> {
         use nvml_wrapper::Nvml;
 
-        let nvml = Nvml::init().map_err(|e| {
-            NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e))
-        })?;
+        let nvml = Nvml::init()
+            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
 
-        let mut device = nvml.device_by_index(gpu_id).map_err(|e| {
-            NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e))
-        })?;
+        let mut device = nvml
+            .device_by_index(gpu_id)
+            .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e)))?;
 
         // Set power limit
         device
             .set_power_management_limit(power_watts * 1000)
             .map_err(|e| {
-                NvControlError::PowerManagementFailed(format!(
-                    "Failed to set power limit: {}",
-                    e
-                ))
+                NvControlError::PowerManagementFailed(format!("Failed to set power limit: {}", e))
             })?;
 
         self.limits.insert(
@@ -417,10 +412,7 @@ impl ContainerPowerController {
             })?;
 
             let default_limit = device.power_management_limit_default().map_err(|e| {
-                NvControlError::PowerManagementFailed(format!(
-                    "Failed to get default limit: {}",
-                    e
-                ))
+                NvControlError::PowerManagementFailed(format!("Failed to get default limit: {}", e))
             })?;
 
             device

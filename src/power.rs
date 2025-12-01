@@ -569,15 +569,20 @@ pub fn apply_custom_power_profile(profile_name: &str) -> NvResult<()> {
                 println!("📄 Loading custom TOML profile from file...");
 
                 // Read and parse TOML file
-                let toml_content = fs::read_to_string(&profile_path)
-                    .map_err(|e| NvControlError::PowerManagementFailed(
-                        format!("Failed to read profile file: {}", e)
-                    ))?;
+                let toml_content = fs::read_to_string(&profile_path).map_err(|e| {
+                    NvControlError::PowerManagementFailed(format!(
+                        "Failed to read profile file: {}",
+                        e
+                    ))
+                })?;
 
-                let config: CustomPowerProfileConfig = toml::from_str(&toml_content)
-                    .map_err(|e| NvControlError::PowerManagementFailed(
-                        format!("Failed to parse TOML profile: {}", e)
-                    ))?;
+                let config: CustomPowerProfileConfig =
+                    toml::from_str(&toml_content).map_err(|e| {
+                        NvControlError::PowerManagementFailed(format!(
+                            "Failed to parse TOML profile: {}",
+                            e
+                        ))
+                    })?;
 
                 println!("🔧 Applying custom profile: {}", config.name);
                 if let Some(desc) = &config.description {
@@ -754,10 +759,9 @@ pub fn create_example_power_profiles() -> NvResult<()> {
         })?;
 
     let profiles_dir = config_dir.config_dir().join("power_profiles");
-    fs::create_dir_all(&profiles_dir)
-        .map_err(|e| NvControlError::PowerManagementFailed(
-            format!("Failed to create profiles directory: {}", e)
-        ))?;
+    fs::create_dir_all(&profiles_dir).map_err(|e| {
+        NvControlError::PowerManagementFailed(format!("Failed to create profiles directory: {}", e))
+    })?;
 
     // Example 1: Ultra Gaming Profile
     let ultra_gaming = CustomPowerProfileConfig {
@@ -804,15 +808,13 @@ pub fn create_example_power_profiles() -> NvResult<()> {
     // Write profiles to TOML files
     for profile in &[ultra_gaming, silent, creator] {
         let profile_path = profiles_dir.join(format!("{}.toml", profile.name));
-        let toml_content = toml::to_string_pretty(profile)
-            .map_err(|e| NvControlError::PowerManagementFailed(
-                format!("Failed to serialize profile: {}", e)
-            ))?;
+        let toml_content = toml::to_string_pretty(profile).map_err(|e| {
+            NvControlError::PowerManagementFailed(format!("Failed to serialize profile: {}", e))
+        })?;
 
-        fs::write(&profile_path, toml_content)
-            .map_err(|e| NvControlError::PowerManagementFailed(
-                format!("Failed to write profile file: {}", e)
-            ))?;
+        fs::write(&profile_path, toml_content).map_err(|e| {
+            NvControlError::PowerManagementFailed(format!("Failed to write profile file: {}", e))
+        })?;
 
         println!("✅ Created: {}", profile_path.display());
     }

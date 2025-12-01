@@ -48,7 +48,9 @@ impl GspManager {
         }
 
         // Check via sysfs (runtime)
-        if let Ok(content) = fs::read_to_string("/sys/module/nvidia/parameters/NVreg_EnableGpuFirmware") {
+        if let Ok(content) =
+            fs::read_to_string("/sys/module/nvidia/parameters/NVreg_EnableGpuFirmware")
+        {
             return Ok(content.trim() == "1");
         }
 
@@ -83,8 +85,9 @@ impl GspManager {
             .find(|p| p.exists())
             .ok_or_else(|| NvControlError::ConfigError("GSP firmware not found".to_string()))?;
 
-        let metadata = fs::metadata(firmware_path)
-            .map_err(|e| NvControlError::ConfigError(format!("Failed to read firmware metadata: {}", e)))?;
+        let metadata = fs::metadata(firmware_path).map_err(|e| {
+            NvControlError::ConfigError(format!("Failed to read firmware metadata: {}", e))
+        })?;
 
         let version = Self::get_firmware_version(firmware_path)?;
 
@@ -108,7 +111,11 @@ impl GspManager {
         }
 
         // Fallback: check driver version
-        if let Ok(output) = Command::new("nvidia-smi").arg("--query-gpu=driver_version").arg("--format=csv,noheader").output() {
+        if let Ok(output) = Command::new("nvidia-smi")
+            .arg("--query-gpu=driver_version")
+            .arg("--format=csv,noheader")
+            .output()
+        {
             return Ok(String::from_utf8_lossy(&output.stdout).trim().to_string());
         }
 
@@ -117,13 +124,14 @@ impl GspManager {
 
     /// Calculate firmware checksum
     fn calculate_checksum(path: &Path) -> NvResult<String> {
-        let output = Command::new("sha256sum")
-            .arg(path)
-            .output()
-            .map_err(|e| NvControlError::CommandFailed(format!("Failed to calculate checksum: {}", e)))?;
+        let output = Command::new("sha256sum").arg(path).output().map_err(|e| {
+            NvControlError::CommandFailed(format!("Failed to calculate checksum: {}", e))
+        })?;
 
         let checksum = String::from_utf8_lossy(&output.stdout);
-        let hash = checksum.split_whitespace().next()
+        let hash = checksum
+            .split_whitespace()
+            .next()
             .ok_or_else(|| NvControlError::ConfigError("Invalid checksum output".to_string()))?;
 
         Ok(hash.to_string())
@@ -135,7 +143,7 @@ impl GspManager {
 
         if !self.is_root() {
             return Err(NvControlError::ConfigError(
-                "Root privileges required to enable GSP".to_string()
+                "Root privileges required to enable GSP".to_string(),
             ));
         }
 
@@ -153,7 +161,7 @@ impl GspManager {
 
         if !self.is_root() {
             return Err(NvControlError::ConfigError(
-                "Root privileges required to disable GSP".to_string()
+                "Root privileges required to disable GSP".to_string(),
             ));
         }
 
@@ -169,8 +177,7 @@ impl GspManager {
     fn set_gsp_parameter(&self, value: &str) -> NvResult<()> {
         let config_path = PathBuf::from("/etc/modprobe.d/nvidia.conf");
 
-        let mut content = fs::read_to_string(&config_path)
-            .unwrap_or_else(|_| String::new());
+        let mut content = fs::read_to_string(&config_path).unwrap_or_else(|_| String::new());
 
         // Remove existing GSP parameter
         content = content
@@ -180,7 +187,10 @@ impl GspManager {
             .join("\n");
 
         // Add new parameter
-        content.push_str(&format!("\noptions nvidia NVreg_EnableGpuFirmware={}\n", value));
+        content.push_str(&format!(
+            "\noptions nvidia NVreg_EnableGpuFirmware={}\n",
+            value
+        ));
 
         fs::write(&config_path, content)
             .map_err(|e| NvControlError::ConfigError(format!("Failed to write config: {}", e)))?;
@@ -203,7 +213,9 @@ impl GspManager {
         let parts: Vec<&str> = data.trim().split(',').collect();
 
         if parts.len() < 3 {
-            return Err(NvControlError::GpuQueryFailed("Invalid telemetry data".to_string()));
+            return Err(NvControlError::GpuQueryFailed(
+                "Invalid telemetry data".to_string(),
+            ));
         }
 
         Ok(GspTelemetry {
@@ -237,8 +249,7 @@ impl GspManager {
         println!("🔍 Checking for GSP firmware updates...");
 
         // Check if nvidia-open package has updates
-        let output = Command::new("checkupdates")
-            .output();
+        let output = Command::new("checkupdates").output();
 
         if let Ok(out) = output {
             let updates = String::from_utf8_lossy(&out.stdout);
@@ -258,17 +269,21 @@ impl GspManager {
 
         if !self.is_root() {
             return Err(NvControlError::ConfigError(
-                "Root privileges required to update packages".to_string()
+                "Root privileges required to update packages".to_string(),
             ));
         }
 
         let status = Command::new("pacman")
             .args(&["-Syu", "--noconfirm", "nvidia-open", "nvidia-utils"])
             .status()
-            .map_err(|e| NvControlError::CommandFailed(format!("Failed to update packages: {}", e)))?;
+            .map_err(|e| {
+                NvControlError::CommandFailed(format!("Failed to update packages: {}", e))
+            })?;
 
         if !status.success() {
-            return Err(NvControlError::CommandFailed("Package update failed".to_string()));
+            return Err(NvControlError::CommandFailed(
+                "Package update failed".to_string(),
+            ));
         }
 
         println!("✅ Firmware updated successfully");
@@ -283,7 +298,14 @@ impl GspManager {
 
         // Check if GSP is enabled
         let enabled = Self::is_gsp_enabled()?;
-        println!("GSP Status: {}", if enabled { "✅ Enabled" } else { "❌ Disabled" });
+        println!(
+            "GSP Status: {}",
+            if enabled {
+                "✅ Enabled"
+            } else {
+                "❌ Disabled"
+            }
+        );
 
         // Get firmware info
         if let Ok(info) = self.get_firmware_info() {

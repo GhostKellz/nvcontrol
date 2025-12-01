@@ -10,9 +10,9 @@ pub enum ThemeVariant {
     TokyoNightStorm,
     TokyoNightMoon,
     Dracula,
-    RogRed,        // ASUS ROG red theme
-    MatrixGreen,   // Classic green on black
-    Cyberpunk,     // Pink/cyan neon
+    RogRed,      // ASUS ROG red theme
+    MatrixGreen, // Classic green on black
+    Cyberpunk,   // Pink/cyan neon
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,10 +49,10 @@ pub struct ColorPalette {
     pub yellow: Color,
 
     // Semantic colors (for GPU monitoring)
-    pub temp_cold: Color,    // < 50°C - Blue/Cyan
-    pub temp_normal: Color,  // 50-70°C - Green
-    pub temp_warm: Color,    // 70-80°C - Yellow/Orange
-    pub temp_hot: Color,     // > 80°C - Red
+    pub temp_cold: Color,   // < 50°C - Blue/Cyan
+    pub temp_normal: Color, // 50-70°C - Green
+    pub temp_warm: Color,   // 70-80°C - Yellow/Orange
+    pub temp_hot: Color,    // > 80°C - Red
 
     pub usage_low: Color,    // < 30% - Green
     pub usage_medium: Color, // 30-70% - Yellow
@@ -69,10 +69,10 @@ pub struct ColorPalette {
     pub comment: Color,
 
     // Graph colors
-    pub graph_line1: Color,  // Primary metric
-    pub graph_line2: Color,  // Secondary metric
-    pub graph_line3: Color,  // Tertiary metric
-    pub graph_fill: Color,   // Area fill
+    pub graph_line1: Color, // Primary metric
+    pub graph_line2: Color, // Secondary metric
+    pub graph_line3: Color, // Tertiary metric
+    pub graph_fill: Color,  // Area fill
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -158,15 +158,15 @@ impl Theme {
                 yellow: Color::hex(0xe0af68),
 
                 // Temperature colors
-                temp_cold: Color::hex(0x7dcfff),    // Cyan
-                temp_normal: Color::hex(0x9ece6a),  // Green
-                temp_warm: Color::hex(0xe0af68),    // Yellow
-                temp_hot: Color::hex(0xf7768e),     // Red
+                temp_cold: Color::hex(0x7dcfff),   // Cyan
+                temp_normal: Color::hex(0x9ece6a), // Green
+                temp_warm: Color::hex(0xe0af68),   // Yellow
+                temp_hot: Color::hex(0xf7768e),    // Red
 
                 // Usage colors
-                usage_low: Color::hex(0x9ece6a),     // Green
-                usage_medium: Color::hex(0xe0af68),  // Yellow
-                usage_high: Color::hex(0xf7768e),    // Red
+                usage_low: Color::hex(0x9ece6a),    // Green
+                usage_medium: Color::hex(0xe0af68), // Yellow
+                usage_high: Color::hex(0xf7768e),   // Red
 
                 // Power colors
                 power_efficient: Color::hex(0x73daca), // Green teal
@@ -180,10 +180,10 @@ impl Theme {
                 comment: Color::hex(0x565f89),
 
                 // Graphs
-                graph_line1: Color::hex(0x7aa2f7),  // Blue - GPU temp
-                graph_line2: Color::hex(0x9ece6a),  // Green - FPS
-                graph_line3: Color::hex(0xbb9af7),  // Magenta - Power
-                graph_fill: Color::hex(0x292e42),   // Dark blue
+                graph_line1: Color::hex(0x7aa2f7), // Blue - GPU temp
+                graph_line2: Color::hex(0x9ece6a), // Green - FPS
+                graph_line3: Color::hex(0xbb9af7), // Magenta - Power
+                graph_fill: Color::hex(0x292e42),  // Dark blue
             },
             nerd_font: true,
         }

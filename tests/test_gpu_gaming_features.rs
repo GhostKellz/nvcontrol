@@ -3,18 +3,29 @@
 /// Tests overclocking profiles, fan curves, power management,
 /// multi-GPU coordination, gaming integration (Steam/Lutris/GameMode),
 /// performance monitoring, upscaling (DLSS/FSR), and VRR/display config.
-
 use nvcontrol::{
+    advanced_display::{
+        ColorDepth, DisplayConfig, DisplayConfigManager, ReflexIntegration, VrrConfig,
+        VrrProfileManager,
+    },
+    advanced_multi_gpu::{
+        GpuProfile, LoadBalancer, MultiGpuCoordinator, PerGpuProfileManager, ThermalBalancer,
+    },
+    advanced_power::{
+        BatteryBoost, DynamicPowerManager, PowerMode, PowerProfile, PowerProfileManager,
+    },
     // Advanced GPU control
     enhanced_overclock::{OverclockProfile, OverclockProfileManager, StabilityTester},
-    intelligent_fan::{AdvancedFanCurve, FanOptimizer, MultiFanController},
-    advanced_power::{DynamicPowerManager, PowerMode, PowerProfile, PowerProfileManager, BatteryBoost},
-    advanced_multi_gpu::{MultiGpuCoordinator, PerGpuProfileManager, GpuProfile, LoadBalancer, ThermalBalancer},
     // Gaming integration
-    gaming_integration::{SteamScanner, LutrisScanner, GameModeIntegration, LaunchOptimizer},
-    performance_monitoring::{FpsCounter, PerformanceOverlay, LatencyMonitor, RegressionDetector, FrameTimeStats},
-    upscaling_tech::{DlssQuality, FsrQuality, UpscalingConfig, UpscalingTech, ResolutionScaler, UpscalingRecommender},
-    advanced_display::{VrrConfig, DisplayConfig, ReflexIntegration, VrrProfileManager, DisplayConfigManager, ColorDepth},
+    gaming_integration::{GameModeIntegration, LaunchOptimizer, LutrisScanner, SteamScanner},
+    intelligent_fan::{AdvancedFanCurve, FanOptimizer, MultiFanController},
+    performance_monitoring::{
+        FpsCounter, FrameTimeStats, LatencyMonitor, PerformanceOverlay, RegressionDetector,
+    },
+    upscaling_tech::{
+        DlssQuality, FsrQuality, ResolutionScaler, UpscalingConfig, UpscalingRecommender,
+        UpscalingTech,
+    },
 };
 
 // ==================== Overclock & Fan Tests ====================
@@ -498,7 +509,10 @@ fn test_full_gaming_session_simulation() {
 
     // 4. Enable VRR
     let vrr_config = VrrConfig::new("Cyberpunk".to_string(), 48, 144);
-    println!("4. VRR configured: {}-{} Hz", vrr_config.min_refresh_hz, vrr_config.max_refresh_hz);
+    println!(
+        "4. VRR configured: {}-{} Hz",
+        vrr_config.min_refresh_hz, vrr_config.max_refresh_hz
+    );
 
     // 5. Monitor performance
     let mut fps_counter = FpsCounter::new(100);
@@ -508,7 +522,10 @@ fn test_full_gaming_session_simulation() {
         std::thread::sleep(Duration::from_millis(16));
     }
     let stats = fps_counter.get_stats();
-    println!("5. Performance: {:.1} FPS (1% low: {:.1})", stats.avg_fps, stats.one_percent_low);
+    println!(
+        "5. Performance: {:.1} FPS (1% low: {:.1})",
+        stats.avg_fps, stats.one_percent_low
+    );
 
     println!("\n✓ Full gaming session simulation completed");
 }

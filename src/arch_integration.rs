@@ -60,9 +60,7 @@ impl ArchIntegration {
 
     /// Query pacman for package info
     fn query_package(name: &str) -> NvResult<PackageInfo> {
-        let output = Command::new("pacman")
-            .args(&["-Qi", name])
-            .output();
+        let output = Command::new("pacman").args(&["-Qi", name]).output();
 
         let installed = output.as_ref().map(|o| o.status.success()).unwrap_or(false);
 
@@ -90,10 +88,9 @@ impl ArchIntegration {
 
     /// Get current kernel version
     pub fn get_kernel_version() -> NvResult<String> {
-        let output = Command::new("uname")
-            .arg("-r")
-            .output()
-            .map_err(|e| NvControlError::CommandFailed(format!("Failed to get kernel version: {}", e)))?;
+        let output = Command::new("uname").arg("-r").output().map_err(|e| {
+            NvControlError::CommandFailed(format!("Failed to get kernel version: {}", e))
+        })?;
 
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     }
@@ -138,12 +135,13 @@ impl ArchIntegration {
 
         if !self.is_root() {
             return Err(NvControlError::ConfigError(
-                "Root privileges required to install hooks".to_string()
+                "Root privileges required to install hooks".to_string(),
             ));
         }
 
-        fs::create_dir_all(&self.hooks_dir)
-            .map_err(|e| NvControlError::ConfigError(format!("Failed to create hooks dir: {}", e)))?;
+        fs::create_dir_all(&self.hooks_dir).map_err(|e| {
+            NvControlError::ConfigError(format!("Failed to create hooks dir: {}", e))
+        })?;
 
         let hook_content = r#"[Trigger]
 Operation = Install
@@ -181,7 +179,7 @@ Exec = /bin/sh -c 'while read -r trg; do case $trg in linux*) exit 0; esac; done
 
         if !self.is_root() {
             return Err(NvControlError::ConfigError(
-                "Root privileges required to install hooks".to_string()
+                "Root privileges required to install hooks".to_string(),
             ));
         }
 
@@ -213,7 +211,7 @@ Exec = /usr/bin/dkms autoinstall
 
         if !self.is_root() {
             return Err(NvControlError::ConfigError(
-                "Root privileges required to install hooks".to_string()
+                "Root privileges required to install hooks".to_string(),
             ));
         }
 
@@ -261,7 +259,7 @@ Exec = /usr/bin/sh -c 'echo "⚠️  Kernel upgrade detected. NVIDIA drivers may
 
         if !self.is_root() {
             return Err(NvControlError::ConfigError(
-                "Root privileges required to remove hooks".to_string()
+                "Root privileges required to remove hooks".to_string(),
             ));
         }
 
@@ -274,8 +272,9 @@ Exec = /usr/bin/sh -c 'echo "⚠️  Kernel upgrade detected. NVIDIA drivers may
         for hook in hooks {
             let path = self.hooks_dir.join(hook);
             if path.exists() {
-                fs::remove_file(&path)
-                    .map_err(|e| NvControlError::ConfigError(format!("Failed to remove hook: {}", e)))?;
+                fs::remove_file(&path).map_err(|e| {
+                    NvControlError::ConfigError(format!("Failed to remove hook: {}", e))
+                })?;
                 println!("   Removed: {}", hook);
             }
         }
@@ -289,19 +288,30 @@ Exec = /usr/bin/sh -c 'echo "⚠️  Kernel upgrade detected. NVIDIA drivers may
         let mut suggestions = Vec::new();
 
         // Check for nvidia-patch (removes streaming restrictions)
-        if Self::query_package("nvidia-patch").map(|p| !p.installed).unwrap_or(true) {
-            suggestions.push("📦 nvidia-patch - Removes NVENC/NVDEC stream restrictions".to_string());
+        if Self::query_package("nvidia-patch")
+            .map(|p| !p.installed)
+            .unwrap_or(true)
+        {
+            suggestions
+                .push("📦 nvidia-patch - Removes NVENC/NVDEC stream restrictions".to_string());
         }
 
         // Check for nvidia-tweaks
-        if Self::query_package("nvidia-tweaks").map(|p| !p.installed).unwrap_or(true) {
+        if Self::query_package("nvidia-tweaks")
+            .map(|p| !p.installed)
+            .unwrap_or(true)
+        {
             suggestions.push("📦 nvidia-tweaks - Additional performance tweaks".to_string());
         }
 
         // Check for optimus-manager (for laptops)
         if Self::is_laptop() {
-            if Self::query_package("optimus-manager").map(|p| !p.installed).unwrap_or(true) {
-                suggestions.push("📦 optimus-manager - Hybrid GPU management for laptops".to_string());
+            if Self::query_package("optimus-manager")
+                .map(|p| !p.installed)
+                .unwrap_or(true)
+            {
+                suggestions
+                    .push("📦 optimus-manager - Hybrid GPU management for laptops".to_string());
             }
         }
 
@@ -310,8 +320,8 @@ Exec = /usr/bin/sh -c 'echo "⚠️  Kernel upgrade detected. NVIDIA drivers may
 
     /// Check if system is a laptop
     fn is_laptop() -> bool {
-        Path::new("/sys/class/power_supply/BAT0").exists() ||
-        Path::new("/sys/class/power_supply/BAT1").exists()
+        Path::new("/sys/class/power_supply/BAT0").exists()
+            || Path::new("/sys/class/power_supply/BAT1").exists()
     }
 
     /// Rebuild DKMS modules manually
@@ -320,7 +330,7 @@ Exec = /usr/bin/sh -c 'echo "⚠️  Kernel upgrade detected. NVIDIA drivers may
 
         if !self.is_root() {
             return Err(NvControlError::ConfigError(
-                "Root privileges required to rebuild DKMS modules".to_string()
+                "Root privileges required to rebuild DKMS modules".to_string(),
             ));
         }
 
@@ -335,7 +345,9 @@ Exec = /usr/bin/sh -c 'echo "⚠️  Kernel upgrade detected. NVIDIA drivers may
             .map_err(|e| NvControlError::CommandFailed(format!("Failed to rebuild DKMS: {}", e)))?;
 
         if !status.success() {
-            return Err(NvControlError::CommandFailed("DKMS rebuild failed".to_string()));
+            return Err(NvControlError::CommandFailed(
+                "DKMS rebuild failed".to_string(),
+            ));
         }
 
         println!("✅ DKMS modules rebuilt successfully");
@@ -348,17 +360,18 @@ Exec = /usr/bin/sh -c 'echo "⚠️  Kernel upgrade detected. NVIDIA drivers may
 
         if !self.is_root() {
             return Err(NvControlError::ConfigError(
-                "Root privileges required to regenerate initramfs".to_string()
+                "Root privileges required to regenerate initramfs".to_string(),
             ));
         }
 
-        let status = Command::new("mkinitcpio")
-            .arg("-P")
-            .status()
-            .map_err(|e| NvControlError::CommandFailed(format!("Failed to run mkinitcpio: {}", e)))?;
+        let status = Command::new("mkinitcpio").arg("-P").status().map_err(|e| {
+            NvControlError::CommandFailed(format!("Failed to run mkinitcpio: {}", e))
+        })?;
 
         if !status.success() {
-            return Err(NvControlError::CommandFailed("mkinitcpio failed".to_string()));
+            return Err(NvControlError::CommandFailed(
+                "mkinitcpio failed".to_string(),
+            ));
         }
 
         println!("✅ Initramfs regenerated successfully");
@@ -369,8 +382,7 @@ Exec = /usr/bin/sh -c 'echo "⚠️  Kernel upgrade detected. NVIDIA drivers may
 
     /// Check for pending kernel/driver updates
     pub fn check_pending_updates() -> NvResult<Vec<String>> {
-        let output = Command::new("checkupdates")
-            .output();
+        let output = Command::new("checkupdates").output();
 
         let mut nvidia_updates = Vec::new();
 
@@ -399,8 +411,22 @@ Exec = /usr/bin/sh -c 'echo "⚠️  Kernel upgrade detected. NVIDIA drivers may
         let kernel_info = Self::check_kernel_compatibility()?;
         println!("Kernel Information:");
         println!("   Version: {}", kernel_info.version);
-        println!("   NVIDIA Compatible: {}", if kernel_info.nvidia_compatible { "✅ Yes" } else { "❌ No" });
-        println!("   DKMS Built: {}", if kernel_info.dkms_built { "✅ Yes" } else { "❌ No (using nvidia-open?)" });
+        println!(
+            "   NVIDIA Compatible: {}",
+            if kernel_info.nvidia_compatible {
+                "✅ Yes"
+            } else {
+                "❌ No"
+            }
+        );
+        println!(
+            "   DKMS Built: {}",
+            if kernel_info.dkms_built {
+                "✅ Yes"
+            } else {
+                "❌ No (using nvidia-open?)"
+            }
+        );
 
         // Package info
         println!("\nInstalled NVIDIA Packages:");

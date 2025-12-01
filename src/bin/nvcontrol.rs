@@ -2,8 +2,7 @@
 use eframe::egui;
 #[cfg(feature = "gui")]
 use nvcontrol::{
-    config, display, fan, gamescope, latency, overclocking, recording, theme,
-    vibrance, vrr,
+    config, display, fan, gamescope, latency, overclocking, recording, theme, vibrance, vrr,
 };
 
 // Phosphor icon constants for clean, consistent icons
@@ -86,7 +85,7 @@ enum Tab {
     GameProfiles,
     RgbControl,
     Containers,
-    Osd,            // On-Screen Display configuration
+    Osd, // On-Screen Display configuration
     Settings,
 }
 
@@ -163,22 +162,24 @@ fn main() -> eframe::Result<()> {
             // Embed Fira Code Nerd Font (monospace with all nerd font icons built-in)
             fonts.font_data.insert(
                 "FiraCodeNerd".to_owned(),
-                egui::FontData::from_static(
-                    include_bytes!("../../assets/fonts/FiraCodeNerdFontMono-Regular.ttf")
-                ),
+                egui::FontData::from_static(include_bytes!(
+                    "../../assets/fonts/FiraCodeNerdFontMono-Regular.ttf"
+                )),
             );
 
             // Add Phosphor icons (regular variant) for additional clean icons
             egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
 
             // Set Fira Code Nerd as primary monospace font
-            fonts.families
+            fonts
+                .families
                 .entry(egui::FontFamily::Monospace)
                 .or_default()
                 .insert(0, "FiraCodeNerd".to_owned());
 
             // Add Fira Code Nerd as fallback for proportional text (for nerd font glyphs)
-            fonts.families
+            fonts
+                .families
                 .entry(egui::FontFamily::Proportional)
                 .or_default()
                 .push("FiraCodeNerd".to_owned());
@@ -207,7 +208,7 @@ struct NvControlApp {
     config: config::Config,
     hdr_enabled: bool,
     selected_icc_profile_idx: usize,
-    theme: theme::ModernTheme,  // Legacy theme, kept for compatibility
+    theme: theme::ModernTheme, // Legacy theme, kept for compatibility
     overclock_profile: overclocking::OverclockProfile,
     // Missing fields that are used in the update() method
     fan_speeds: std::collections::HashMap<usize, u8>,
@@ -236,8 +237,8 @@ struct NvControlApp {
     game_auto_config: nvcontrol::game_profile_auto::AutoProfileConfig,
 
     // NEW: Interactive OC controls (from TUI)
-    gpu_offset: i32,        // -200 to +200 MHz
-    memory_offset: i32,     // -1000 to +1000 MHz
+    gpu_offset: i32,          // -200 to +200 MHz
+    memory_offset: i32,       // -1000 to +1000 MHz
     power_limit_percent: u32, // 50 to 105%
     oc_preset: OcPreset,
 
@@ -309,23 +310,38 @@ impl NvControlApp {
                     if let Ok(device) = nvml.device_by_index(0) {
                         let name = device.name().unwrap_or_else(|_| "Unknown GPU".to_string());
                         let temperature = device
-                            .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
+                            .temperature(
+                                nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu,
+                            )
                             .unwrap_or(0) as f32;
-                        let power_draw = device.power_usage().map(|p| p as f32 / 1000.0).unwrap_or(0.0);
-                        let power_limit = device.power_management_limit().map(|p| p as f32 / 1000.0).unwrap_or(0.0);
+                        let power_draw = device
+                            .power_usage()
+                            .map(|p| p as f32 / 1000.0)
+                            .unwrap_or(0.0);
+                        let power_limit = device
+                            .power_management_limit()
+                            .map(|p| p as f32 / 1000.0)
+                            .unwrap_or(0.0);
                         let utilization_rates = device.utilization_rates().ok();
                         let utilization = utilization_rates.map(|u| u.gpu as f32).unwrap_or(0.0);
                         let mem_info = device.memory_info().ok();
                         let memory_used = mem_info.as_ref().map(|m| m.used).unwrap_or(0);
                         let memory_total = mem_info.as_ref().map(|m| m.total).unwrap_or(0);
                         let fan_speed = device.fan_speed(0).unwrap_or(0);
-                        let gpu_clock = device.clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics).unwrap_or(0);
-                        let memory_clock = device.clock_info(nvml_wrapper::enum_wrappers::device::Clock::Memory).unwrap_or(0);
+                        let gpu_clock = device
+                            .clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics)
+                            .unwrap_or(0);
+                        let memory_clock = device
+                            .clock_info(nvml_wrapper::enum_wrappers::device::Clock::Memory)
+                            .unwrap_or(0);
 
                         // Additional info (fetch once per second to reduce overhead)
-                        let driver_version = nvml.sys_driver_version().unwrap_or_else(|_| "Unknown".to_string());
+                        let driver_version = nvml
+                            .sys_driver_version()
+                            .unwrap_or_else(|_| "Unknown".to_string());
                         let pci_info = device.pci_info().ok();
-                        let pci_bus = pci_info.map(|p| format!("{:04x}:{:02x}:{:02x}.0", p.domain, p.bus, p.device))
+                        let pci_bus = pci_info
+                            .map(|p| format!("{:04x}:{:02x}:{:02x}.0", p.domain, p.bus, p.device))
                             .unwrap_or_else(|| "Unknown".to_string());
 
                         // Compute capability and architecture detection
@@ -491,20 +507,22 @@ impl NvControlApp {
             power_limit: self.power_limit_percent as u8,
             voltage_offset: 0,
             temp_limit: 90,
-            fan_curve: vec![],  // Use default fan curve
+            fan_curve: vec![], // Use default fan curve
         };
 
         if let Err(e) = overclocking::apply_overclock_profile(&profile) {
             eprintln!("Failed to apply overclock: {}", e);
         } else {
-            println!("✅ Overclock applied: GPU {:+}MHz, Mem {:+}MHz, Power {}%",
-                self.gpu_offset, self.memory_offset, self.power_limit_percent);
+            println!(
+                "✅ Overclock applied: GPU {:+}MHz, Mem {:+}MHz, Power {}%",
+                self.gpu_offset, self.memory_offset, self.power_limit_percent
+            );
         }
     }
 
     // NEW: Apply RGB settings
     fn apply_rgb_settings(&self) {
-        use nvcontrol::rgb_control::{RgbController, RgbMode, RgbColor};
+        use nvcontrol::rgb_control::{RgbColor, RgbController, RgbMode};
 
         if let Ok(mut controller) = RgbController::new() {
             let color = RgbColor {
@@ -702,15 +720,33 @@ impl eframe::App for NvControlApp {
         // ═══════════════════════════════════════════════════════════════════════
         ctx.input(|i| {
             // Tab navigation: 1-9 for quick access
-            if i.key_pressed(egui::Key::Num1) { self.tab = Tab::Gpu; }
-            if i.key_pressed(egui::Key::Num2) { self.tab = Tab::Overclock; }
-            if i.key_pressed(egui::Key::Num3) { self.tab = Tab::Fan; }
-            if i.key_pressed(egui::Key::Num4) { self.tab = Tab::Display; }
-            if i.key_pressed(egui::Key::Num5) { self.tab = Tab::Vibrance; }
-            if i.key_pressed(egui::Key::Num6) { self.tab = Tab::Hdr; }
-            if i.key_pressed(egui::Key::Num7) { self.tab = Tab::GameProfiles; }
-            if i.key_pressed(egui::Key::Num8) { self.tab = Tab::Osd; }
-            if i.key_pressed(egui::Key::Num9) { self.tab = Tab::Settings; }
+            if i.key_pressed(egui::Key::Num1) {
+                self.tab = Tab::Gpu;
+            }
+            if i.key_pressed(egui::Key::Num2) {
+                self.tab = Tab::Overclock;
+            }
+            if i.key_pressed(egui::Key::Num3) {
+                self.tab = Tab::Fan;
+            }
+            if i.key_pressed(egui::Key::Num4) {
+                self.tab = Tab::Display;
+            }
+            if i.key_pressed(egui::Key::Num5) {
+                self.tab = Tab::Vibrance;
+            }
+            if i.key_pressed(egui::Key::Num6) {
+                self.tab = Tab::Hdr;
+            }
+            if i.key_pressed(egui::Key::Num7) {
+                self.tab = Tab::GameProfiles;
+            }
+            if i.key_pressed(egui::Key::Num8) {
+                self.tab = Tab::Osd;
+            }
+            if i.key_pressed(egui::Key::Num9) {
+                self.tab = Tab::Settings;
+            }
 
             // Ctrl+S to save config
             if i.modifiers.ctrl && i.key_pressed(egui::Key::S) {
@@ -728,7 +764,10 @@ impl eframe::App for NvControlApp {
             // Ctrl+T to cycle through themes
             if i.modifiers.ctrl && i.key_pressed(egui::Key::T) {
                 let themes = nvcontrol::themes::ThemeVariant::all();
-                let current_idx = themes.iter().position(|&t| t == self.current_theme).unwrap_or(0);
+                let current_idx = themes
+                    .iter()
+                    .position(|&t| t == self.current_theme)
+                    .unwrap_or(0);
                 let next_idx = (current_idx + 1) % themes.len();
                 self.current_theme = themes[next_idx];
                 self.apply_theme(ctx);
@@ -745,216 +784,432 @@ impl eframe::App for NvControlApp {
 
         // Side panel with grouped navigation
         let sidebar_colors = self.theme_colors();
-        egui::SidePanel::left("nav_panel").default_width(170.0).show(ctx, |ui| {
-            ui.add_space(8.0);
+        egui::SidePanel::left("nav_panel")
+            .default_width(170.0)
+            .show(ctx, |ui| {
+                ui.add_space(8.0);
 
-            // Header with GPU stats
-            ui.horizontal(|ui| {
-                ui.heading(egui::RichText::new("nvcontrol").strong().color(sidebar_colors.blue.to_egui()));
-            });
-
-            // Live GPU stats in header
-            if let Some(stats) = &self.gpu_stats {
-                ui.add_space(4.0);
+                // Header with GPU stats
                 ui.horizontal(|ui| {
-                    let temp_color = self.temp_color(stats.temperature);
-                    ui.label(egui::RichText::new(format!("{}°C", stats.temperature as i32))
-                        .small()
-                        .color(temp_color));
-                    ui.separator();
-                    let usage_color = self.usage_color(stats.utilization);
-                    ui.label(egui::RichText::new(format!("{}%", stats.utilization as i32))
-                        .small()
-                        .color(usage_color));
-                    ui.separator();
-                    let power_ratio = if stats.power_limit > 0.0 { stats.power_draw / stats.power_limit } else { 0.0 };
-                    let power_color = self.power_color(power_ratio);
-                    ui.label(egui::RichText::new(format!("{:.0}W", stats.power_draw))
-                        .small()
-                        .color(power_color));
+                    ui.heading(
+                        egui::RichText::new("nvcontrol")
+                            .strong()
+                            .color(sidebar_colors.blue.to_egui()),
+                    );
                 });
-            }
 
-            ui.add_space(4.0);
-            ui.separator();
-            ui.add_space(4.0);
-
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                // Teal color for unselected menu items (mint green)
-                let menu_color = sidebar_colors.teal.to_egui();
-                let menu_active = sidebar_colors.cyan.to_egui();
-
-                // GPU & Hardware section
-                ui.label(egui::RichText::new("GPU & Hardware").small().strong().color(sidebar_colors.cyan.to_egui()));
-                ui.add_space(2.0);
-                let selected = matches!(self.tab, Tab::Gpu);
-                if ui.add(egui::SelectableLabel::new(selected,
-                    egui::RichText::new("    GPU Status").color(if selected { menu_active } else { menu_color }))).clicked() {
-                    self.tab = Tab::Gpu;
-                }
-                let oc_label = if self.gpu_offset != 0 || self.memory_offset != 0 {
-                    "    Overclock  *"
-                } else {
-                    "    Overclock"
-                };
-                let selected = matches!(self.tab, Tab::Overclock);
-                if ui.add(egui::SelectableLabel::new(selected,
-                    egui::RichText::new(oc_label).color(if selected { menu_active } else { menu_color }))).clicked() {
-                    self.tab = Tab::Overclock;
-                }
-                let auto_oc_label = if self.auto_oc_running {
-                    "    Auto-OC  ~"
-                } else {
-                    "    Auto-OC"
-                };
-                let selected = matches!(self.tab, Tab::AutoOverclock);
-                if ui.add(egui::SelectableLabel::new(selected,
-                    egui::RichText::new(auto_oc_label).color(if selected { menu_active } else { menu_color }))).clicked() {
-                    self.tab = Tab::AutoOverclock;
-                }
-                let selected = matches!(self.tab, Tab::Fan);
-                if ui.add(egui::SelectableLabel::new(selected,
-                    egui::RichText::new("    Fan Control").color(if selected { menu_active } else { menu_color }))).clicked() {
-                    self.tab = Tab::Fan;
-                }
-                let selected = matches!(self.tab, Tab::PowerCurves);
-                if ui.add(egui::SelectableLabel::new(selected,
-                    egui::RichText::new("    Power").color(if selected { menu_active } else { menu_color }))).clicked() {
-                    self.tab = Tab::PowerCurves;
+                // Live GPU stats in header
+                if let Some(stats) = &self.gpu_stats {
+                    ui.add_space(4.0);
+                    ui.horizontal(|ui| {
+                        let temp_color = self.temp_color(stats.temperature);
+                        ui.label(
+                            egui::RichText::new(format!("{}°C", stats.temperature as i32))
+                                .small()
+                                .color(temp_color),
+                        );
+                        ui.separator();
+                        let usage_color = self.usage_color(stats.utilization);
+                        ui.label(
+                            egui::RichText::new(format!("{}%", stats.utilization as i32))
+                                .small()
+                                .color(usage_color),
+                        );
+                        ui.separator();
+                        let power_ratio = if stats.power_limit > 0.0 {
+                            stats.power_draw / stats.power_limit
+                        } else {
+                            0.0
+                        };
+                        let power_color = self.power_color(power_ratio);
+                        ui.label(
+                            egui::RichText::new(format!("{:.0}W", stats.power_draw))
+                                .small()
+                                .color(power_color),
+                        );
+                    });
                 }
 
-                ui.add_space(10.0);
+                ui.add_space(4.0);
                 ui.separator();
                 ui.add_space(4.0);
 
-                // Display section
-                ui.label(egui::RichText::new("Display").small().strong().color(sidebar_colors.purple.to_egui()));
-                ui.add_space(2.0);
-                let selected = matches!(self.tab, Tab::Display);
-                if ui.add(egui::SelectableLabel::new(selected,
-                    egui::RichText::new("    Display").color(if selected { menu_active } else { menu_color }))).clicked() {
-                    self.tab = Tab::Display;
-                }
-                let vibrance_label = if self.vibrance_levels.iter().any(|&v| v != 0) {
-                    "    Vibrance  *"
-                } else {
-                    "    Vibrance"
-                };
-                let selected = matches!(self.tab, Tab::Vibrance);
-                if ui.add(egui::SelectableLabel::new(selected,
-                    egui::RichText::new(vibrance_label).color(if selected { menu_active } else { menu_color }))).clicked() {
-                    self.tab = Tab::Vibrance;
-                }
-                let hdr_label = if self.hdr_enabled {
-                    "    HDR  *"
-                } else {
-                    "    HDR"
-                };
-                let selected = matches!(self.tab, Tab::Hdr);
-                if ui.add(egui::SelectableLabel::new(selected,
-                    egui::RichText::new(hdr_label).color(if selected { menu_active } else { menu_color }))).clicked() {
-                    self.tab = Tab::Hdr;
-                }
-                let selected = matches!(self.tab, Tab::Vrr);
-                if ui.add(egui::SelectableLabel::new(selected,
-                    egui::RichText::new("    VRR").color(if selected { menu_active } else { menu_color }))).clicked() {
-                    self.tab = Tab::Vrr;
-                }
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    // Teal color for unselected menu items (mint green)
+                    let menu_color = sidebar_colors.teal.to_egui();
+                    let menu_active = sidebar_colors.cyan.to_egui();
 
-                ui.add_space(10.0);
-                ui.separator();
-                ui.add_space(4.0);
+                    // GPU & Hardware section
+                    ui.label(
+                        egui::RichText::new("GPU & Hardware")
+                            .small()
+                            .strong()
+                            .color(sidebar_colors.cyan.to_egui()),
+                    );
+                    ui.add_space(2.0);
+                    let selected = matches!(self.tab, Tab::Gpu);
+                    if ui
+                        .add(egui::SelectableLabel::new(
+                            selected,
+                            egui::RichText::new("    GPU Status").color(if selected {
+                                menu_active
+                            } else {
+                                menu_color
+                            }),
+                        ))
+                        .clicked()
+                    {
+                        self.tab = Tab::Gpu;
+                    }
+                    let oc_label = if self.gpu_offset != 0 || self.memory_offset != 0 {
+                        "    Overclock  *"
+                    } else {
+                        "    Overclock"
+                    };
+                    let selected = matches!(self.tab, Tab::Overclock);
+                    if ui
+                        .add(egui::SelectableLabel::new(
+                            selected,
+                            egui::RichText::new(oc_label).color(if selected {
+                                menu_active
+                            } else {
+                                menu_color
+                            }),
+                        ))
+                        .clicked()
+                    {
+                        self.tab = Tab::Overclock;
+                    }
+                    let auto_oc_label = if self.auto_oc_running {
+                        "    Auto-OC  ~"
+                    } else {
+                        "    Auto-OC"
+                    };
+                    let selected = matches!(self.tab, Tab::AutoOverclock);
+                    if ui
+                        .add(egui::SelectableLabel::new(
+                            selected,
+                            egui::RichText::new(auto_oc_label).color(if selected {
+                                menu_active
+                            } else {
+                                menu_color
+                            }),
+                        ))
+                        .clicked()
+                    {
+                        self.tab = Tab::AutoOverclock;
+                    }
+                    let selected = matches!(self.tab, Tab::Fan);
+                    if ui
+                        .add(egui::SelectableLabel::new(
+                            selected,
+                            egui::RichText::new("    Fan Control").color(if selected {
+                                menu_active
+                            } else {
+                                menu_color
+                            }),
+                        ))
+                        .clicked()
+                    {
+                        self.tab = Tab::Fan;
+                    }
+                    let selected = matches!(self.tab, Tab::PowerCurves);
+                    if ui
+                        .add(egui::SelectableLabel::new(
+                            selected,
+                            egui::RichText::new("    Power").color(if selected {
+                                menu_active
+                            } else {
+                                menu_color
+                            }),
+                        ))
+                        .clicked()
+                    {
+                        self.tab = Tab::PowerCurves;
+                    }
 
-                // Gaming section
-                ui.label(egui::RichText::new("Gaming").small().strong().color(sidebar_colors.green.to_egui()));
-                ui.add_space(2.0);
-                let selected = matches!(self.tab, Tab::GameProfiles);
-                if ui.add(egui::SelectableLabel::new(selected,
-                    egui::RichText::new("    Profiles").color(if selected { menu_active } else { menu_color }))).clicked() {
-                    self.tab = Tab::GameProfiles;
-                }
-                let osd_label = if self.osd_enabled {
-                    "    OSD  *"
-                } else {
-                    "    OSD"
-                };
-                let selected = matches!(self.tab, Tab::Osd);
-                if ui.add(egui::SelectableLabel::new(selected,
-                    egui::RichText::new(osd_label).color(if selected { menu_active } else { menu_color }))).clicked() {
-                    self.tab = Tab::Osd;
-                }
-                let selected = matches!(self.tab, Tab::Latency);
-                if ui.add(egui::SelectableLabel::new(selected,
-                    egui::RichText::new("    Latency").color(if selected { menu_active } else { menu_color }))).clicked() {
-                    self.tab = Tab::Latency;
-                }
-                let selected = matches!(self.tab, Tab::Gamescope);
-                if ui.add(egui::SelectableLabel::new(selected,
-                    egui::RichText::new("    Gamescope").color(if selected { menu_active } else { menu_color }))).clicked() {
-                    self.tab = Tab::Gamescope;
-                }
-                let selected = matches!(self.tab, Tab::Recording);
-                if ui.add(egui::SelectableLabel::new(selected,
-                    egui::RichText::new("    Recording").color(if selected { menu_active } else { menu_color }))).clicked() {
-                    self.tab = Tab::Recording;
-                }
+                    ui.add_space(10.0);
+                    ui.separator();
+                    ui.add_space(4.0);
 
-                ui.add_space(10.0);
-                ui.separator();
-                ui.add_space(4.0);
+                    // Display section
+                    ui.label(
+                        egui::RichText::new("Display")
+                            .small()
+                            .strong()
+                            .color(sidebar_colors.purple.to_egui()),
+                    );
+                    ui.add_space(2.0);
+                    let selected = matches!(self.tab, Tab::Display);
+                    if ui
+                        .add(egui::SelectableLabel::new(
+                            selected,
+                            egui::RichText::new("    Display").color(if selected {
+                                menu_active
+                            } else {
+                                menu_color
+                            }),
+                        ))
+                        .clicked()
+                    {
+                        self.tab = Tab::Display;
+                    }
+                    let vibrance_label = if self.vibrance_levels.iter().any(|&v| v != 0) {
+                        "    Vibrance  *"
+                    } else {
+                        "    Vibrance"
+                    };
+                    let selected = matches!(self.tab, Tab::Vibrance);
+                    if ui
+                        .add(egui::SelectableLabel::new(
+                            selected,
+                            egui::RichText::new(vibrance_label).color(if selected {
+                                menu_active
+                            } else {
+                                menu_color
+                            }),
+                        ))
+                        .clicked()
+                    {
+                        self.tab = Tab::Vibrance;
+                    }
+                    let hdr_label = if self.hdr_enabled {
+                        "    HDR  *"
+                    } else {
+                        "    HDR"
+                    };
+                    let selected = matches!(self.tab, Tab::Hdr);
+                    if ui
+                        .add(egui::SelectableLabel::new(
+                            selected,
+                            egui::RichText::new(hdr_label).color(if selected {
+                                menu_active
+                            } else {
+                                menu_color
+                            }),
+                        ))
+                        .clicked()
+                    {
+                        self.tab = Tab::Hdr;
+                    }
+                    let selected = matches!(self.tab, Tab::Vrr);
+                    if ui
+                        .add(egui::SelectableLabel::new(
+                            selected,
+                            egui::RichText::new("    VRR").color(if selected {
+                                menu_active
+                            } else {
+                                menu_color
+                            }),
+                        ))
+                        .clicked()
+                    {
+                        self.tab = Tab::Vrr;
+                    }
 
-                // System section
-                ui.label(egui::RichText::new("System").small().strong().color(sidebar_colors.magenta.to_egui()));
-                ui.add_space(2.0);
-                let selected = matches!(self.tab, Tab::ShaderCache);
-                if ui.add(egui::SelectableLabel::new(selected,
-                    egui::RichText::new("    Shaders").color(if selected { menu_active } else { menu_color }))).clicked() {
-                    self.tab = Tab::ShaderCache;
-                }
-                let selected = matches!(self.tab, Tab::Drivers);
-                if ui.add(egui::SelectableLabel::new(selected,
-                    egui::RichText::new("    Drivers").color(if selected { menu_active } else { menu_color }))).clicked() {
-                    self.tab = Tab::Drivers;
-                }
-                let container_label = if !self.running_containers.is_empty() {
-                    format!("    Containers  ({})", self.running_containers.len())
-                } else {
-                    "    Containers".to_string()
-                };
-                let selected = matches!(self.tab, Tab::Containers);
-                if ui.add(egui::SelectableLabel::new(selected,
-                    egui::RichText::new(&container_label).color(if selected { menu_active } else { menu_color }))).clicked() {
-                    self.tab = Tab::Containers;
-                }
-                let selected = matches!(self.tab, Tab::RgbControl);
-                if ui.add(egui::SelectableLabel::new(selected,
-                    egui::RichText::new("    RGB").color(if selected { menu_active } else { menu_color }))).clicked() {
-                    self.tab = Tab::RgbControl;
-                }
-                let selected = matches!(self.tab, Tab::Benchmark);
-                if ui.add(egui::SelectableLabel::new(selected,
-                    egui::RichText::new("    Benchmark").color(if selected { menu_active } else { menu_color }))).clicked() {
-                    self.tab = Tab::Benchmark;
-                }
+                    ui.add_space(10.0);
+                    ui.separator();
+                    ui.add_space(4.0);
 
-                ui.add_space(10.0);
-                ui.separator();
-                ui.add_space(4.0);
+                    // Gaming section
+                    ui.label(
+                        egui::RichText::new("Gaming")
+                            .small()
+                            .strong()
+                            .color(sidebar_colors.green.to_egui()),
+                    );
+                    ui.add_space(2.0);
+                    let selected = matches!(self.tab, Tab::GameProfiles);
+                    if ui
+                        .add(egui::SelectableLabel::new(
+                            selected,
+                            egui::RichText::new("    Profiles").color(if selected {
+                                menu_active
+                            } else {
+                                menu_color
+                            }),
+                        ))
+                        .clicked()
+                    {
+                        self.tab = Tab::GameProfiles;
+                    }
+                    let osd_label = if self.osd_enabled {
+                        "    OSD  *"
+                    } else {
+                        "    OSD"
+                    };
+                    let selected = matches!(self.tab, Tab::Osd);
+                    if ui
+                        .add(egui::SelectableLabel::new(
+                            selected,
+                            egui::RichText::new(osd_label).color(if selected {
+                                menu_active
+                            } else {
+                                menu_color
+                            }),
+                        ))
+                        .clicked()
+                    {
+                        self.tab = Tab::Osd;
+                    }
+                    let selected = matches!(self.tab, Tab::Latency);
+                    if ui
+                        .add(egui::SelectableLabel::new(
+                            selected,
+                            egui::RichText::new("    Latency").color(if selected {
+                                menu_active
+                            } else {
+                                menu_color
+                            }),
+                        ))
+                        .clicked()
+                    {
+                        self.tab = Tab::Latency;
+                    }
+                    let selected = matches!(self.tab, Tab::Gamescope);
+                    if ui
+                        .add(egui::SelectableLabel::new(
+                            selected,
+                            egui::RichText::new("    Gamescope").color(if selected {
+                                menu_active
+                            } else {
+                                menu_color
+                            }),
+                        ))
+                        .clicked()
+                    {
+                        self.tab = Tab::Gamescope;
+                    }
+                    let selected = matches!(self.tab, Tab::Recording);
+                    if ui
+                        .add(egui::SelectableLabel::new(
+                            selected,
+                            egui::RichText::new("    Recording").color(if selected {
+                                menu_active
+                            } else {
+                                menu_color
+                            }),
+                        ))
+                        .clicked()
+                    {
+                        self.tab = Tab::Recording;
+                    }
 
-                // Settings at bottom
-                let selected = matches!(self.tab, Tab::Settings);
-                if ui.add(egui::SelectableLabel::new(selected,
-                    egui::RichText::new("    Settings").color(if selected { menu_active } else { menu_color }))).clicked() {
-                    self.tab = Tab::Settings;
-                }
+                    ui.add_space(10.0);
+                    ui.separator();
+                    ui.add_space(4.0);
 
-                // Version info at bottom
-                ui.add_space(10.0);
-                ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
-                    ui.label(egui::RichText::new("v0.7.2").small().weak());
+                    // System section
+                    ui.label(
+                        egui::RichText::new("System")
+                            .small()
+                            .strong()
+                            .color(sidebar_colors.magenta.to_egui()),
+                    );
+                    ui.add_space(2.0);
+                    let selected = matches!(self.tab, Tab::ShaderCache);
+                    if ui
+                        .add(egui::SelectableLabel::new(
+                            selected,
+                            egui::RichText::new("    Shaders").color(if selected {
+                                menu_active
+                            } else {
+                                menu_color
+                            }),
+                        ))
+                        .clicked()
+                    {
+                        self.tab = Tab::ShaderCache;
+                    }
+                    let selected = matches!(self.tab, Tab::Drivers);
+                    if ui
+                        .add(egui::SelectableLabel::new(
+                            selected,
+                            egui::RichText::new("    Drivers").color(if selected {
+                                menu_active
+                            } else {
+                                menu_color
+                            }),
+                        ))
+                        .clicked()
+                    {
+                        self.tab = Tab::Drivers;
+                    }
+                    let container_label = if !self.running_containers.is_empty() {
+                        format!("    Containers  ({})", self.running_containers.len())
+                    } else {
+                        "    Containers".to_string()
+                    };
+                    let selected = matches!(self.tab, Tab::Containers);
+                    if ui
+                        .add(egui::SelectableLabel::new(
+                            selected,
+                            egui::RichText::new(&container_label).color(if selected {
+                                menu_active
+                            } else {
+                                menu_color
+                            }),
+                        ))
+                        .clicked()
+                    {
+                        self.tab = Tab::Containers;
+                    }
+                    let selected = matches!(self.tab, Tab::RgbControl);
+                    if ui
+                        .add(egui::SelectableLabel::new(
+                            selected,
+                            egui::RichText::new("    RGB").color(if selected {
+                                menu_active
+                            } else {
+                                menu_color
+                            }),
+                        ))
+                        .clicked()
+                    {
+                        self.tab = Tab::RgbControl;
+                    }
+                    let selected = matches!(self.tab, Tab::Benchmark);
+                    if ui
+                        .add(egui::SelectableLabel::new(
+                            selected,
+                            egui::RichText::new("    Benchmark").color(if selected {
+                                menu_active
+                            } else {
+                                menu_color
+                            }),
+                        ))
+                        .clicked()
+                    {
+                        self.tab = Tab::Benchmark;
+                    }
+
+                    ui.add_space(10.0);
+                    ui.separator();
+                    ui.add_space(4.0);
+
+                    // Settings at bottom
+                    let selected = matches!(self.tab, Tab::Settings);
+                    if ui
+                        .add(egui::SelectableLabel::new(
+                            selected,
+                            egui::RichText::new("    Settings").color(if selected {
+                                menu_active
+                            } else {
+                                menu_color
+                            }),
+                        ))
+                        .clicked()
+                    {
+                        self.tab = Tab::Settings;
+                    }
+
+                    // Version info at bottom
+                    ui.add_space(10.0);
+                    ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
+                        ui.label(egui::RichText::new("v0.7.2").small().weak());
+                    });
                 });
             });
-        });
         match self.tab {
             Tab::Gpu => {
                 egui::CentralPanel::default().show(ctx, |ui| {
@@ -966,9 +1221,11 @@ impl eframe::App for NvControlApp {
                             ui.horizontal(|ui| {
                                 ui.label(format!("{} Select GPU:", icons::TARGET));
                                 egui::ComboBox::from_id_source("gpu_selector")
-                                    .selected_text(format!("GPU {} - {}",
+                                    .selected_text(format!(
+                                        "GPU {} - {}",
                                         self.selected_gpu_index,
-                                        self.available_gpus.get(self.selected_gpu_index as usize)
+                                        self.available_gpus
+                                            .get(self.selected_gpu_index as usize)
                                             .map(|g| g.name.as_str())
                                             .unwrap_or("Unknown")
                                     ))
@@ -977,33 +1234,49 @@ impl eframe::App for NvControlApp {
                                             ui.selectable_value(
                                                 &mut self.selected_gpu_index,
                                                 gpu.index,
-                                                format!("GPU {} - {} ({:.1}°C, {:.0}%)",
+                                                format!(
+                                                    "GPU {} - {} ({:.1}°C, {:.0}%)",
                                                     gpu.index,
                                                     gpu.name,
                                                     gpu.temperature,
                                                     gpu.utilization
-                                                )
+                                                ),
                                             );
                                         }
                                     });
 
-                                if ui.button(format!("{} Refresh GPUs", icons::REFRESH)).clicked() {
-                                    self.available_gpus = nvcontrol::multi_gpu::detect_gpus().unwrap_or_else(|_| vec![]);
+                                if ui
+                                    .button(format!("{} Refresh GPUs", icons::REFRESH))
+                                    .clicked()
+                                {
+                                    self.available_gpus = nvcontrol::multi_gpu::detect_gpus()
+                                        .unwrap_or_else(|_| vec![]);
                                 }
                             });
 
                             // Show multi-GPU info
                             ui.horizontal(|ui| {
-                                ui.label(format!("{} Total GPUs: {}", icons::CHART, self.available_gpus.len()));
+                                ui.label(format!(
+                                    "{} Total GPUs: {}",
+                                    icons::CHART,
+                                    self.available_gpus.len()
+                                ));
 
                                 let has_sli = self.available_gpus.iter().any(|g| g.sli_enabled);
-                                let has_nvlink = self.available_gpus.iter().any(|g| g.nvlink_enabled);
+                                let has_nvlink =
+                                    self.available_gpus.iter().any(|g| g.nvlink_enabled);
 
                                 if has_sli {
-                                    ui.colored_label(egui::Color32::GREEN, format!("{} SLI", icons::OK));
+                                    ui.colored_label(
+                                        egui::Color32::GREEN,
+                                        format!("{} SLI", icons::OK),
+                                    );
                                 }
                                 if has_nvlink {
-                                    ui.colored_label(egui::Color32::GREEN, format!("{} NVLink", icons::OK));
+                                    ui.colored_label(
+                                        egui::Color32::GREEN,
+                                        format!("{} NVLink", icons::OK),
+                                    );
                                 }
                             });
                         });
@@ -1016,7 +1289,11 @@ impl eframe::App for NvControlApp {
                     ui.columns(2, |columns| {
                         // Left column: GPU Identity Card
                         columns[0].group(|ui| {
-                            ui.label(egui::RichText::new("󰢮 GPU Information").strong().color(theme_colors.cyan.to_egui()));
+                            ui.label(
+                                egui::RichText::new("󰢮 GPU Information")
+                                    .strong()
+                                    .color(theme_colors.cyan.to_egui()),
+                            );
                             ui.separator();
 
                             if let Some(ref stats) = self.gpu_stats {
@@ -1038,32 +1315,46 @@ impl eframe::App for NvControlApp {
                                         "Pascal" => theme_colors.orange.to_egui(),
                                         _ => theme_colors.fg_dark.to_egui(),
                                     };
-                                    ui.label(egui::RichText::new(format!("󰘚 {}", stats.architecture))
-                                        .color(arch_color)
-                                        .background_color(theme_colors.bg_highlight.to_egui()));
+                                    ui.label(
+                                        egui::RichText::new(format!("󰘚 {}", stats.architecture))
+                                            .color(arch_color)
+                                            .background_color(theme_colors.bg_highlight.to_egui()),
+                                    );
                                     ui.label(format!("SM {}", stats.compute_capability));
                                 });
 
                                 ui.add_space(6.0);
 
                                 // Specs grid
-                                egui::Grid::new("gpu_specs").num_columns(2).spacing([20.0, 4.0]).show(ui, |ui| {
-                                    ui.label("CUDA Cores:");
-                                    ui.label(egui::RichText::new(format!("{}", stats.cuda_cores)).strong());
-                                    ui.end_row();
+                                egui::Grid::new("gpu_specs")
+                                    .num_columns(2)
+                                    .spacing([20.0, 4.0])
+                                    .show(ui, |ui| {
+                                        ui.label("CUDA Cores:");
+                                        ui.label(
+                                            egui::RichText::new(format!("{}", stats.cuda_cores))
+                                                .strong(),
+                                        );
+                                        ui.end_row();
 
-                                    ui.label("VRAM:");
-                                    ui.label(egui::RichText::new(format!("{:.0} GB GDDR", stats.memory_total as f64 / 1e9)).strong());
-                                    ui.end_row();
+                                        ui.label("VRAM:");
+                                        ui.label(
+                                            egui::RichText::new(format!(
+                                                "{:.0} GB GDDR",
+                                                stats.memory_total as f64 / 1e9
+                                            ))
+                                            .strong(),
+                                        );
+                                        ui.end_row();
 
-                                    ui.label("Driver:");
-                                    ui.label(&stats.driver_version);
-                                    ui.end_row();
+                                        ui.label("Driver:");
+                                        ui.label(&stats.driver_version);
+                                        ui.end_row();
 
-                                    ui.label("PCI Bus:");
-                                    ui.label(egui::RichText::new(&stats.pci_bus).small());
-                                    ui.end_row();
-                                });
+                                        ui.label("PCI Bus:");
+                                        ui.label(egui::RichText::new(&stats.pci_bus).small());
+                                        ui.end_row();
+                                    });
                             } else {
                                 ui.label(format!("{} GPU not detected", icons::WARN));
                             }
@@ -1072,7 +1363,11 @@ impl eframe::App for NvControlApp {
                         // Right column: Real-time Stats
                         columns[1].group(|ui| {
                             let theme_colors = self.theme_colors();
-                            ui.label(egui::RichText::new(format!("{} Real-time Metrics", icons::CHART)).strong().color(theme_colors.green.to_egui()));
+                            ui.label(
+                                egui::RichText::new(format!("{} Real-time Metrics", icons::CHART))
+                                    .strong()
+                                    .color(theme_colors.green.to_egui()),
+                            );
                             ui.separator();
 
                             if let Some(ref stats) = self.gpu_stats {
@@ -1080,10 +1375,12 @@ impl eframe::App for NvControlApp {
                                 ui.horizontal(|ui| {
                                     ui.label(format!("{} Temperature:", icons::TEMP));
                                     let temp_color = self.temp_color(stats.temperature);
-                                    ui.label(egui::RichText::new(format!("{:.0}°C", stats.temperature))
-                                        .color(temp_color)
-                                        .strong()
-                                        .size(18.0));
+                                    ui.label(
+                                        egui::RichText::new(format!("{:.0}°C", stats.temperature))
+                                            .color(temp_color)
+                                            .strong()
+                                            .size(18.0),
+                                    );
                                 });
 
                                 ui.add_space(4.0);
@@ -1104,7 +1401,8 @@ impl eframe::App for NvControlApp {
                                     ui.label(format!("{} VRAM:", icons::MEMORY));
                                     let used_gb = stats.memory_used as f64 / 1e9;
                                     let total_gb = stats.memory_total as f64 / 1e9;
-                                    let usage_ratio = stats.memory_used as f32 / stats.memory_total.max(1) as f32;
+                                    let usage_ratio =
+                                        stats.memory_used as f32 / stats.memory_total.max(1) as f32;
                                     let vram_color = self.usage_color(usage_ratio * 100.0);
                                     ui.add(
                                         egui::ProgressBar::new(usage_ratio)
@@ -1124,7 +1422,10 @@ impl eframe::App for NvControlApp {
                                     let power_color = self.power_color(power_ratio);
                                     ui.add(
                                         egui::ProgressBar::new(power_ratio.min(1.0))
-                                            .text(format!("{:.0}W / {:.0}W", stats.power_draw, stats.power_limit))
+                                            .text(format!(
+                                                "{:.0}W / {:.0}W",
+                                                stats.power_draw, stats.power_limit
+                                            ))
                                             .fill(power_color),
                                     );
                                 });
@@ -1148,7 +1449,10 @@ impl eframe::App for NvControlApp {
                                     );
                                 });
                             } else {
-                                ui.label(format!("{} NVML not available - install NVIDIA drivers", icons::WARN));
+                                ui.label(format!(
+                                    "{} NVML not available - install NVIDIA drivers",
+                                    icons::WARN
+                                ));
                             }
                         });
                     });
@@ -1158,12 +1462,23 @@ impl eframe::App for NvControlApp {
                     // Quick actions with themed styling
                     let qa_colors = self.theme_colors();
                     ui.group(|ui| {
-                        ui.label(egui::RichText::new(format!("{} Quick Actions", icons::ROCKET)).strong().color(qa_colors.yellow.to_egui()));
+                        ui.label(
+                            egui::RichText::new(format!("{} Quick Actions", icons::ROCKET))
+                                .strong()
+                                .color(qa_colors.yellow.to_egui()),
+                        );
                         ui.separator();
 
                         ui.horizontal(|ui| {
-                            let tui_btn = egui::Button::new(egui::RichText::new(format!("{} Live Monitor (TUI)", icons::CHART)).color(qa_colors.cyan.to_egui()));
-                            if ui.add(tui_btn).on_hover_text("Open terminal-based monitor").clicked() {
+                            let tui_btn = egui::Button::new(
+                                egui::RichText::new(format!("{} Live Monitor (TUI)", icons::CHART))
+                                    .color(qa_colors.cyan.to_egui()),
+                            );
+                            if ui
+                                .add(tui_btn)
+                                .on_hover_text("Open terminal-based monitor")
+                                .clicked()
+                            {
                                 std::thread::spawn(|| {
                                     let _ = std::process::Command::new("x-terminal-emulator")
                                         .args(["-e", "nvctl", "gpu", "stat"])
@@ -1171,19 +1486,40 @@ impl eframe::App for NvControlApp {
                                 });
                             }
 
-                            let cap_btn = egui::Button::new(egui::RichText::new(format!("{} Capabilities", icons::DRIVER)).color(qa_colors.green.to_egui()));
-                            if ui.add(cap_btn).on_hover_text("Show GPU capabilities").clicked() {
+                            let cap_btn = egui::Button::new(
+                                egui::RichText::new(format!("{} Capabilities", icons::DRIVER))
+                                    .color(qa_colors.green.to_egui()),
+                            );
+                            if ui
+                                .add(cap_btn)
+                                .on_hover_text("Show GPU capabilities")
+                                .clicked()
+                            {
                                 self.tab = Tab::Settings;
                             }
 
-                            let clear_btn = egui::Button::new(egui::RichText::new(format!("{} Clear Graphs", icons::REFRESH)).color(qa_colors.orange.to_egui()));
-                            if ui.add(clear_btn).on_hover_text("Reset monitoring history").clicked() {
+                            let clear_btn = egui::Button::new(
+                                egui::RichText::new(format!("{} Clear Graphs", icons::REFRESH))
+                                    .color(qa_colors.orange.to_egui()),
+                            );
+                            if ui
+                                .add(clear_btn)
+                                .on_hover_text("Reset monitoring history")
+                                .clicked()
+                            {
                                 self.monitoring_dashboard.clear_all();
                             }
 
                             // Add OC shortcut
-                            let oc_btn = egui::Button::new(egui::RichText::new(format!("{} Quick OC", icons::OVERCLOCK)).color(qa_colors.purple.to_egui()));
-                            if ui.add(oc_btn).on_hover_text("Go to Overclock tab (key: 2)").clicked() {
+                            let oc_btn = egui::Button::new(
+                                egui::RichText::new(format!("{} Quick OC", icons::OVERCLOCK))
+                                    .color(qa_colors.purple.to_egui()),
+                            );
+                            if ui
+                                .add(oc_btn)
+                                .on_hover_text("Go to Overclock tab (key: 2)")
+                                .clicked()
+                            {
                                 self.tab = Tab::Overclock;
                             }
                         });
@@ -1194,13 +1530,23 @@ impl eframe::App for NvControlApp {
                     // Real-time monitoring graphs with theme colors
                     let graph_colors = self.theme_colors();
                     ui.group(|ui| {
-                        ui.label(egui::RichText::new(format!("{} Real-Time Monitoring", icons::CHART_UP)).strong().color(graph_colors.blue.to_egui()));
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "{} Real-Time Monitoring",
+                                icons::CHART_UP
+                            ))
+                            .strong()
+                            .color(graph_colors.blue.to_egui()),
+                        );
                         ui.separator();
 
                         use egui_plot::{Line, Plot, PlotPoints};
 
                         // Temperature graph
-                        ui.label(egui::RichText::new(format!("{} Temperature History", icons::TEMP)).color(graph_colors.red.to_egui()));
+                        ui.label(
+                            egui::RichText::new(format!("{} Temperature History", icons::TEMP))
+                                .color(graph_colors.red.to_egui()),
+                        );
                         let temp_points: PlotPoints = self
                             .monitoring_dashboard
                             .temperature
@@ -1230,18 +1576,36 @@ impl eframe::App for NvControlApp {
                             self.monitoring_dashboard.temperature.avg_value(),
                         ) {
                             ui.horizontal(|ui| {
-                                ui.label(egui::RichText::new(format!("Min: {:.0}°C", min)).small().color(graph_colors.cyan.to_egui()));
+                                ui.label(
+                                    egui::RichText::new(format!("Min: {:.0}°C", min))
+                                        .small()
+                                        .color(graph_colors.cyan.to_egui()),
+                                );
                                 ui.separator();
-                                ui.label(egui::RichText::new(format!("Max: {:.0}°C", max)).small().color(graph_colors.red.to_egui()));
+                                ui.label(
+                                    egui::RichText::new(format!("Max: {:.0}°C", max))
+                                        .small()
+                                        .color(graph_colors.red.to_egui()),
+                                );
                                 ui.separator();
-                                ui.label(egui::RichText::new(format!("Avg: {:.0}°C", avg)).small().color(graph_colors.yellow.to_egui()));
+                                ui.label(
+                                    egui::RichText::new(format!("Avg: {:.0}°C", avg))
+                                        .small()
+                                        .color(graph_colors.yellow.to_egui()),
+                                );
                             });
                         }
 
                         ui.add_space(8.0);
 
                         // GPU Utilization graph
-                        ui.label(egui::RichText::new(format!("{} GPU Utilization History", icons::CHART)).color(graph_colors.cyan.to_egui()));
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "{} GPU Utilization History",
+                                icons::CHART
+                            ))
+                            .color(graph_colors.cyan.to_egui()),
+                        );
                         let util_points: PlotPoints = self
                             .monitoring_dashboard
                             .gpu_utilization
@@ -1270,18 +1634,33 @@ impl eframe::App for NvControlApp {
                             self.monitoring_dashboard.gpu_utilization.avg_value(),
                         ) {
                             ui.horizontal(|ui| {
-                                ui.label(egui::RichText::new(format!("Min: {:.0}%", min)).small().color(graph_colors.green.to_egui()));
+                                ui.label(
+                                    egui::RichText::new(format!("Min: {:.0}%", min))
+                                        .small()
+                                        .color(graph_colors.green.to_egui()),
+                                );
                                 ui.separator();
-                                ui.label(egui::RichText::new(format!("Max: {:.0}%", max)).small().color(graph_colors.red.to_egui()));
+                                ui.label(
+                                    egui::RichText::new(format!("Max: {:.0}%", max))
+                                        .small()
+                                        .color(graph_colors.red.to_egui()),
+                                );
                                 ui.separator();
-                                ui.label(egui::RichText::new(format!("Avg: {:.0}%", avg)).small().color(graph_colors.yellow.to_egui()));
+                                ui.label(
+                                    egui::RichText::new(format!("Avg: {:.0}%", avg))
+                                        .small()
+                                        .color(graph_colors.yellow.to_egui()),
+                                );
                             });
                         }
 
                         ui.add_space(8.0);
 
                         // Power Draw graph
-                        ui.label(egui::RichText::new(format!("{} Power Draw History", icons::OVERCLOCK)).color(graph_colors.yellow.to_egui()));
+                        ui.label(
+                            egui::RichText::new(format!("{} Power Draw History", icons::OVERCLOCK))
+                                .color(graph_colors.yellow.to_egui()),
+                        );
                         let power_points: PlotPoints = self
                             .monitoring_dashboard
                             .power
@@ -1310,18 +1689,33 @@ impl eframe::App for NvControlApp {
                             self.monitoring_dashboard.power.avg_value(),
                         ) {
                             ui.horizontal(|ui| {
-                                ui.label(egui::RichText::new(format!("Min: {:.0}W", min)).small().color(graph_colors.green.to_egui()));
+                                ui.label(
+                                    egui::RichText::new(format!("Min: {:.0}W", min))
+                                        .small()
+                                        .color(graph_colors.green.to_egui()),
+                                );
                                 ui.separator();
-                                ui.label(egui::RichText::new(format!("Max: {:.0}W", max)).small().color(graph_colors.red.to_egui()));
+                                ui.label(
+                                    egui::RichText::new(format!("Max: {:.0}W", max))
+                                        .small()
+                                        .color(graph_colors.red.to_egui()),
+                                );
                                 ui.separator();
-                                ui.label(egui::RichText::new(format!("Avg: {:.0}W", avg)).small().color(graph_colors.yellow.to_egui()));
+                                ui.label(
+                                    egui::RichText::new(format!("Avg: {:.0}W", avg))
+                                        .small()
+                                        .color(graph_colors.yellow.to_egui()),
+                                );
                             });
                         }
 
                         ui.add_space(8.0);
 
                         // Fan Speed graph
-                        ui.label(egui::RichText::new(format!("{} Fan Speed History", icons::FAN_ICON)).color(graph_colors.purple.to_egui()));
+                        ui.label(
+                            egui::RichText::new(format!("{} Fan Speed History", icons::FAN_ICON))
+                                .color(graph_colors.purple.to_egui()),
+                        );
                         let fan_points: PlotPoints = self
                             .monitoring_dashboard
                             .fan_speed
@@ -1350,11 +1744,23 @@ impl eframe::App for NvControlApp {
                             self.monitoring_dashboard.fan_speed.avg_value(),
                         ) {
                             ui.horizontal(|ui| {
-                                ui.label(egui::RichText::new(format!("Min: {:.0}%", min)).small().color(graph_colors.green.to_egui()));
+                                ui.label(
+                                    egui::RichText::new(format!("Min: {:.0}%", min))
+                                        .small()
+                                        .color(graph_colors.green.to_egui()),
+                                );
                                 ui.separator();
-                                ui.label(egui::RichText::new(format!("Max: {:.0}%", max)).small().color(graph_colors.red.to_egui()));
+                                ui.label(
+                                    egui::RichText::new(format!("Max: {:.0}%", max))
+                                        .small()
+                                        .color(graph_colors.red.to_egui()),
+                                );
                                 ui.separator();
-                                ui.label(egui::RichText::new(format!("Avg: {:.0}%", avg)).small().color(graph_colors.yellow.to_egui()));
+                                ui.label(
+                                    egui::RichText::new(format!("Avg: {:.0}%", avg))
+                                        .small()
+                                        .color(graph_colors.yellow.to_egui()),
+                                );
                             });
                         }
                     });
@@ -2456,7 +2862,10 @@ impl eframe::App for NvControlApp {
             }
             Tab::Vrr => {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.heading(format!("{} VRR (Variable Refresh Rate) & G-Sync Control", icons::VRR));
+                    ui.heading(format!(
+                        "{} VRR (Variable Refresh Rate) & G-Sync Control",
+                        icons::VRR
+                    ));
 
                     ui.group(|ui| {
                         ui.label("🖥️ Display VRR Status");
@@ -2541,7 +2950,10 @@ impl eframe::App for NvControlApp {
             }
             Tab::Latency => {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.heading(format!("{} Latency Optimization & Gaming Performance", icons::LATENCY));
+                    ui.heading(format!(
+                        "{} Latency Optimization & Gaming Performance",
+                        icons::LATENCY
+                    ));
 
                     ui.group(|ui| {
                         ui.label("🎯 Current Latency Status");
@@ -2683,7 +3095,10 @@ impl eframe::App for NvControlApp {
             }
             Tab::Recording => {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.heading(format!("{} NVENC Recording & Shadowplay-like Features", icons::RECORD));
+                    ui.heading(format!(
+                        "{} NVENC Recording & Shadowplay-like Features",
+                        icons::RECORD
+                    ));
 
                     ui.group(|ui| {
                         ui.label("🎬 NVENC Capabilities");
@@ -2960,7 +3375,10 @@ impl eframe::App for NvControlApp {
             }
             Tab::Gamescope => {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.heading(format!("{} Gamescope Integration & Steam Deck Optimization", icons::GAME));
+                    ui.heading(format!(
+                        "{} Gamescope Integration & Steam Deck Optimization",
+                        icons::GAME
+                    ));
 
                     ui.group(|ui| {
                         ui.label("🚀 Quick Launch Presets");
@@ -3265,7 +3683,9 @@ impl eframe::App for NvControlApp {
                                 let _ = Command::new("xdg-open")
                                     .arg("/var/log/Xorg.0.log")
                                     .spawn()
-                                    .or_else(|_| Command::new("less").arg("/var/log/Xorg.0.log").spawn());
+                                    .or_else(|_| {
+                                        Command::new("less").arg("/var/log/Xorg.0.log").spawn()
+                                    });
                                 println!("📜 Opening driver logs...");
                             }
 
@@ -3385,12 +3805,20 @@ impl eframe::App for NvControlApp {
                         if let Ok(suite) = nvcontrol::benchmark::BenchmarkSuite::new() {
                             if let Ok(results) = suite.load_all_results() {
                                 if results.is_empty() {
-                                    ui.label("No benchmark results yet. Run a benchmark to get started!");
+                                    ui.label(
+                                        "No benchmark results yet. Run a benchmark to get started!",
+                                    );
                                 } else {
                                     // Show latest result
                                     if let Some(latest) = results.first() {
-                                        ui.label(format!("🏆 Latest Score: {:.2}", latest.total_score));
-                                        ui.label(format!("📅 Date: {}", latest.timestamp.format("%Y-%m-%d %H:%M")));
+                                        ui.label(format!(
+                                            "🏆 Latest Score: {:.2}",
+                                            latest.total_score
+                                        ));
+                                        ui.label(format!(
+                                            "📅 Date: {}",
+                                            latest.timestamp.format("%Y-%m-%d %H:%M")
+                                        ));
                                         ui.add_space(5.0);
                                     }
 
@@ -3428,17 +3856,36 @@ impl eframe::App for NvControlApp {
                                         .show(ui, |ui| {
                                             for result in results.iter().take(10) {
                                                 ui.horizontal(|ui| {
-                                                    ui.label(result.timestamp.format("%Y-%m-%d %H:%M").to_string());
+                                                    ui.label(
+                                                        result
+                                                            .timestamp
+                                                            .format("%Y-%m-%d %H:%M")
+                                                            .to_string(),
+                                                    );
                                                     ui.separator();
-                                                    ui.label(format!("Score: {:.2}", result.total_score));
+                                                    ui.label(format!(
+                                                        "Score: {:.2}",
+                                                        result.total_score
+                                                    ));
                                                     ui.separator();
-                                                    ui.label(format!("Temp: {:.1}°C", result.avg_temp));
+                                                    ui.label(format!(
+                                                        "Temp: {:.1}°C",
+                                                        result.avg_temp
+                                                    ));
                                                     ui.separator();
-                                                    ui.label(format!("Power: {:.1}W", result.avg_power));
+                                                    ui.label(format!(
+                                                        "Power: {:.1}W",
+                                                        result.avg_power
+                                                    ));
 
-                                                    if let (Some(gpu), Some(mem)) = (result.gpu_offset, result.memory_offset) {
+                                                    if let (Some(gpu), Some(mem)) =
+                                                        (result.gpu_offset, result.memory_offset)
+                                                    {
                                                         ui.separator();
-                                                        ui.label(format!("OC: {:+}/{:+}MHz", gpu, mem));
+                                                        ui.label(format!(
+                                                            "OC: {:+}/{:+}MHz",
+                                                            gpu, mem
+                                                        ));
                                                     }
                                                 });
                                             }
@@ -3458,13 +3905,19 @@ impl eframe::App for NvControlApp {
                                         ui.horizontal(|ui| {
                                             ui.label("Baseline:");
                                             ui.label(format!("{:.2}", baseline.total_score));
-                                            ui.label(format!("({})", baseline.timestamp.format("%Y-%m-%d")));
+                                            ui.label(format!(
+                                                "({})",
+                                                baseline.timestamp.format("%Y-%m-%d")
+                                            ));
                                         });
 
                                         ui.horizontal(|ui| {
                                             ui.label("Latest:");
                                             ui.label(format!("{:.2}", current.total_score));
-                                            ui.label(format!("({})", current.timestamp.format("%Y-%m-%d")));
+                                            ui.label(format!(
+                                                "({})",
+                                                current.timestamp.format("%Y-%m-%d")
+                                            ));
                                         });
 
                                         ui.horizontal(|ui| {
@@ -3474,7 +3927,10 @@ impl eframe::App for NvControlApp {
                                             } else {
                                                 egui::Color32::RED
                                             };
-                                            ui.colored_label(color, format!("{:+.2}%", comparison.performance_gain));
+                                            ui.colored_label(
+                                                color,
+                                                format!("{:+.2}%", comparison.performance_gain),
+                                            );
                                         });
 
                                         ui.horizontal(|ui| {
@@ -3484,7 +3940,10 @@ impl eframe::App for NvControlApp {
                                             } else {
                                                 egui::Color32::YELLOW
                                             };
-                                            ui.colored_label(color, format!("{:+.1}°C", comparison.temp_delta));
+                                            ui.colored_label(
+                                                color,
+                                                format!("{:+.1}°C", comparison.temp_delta),
+                                            );
                                         });
 
                                         ui.horizontal(|ui| {
@@ -3494,7 +3953,10 @@ impl eframe::App for NvControlApp {
                                             } else {
                                                 egui::Color32::YELLOW
                                             };
-                                            ui.colored_label(color, format!("{:+.1}W", comparison.power_delta));
+                                            ui.colored_label(
+                                                color,
+                                                format!("{:+.1}W", comparison.power_delta),
+                                            );
                                         });
                                     }
                                 }
@@ -3557,7 +4019,10 @@ impl eframe::App for NvControlApp {
                         ui.horizontal(|ui| {
                             ui.label("Peak Brightness:");
                             let mut peak = self.hdr_config.peak_brightness as f32;
-                            if ui.add(egui::Slider::new(&mut peak, 100.0..=10000.0).suffix(" nits")).changed() {
+                            if ui
+                                .add(egui::Slider::new(&mut peak, 100.0..=10000.0).suffix(" nits"))
+                                .changed()
+                            {
                                 self.hdr_config.peak_brightness = peak as u32;
                                 let _ = self.hdr_config.save();
                             }
@@ -3566,7 +4031,14 @@ impl eframe::App for NvControlApp {
                         ui.horizontal(|ui| {
                             ui.label("Min Brightness:");
                             let mut min = self.hdr_config.min_brightness;
-                            if ui.add(egui::Slider::new(&mut min, 0.0001..=0.1).suffix(" nits").logarithmic(true)).changed() {
+                            if ui
+                                .add(
+                                    egui::Slider::new(&mut min, 0.0001..=0.1)
+                                        .suffix(" nits")
+                                        .logarithmic(true),
+                                )
+                                .changed()
+                            {
                                 self.hdr_config.min_brightness = min;
                                 let _ = self.hdr_config.save();
                             }
@@ -3575,7 +4047,13 @@ impl eframe::App for NvControlApp {
                         ui.horizontal(|ui| {
                             ui.label("Max Content Light Level:");
                             let mut max_cll = self.hdr_config.max_content_light_level as f32;
-                            if ui.add(egui::Slider::new(&mut max_cll, 100.0..=10000.0).suffix(" nits")).changed() {
+                            if ui
+                                .add(
+                                    egui::Slider::new(&mut max_cll, 100.0..=10000.0)
+                                        .suffix(" nits"),
+                                )
+                                .changed()
+                            {
                                 self.hdr_config.max_content_light_level = max_cll as u32;
                                 let _ = self.hdr_config.save();
                             }
@@ -3584,7 +4062,12 @@ impl eframe::App for NvControlApp {
                         ui.horizontal(|ui| {
                             ui.label("Max Frame Average:");
                             let mut max_fall = self.hdr_config.max_frame_average as f32;
-                            if ui.add(egui::Slider::new(&mut max_fall, 50.0..=5000.0).suffix(" nits")).changed() {
+                            if ui
+                                .add(
+                                    egui::Slider::new(&mut max_fall, 50.0..=5000.0).suffix(" nits"),
+                                )
+                                .changed()
+                            {
                                 self.hdr_config.max_frame_average = max_fall as u32;
                                 let _ = self.hdr_config.save();
                             }
@@ -3603,11 +4086,31 @@ impl eframe::App for NvControlApp {
                                 .selected_text(format!("{}", self.hdr_config.tone_mapping))
                                 .show_ui(ui, |ui| {
                                     use nvcontrol::hdr::ToneMappingMode;
-                                    ui.selectable_value(&mut self.hdr_config.tone_mapping, ToneMappingMode::None, "None (Clip)");
-                                    ui.selectable_value(&mut self.hdr_config.tone_mapping, ToneMappingMode::Reinhard, "Reinhard");
-                                    ui.selectable_value(&mut self.hdr_config.tone_mapping, ToneMappingMode::Hable, "Hable (Uncharted 2)");
-                                    ui.selectable_value(&mut self.hdr_config.tone_mapping, ToneMappingMode::ACES, "ACES Filmic");
-                                    ui.selectable_value(&mut self.hdr_config.tone_mapping, ToneMappingMode::AGX, "AGX");
+                                    ui.selectable_value(
+                                        &mut self.hdr_config.tone_mapping,
+                                        ToneMappingMode::None,
+                                        "None (Clip)",
+                                    );
+                                    ui.selectable_value(
+                                        &mut self.hdr_config.tone_mapping,
+                                        ToneMappingMode::Reinhard,
+                                        "Reinhard",
+                                    );
+                                    ui.selectable_value(
+                                        &mut self.hdr_config.tone_mapping,
+                                        ToneMappingMode::Hable,
+                                        "Hable (Uncharted 2)",
+                                    );
+                                    ui.selectable_value(
+                                        &mut self.hdr_config.tone_mapping,
+                                        ToneMappingMode::ACES,
+                                        "ACES Filmic",
+                                    );
+                                    ui.selectable_value(
+                                        &mut self.hdr_config.tone_mapping,
+                                        ToneMappingMode::AGX,
+                                        "AGX",
+                                    );
                                 });
                         });
 
@@ -3617,9 +4120,21 @@ impl eframe::App for NvControlApp {
                                 .selected_text(format!("{}", self.hdr_config.color_space))
                                 .show_ui(ui, |ui| {
                                     use nvcontrol::hdr::ColorSpace;
-                                    ui.selectable_value(&mut self.hdr_config.color_space, ColorSpace::BT709, "BT.709 (sRGB)");
-                                    ui.selectable_value(&mut self.hdr_config.color_space, ColorSpace::BT2020, "BT.2020 (HDR)");
-                                    ui.selectable_value(&mut self.hdr_config.color_space, ColorSpace::DciP3, "DCI-P3 (Wide Gamut)");
+                                    ui.selectable_value(
+                                        &mut self.hdr_config.color_space,
+                                        ColorSpace::BT709,
+                                        "BT.709 (sRGB)",
+                                    );
+                                    ui.selectable_value(
+                                        &mut self.hdr_config.color_space,
+                                        ColorSpace::BT2020,
+                                        "BT.2020 (HDR)",
+                                    );
+                                    ui.selectable_value(
+                                        &mut self.hdr_config.color_space,
+                                        ColorSpace::DciP3,
+                                        "DCI-P3 (Wide Gamut)",
+                                    );
                                 });
                         });
 
@@ -3629,9 +4144,21 @@ impl eframe::App for NvControlApp {
                                 .selected_text(format!("{}", self.hdr_config.eotf))
                                 .show_ui(ui, |ui| {
                                     use nvcontrol::hdr::Eotf;
-                                    ui.selectable_value(&mut self.hdr_config.eotf, Eotf::Gamma22, "Gamma 2.2 (SDR)");
-                                    ui.selectable_value(&mut self.hdr_config.eotf, Eotf::PQ, "PQ (HDR10)");
-                                    ui.selectable_value(&mut self.hdr_config.eotf, Eotf::HLG, "HLG (HDR10+/BBC)");
+                                    ui.selectable_value(
+                                        &mut self.hdr_config.eotf,
+                                        Eotf::Gamma22,
+                                        "Gamma 2.2 (SDR)",
+                                    );
+                                    ui.selectable_value(
+                                        &mut self.hdr_config.eotf,
+                                        Eotf::PQ,
+                                        "PQ (HDR10)",
+                                    );
+                                    ui.selectable_value(
+                                        &mut self.hdr_config.eotf,
+                                        Eotf::HLG,
+                                        "HLG (HDR10+/BBC)",
+                                    );
                                 });
                         });
 
@@ -3743,33 +4270,46 @@ impl eframe::App for NvControlApp {
 
                     ui.group(|ui| {
                         ui.horizontal(|ui| {
-                            ui.checkbox(&mut self.power_config.curve_enabled, "Enable Temperature-Based Power Curve");
+                            ui.checkbox(
+                                &mut self.power_config.curve_enabled,
+                                "Enable Temperature-Based Power Curve",
+                            );
                         });
                     });
 
                     ui.add_space(10.0);
 
                     ui.label("Curve Points (Temperature → Power Limit):");
-                    egui::ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
-                        for (i, point) in self.power_config.power_curve.points.iter().enumerate() {
-                            ui.horizontal(|ui| {
-                                ui.label(format!("Point {}: {:.0}°C → {:.0}%", i, point.x, point.y));
-                            });
-                        }
-                    });
+                    egui::ScrollArea::vertical()
+                        .max_height(200.0)
+                        .show(ui, |ui| {
+                            for (i, point) in
+                                self.power_config.power_curve.points.iter().enumerate()
+                            {
+                                ui.horizontal(|ui| {
+                                    ui.label(format!(
+                                        "Point {}: {:.0}°C → {:.0}%",
+                                        i, point.x, point.y
+                                    ));
+                                });
+                            }
+                        });
 
                     ui.add_space(10.0);
 
                     ui.horizontal(|ui| {
                         if ui.button("💾 Save Configuration").clicked() {
-                            if let Err(e) = nvcontrol::power_curves::save_power_config(&self.power_config) {
+                            if let Err(e) =
+                                nvcontrol::power_curves::save_power_config(&self.power_config)
+                            {
                                 eprintln!("Failed to save power config: {}", e);
                             } else {
                                 println!("✅ Power configuration saved");
                             }
                         }
                         if ui.button("🔄 Reset to Defaults").clicked() {
-                            self.power_config = nvcontrol::power_curves::PowerManagementConfig::default();
+                            self.power_config =
+                                nvcontrol::power_curves::PowerManagementConfig::default();
                         }
                     });
                 });
@@ -3833,10 +4373,26 @@ impl eframe::App for NvControlApp {
                         egui::ComboBox::from_label("Select Mode")
                             .selected_text(&self.rgb_mode)
                             .show_ui(ui, |ui| {
-                                ui.selectable_value(&mut self.rgb_mode, "Static".to_string(), "Static");
-                                ui.selectable_value(&mut self.rgb_mode, "Breathing".to_string(), "Breathing");
-                                ui.selectable_value(&mut self.rgb_mode, "Rainbow".to_string(), "Rainbow");
-                                ui.selectable_value(&mut self.rgb_mode, "TempReactive".to_string(), "Temperature Reactive");
+                                ui.selectable_value(
+                                    &mut self.rgb_mode,
+                                    "Static".to_string(),
+                                    "Static",
+                                );
+                                ui.selectable_value(
+                                    &mut self.rgb_mode,
+                                    "Breathing".to_string(),
+                                    "Breathing",
+                                );
+                                ui.selectable_value(
+                                    &mut self.rgb_mode,
+                                    "Rainbow".to_string(),
+                                    "Rainbow",
+                                );
+                                ui.selectable_value(
+                                    &mut self.rgb_mode,
+                                    "TempReactive".to_string(),
+                                    "Temperature Reactive",
+                                );
                                 ui.selectable_value(&mut self.rgb_mode, "Off".to_string(), "Off");
                             });
 
@@ -3884,13 +4440,19 @@ impl eframe::App for NvControlApp {
                         ui.separator();
 
                         if let Some(ref _runtime) = self.container_runtime {
-                            ui.colored_label(egui::Color32::GREEN, "✅ Container runtime initialized");
+                            ui.colored_label(
+                                egui::Color32::GREEN,
+                                "✅ Container runtime initialized",
+                            );
 
                             // Check NVIDIA Container Toolkit
                             ui.label("Checking NVIDIA Container Toolkit...");
                             ui.label("(Feature requires full implementation)");
                         } else {
-                            ui.colored_label(egui::Color32::RED, "❌ Container runtime not available");
+                            ui.colored_label(
+                                egui::Color32::RED,
+                                "❌ Container runtime not available",
+                            );
                             ui.label("");
                             ui.label("Install Docker or Podman:");
                             ui.label("  sudo pacman -S docker");
@@ -3960,7 +4522,13 @@ impl eframe::App for NvControlApp {
             Tab::Osd => {
                 egui::CentralPanel::default().show(ctx, |ui| {
                     ui.heading(format!("{} On-Screen Display (OSD)", icons::CHART));
-                    ui.label(egui::RichText::new("Configure performance overlay • Future: envyhub integration").small().color(egui::Color32::GRAY));
+                    ui.label(
+                        egui::RichText::new(
+                            "Configure performance overlay • Future: envyhub integration",
+                        )
+                        .small()
+                        .color(egui::Color32::GRAY),
+                    );
                     ui.add_space(8.0);
 
                     // Backend status (MangoHud for now, envyhub later)
@@ -3969,7 +4537,11 @@ impl eframe::App for NvControlApp {
                         ui.horizontal(|ui| {
                             if self.mangohud_installed {
                                 ui.label("✅ MangoHud detected");
-                                ui.label(egui::RichText::new("(envyhub coming soon)").small().color(egui::Color32::GRAY));
+                                ui.label(
+                                    egui::RichText::new("(envyhub coming soon)")
+                                        .small()
+                                        .color(egui::Color32::GRAY),
+                                );
                             } else {
                                 ui.label("❌ No OSD backend installed");
                                 if ui.button("📋 Install MangoHud").clicked() {
@@ -4009,19 +4581,37 @@ impl eframe::App for NvControlApp {
                         egui::ComboBox::from_label("OSD Position")
                             .selected_text(&self.osd_position)
                             .show_ui(ui, |ui| {
-                                if ui.selectable_label(self.osd_position == "top-left", "Top Left").clicked() {
+                                if ui
+                                    .selectable_label(self.osd_position == "top-left", "Top Left")
+                                    .clicked()
+                                {
                                     self.osd_position = "top-left".to_string();
                                     self.save_mangohud_config();
                                 }
-                                if ui.selectable_label(self.osd_position == "top-right", "Top Right").clicked() {
+                                if ui
+                                    .selectable_label(self.osd_position == "top-right", "Top Right")
+                                    .clicked()
+                                {
                                     self.osd_position = "top-right".to_string();
                                     self.save_mangohud_config();
                                 }
-                                if ui.selectable_label(self.osd_position == "bottom-left", "Bottom Left").clicked() {
+                                if ui
+                                    .selectable_label(
+                                        self.osd_position == "bottom-left",
+                                        "Bottom Left",
+                                    )
+                                    .clicked()
+                                {
                                     self.osd_position = "bottom-left".to_string();
                                     self.save_mangohud_config();
                                 }
-                                if ui.selectable_label(self.osd_position == "bottom-right", "Bottom Right").clicked() {
+                                if ui
+                                    .selectable_label(
+                                        self.osd_position == "bottom-right",
+                                        "Bottom Right",
+                                    )
+                                    .clicked()
+                                {
                                     self.osd_position = "bottom-right".to_string();
                                     self.save_mangohud_config();
                                 }
@@ -4077,14 +4667,20 @@ impl eframe::App for NvControlApp {
 
                         ui.horizontal(|ui| {
                             ui.label("Font Size:");
-                            if ui.add(egui::Slider::new(&mut self.osd_font_size, 12..=48)).changed() {
+                            if ui
+                                .add(egui::Slider::new(&mut self.osd_font_size, 12..=48))
+                                .changed()
+                            {
                                 self.save_mangohud_config();
                             }
                         });
 
                         ui.horizontal(|ui| {
                             ui.label("Background Opacity:");
-                            if ui.add(egui::Slider::new(&mut self.osd_opacity, 0.0..=1.0)).changed() {
+                            if ui
+                                .add(egui::Slider::new(&mut self.osd_opacity, 0.0..=1.0))
+                                .changed()
+                            {
                                 self.save_mangohud_config();
                             }
                         });
@@ -4166,11 +4762,15 @@ impl eframe::App for NvControlApp {
                             self.osd_opacity
                         );
 
-                        egui::ScrollArea::vertical().max_height(150.0).show(ui, |ui| {
-                            ui.add(egui::TextEdit::multiline(&mut config_preview.clone())
-                                .font(egui::TextStyle::Monospace)
-                                .desired_width(f32::INFINITY));
-                        });
+                        egui::ScrollArea::vertical()
+                            .max_height(150.0)
+                            .show(ui, |ui| {
+                                ui.add(
+                                    egui::TextEdit::multiline(&mut config_preview.clone())
+                                        .font(egui::TextStyle::Monospace)
+                                        .desired_width(f32::INFINITY),
+                                );
+                            });
                     });
                 });
             }
