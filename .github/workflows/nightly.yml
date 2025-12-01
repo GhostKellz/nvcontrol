@@ -18,7 +18,6 @@ jobs:
 
       - name: Verify Environment
         run: |
-          source $HOME/.cargo/env
           set -euo pipefail
           echo "=== Nightly Build $(date -u +%Y-%m-%d) ==="
           rustc --version
@@ -31,21 +30,13 @@ jobs:
           key: nvcontrol-nightly
 
       - name: Full build
-        run: |
-          source $HOME/.cargo/env
-          set -euo pipefail
-          cargo build --release --no-default-features
+        run: cargo build --release --no-default-features
 
       - name: Full test sweep
-        run: |
-          source $HOME/.cargo/env
-          set -euo pipefail
-          cargo test --lib --no-default-features
+        run: cargo test --lib --no-default-features
 
       - name: Clippy strict
         run: |
-          source $HOME/.cargo/env
-          set -euo pipefail
           cargo clippy --bin nvctl --lib --no-default-features -- \
             -W clippy::all \
             -W clippy::pedantic \
@@ -58,9 +49,7 @@ jobs:
             -A clippy::missing-panics-doc
 
       - name: Format check
-        run: |
-          source $HOME/.cargo/env
-          cargo fmt --check
+        run: cargo fmt --check
 
       - name: GPU stress test
         run: |
@@ -98,7 +87,6 @@ jobs:
 
       - name: Nightly Summary
         run: |
-          source $HOME/.cargo/env
           echo "### Nightly Build $(date -u +%Y-%m-%d) ✅" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY

@@ -19,7 +19,6 @@ jobs:
 
       - name: Verify Environment
         run: |
-          source $HOME/.cargo/env
           set -euo pipefail
           echo "=== Rust Toolchain ==="
           rustc --version
@@ -34,13 +33,10 @@ jobs:
           key: nvcontrol-ci
 
       - name: Build CLI
-        run: |
-          source $HOME/.cargo/env
-          cargo build --bin nvctl --release --no-default-features
+        run: cargo build --bin nvctl --release --no-default-features
 
       - name: Clippy
         run: |
-          source $HOME/.cargo/env
           cargo clippy --bin nvctl --lib --no-default-features -- \
             -W clippy::all \
             -A clippy::needless-borrows-for-generic-args \
@@ -48,14 +44,10 @@ jobs:
             -A clippy::redundant-field-names
 
       - name: Format Check
-        run: |
-          source $HOME/.cargo/env
-          cargo fmt --check || echo "::warning::Format issues found"
+        run: cargo fmt --check || echo "::warning::Format issues found"
 
       - name: Unit Tests
-        run: |
-          source $HOME/.cargo/env
-          cargo test --lib --no-default-features
+        run: cargo test --lib --no-default-features
 
       - name: GPU Smoke Test
         run: |
@@ -116,7 +108,6 @@ jobs:
 
       - name: Build Summary
         run: |
-          source $HOME/.cargo/env
           echo "### Build Complete ✅" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
