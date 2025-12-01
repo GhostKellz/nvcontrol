@@ -1,0 +1,12 @@
+services:
+  nvctl:
+    build: .
+    container_name: nv-gui-runner
+    restart: unless-stopped
+    environment:
+      - RUNNER_ALLOW_RUNASROOT=1
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    runtime: nvidia
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

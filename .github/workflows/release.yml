@@ -9,9 +9,10 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  # Job 1: CLI-only build on nv-osmium
+  release-cli:
     runs-on: self-hosted
-    name: Build Release (nv-osmium)
+    name: Build CLI (nv-osmium)
     timeout-minutes: 20
     env:
       PATH: /home/runner/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -24,7 +25,7 @@ jobs:
       - name: Verify Environment
         run: |
           set -euo pipefail
-          echo "=== Release Build ==="
+          echo "=== CLI Release Build ==="
           echo "Tag: ${{ github.ref_name }}"
           rustc --version
           cargo --version
@@ -33,7 +34,7 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          key: nvcontrol-release
+          key: nvcontrol-cli
 
       - name: Build Release (CLI only)
         run: cargo build --bin nvctl --release --no-default-features
@@ -45,32 +46,120 @@ jobs:
           $NVCTL --version
           $NVCTL gpu info
 
-      - name: Create Release Archive
+      - name: Create CLI Archive
         run: |
           set -euo pipefail
           VERSION="${{ github.ref_name }}"
-          ARCHIVE_DIR="nvcontrol-${VERSION}"
+          ARCHIVE_DIR="nvctl-${VERSION}"
           NVCTL=$(find target -path "*/release/nvctl" -type f -executable | head -1)
 
           mkdir -p "$ARCHIVE_DIR"
           cp "$NVCTL" "$ARCHIVE_DIR/nvctl"
           cp README.md LICENSE "$ARCHIVE_DIR/" 2>/dev/null || true
-          [ -f DOCS.md ] && cp DOCS.md "$ARCHIVE_DIR/"
-          [ -f COMMANDS.md ] && cp COMMANDS.md "$ARCHIVE_DIR/"
+
+          tar -czf "nvctl-${VERSION}-linux-x86_64.tar.gz" "$ARCHIVE_DIR"
+
+          echo "=== CLI Archive Contents ==="
+          tar -tvf "nvctl-${VERSION}-linux-x86_64.tar.gz"
+          ls -lh "nvctl-${VERSION}-linux-x86_64.tar.gz"
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvctl-cli
+          path: nvctl-${{ github.ref_name }}-linux-x86_64.tar.gz
+
+  # Job 2: Full GUI build on nv-palladium
+  release-gui:
+    runs-on: [self-hosted, gui]
+    name: Build GUI (nv-palladium)
+    timeout-minutes: 30
+    env:
+      PATH: /home/runner/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Verify Environment
+        run: |
+          set -euo pipefail
+          echo "=== GUI Release Build ==="
+          echo "Tag: ${{ github.ref_name }}"
+          rustc --version
+          cargo --version
+          nvidia-smi --query-gpu=name --format=csv,noheader || echo "No GPU (headless build)"
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: nvcontrol-gui
+
+      - name: Build Release (Full GUI)
+        run: cargo build --release --all-features
+
+      - name: Run Tests
+        run: cargo test --lib
+
+      - name: Create GUI Archive
+        run: |
+          set -euo pipefail
+          VERSION="${{ github.ref_name }}"
+          ARCHIVE_DIR="nvcontrol-${VERSION}"
+
+          mkdir -p "$ARCHIVE_DIR"
+          cp target/release/nvcontrol "$ARCHIVE_DIR/" 2>/dev/null || cp target/release/nvctl "$ARCHIVE_DIR/nvcontrol"
+          cp target/release/nvctl "$ARCHIVE_DIR/" 2>/dev/null || true
+          cp README.md LICENSE "$ARCHIVE_DIR/" 2>/dev/null || true
 
           tar -czf "nvcontrol-${VERSION}-linux-x86_64.tar.gz" "$ARCHIVE_DIR"
 
-          echo "=== Archive Contents ==="
+          echo "=== GUI Archive Contents ==="
           tar -tvf "nvcontrol-${VERSION}-linux-x86_64.tar.gz"
           ls -lh "nvcontrol-${VERSION}-linux-x86_64.tar.gz"
+
+      - name: Upload GUI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvcontrol-gui
+          path: nvcontrol-${{ github.ref_name }}-linux-x86_64.tar.gz
+
+  # Job 3: Create GitHub Release with both artifacts
+  publish:
+    runs-on: self-hosted
+    name: Publish Release
+    needs: [release-cli, release-gui]
+    steps:
+      - name: Download CLI artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: nvctl-cli
+
+      - name: Download GUI artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: nvcontrol-gui
+
+      - name: List artifacts
+        run: ls -lh *.tar.gz
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: nvcontrol-${{ github.ref_name }}-linux-x86_64.tar.gz
+          files: |
+            nvctl-${{ github.ref_name }}-linux-x86_64.tar.gz
+            nvcontrol-${{ github.ref_name }}-linux-x86_64.tar.gz
           draft: false
           prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
           generate_release_notes: true
+          body: |
+            ## Downloads
+
+            | Package | Description |
+            |---------|-------------|
+            | `nvctl-${{ github.ref_name }}-linux-x86_64.tar.gz` | CLI only (minimal) |
+            | `nvcontrol-${{ github.ref_name }}-linux-x86_64.tar.gz` | Full GUI + CLI |
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -78,8 +167,7 @@ jobs:
         run: |
           echo "### Release ${{ github.ref_name }} ✅" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Binary | nvctl $(find target -path '*/release/nvctl' -type f -executable -exec ls -lh {} \; | awk '{print $5}' | head -1)" >> $GITHUB_STEP_SUMMARY
-          echo "| Archive | $(ls -lh nvcontrol-${{ github.ref_name }}-linux-x86_64.tar.gz | awk '{print $5}')" >> $GITHUB_STEP_SUMMARY
-          echo "| GPU Tested | $(nvidia-smi --query-gpu=name --format=csv,noheader)" >> $GITHUB_STEP_SUMMARY
+          echo "| Package | Size |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "| nvctl (CLI) | $(ls -lh nvctl-${{ github.ref_name }}-linux-x86_64.tar.gz | awk '{print $5}') |" >> $GITHUB_STEP_SUMMARY
+          echo "| nvcontrol (GUI) | $(ls -lh nvcontrol-${{ github.ref_name }}-linux-x86_64.tar.gz | awk '{print $5}') |" >> $GITHUB_STEP_SUMMARY
