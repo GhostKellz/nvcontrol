@@ -17,11 +17,9 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Setup Rust PATH
-        run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-
       - name: Verify Environment
         run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
           set -euo pipefail
           echo "=== Rust Toolchain ==="
           rustc --version
@@ -36,10 +34,13 @@ jobs:
           key: nvcontrol-ci
 
       - name: Build CLI
-        run: cargo build --bin nvctl --release --no-default-features
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo build --bin nvctl --release --no-default-features
 
       - name: Clippy
         run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
           cargo clippy --bin nvctl --lib --no-default-features -- \
             -W clippy::all \
             -A clippy::needless-borrows-for-generic-args \
@@ -47,10 +48,14 @@ jobs:
             -A clippy::redundant-field-names
 
       - name: Format Check
-        run: cargo fmt --check || echo "::warning::Format issues found"
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo fmt --check || echo "::warning::Format issues found"
 
       - name: Unit Tests
-        run: cargo test --lib --no-default-features
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo test --lib --no-default-features
 
       - name: GPU Smoke Test
         run: |
@@ -111,6 +116,7 @@ jobs:
 
       - name: Build Summary
         run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
           echo "### Build Complete ✅" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY

@@ -16,11 +16,9 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Setup Rust PATH
-        run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-
       - name: Verify Environment
         run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
           set -euo pipefail
           echo "=== Release Build ==="
           echo "Tag: ${{ github.ref_name }}"
@@ -34,10 +32,13 @@ jobs:
           key: nvcontrol-release
 
       - name: Build Release (CLI only)
-        run: cargo build --bin nvctl --release --no-default-features
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo build --bin nvctl --release --no-default-features
 
       - name: Run Tests
         run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
           cargo test --lib --no-default-features
           NVCTL=$(find target -path "*/release/nvctl" -type f -executable | head -1)
           $NVCTL --version
@@ -74,6 +75,7 @@ jobs:
 
       - name: Release Summary
         run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
           echo "### Release ${{ github.ref_name }} ✅" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY

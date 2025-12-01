@@ -16,11 +16,9 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Setup Rust PATH
-        run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-
       - name: Verify Environment
         run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
           set -euo pipefail
           echo "=== Nightly Build $(date -u +%Y-%m-%d) ==="
           rustc --version
@@ -33,13 +31,18 @@ jobs:
           key: nvcontrol-nightly
 
       - name: Full build
-        run: cargo build --release --no-default-features
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo build --release --no-default-features
 
       - name: Full test sweep
-        run: cargo test --lib --no-default-features
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo test --lib --no-default-features
 
       - name: Clippy strict
         run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
           cargo clippy --bin nvctl --lib --no-default-features -- \
             -W clippy::all \
             -W clippy::pedantic \
@@ -52,7 +55,9 @@ jobs:
             -A clippy::missing-panics-doc
 
       - name: Format check
-        run: cargo fmt --check
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo fmt --check
 
       - name: GPU stress test
         run: |
@@ -90,6 +95,7 @@ jobs:
 
       - name: Nightly Summary
         run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
           echo "### Nightly Build $(date -u +%Y-%m-%d) ✅" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
