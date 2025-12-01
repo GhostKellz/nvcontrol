@@ -302,7 +302,9 @@ pub fn run_diagnostics() -> String {
     if headless {
         output.push_str(&format!(
             "\n{}\n\n",
-            style("🔍 nvcontrol Diagnostics (headless/CI mode)").cyan().bold()
+            style("🔍 nvcontrol Diagnostics (headless/CI mode)")
+                .cyan()
+                .bold()
         ));
     } else {
         output.push_str(&format!(

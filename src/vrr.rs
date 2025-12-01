@@ -233,7 +233,11 @@ fn parse_hyprland_vrr_info(json_str: &str) -> NvResult<Vec<DisplayVrrCapability>
     if let Ok(monitors) = serde_json::from_str::<Vec<serde_json::Value>>(json_str) {
         for monitor in monitors {
             // Skip disabled monitors
-            if monitor.get("disabled").and_then(|d| d.as_bool()).unwrap_or(false) {
+            if monitor
+                .get("disabled")
+                .and_then(|d| d.as_bool())
+                .unwrap_or(false)
+            {
                 continue;
             }
 

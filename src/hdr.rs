@@ -64,9 +64,15 @@ pub fn get_hdr_status_cli() -> NvResult<()> {
                 if let Ok(monitors) = get_hyprland_monitors() {
                     println!("\n  Monitors:");
                     for mon in &monitors {
-                        let hdr_status = if mon.hdr_enabled { "✅ HDR Active" } else { "❌ SDR" };
-                        println!("    {} ({}x{}@{}Hz): {}",
-                            mon.name, mon.width, mon.height, mon.refresh_rate, hdr_status);
+                        let hdr_status = if mon.hdr_enabled {
+                            "✅ HDR Active"
+                        } else {
+                            "❌ SDR"
+                        };
+                        println!(
+                            "    {} ({}x{}@{}Hz): {}",
+                            mon.name, mon.width, mon.height, mon.refresh_rate, hdr_status
+                        );
                     }
                 }
                 println!("\n💡 To enable HDR:");
@@ -78,7 +84,11 @@ pub fn get_hdr_status_cli() -> NvResult<()> {
                     if !displays.is_empty() {
                         println!("\n  Monitors:");
                         for disp in &displays {
-                            let hdr_status = if disp.hdr_enabled { "✅ HDR Active" } else { "❌ SDR" };
+                            let hdr_status = if disp.hdr_enabled {
+                                "✅ HDR Active"
+                            } else {
+                                "❌ SDR"
+                            };
                             let vrr_status = match disp.vrr_policy {
                                 0 => "VRR Off",
                                 1 => "VRR Always",
@@ -96,8 +106,22 @@ pub fn get_hdr_status_cli() -> NvResult<()> {
             "gnome" | "mutter" => {
                 let (hdr_feature, vrr_feature) = get_gnome_hdr_status();
                 println!("\n  Experimental Features:");
-                println!("    HDR: {}", if hdr_feature { "✅ Enabled" } else { "❌ Disabled" });
-                println!("    VRR: {}", if vrr_feature { "✅ Enabled" } else { "❌ Disabled" });
+                println!(
+                    "    HDR: {}",
+                    if hdr_feature {
+                        "✅ Enabled"
+                    } else {
+                        "❌ Disabled"
+                    }
+                );
+                println!(
+                    "    VRR: {}",
+                    if vrr_feature {
+                        "✅ Enabled"
+                    } else {
+                        "❌ Disabled"
+                    }
+                );
                 println!("\n💡 To enable HDR:");
                 println!("  nvctl display hdr enable");
                 println!("  OR: Settings → Displays → Enable HDR (per display)");
@@ -160,7 +184,12 @@ fn enable_hdr_kde() -> NvResult<()> {
     if displays.is_empty() {
         // Fallback to D-Bus method
         let output = Command::new("qdbus")
-            .args(["org.kde.KWin", "/KWin", "org.kde.KWin.setHDREnabled", "true"])
+            .args([
+                "org.kde.KWin",
+                "/KWin",
+                "org.kde.KWin.setHDREnabled",
+                "true",
+            ])
             .output();
 
         match output {
@@ -214,7 +243,12 @@ fn disable_hdr_kde() -> NvResult<()> {
 
     if displays.is_empty() {
         let _ = Command::new("qdbus")
-            .args(["org.kde.KWin", "/KWin", "org.kde.KWin.setHDREnabled", "false"])
+            .args([
+                "org.kde.KWin",
+                "/KWin",
+                "org.kde.KWin.setHDREnabled",
+                "false",
+            ])
             .output();
         println!("✅ HDR disabled in KDE");
         return Ok(());
@@ -247,7 +281,9 @@ fn get_kde_displays() -> NvResult<Vec<KdeDisplay>> {
     let output = Command::new("kscreen-doctor")
         .arg("-j")
         .output()
-        .map_err(|e| crate::NvControlError::DisplayDetectionFailed(format!("kscreen-doctor failed: {}", e)))?;
+        .map_err(|e| {
+            crate::NvControlError::DisplayDetectionFailed(format!("kscreen-doctor failed: {}", e))
+        })?;
 
     if !output.status.success() {
         return Ok(vec![]);
@@ -259,7 +295,8 @@ fn get_kde_displays() -> NvResult<Vec<KdeDisplay>> {
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&json_str) {
         if let Some(outputs) = json.get("outputs").and_then(|o| o.as_array()) {
             for out in outputs {
-                let connected = out.get("connected")
+                let connected = out
+                    .get("connected")
                     .and_then(|c| c.as_bool())
                     .unwrap_or(false);
 
@@ -267,22 +304,22 @@ fn get_kde_displays() -> NvResult<Vec<KdeDisplay>> {
                     continue;
                 }
 
-                let name = out.get("name")
+                let name = out
+                    .get("name")
                     .and_then(|n| n.as_str())
                     .unwrap_or("Unknown")
                     .to_string();
 
                 // Plasma 6: "hdr" is the capability/enabled state
                 // Some versions use "hdrEnabled" separately
-                let hdr_enabled = out.get("hdr")
+                let hdr_enabled = out
+                    .get("hdr")
                     .and_then(|h| h.as_bool())
                     .or_else(|| out.get("hdrEnabled").and_then(|h| h.as_bool()))
                     .unwrap_or(false);
 
                 // vrrPolicy: 0=Never, 1=Always, 2=Automatic
-                let vrr_policy = out.get("vrrPolicy")
-                    .and_then(|v| v.as_i64())
-                    .unwrap_or(0) as i32;
+                let vrr_policy = out.get("vrrPolicy").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
 
                 displays.push(KdeDisplay {
                     name,
@@ -326,7 +363,12 @@ fn enable_hdr_gnome() -> NvResult<()> {
     };
 
     let output = Command::new("gsettings")
-        .args(["set", "org.gnome.mutter", "experimental-features", new_features])
+        .args([
+            "set",
+            "org.gnome.mutter",
+            "experimental-features",
+            new_features,
+        ])
         .output();
 
     match output {
@@ -364,7 +406,12 @@ fn disable_hdr_gnome() -> NvResult<()> {
     };
 
     Command::new("gsettings")
-        .args(["set", "org.gnome.mutter", "experimental-features", new_features])
+        .args([
+            "set",
+            "org.gnome.mutter",
+            "experimental-features",
+            new_features,
+        ])
         .output()
         .ok();
 
@@ -405,11 +452,18 @@ fn enable_hdr_hyprland() -> NvResult<()> {
     let mut success_count = 0;
     for monitor in &monitors {
         // Get current mode for this monitor
-        let mode = format!("{}x{}@{}", monitor.width, monitor.height, monitor.refresh_rate);
+        let mode = format!(
+            "{}x{}@{}",
+            monitor.width, monitor.height, monitor.refresh_rate
+        );
 
         // Apply HDR with current settings
         let output = Command::new("hyprctl")
-            .args(["keyword", "monitor", &format!("{},{},auto,1,hdr", monitor.name, mode)])
+            .args([
+                "keyword",
+                "monitor",
+                &format!("{},{},auto,1,hdr", monitor.name, mode),
+            ])
             .output();
 
         match output {
@@ -426,8 +480,10 @@ fn enable_hdr_hyprland() -> NvResult<()> {
     if success_count == 0 {
         println!("\n💡 Add to hyprland.conf manually:");
         for monitor in &monitors {
-            println!("   monitor={},{}x{}@{},auto,1,hdr",
-                monitor.name, monitor.width, monitor.height, monitor.refresh_rate);
+            println!(
+                "   monitor={},{}x{}@{},auto,1,hdr",
+                monitor.name, monitor.width, monitor.height, monitor.refresh_rate
+            );
         }
     }
 
@@ -440,10 +496,17 @@ fn disable_hdr_hyprland() -> NvResult<()> {
     let monitors = get_hyprland_monitors()?;
 
     for monitor in &monitors {
-        let mode = format!("{}x{}@{}", monitor.width, monitor.height, monitor.refresh_rate);
+        let mode = format!(
+            "{}x{}@{}",
+            monitor.width, monitor.height, monitor.refresh_rate
+        );
 
         Command::new("hyprctl")
-            .args(["keyword", "monitor", &format!("{},{},auto,1", monitor.name, mode)])
+            .args([
+                "keyword",
+                "monitor",
+                &format!("{},{},auto,1", monitor.name, mode),
+            ])
             .output()
             .ok();
 
@@ -473,7 +536,9 @@ fn get_hyprland_monitors() -> NvResult<Vec<HyprlandMonitor>> {
     let output = Command::new("hyprctl")
         .args(["monitors", "-j"])
         .output()
-        .map_err(|e| crate::NvControlError::DisplayDetectionFailed(format!("hyprctl failed: {}", e)))?;
+        .map_err(|e| {
+            crate::NvControlError::DisplayDetectionFailed(format!("hyprctl failed: {}", e))
+        })?;
 
     if !output.status.success() {
         return Ok(vec![]);
@@ -484,32 +549,36 @@ fn get_hyprland_monitors() -> NvResult<Vec<HyprlandMonitor>> {
 
     if let Ok(monitor_array) = serde_json::from_str::<Vec<serde_json::Value>>(&json_str) {
         for mon in monitor_array {
-            if mon.get("disabled").and_then(|d| d.as_bool()).unwrap_or(false) {
+            if mon
+                .get("disabled")
+                .and_then(|d| d.as_bool())
+                .unwrap_or(false)
+            {
                 continue;
             }
 
-            let name = mon.get("name")
+            let name = mon
+                .get("name")
                 .and_then(|n| n.as_str())
                 .unwrap_or("Unknown")
                 .to_string();
 
-            let width = mon.get("width")
-                .and_then(|w| w.as_u64())
-                .unwrap_or(1920) as u32;
+            let width = mon.get("width").and_then(|w| w.as_u64()).unwrap_or(1920) as u32;
 
-            let height = mon.get("height")
-                .and_then(|h| h.as_u64())
-                .unwrap_or(1080) as u32;
+            let height = mon.get("height").and_then(|h| h.as_u64()).unwrap_or(1080) as u32;
 
-            let refresh_rate = mon.get("refreshRate")
+            let refresh_rate = mon
+                .get("refreshRate")
                 .and_then(|r| r.as_f64())
                 .unwrap_or(60.0) as u32;
 
             // Check current format for HDR hint (XRGB2101010 = 10-bit HDR capable)
-            let current_format = mon.get("currentFormat")
+            let current_format = mon
+                .get("currentFormat")
                 .and_then(|f| f.as_str())
                 .unwrap_or("");
-            let hdr_enabled = current_format.contains("101010") || current_format.contains("16161616");
+            let hdr_enabled =
+                current_format.contains("101010") || current_format.contains("16161616");
 
             monitors.push(HyprlandMonitor {
                 name,

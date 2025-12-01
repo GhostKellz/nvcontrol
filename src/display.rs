@@ -302,7 +302,10 @@ pub fn is_hdr_capable(display_name: &str) -> bool {
                     let name = mon.get("name").and_then(|n| n.as_str()).unwrap_or("");
                     if name == display_name {
                         // HDR-capable if 10-bit format or explicit HDR support
-                        let format = mon.get("currentFormat").and_then(|f| f.as_str()).unwrap_or("");
+                        let format = mon
+                            .get("currentFormat")
+                            .and_then(|f| f.as_str())
+                            .unwrap_or("");
                         return format.contains("101010") || format.contains("16161616");
                     }
                 }
@@ -338,7 +341,10 @@ pub fn get_hdr_status(display_name: &str) -> bool {
                         if name == display_name {
                             // Plasma 6: "hdr" field indicates HDR is enabled
                             let hdr = out.get("hdr").and_then(|h| h.as_bool()).unwrap_or(false);
-                            let hdr_enabled = out.get("hdrEnabled").and_then(|h| h.as_bool()).unwrap_or(false);
+                            let hdr_enabled = out
+                                .get("hdrEnabled")
+                                .and_then(|h| h.as_bool())
+                                .unwrap_or(false);
                             return hdr || hdr_enabled;
                         }
                     }
@@ -359,7 +365,10 @@ pub fn get_hdr_status(display_name: &str) -> bool {
                     let name = mon.get("name").and_then(|n| n.as_str()).unwrap_or("");
                     if name == display_name {
                         // Check pixel format for HDR hint (10-bit = HDR capable/active)
-                        let format = mon.get("currentFormat").and_then(|f| f.as_str()).unwrap_or("");
+                        let format = mon
+                            .get("currentFormat")
+                            .and_then(|f| f.as_str())
+                            .unwrap_or("");
                         return format.contains("101010") || format.contains("16161616");
                     }
                 }

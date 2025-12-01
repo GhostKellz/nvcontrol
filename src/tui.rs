@@ -2453,7 +2453,8 @@ impl TuiApp {
         // Use TunerState for consistent fan control implementation with GUI
         if let Some(tuner) = self.tuner_states.get_mut(self.selected_gpu) {
             // Sync TUI curve to tuner state
-            tuner.fan_curve = self.fan_curve_points
+            tuner.fan_curve = self
+                .fan_curve_points
                 .iter()
                 .map(|(t, s)| (*t as i32, *s))
                 .collect();
@@ -2473,15 +2474,34 @@ impl TuiApp {
 
                     let curve = FanCurve {
                         name: "TUI Custom".to_string(),
-                        points: self.fan_curve_points.iter().map(|(t, s)| FanCurvePoint {
-                            temperature: *t as u8,
-                            duty_cycle: *s as u8,
-                        }).collect(),
+                        points: self
+                            .fan_curve_points
+                            .iter()
+                            .map(|(t, s)| FanCurvePoint {
+                                temperature: *t as u8,
+                                duty_cycle: *s as u8,
+                            })
+                            .collect(),
                         hysteresis: 2,
-                        min_duty_cycle: self.fan_curve_points.first().map(|(_, s)| *s as u8).unwrap_or(0),
+                        min_duty_cycle: self
+                            .fan_curve_points
+                            .first()
+                            .map(|(_, s)| *s as u8)
+                            .unwrap_or(0),
                         max_duty_cycle: 100,
-                        zero_rpm_threshold: if self.fan_curve_points.first().map(|(_, s)| *s).unwrap_or(0) == 0 {
-                            Some(self.fan_curve_points.first().map(|(t, _)| *t as u8).unwrap_or(30))
+                        zero_rpm_threshold: if self
+                            .fan_curve_points
+                            .first()
+                            .map(|(_, s)| *s)
+                            .unwrap_or(0)
+                            == 0
+                        {
+                            Some(
+                                self.fan_curve_points
+                                    .first()
+                                    .map(|(t, _)| *t as u8)
+                                    .unwrap_or(30),
+                            )
                         } else {
                             None
                         },
@@ -2501,7 +2521,8 @@ impl TuiApp {
 
                     if save_fan_profiles(&[profile]).is_ok() {
                         self.set_status_message(format!(
-                            "⚠️ Fan curve saved (direct control: {})", e
+                            "⚠️ Fan curve saved (direct control: {})",
+                            e
                         ));
                     } else {
                         self.set_status_message(format!("❌ Fan control failed: {}", e));
@@ -2512,7 +2533,8 @@ impl TuiApp {
             // No tuner state, try direct fan module
             use crate::fan::set_fan_curve;
 
-            let curve_points: Vec<(u8, u8)> = self.fan_curve_points
+            let curve_points: Vec<(u8, u8)> = self
+                .fan_curve_points
                 .iter()
                 .map(|(t, s)| (*t as u8, *s as u8))
                 .collect();

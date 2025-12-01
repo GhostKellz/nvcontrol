@@ -84,7 +84,9 @@ pub fn get_gpu_info() -> NvResult<GpuInfo> {
                     });
 
                     // Get CUDA compute capability
-                    let cuda_compute = device.cuda_compute_capability().ok()
+                    let cuda_compute = device
+                        .cuda_compute_capability()
+                        .ok()
                         .map(|cc| format!("{}.{}", cc.major, cc.minor));
 
                     // Get PCIe info
@@ -92,17 +94,25 @@ pub fn get_gpu_info() -> NvResult<GpuInfo> {
                     let pcie_width = device.current_pcie_link_width().ok();
 
                     // Get power limits
-                    let power_limit = device.power_management_limit().ok()
+                    let power_limit = device
+                        .power_management_limit()
+                        .ok()
                         .map(|p| p as f32 / 1000.0);
                     let power_limit_constraints = device.power_management_limit_constraints().ok();
-                    let power_limit_min = power_limit_constraints.as_ref()
+                    let power_limit_min = power_limit_constraints
+                        .as_ref()
                         .map(|c| c.min_limit as f32 / 1000.0);
-                    let power_limit_max = power_limit_constraints.as_ref()
+                    let power_limit_max = power_limit_constraints
+                        .as_ref()
                         .map(|c| c.max_limit as f32 / 1000.0);
 
                     // Get clock speeds
-                    let gpu_clock = device.clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics).ok();
-                    let memory_clock = device.clock_info(nvml_wrapper::enum_wrappers::device::Clock::Memory).ok();
+                    let gpu_clock = device
+                        .clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics)
+                        .ok();
+                    let memory_clock = device
+                        .clock_info(nvml_wrapper::enum_wrappers::device::Clock::Memory)
+                        .ok();
 
                     // Detect architecture from name
                     let architecture = detect_architecture(&name);
@@ -152,15 +162,33 @@ pub fn get_gpu_info() -> NvResult<GpuInfo> {
 /// Detect GPU architecture from name
 fn detect_architecture(name: &str) -> Option<String> {
     let name_lower = name.to_lowercase();
-    if name_lower.contains("5090") || name_lower.contains("5080") || name_lower.contains("5070") || name_lower.contains("5060") {
+    if name_lower.contains("5090")
+        || name_lower.contains("5080")
+        || name_lower.contains("5070")
+        || name_lower.contains("5060")
+    {
         Some("Blackwell".to_string())
-    } else if name_lower.contains("4090") || name_lower.contains("4080") || name_lower.contains("4070") || name_lower.contains("4060") {
+    } else if name_lower.contains("4090")
+        || name_lower.contains("4080")
+        || name_lower.contains("4070")
+        || name_lower.contains("4060")
+    {
         Some("Ada Lovelace".to_string())
-    } else if name_lower.contains("3090") || name_lower.contains("3080") || name_lower.contains("3070") || name_lower.contains("3060") {
+    } else if name_lower.contains("3090")
+        || name_lower.contains("3080")
+        || name_lower.contains("3070")
+        || name_lower.contains("3060")
+    {
         Some("Ampere".to_string())
-    } else if name_lower.contains("2080") || name_lower.contains("2070") || name_lower.contains("2060") {
+    } else if name_lower.contains("2080")
+        || name_lower.contains("2070")
+        || name_lower.contains("2060")
+    {
         Some("Turing".to_string())
-    } else if name_lower.contains("1080") || name_lower.contains("1070") || name_lower.contains("1060") {
+    } else if name_lower.contains("1080")
+        || name_lower.contains("1070")
+        || name_lower.contains("1060")
+    {
         Some("Pascal".to_string())
     } else if name_lower.contains("1660") || name_lower.contains("1650") {
         Some("Turing (GTX)".to_string())
@@ -175,7 +203,9 @@ fn get_throttle_reason(device: &nvml_wrapper::Device) -> Option<String> {
     let mut reasons = Vec::new();
 
     // Try to get current throttle reasons via supported clocks
-    if let Ok(temp) = device.temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu) {
+    if let Ok(temp) =
+        device.temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
+    {
         if temp > 83 {
             reasons.push("Thermal");
         }
@@ -330,7 +360,10 @@ pub fn get_gpu_info_with_format(format: OutputFormat) -> NvResult<()> {
             if let Some(ref cuda) = gpu_info.cuda_compute {
                 println!("   CUDA Compute: {}", cuda);
             }
-            println!("   Memory: {} MB ({} MB used)", gpu_info.memory_total, gpu_info.memory_used);
+            println!(
+                "   Memory: {} MB ({} MB used)",
+                gpu_info.memory_total, gpu_info.memory_used
+            );
             if let (Some(pcie_gen), Some(pcie_width)) = (gpu_info.pcie_gen, gpu_info.pcie_width) {
                 println!("   PCIe: Gen{} x{}", pcie_gen, pcie_width);
             }
@@ -369,7 +402,10 @@ pub fn get_gpu_info_with_format(format: OutputFormat) -> NvResult<()> {
                 format!("{} / {} MB", gpu_info.memory_used, gpu_info.memory_total)
             );
             if let (Some(pcie_gen), Some(pcie_width)) = (gpu_info.pcie_gen, gpu_info.pcie_width) {
-                println!("│ PCIe                 │ {:<28} │", format!("Gen{} x{}", pcie_gen, pcie_width));
+                println!(
+                    "│ PCIe                 │ {:<28} │",
+                    format!("Gen{} x{}", pcie_gen, pcie_width)
+                );
             }
             println!(
                 "│ Temperature          │ {:<28} │",

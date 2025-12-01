@@ -323,11 +323,11 @@ pub struct AuraConfig {
 /// Temperature thresholds for reactive RGB
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TempThresholds {
-    pub cold: u32,      // Below this: blue/cyan
-    pub cool: u32,      // Below this: green
-    pub warm: u32,      // Below this: yellow
-    pub hot: u32,       // Below this: orange
-                        // Above hot: red
+    pub cold: u32, // Below this: blue/cyan
+    pub cool: u32, // Below this: green
+    pub warm: u32, // Below this: yellow
+    pub hot: u32,  // Below this: orange
+                   // Above hot: red
 }
 
 impl Default for TempThresholds {

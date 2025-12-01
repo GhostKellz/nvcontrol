@@ -216,10 +216,7 @@ impl PowerHistory {
             }
         }
 
-        let rail_currents: Vec<u32> = status.rails
-            .iter()
-            .filter_map(|r| r.current_ma)
-            .collect();
+        let rail_currents: Vec<u32> = status.rails.iter().filter_map(|r| r.current_ma).collect();
 
         let sample = PowerHistorySample {
             elapsed_ms: self.start_time.elapsed().as_millis() as u64,
@@ -267,12 +264,18 @@ impl PowerHistory {
 
     /// Get peak power in the history
     pub fn peak_power(&self) -> Option<f32> {
-        self.samples.iter().map(|s| s.total_power_w).max_by(|a, b| a.partial_cmp(b).unwrap())
+        self.samples
+            .iter()
+            .map(|s| s.total_power_w)
+            .max_by(|a, b| a.partial_cmp(b).unwrap())
     }
 
     /// Get minimum power in the history
     pub fn min_power(&self) -> Option<f32> {
-        self.samples.iter().map(|s| s.total_power_w).min_by(|a, b| a.partial_cmp(b).unwrap())
+        self.samples
+            .iter()
+            .map(|s| s.total_power_w)
+            .min_by(|a, b| a.partial_cmp(b).unwrap())
     }
 
     /// Analyze power trend over recent samples
@@ -284,11 +287,15 @@ impl PowerHistory {
 
         // Compare last 5 samples with previous 5
         let len = self.samples.len();
-        let recent: Vec<f32> = self.samples.iter()
+        let recent: Vec<f32> = self
+            .samples
+            .iter()
             .skip(len.saturating_sub(5))
             .map(|s| s.total_power_w)
             .collect();
-        let older: Vec<f32> = self.samples.iter()
+        let older: Vec<f32> = self
+            .samples
+            .iter()
             .skip(len.saturating_sub(10))
             .take(5)
             .map(|s| s.total_power_w)
@@ -320,34 +327,47 @@ impl PowerHistory {
         }
 
         // Find max number of rails across samples
-        let max_rails = self.samples.iter()
+        let max_rails = self
+            .samples
+            .iter()
             .map(|s| s.rail_currents.len())
             .max()
             .unwrap_or(0);
 
-        (0..max_rails).map(|rail_idx| {
-            let sum: u32 = self.samples.iter()
-                .filter_map(|s| s.rail_currents.get(rail_idx))
-                .sum();
-            let count = self.samples.iter()
-                .filter(|s| s.rail_currents.get(rail_idx).is_some())
-                .count();
-            if count > 0 {
-                sum as f32 / count as f32
-            } else {
-                0.0
-            }
-        }).collect()
+        (0..max_rails)
+            .map(|rail_idx| {
+                let sum: u32 = self
+                    .samples
+                    .iter()
+                    .filter_map(|s| s.rail_currents.get(rail_idx))
+                    .sum();
+                let count = self
+                    .samples
+                    .iter()
+                    .filter(|s| s.rail_currents.get(rail_idx).is_some())
+                    .count();
+                if count > 0 {
+                    sum as f32 / count as f32
+                } else {
+                    0.0
+                }
+            })
+            .collect()
     }
 
     /// Check if any warning conditions occurred in history
     pub fn had_warnings(&self) -> bool {
-        self.samples.iter().any(|s| matches!(s.health, PowerHealth::Warning | PowerHealth::Critical))
+        self.samples
+            .iter()
+            .any(|s| matches!(s.health, PowerHealth::Warning | PowerHealth::Critical))
     }
 
     /// Count of warning samples
     pub fn warning_count(&self) -> usize {
-        self.samples.iter().filter(|s| matches!(s.health, PowerHealth::Warning | PowerHealth::Critical)).count()
+        self.samples
+            .iter()
+            .filter(|s| matches!(s.health, PowerHealth::Warning | PowerHealth::Critical))
+            .count()
     }
 
     /// Clear all history
@@ -862,14 +882,12 @@ mod tests {
             let status = PowerConnectorStatus {
                 model: "Test".to_string(),
                 i2c_bus: 0,
-                rails: vec![
-                    PowerRailReading {
-                        rail_id: 0,
-                        raw_value: 0x0200,
-                        current_ma: Some(1000 + i * 100),
-                        warning: false,
-                    },
-                ],
+                rails: vec![PowerRailReading {
+                    rail_id: 0,
+                    raw_value: 0x0200,
+                    current_ma: Some(1000 + i * 100),
+                    warning: false,
+                }],
                 total_power_w: Some(12.0 + i as f32),
                 has_warnings: false,
                 health: PowerHealth::Good,

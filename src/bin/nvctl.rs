@@ -5940,7 +5940,10 @@ fn main() {
                 }
             }
             AsusSubcommand::Aura { action } => {
-                use nvcontrol::asus_aura::{AsusAuraController, AuraEffect, AuraMode, AuraSpeed, AuraPresets, RgbColor, AuraConfig};
+                use nvcontrol::asus_aura::{
+                    AsusAuraController, AuraConfig, AuraEffect, AuraMode, AuraPresets, AuraSpeed,
+                    RgbColor,
+                };
 
                 let mut controller = AsusAuraController::new();
 
@@ -5958,7 +5961,10 @@ fn main() {
                             match controller.detect_gpu() {
                                 Ok(found) => {
                                     if found {
-                                        println!("✅ ASUS GPU detected (device {})", controller.device_id().unwrap_or(0));
+                                        println!(
+                                            "✅ ASUS GPU detected (device {})",
+                                            controller.device_id().unwrap_or(0)
+                                        );
                                     } else {
                                         println!("⚠️  No ASUS GPU found in OpenRGB");
                                         println!("   Run: openrgb --list-devices");
@@ -5972,8 +5978,18 @@ fn main() {
                                 println!("\n📋 Saved Configuration:");
                                 println!("   Mode: {:?}", config.effect.mode);
                                 println!("   Brightness: {}%", config.effect.brightness);
-                                println!("   Apply on startup: {}", if config.apply_on_startup { "Yes" } else { "No" });
-                                println!("   Temp-reactive: {}", if config.temperature_reactive { "Yes" } else { "No" });
+                                println!(
+                                    "   Apply on startup: {}",
+                                    if config.apply_on_startup { "Yes" } else { "No" }
+                                );
+                                println!(
+                                    "   Temp-reactive: {}",
+                                    if config.temperature_reactive {
+                                        "Yes"
+                                    } else {
+                                        "No"
+                                    }
+                                );
                             }
                         }
                     }
@@ -5986,7 +6002,9 @@ fn main() {
                         let effect = match mode.to_lowercase().as_str() {
                             "off" | "stealth" => AuraPresets::stealth_mode(),
                             "static" => AuraPresets::rog_red(),
-                            "breathing" => AuraEffect::breathing(RgbColor::red(), AuraSpeed::Medium),
+                            "breathing" => {
+                                AuraEffect::breathing(RgbColor::red(), AuraSpeed::Medium)
+                            }
                             "rainbow" => AuraPresets::rog_rainbow(),
                             "cycle" | "color_cycle" => AuraEffect {
                                 mode: AuraMode::ColorCycle,
@@ -6000,7 +6018,9 @@ fn main() {
                             "silent" => AuraPresets::silent_mode(),
                             _ => {
                                 eprintln!("❌ Unknown mode: {}", mode);
-                                println!("   Available: off, static, breathing, rainbow, cycle, cyberpunk, purple, performance, silent");
+                                println!(
+                                    "   Available: off, static, breathing, rainbow, cycle, cyberpunk, purple, performance, silent"
+                                );
                                 return;
                             }
                         };
@@ -6030,7 +6050,9 @@ fn main() {
                         let rgb = RgbColor::new(r, g, b);
 
                         match controller.set_static_color(rgb, 100) {
-                            Ok(()) => println!("✅ Aura color set to: #{}", color_str.to_uppercase()),
+                            Ok(()) => {
+                                println!("✅ Aura color set to: #{}", color_str.to_uppercase())
+                            }
                             Err(e) => eprintln!("❌ Failed to set color: {}", e),
                         }
                     }
