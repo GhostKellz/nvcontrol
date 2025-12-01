@@ -17,9 +17,27 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Debug Environment
+        run: |
+          echo "=== Debug Info ==="
+          echo "whoami: $(whoami)"
+          echo "HOME: $HOME"
+          echo "PWD: $(pwd)"
+          echo "PATH: $PATH"
+          echo ""
+          echo "=== Finding Rust ==="
+          find /home -name rustc 2>/dev/null || echo "Not in /home"
+          find /usr -name rustc 2>/dev/null || echo "Not in /usr"
+          ls -la /home/runner/.cargo/bin/ 2>/dev/null || echo "No /home/runner/.cargo/bin"
+          ls -la ~/.cargo/bin/ 2>/dev/null || echo "No ~/.cargo/bin"
+          cat /home/runner/.cargo/env 2>/dev/null || echo "No cargo env file"
+
       - name: Verify Environment
         run: |
-          export PATH="/home/runner/.cargo/bin:$PATH"
+          # Source cargo env if it exists
+          [ -f /home/runner/.cargo/env ] && source /home/runner/.cargo/env
+          [ -f ~/.cargo/env ] && source ~/.cargo/env
+          export PATH="/home/runner/.cargo/bin:$HOME/.cargo/bin:$PATH"
           set -euo pipefail
           echo "=== Rust Toolchain ==="
           rustc --version
