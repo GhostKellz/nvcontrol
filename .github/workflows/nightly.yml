@@ -10,14 +10,14 @@ jobs:
     name: "Nightly validation"
     runs-on: self-hosted
     timeout-minutes: 30
-    defaults:
-      run:
-        shell: bash -l {0}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Setup Rust PATH
+        run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - name: Verify Environment
         run: |
