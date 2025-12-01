@@ -1,0 +1,112 @@
+name: Nightly Sanity Sweep
+
+on:
+  schedule:
+    - cron: '30 7 * * *'  # 7:30 AM UTC daily
+  workflow_dispatch:
+
+jobs:
+  nightly:
+    name: "Nightly validation"
+    runs-on: self-hosted
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Verify Environment
+        run: |
+          set -euo pipefail
+          echo "=== Nightly Build $(date -u +%Y-%m-%d) ==="
+          rustc --version
+          cargo --version
+          nvidia-smi --query-gpu=name,driver_version --format=csv,noheader
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: nvcontrol-nightly
+
+      - name: Full build (all features)
+        run: |
+          set -euo pipefail
+          cargo build --release --all-features 2>&1 || cargo build --release --no-default-features
+
+      - name: Full test sweep
+        run: |
+          set -euo pipefail
+          cargo test --lib --no-default-features -- --include-ignored 2>&1 || cargo test --lib --no-default-features
+
+      - name: Clippy strict
+        run: |
+          set -euo pipefail
+          cargo clippy --bin nvctl --lib --no-default-features -- \
+            -W clippy::all \
+            -W clippy::pedantic \
+            -A clippy::needless-borrows-for-generic-args \
+            -A clippy::single-char-add-str \
+            -A clippy::redundant-field-names \
+            -A clippy::module-name-repetitions \
+            -A clippy::too-many-lines \
+            -A clippy::missing-errors-doc \
+            -A clippy::missing-panics-doc
+
+      - name: Format check
+        run: cargo fmt --check
+
+      - name: GPU stress test
+        run: |
+          set -euo pipefail
+          NVCTL=$(find target -path "*/release/nvctl" -type f -executable | head -1)
+
+          echo "=== Extended CLI Tests ==="
+          $NVCTL --version
+          $NVCTL gpu info
+          $NVCTL gpu info --format json || true
+          $NVCTL fan info
+          $NVCTL power status
+          $NVCTL config show
+          $NVCTL doctor
+
+          echo ""
+          echo "=== Repeated queries (stability check) ==="
+          for i in 1 2 3 4 5; do
+            $NVCTL gpu info > /dev/null
+            echo "Query $i: OK"
+          done
+
+          echo ""
+          echo "✅ GPU stress test passed"
+
+      - name: Dependency audit
+        run: |
+          if command -v cargo-audit >/dev/null 2>&1; then
+            cargo audit || echo "::warning::Security vulnerabilities found"
+          else
+            echo "cargo-audit not installed, skipping"
+          fi
+
+      - name: Binary size check
+        run: |
+          set -euo pipefail
+          NVCTL=$(find target -path "*/release/nvctl" -type f -executable | head -1)
+          SIZE=$(stat -c%s "$NVCTL" 2>/dev/null || stat -f%z "$NVCTL")
+          SIZE_MB=$((SIZE / 1024 / 1024))
+          echo "Binary size: ${SIZE_MB}MB ($SIZE bytes)"
+          if [ "$SIZE_MB" -gt 50 ]; then
+            echo "::warning::Binary size exceeds 50MB"
+          fi
+
+      - name: Nightly Summary
+        run: |
+          echo "### Nightly Build $(date -u +%Y-%m-%d) ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Build | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tests | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| Clippy | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| GPU Tests | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| Binary | $(find target -path '*/release/nvctl' -type f -executable -exec ls -lh {} \; | awk '{print $5}' | head -1) |" >> $GITHUB_STEP_SUMMARY

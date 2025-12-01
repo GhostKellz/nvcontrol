@@ -286,14 +286,30 @@ pub fn print_error_with_solution(error: &NvControlError) {
     eprintln!("\n{}\n", error.with_solution());
 }
 
+/// Detect if running in headless/CI environment
+fn is_headless() -> bool {
+    // No display session
+    std::env::var("XDG_SESSION_TYPE").is_err()
+        && std::env::var("DISPLAY").is_err()
+        && std::env::var("WAYLAND_DISPLAY").is_err()
+}
+
 /// Quick diagnostic helper
 pub fn run_diagnostics() -> String {
     let mut output = String::new();
+    let headless = is_headless();
 
-    output.push_str(&format!(
-        "\n{}\n\n",
-        style("🔍 nvcontrol Diagnostics").cyan().bold()
-    ));
+    if headless {
+        output.push_str(&format!(
+            "\n{}\n\n",
+            style("🔍 nvcontrol Diagnostics (headless/CI mode)").cyan().bold()
+        ));
+    } else {
+        output.push_str(&format!(
+            "\n{}\n\n",
+            style("🔍 nvcontrol Diagnostics").cyan().bold()
+        ));
+    }
 
     // Check NVIDIA drivers
     output.push_str(&format!(
@@ -311,65 +327,70 @@ pub fn run_diagnostics() -> String {
         }
     }
 
-    // Check nvidia-settings
-    output.push_str(&format!(
-        "\n{}\n",
-        style("2. NVIDIA Settings:").yellow().bold()
-    ));
-    let settings_check = std::process::Command::new("nvidia-settings")
-        .arg("--version")
-        .output();
-    match settings_check {
-        Ok(result) if result.status.success() => {
-            output.push_str("   ✅ nvidia-settings found\n");
+    // Skip display-related checks in headless mode
+    if !headless {
+        // Check nvidia-settings
+        output.push_str(&format!(
+            "\n{}\n",
+            style("2. NVIDIA Settings:").yellow().bold()
+        ));
+        let settings_check = std::process::Command::new("nvidia-settings")
+            .arg("--version")
+            .output();
+        match settings_check {
+            Ok(result) if result.status.success() => {
+                output.push_str("   ✅ nvidia-settings found\n");
+            }
+            _ => {
+                output.push_str("   ❌ nvidia-settings not found\n");
+                output.push_str("   💡 Install: sudo pacman -S nvidia-settings\n");
+            }
         }
-        _ => {
-            output.push_str("   ❌ nvidia-settings not found\n");
-            output.push_str("   💡 Install: sudo pacman -S nvidia-settings\n");
-        }
-    }
 
-    // Check display server
-    output.push_str(&format!(
-        "\n{}\n",
-        style("3. Display Server:").yellow().bold()
-    ));
-    if let Ok(session_type) = std::env::var("XDG_SESSION_TYPE") {
-        output.push_str(&format!("   ✅ Running on: {}\n", session_type));
+        // Check display server
+        output.push_str(&format!(
+            "\n{}\n",
+            style("3. Display Server:").yellow().bold()
+        ));
+        if let Ok(session_type) = std::env::var("XDG_SESSION_TYPE") {
+            output.push_str(&format!("   ✅ Running on: {}\n", session_type));
+        } else {
+            output.push_str("   ⚠️  Could not detect session type\n");
+        }
+
+        // Check GameMode
+        output.push_str(&format!("\n{}\n", style("4. GameMode:").yellow().bold()));
+        let gamemode_check = std::process::Command::new("gamemoded")
+            .arg("--version")
+            .output();
+        match gamemode_check {
+            Ok(result) if result.status.success() => {
+                output.push_str("   ✅ GameMode installed\n");
+            }
+            _ => {
+                output.push_str("   ❌ GameMode not found\n");
+                output.push_str("   💡 Install: sudo pacman -S gamemode\n");
+            }
+        }
+
+        // Check Docker/Podman
+        output.push_str(&format!(
+            "\n{}\n",
+            style("5. Container Runtimes:").yellow().bold()
+        ));
+        let docker_check = std::process::Command::new("docker")
+            .arg("--version")
+            .output();
+        match docker_check {
+            Ok(result) if result.status.success() => {
+                output.push_str("   ✅ Docker installed\n");
+            }
+            _ => {
+                output.push_str("   ❌ Docker not found\n");
+            }
+        }
     } else {
-        output.push_str("   ⚠️  Could not detect session type\n");
-    }
-
-    // Check GameMode
-    output.push_str(&format!("\n{}\n", style("4. GameMode:").yellow().bold()));
-    let gamemode_check = std::process::Command::new("gamemoded")
-        .arg("--version")
-        .output();
-    match gamemode_check {
-        Ok(result) if result.status.success() => {
-            output.push_str("   ✅ GameMode installed\n");
-        }
-        _ => {
-            output.push_str("   ❌ GameMode not found\n");
-            output.push_str("   💡 Install: sudo pacman -S gamemode\n");
-        }
-    }
-
-    // Check Docker/Podman
-    output.push_str(&format!(
-        "\n{}\n",
-        style("5. Container Runtimes:").yellow().bold()
-    ));
-    let docker_check = std::process::Command::new("docker")
-        .arg("--version")
-        .output();
-    match docker_check {
-        Ok(result) if result.status.success() => {
-            output.push_str("   ✅ Docker installed\n");
-        }
-        _ => {
-            output.push_str("   ❌ Docker not found\n");
-        }
+        output.push_str("\n   ℹ️  Skipping display/desktop checks (headless environment)\n");
     }
 
     output.push_str(&format!(
