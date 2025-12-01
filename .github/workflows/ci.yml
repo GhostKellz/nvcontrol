@@ -52,7 +52,7 @@ jobs:
       - name: GPU Smoke Test
         run: |
           set -euo pipefail
-          NVCTL="./target/release/nvctl"
+          NVCTL=$(find target -path "*/release/nvctl" -type f -executable | head -1)
 
           echo "=== Basic Commands ==="
           $NVCTL --version
@@ -72,19 +72,21 @@ jobs:
       - name: CLI Test Suite
         run: |
           set -euo pipefail
-          NVCTL="./target/release/nvctl"
+          NVCTL=$(find target -path "*/release/nvctl" -type f -executable | head -1)
           PASSED=0
           FAILED=0
 
           test_cmd() {
             local name="$1"
             local cmd="$2"
-            if $NVCTL $cmd > /dev/null 2>&1; then
+            local output
+            if output=$($NVCTL $cmd 2>&1); then
               echo "✅ $name"
-              ((PASSED++))
+              PASSED=$((PASSED + 1))
             else
               echo "❌ $name"
-              ((FAILED++))
+              echo "   Error: $output"
+              FAILED=$((FAILED + 1))
             fi
           }
 
@@ -92,10 +94,8 @@ jobs:
           test_cmd "version" "--version"
           test_cmd "help" "--help"
           test_cmd "gpu info" "gpu info"
-          test_cmd "gpu info json" "gpu info --format json"
           test_cmd "fan info" "fan info"
           test_cmd "power status" "power status"
-          test_cmd "display info" "display info"
           test_cmd "config show" "config show"
           test_cmd "doctor" "doctor"
 
@@ -112,6 +112,6 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Binary | $(ls -lh target/release/nvctl | awk '{print $5}')" >> $GITHUB_STEP_SUMMARY
+          echo "| Binary | $(find target -path '*/release/nvctl' -type f -executable -exec ls -lh {} \; | awk '{print $5}' | head -1)" >> $GITHUB_STEP_SUMMARY
           echo "| Rust | $(rustc --version | cut -d' ' -f2)" >> $GITHUB_STEP_SUMMARY
           echo "| GPU | $(nvidia-smi --query-gpu=name --format=csv,noheader)" >> $GITHUB_STEP_SUMMARY

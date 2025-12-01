@@ -36,17 +36,19 @@ jobs:
       - name: Run Tests
         run: |
           cargo test --lib --no-default-features
-          ./target/release/nvctl --version
-          ./target/release/nvctl gpu info
+          NVCTL=$(find target -path "*/release/nvctl" -type f -executable | head -1)
+          $NVCTL --version
+          $NVCTL gpu info
 
       - name: Create Release Archive
         run: |
           set -euo pipefail
           VERSION="${{ github.ref_name }}"
           ARCHIVE_DIR="nvcontrol-${VERSION}"
+          NVCTL=$(find target -path "*/release/nvctl" -type f -executable | head -1)
 
           mkdir -p "$ARCHIVE_DIR"
-          cp target/release/nvctl "$ARCHIVE_DIR/"
+          cp "$NVCTL" "$ARCHIVE_DIR/nvctl"
           cp README.md LICENSE "$ARCHIVE_DIR/" 2>/dev/null || true
           [ -f DOCS.md ] && cp DOCS.md "$ARCHIVE_DIR/"
           [ -f COMMANDS.md ] && cp COMMANDS.md "$ARCHIVE_DIR/"
@@ -73,6 +75,6 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Binary | nvctl $(ls -lh target/release/nvctl | awk '{print $5}')" >> $GITHUB_STEP_SUMMARY
+          echo "| Binary | nvctl $(find target -path '*/release/nvctl' -type f -executable -exec ls -lh {} \; | awk '{print $5}' | head -1)" >> $GITHUB_STEP_SUMMARY
           echo "| Archive | $(ls -lh nvcontrol-${{ github.ref_name }}-linux-x86_64.tar.gz | awk '{print $5}')" >> $GITHUB_STEP_SUMMARY
           echo "| GPU Tested | $(nvidia-smi --query-gpu=name --format=csv,noheader)" >> $GITHUB_STEP_SUMMARY
