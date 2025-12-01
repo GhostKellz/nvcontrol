@@ -19,7 +19,7 @@ jobs:
 
       - name: Verify Environment
         run: |
-          export PATH="$HOME/.cargo/bin:$PATH"
+          export PATH="/home/runner/.cargo/bin:$PATH"
           set -euo pipefail
           echo "=== Rust Toolchain ==="
           rustc --version
@@ -35,12 +35,12 @@ jobs:
 
       - name: Build CLI
         run: |
-          export PATH="$HOME/.cargo/bin:$PATH"
+          export PATH="/home/runner/.cargo/bin:$PATH"
           cargo build --bin nvctl --release --no-default-features
 
       - name: Clippy
         run: |
-          export PATH="$HOME/.cargo/bin:$PATH"
+          export PATH="/home/runner/.cargo/bin:$PATH"
           cargo clippy --bin nvctl --lib --no-default-features -- \
             -W clippy::all \
             -A clippy::needless-borrows-for-generic-args \
@@ -49,12 +49,12 @@ jobs:
 
       - name: Format Check
         run: |
-          export PATH="$HOME/.cargo/bin:$PATH"
+          export PATH="/home/runner/.cargo/bin:$PATH"
           cargo fmt --check || echo "::warning::Format issues found"
 
       - name: Unit Tests
         run: |
-          export PATH="$HOME/.cargo/bin:$PATH"
+          export PATH="/home/runner/.cargo/bin:$PATH"
           cargo test --lib --no-default-features
 
       - name: GPU Smoke Test
@@ -116,7 +116,7 @@ jobs:
 
       - name: Build Summary
         run: |
-          export PATH="$HOME/.cargo/bin:$PATH"
+          export PATH="/home/runner/.cargo/bin:$PATH"
           echo "### Build Complete ✅" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
