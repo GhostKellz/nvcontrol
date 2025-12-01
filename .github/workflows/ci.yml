@@ -17,27 +17,11 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Debug Environment
-        run: |
-          echo "=== Debug Info ==="
-          echo "whoami: $(whoami)"
-          echo "HOME: $HOME"
-          echo "PWD: $(pwd)"
-          echo "PATH: $PATH"
-          echo ""
-          echo "=== Finding rustup ==="
-          find /home -name rustup -type f 2>/dev/null | head -5
-          which rustup 2>/dev/null || echo "rustup not in PATH"
-          ls -la /home/runner/.cargo/bin/ 2>/dev/null || echo "No /home/runner/.cargo/bin"
-          echo ""
-          echo "=== Direct execution test ==="
-          /home/runner/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc --version 2>/dev/null || echo "Direct rustc failed"
-
       - name: Verify Environment
         run: |
           set -euo pipefail
-          # The symlinks in ~/.cargo/bin point to rustup, need to source env first
-          source /home/runner/.cargo/env
+          # Use direct toolchain path - symlinks in ~/.cargo/bin are broken (missing rustup)
+          export PATH="/home/runner/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:$PATH"
           echo "=== Rust Toolchain ==="
           rustc --version
           cargo --version
@@ -52,12 +36,12 @@ jobs:
 
       - name: Build CLI
         run: |
-          source /home/runner/.cargo/env
+          export PATH="/home/runner/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:$PATH"
           cargo build --bin nvctl --release --no-default-features
 
       - name: Clippy
         run: |
-          source /home/runner/.cargo/env
+          export PATH="/home/runner/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:$PATH"
           cargo clippy --bin nvctl --lib --no-default-features -- \
             -W clippy::all \
             -A clippy::needless-borrows-for-generic-args \
@@ -66,12 +50,12 @@ jobs:
 
       - name: Format Check
         run: |
-          source /home/runner/.cargo/env
+          export PATH="/home/runner/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:$PATH"
           cargo fmt --check || echo "::warning::Format issues found"
 
       - name: Unit Tests
         run: |
-          source /home/runner/.cargo/env
+          export PATH="/home/runner/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:$PATH"
           cargo test --lib --no-default-features
 
       - name: GPU Smoke Test
@@ -133,7 +117,7 @@ jobs:
 
       - name: Build Summary
         run: |
-          source /home/runner/.cargo/env
+          export PATH="/home/runner/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:$PATH"
           echo "### Build Complete ✅" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
