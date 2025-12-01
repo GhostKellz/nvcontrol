@@ -7,7 +7,6 @@ use nvcontrol::{
     gsp_firmware, kde_optimizer, latency, monitoring, multimonitor, overclocking, power,
     power_profiles_daemon, recording, upscaling, vrr, wayland_nvidia,
 };
-use serde_json;
 use std::time::Duration;
 
 #[derive(Parser)]
@@ -1930,7 +1929,7 @@ fn main() {
 
                         for (display_idx, &level) in levels.iter().enumerate() {
                             // Convert percentage if needed, or use raw value
-                            let percentage = if level >= -1024 && level <= 1023 {
+                            let percentage = if (-1024..=1023).contains(&level) {
                                 // Raw vibrance value - convert to percentage
                                 if level <= 0 {
                                     ((level + 1024) as f32 / 1024.0 * 100.0) as u32
@@ -1938,7 +1937,7 @@ fn main() {
                                     (100.0 + (level as f32 / 1023.0 * 100.0)) as u32
                                 }
                             } else {
-                                level.abs() as u32 // Treat as percentage if outside raw range
+                                level.unsigned_abs() as u32 // Treat as percentage if outside raw range
                             };
 
                             match vibrance_native::set_display_vibrance_native(
@@ -3471,7 +3470,7 @@ fn main() {
                 Err(e) => eprintln!("❌ Failed to set power profile: {}", e),
             },
             PowerSubcommand::Limit { percentage } => {
-                let percentage = percentage.min(120).max(50);
+                let percentage = percentage.clamp(50, 120);
                 match power::set_power_limit_percentage(percentage) {
                     Ok(()) => println!("✅ Power limit set to {}%", percentage),
                     Err(e) => eprintln!("❌ Failed to set power limit: {}", e),
@@ -5395,7 +5394,7 @@ fn main() {
                         }
 
                         if let Some(op) = opacity {
-                            if op >= 0.0 && op <= 1.0 {
+                            if (0.0..=1.0).contains(&op) {
                                 manager.get_config_mut().background_opacity = op;
                                 changed = true;
                             } else {
@@ -5537,10 +5536,7 @@ fn main() {
                         }
 
                         let os_lower = os_release.to_lowercase();
-                        if os_lower.contains("bazzite") {
-                            is_gaming = true;
-                            println!("   Name: {} 🎮 (Gaming Distro - Tier 1)", name);
-                        } else if os_lower.contains("nobara") {
+                        if os_lower.contains("bazzite") || os_lower.contains("nobara") {
                             is_gaming = true;
                             println!("   Name: {} 🎮 (Gaming Distro - Tier 1)", name);
                         } else if os_lower.contains("arch") {
@@ -5614,20 +5610,20 @@ fn main() {
                     }
 
                     // Check for open kernel modules
-                    if let Ok(modules) = std::fs::read_to_string("/proc/modules") {
-                        if modules.contains("nvidia_modeset") {
-                            let driver_type = if std::path::Path::new(
-                                "/sys/module/nvidia/parameters/OpenRmEnableUnsupportedGpus",
-                            )
-                            .exists()
-                                || modules.contains("nvidia_drm")
-                            {
-                                "Open Kernel Modules ✅"
-                            } else {
-                                "Proprietary"
-                            };
-                            println!("   Driver Type: {}", driver_type);
-                        }
+                    if let Ok(modules) = std::fs::read_to_string("/proc/modules")
+                        && modules.contains("nvidia_modeset")
+                    {
+                        let driver_type = if std::path::Path::new(
+                            "/sys/module/nvidia/parameters/OpenRmEnableUnsupportedGpus",
+                        )
+                        .exists()
+                            || modules.contains("nvidia_drm")
+                        {
+                            "Open Kernel Modules ✅"
+                        } else {
+                            "Proprietary"
+                        };
+                        println!("   Driver Type: {}", driver_type);
                     }
 
                     println!("\n📋 Recommendations:");
@@ -5661,9 +5657,11 @@ fn main() {
                             println!("   ⭐ Premier Platform (Arch Linux)");
                         } else if os_lower.contains("bazzite") || os_lower.contains("nobara") {
                             println!("   🎮 Tier 1 - Gaming Distro");
-                        } else if os_lower.contains("fedora") || os_lower.contains("pop") {
-                            println!("   ✅ Tier 1 - Full Support");
-                        } else if os_lower.contains("debian") || os_lower.contains("ubuntu") {
+                        } else if os_lower.contains("fedora")
+                            || os_lower.contains("pop")
+                            || os_lower.contains("debian")
+                            || os_lower.contains("ubuntu")
+                        {
                             println!("   ✅ Tier 1 - Full Support");
                         } else {
                             println!("   📦 Tier 2 - Community Support");
@@ -5917,8 +5915,7 @@ fn main() {
                         .args(["--query-gpu=temperature.gpu,power.draw,power.limit,fan.speed,clocks.gr,clocks.mem",
                                "--format=csv,noheader,nounits"])
                         .output()
-                    {
-                        if output.status.success() {
+                        && output.status.success() {
                             let info = String::from_utf8_lossy(&output.stdout);
                             let parts: Vec<&str> = info.trim().split(", ").collect();
                             if parts.len() >= 6 {
@@ -5929,7 +5926,6 @@ fn main() {
                                 println!("  Memory Clock: {} MHz", parts[5]);
                             }
                         }
-                    }
 
                     // Show Power Detector+ status if supported
                     if model.supports_power_detector() {

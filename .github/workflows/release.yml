@@ -97,10 +97,10 @@ jobs:
           key: nvcontrol-gui
 
       - name: Build Release (Full GUI)
-        run: cargo build --release --all-features
+        run: cargo build --release
 
       - name: Run Tests
-        run: cargo test --lib
+        run: cargo test --lib --no-default-features
 
       - name: Create GUI Archive
         run: |
@@ -112,6 +112,11 @@ jobs:
           cp target/release/nvcontrol "$ARCHIVE_DIR/" 2>/dev/null || cp target/release/nvctl "$ARCHIVE_DIR/nvcontrol"
           cp target/release/nvctl "$ARCHIVE_DIR/" 2>/dev/null || true
           cp README.md LICENSE "$ARCHIVE_DIR/" 2>/dev/null || true
+
+          # Include assets (icons, desktop file)
+          if [ -d "assets" ]; then
+            cp -r assets "$ARCHIVE_DIR/"
+          fi
 
           tar -czf "nvcontrol-${VERSION}-linux-x86_64.tar.gz" "$ARCHIVE_DIR"
 

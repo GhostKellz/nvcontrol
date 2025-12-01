@@ -28,7 +28,6 @@ mod icons {
     pub const GAME: &str = GAME_CONTROLLER;
     pub const LATENCY: &str = TIMER;
     pub const RECORD: &str = egui_phosphor::regular::RECORD;
-    pub const FILM: &str = FILM_SLATE;
     pub const ROCKET: &str = egui_phosphor::regular::ROCKET;
 
     // System
@@ -48,21 +47,13 @@ mod icons {
 
     // Actions
     pub const REFRESH: &str = ARROW_COUNTER_CLOCKWISE;
-    pub const SAVE: &str = FLOPPY_DISK;
-    pub const RESET: &str = ARROW_COUNTER_CLOCKWISE;
-    pub const APPLY: &str = CHECK;
 
     // Misc
     pub const CHART: &str = CHART_LINE;
     pub const CHART_UP: &str = CHART_LINE_UP;
     pub const LIST: &str = CLIPBOARD;
     pub const TARGET: &str = CROSSHAIR;
-    pub const FIRE: &str = FLAME;
-    pub const CPU_ICON: &str = CPU;
     pub const MEMORY: &str = egui_phosphor::regular::MEMORY;
-    pub const DESKTOP_ICON: &str = DESKTOP;
-    pub const ACTIVITY: &str = PULSE;
-    pub const PLAY: &str = egui_phosphor::regular::PLAY;
 }
 
 #[cfg(feature = "gui")]
@@ -1220,7 +1211,7 @@ impl eframe::App for NvControlApp {
                         ui.group(|ui| {
                             ui.horizontal(|ui| {
                                 ui.label(format!("{} Select GPU:", icons::TARGET));
-                                egui::ComboBox::from_id_source("gpu_selector")
+                                egui::ComboBox::from_id_salt("gpu_selector")
                                     .selected_text(format!(
                                         "GPU {} - {}",
                                         self.selected_gpu_index,
@@ -3320,7 +3311,7 @@ impl eframe::App for NvControlApp {
                             ui.label("Bitrate:");
                             ui.add(
                                 egui::DragValue::new(&mut bitrate)
-                                    .clamp_range(5.0..=200.0)
+                                    .range(5.0..=200.0)
                                     .suffix(" Mbps"),
                             );
                         });
@@ -3330,7 +3321,7 @@ impl eframe::App for NvControlApp {
                             ui.label("Framerate:");
                             ui.add(
                                 egui::DragValue::new(&mut framerate)
-                                    .clamp_range(30.0..=120.0)
+                                    .range(30.0..=120.0)
                                     .suffix(" fps"),
                             );
                         });
@@ -3431,13 +3422,13 @@ impl eframe::App for NvControlApp {
                             ui.label("Resolution:");
                             ui.add(
                                 egui::DragValue::new(&mut width)
-                                    .clamp_range(800.0..=3840.0)
+                                    .range(800.0..=3840.0)
                                     .prefix("W: "),
                             );
                             ui.label("×");
                             ui.add(
                                 egui::DragValue::new(&mut height)
-                                    .clamp_range(600.0..=2160.0)
+                                    .range(600.0..=2160.0)
                                     .prefix("H: "),
                             );
                         });
@@ -3446,7 +3437,7 @@ impl eframe::App for NvControlApp {
                             ui.label("Refresh Rate:");
                             ui.add(
                                 egui::DragValue::new(&mut refresh_rate)
-                                    .clamp_range(30.0..=240.0)
+                                    .range(30.0..=240.0)
                                     .suffix("Hz"),
                             );
                         });
@@ -4082,7 +4073,7 @@ impl eframe::App for NvControlApp {
 
                         ui.horizontal(|ui| {
                             ui.label("Tone Mapping:");
-                            egui::ComboBox::from_id_source("tone_mapping")
+                            egui::ComboBox::from_id_salt("tone_mapping")
                                 .selected_text(format!("{}", self.hdr_config.tone_mapping))
                                 .show_ui(ui, |ui| {
                                     use nvcontrol::hdr::ToneMappingMode;
@@ -4116,7 +4107,7 @@ impl eframe::App for NvControlApp {
 
                         ui.horizontal(|ui| {
                             ui.label("Color Space:");
-                            egui::ComboBox::from_id_source("color_space")
+                            egui::ComboBox::from_id_salt("color_space")
                                 .selected_text(format!("{}", self.hdr_config.color_space))
                                 .show_ui(ui, |ui| {
                                     use nvcontrol::hdr::ColorSpace;
@@ -4140,7 +4131,7 @@ impl eframe::App for NvControlApp {
 
                         ui.horizontal(|ui| {
                             ui.label("EOTF:");
-                            egui::ComboBox::from_id_source("eotf")
+                            egui::ComboBox::from_id_salt("eotf")
                                 .selected_text(format!("{}", self.hdr_config.eotf))
                                 .show_ui(ui, |ui| {
                                     use nvcontrol::hdr::Eotf;
@@ -4209,7 +4200,7 @@ impl eframe::App for NvControlApp {
 
                         ui.horizontal(|ui| {
                             ui.label("Target Mode:");
-                            egui::ComboBox::from_id_source("target")
+                            egui::ComboBox::from_id_salt("target")
                                 .selected_text(&self.auto_oc_target)
                                 .show_ui(ui, |ui| {
                                     ui.selectable_value(&mut self.auto_oc_target, "max-performance".to_string(), "Max Performance");
@@ -4220,7 +4211,7 @@ impl eframe::App for NvControlApp {
 
                         ui.horizontal(|ui| {
                             ui.label("Safety Mode:");
-                            egui::ComboBox::from_id_source("safety")
+                            egui::ComboBox::from_id_salt("safety")
                                 .selected_text(&self.auto_oc_safety)
                                 .show_ui(ui, |ui| {
                                     ui.selectable_value(&mut self.auto_oc_safety, "conservative".to_string(), "Conservative (Safe)");
@@ -4789,7 +4780,7 @@ impl eframe::App for NvControlApp {
                             let previous_theme = self.current_theme;
                             ui.horizontal(|ui| {
                                 ui.label("Theme:");
-                                egui::ComboBox::from_id_source("theme_selector")
+                                egui::ComboBox::from_id_salt("theme_selector")
                                     .selected_text(format!("{} {}", self.theme_icon(), self.current_theme.name()))
                                     .show_ui(ui, |ui| {
                                         ui.selectable_value(&mut self.current_theme,
