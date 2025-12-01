@@ -4,6 +4,8 @@
 /// Reference: asusctl aura implementation for ASUS laptops
 use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
 use std::process::Command;
 
 /// RGB color
@@ -284,6 +286,198 @@ impl AuraPresets {
 
     pub fn silent_mode() -> AuraEffect {
         AuraEffect::static_color(RgbColor::blue(), 30)
+    }
+
+    /// Cyberpunk purple/cyan
+    pub fn cyberpunk() -> AuraEffect {
+        AuraEffect {
+            mode: AuraMode::Breathing,
+            speed: AuraSpeed::Slow,
+            colors: vec![
+                RgbColor::new(255, 0, 128), // Hot pink
+                RgbColor::new(0, 255, 255), // Cyan
+            ],
+            brightness: 100,
+        }
+    }
+
+    /// Purple glow
+    pub fn purple_glow() -> AuraEffect {
+        AuraEffect::breathing(RgbColor::new(128, 0, 255), AuraSpeed::Slow)
+    }
+}
+
+/// Aura configuration for persistence
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuraConfig {
+    /// Active effect configuration
+    pub effect: AuraEffect,
+    /// Whether to apply on startup
+    pub apply_on_startup: bool,
+    /// Temperature-reactive mode enabled
+    pub temperature_reactive: bool,
+    /// Temperature thresholds for reactive mode (in Celsius)
+    pub temp_thresholds: TempThresholds,
+}
+
+/// Temperature thresholds for reactive RGB
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TempThresholds {
+    pub cold: u32,      // Below this: blue/cyan
+    pub cool: u32,      // Below this: green
+    pub warm: u32,      // Below this: yellow
+    pub hot: u32,       // Below this: orange
+                        // Above hot: red
+}
+
+impl Default for TempThresholds {
+    fn default() -> Self {
+        Self {
+            cold: 50,
+            cool: 60,
+            warm: 70,
+            hot: 80,
+        }
+    }
+}
+
+impl Default for AuraConfig {
+    fn default() -> Self {
+        Self {
+            effect: AuraPresets::rog_red(),
+            apply_on_startup: false,
+            temperature_reactive: false,
+            temp_thresholds: TempThresholds::default(),
+        }
+    }
+}
+
+impl AuraConfig {
+    /// Get the config file path
+    pub fn config_path() -> PathBuf {
+        let config_dir = dirs::config_dir()
+            .unwrap_or_else(|| PathBuf::from("~/.config"))
+            .join("nvcontrol");
+        config_dir.join("aura.json")
+    }
+
+    /// Load configuration from file
+    pub fn load() -> NvResult<Self> {
+        let path = Self::config_path();
+
+        if !path.exists() {
+            return Ok(Self::default());
+        }
+
+        let content = fs::read_to_string(&path).map_err(|e| {
+            NvControlError::RuntimeError(format!("Failed to read Aura config: {}", e))
+        })?;
+
+        serde_json::from_str(&content).map_err(|e| {
+            NvControlError::RuntimeError(format!("Failed to parse Aura config: {}", e))
+        })
+    }
+
+    /// Save configuration to file
+    pub fn save(&self) -> NvResult<()> {
+        let path = Self::config_path();
+
+        // Create config directory if needed
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|e| {
+                NvControlError::RuntimeError(format!("Failed to create config dir: {}", e))
+            })?;
+        }
+
+        let content = serde_json::to_string_pretty(self).map_err(|e| {
+            NvControlError::RuntimeError(format!("Failed to serialize Aura config: {}", e))
+        })?;
+
+        fs::write(&path, content).map_err(|e| {
+            NvControlError::RuntimeError(format!("Failed to write Aura config: {}", e))
+        })?;
+
+        Ok(())
+    }
+
+    /// Get color based on GPU temperature
+    pub fn temperature_color(&self, temp_c: u32) -> RgbColor {
+        if temp_c < self.temp_thresholds.cold {
+            // Cold: Blue/Cyan
+            RgbColor::new(0, 128, 255)
+        } else if temp_c < self.temp_thresholds.cool {
+            // Cool: Green
+            RgbColor::new(0, 255, 64)
+        } else if temp_c < self.temp_thresholds.warm {
+            // Warm: Yellow
+            RgbColor::new(255, 255, 0)
+        } else if temp_c < self.temp_thresholds.hot {
+            // Hot: Orange
+            RgbColor::new(255, 128, 0)
+        } else {
+            // Critical: Red
+            RgbColor::new(255, 0, 0)
+        }
+    }
+}
+
+impl AsusAuraController {
+    /// Apply effect and save to config for persistence
+    pub fn apply_effect_and_save(&self, effect: &AuraEffect) -> NvResult<()> {
+        // Apply the effect
+        self.apply_effect(effect)?;
+
+        // Save to config
+        let mut config = AuraConfig::load().unwrap_or_default();
+        config.effect = effect.clone();
+        config.apply_on_startup = true;
+        config.save()?;
+
+        Ok(())
+    }
+
+    /// Load and apply saved configuration
+    pub fn restore_saved_effect(&self) -> NvResult<()> {
+        let config = AuraConfig::load()?;
+
+        if config.apply_on_startup {
+            self.apply_effect(&config.effect)?;
+            println!("Restored saved Aura effect: {:?}", config.effect.mode);
+        }
+
+        Ok(())
+    }
+
+    /// Set temperature-reactive mode
+    pub fn set_temperature_reactive(&self, enabled: bool) -> NvResult<()> {
+        let mut config = AuraConfig::load().unwrap_or_default();
+        config.temperature_reactive = enabled;
+        config.save()?;
+
+        if enabled {
+            println!("Temperature-reactive RGB mode enabled");
+        } else {
+            println!("Temperature-reactive RGB mode disabled");
+        }
+
+        Ok(())
+    }
+
+    /// Update RGB based on current GPU temperature
+    pub fn update_for_temperature(&self, temp_c: u32) -> NvResult<()> {
+        let config = AuraConfig::load()?;
+
+        if !config.temperature_reactive {
+            return Ok(());
+        }
+
+        let color = config.temperature_color(temp_c);
+        let effect = AuraEffect::static_color(color, config.effect.brightness);
+
+        // Only apply, don't save (this is dynamic)
+        self.apply_effect(&effect)?;
+
+        Ok(())
     }
 }
 

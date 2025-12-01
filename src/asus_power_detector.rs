@@ -11,9 +11,12 @@
 /// No writes are ever performed to prevent hardware damage.
 use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 /// ASUS vendor ID
 pub const ASUS_VENDOR_ID: u16 = 0x1043;
@@ -122,6 +125,250 @@ pub struct PowerConnectorStatus {
     pub health: PowerHealth,
     /// Timestamp
     pub timestamp: u64,
+}
+
+/// Maximum number of historical samples to keep
+pub const POWER_HISTORY_SIZE: usize = 60;
+
+/// Trend direction for power readings
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PowerTrend {
+    /// Power draw is increasing
+    Rising,
+    /// Power draw is stable
+    Stable,
+    /// Power draw is decreasing
+    Falling,
+    /// Not enough data to determine trend
+    Unknown,
+}
+
+impl PowerTrend {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Rising => "↑ Rising",
+            Self::Stable => "→ Stable",
+            Self::Falling => "↓ Falling",
+            Self::Unknown => "? Unknown",
+        }
+    }
+}
+
+/// Historical power reading with timestamp
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PowerHistorySample {
+    /// Time since start of monitoring
+    pub elapsed_ms: u64,
+    /// Per-rail current readings (mA)
+    pub rail_currents: Vec<u32>,
+    /// Total estimated power (W)
+    pub total_power_w: f32,
+    /// Health status at this sample
+    pub health: PowerHealth,
+}
+
+/// Power history buffer with trend analysis
+#[derive(Debug, Clone)]
+pub struct PowerHistory {
+    /// Circular buffer of power samples
+    samples: VecDeque<PowerHistorySample>,
+    /// Start time of monitoring
+    start_time: Instant,
+    /// Last sample time (for rate limiting)
+    last_sample: Option<Instant>,
+    /// Minimum interval between samples
+    sample_interval: Duration,
+}
+
+impl Default for PowerHistory {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl PowerHistory {
+    /// Create a new power history buffer
+    pub fn new() -> Self {
+        Self {
+            samples: VecDeque::with_capacity(POWER_HISTORY_SIZE),
+            start_time: Instant::now(),
+            last_sample: None,
+            sample_interval: Duration::from_secs(1),
+        }
+    }
+
+    /// Create with custom sample interval
+    pub fn with_interval(interval: Duration) -> Self {
+        Self {
+            samples: VecDeque::with_capacity(POWER_HISTORY_SIZE),
+            start_time: Instant::now(),
+            last_sample: None,
+            sample_interval: interval,
+        }
+    }
+
+    /// Add a new sample from a PowerConnectorStatus reading
+    pub fn record(&mut self, status: &PowerConnectorStatus) {
+        // Rate limit samples
+        if let Some(last) = self.last_sample {
+            if last.elapsed() < self.sample_interval {
+                return;
+            }
+        }
+
+        let rail_currents: Vec<u32> = status.rails
+            .iter()
+            .filter_map(|r| r.current_ma)
+            .collect();
+
+        let sample = PowerHistorySample {
+            elapsed_ms: self.start_time.elapsed().as_millis() as u64,
+            rail_currents,
+            total_power_w: status.total_power_w.unwrap_or(0.0),
+            health: status.health,
+        };
+
+        // Maintain buffer size
+        if self.samples.len() >= POWER_HISTORY_SIZE {
+            self.samples.pop_front();
+        }
+        self.samples.push_back(sample);
+        self.last_sample = Some(Instant::now());
+    }
+
+    /// Get number of samples in buffer
+    pub fn len(&self) -> usize {
+        self.samples.len()
+    }
+
+    /// Check if buffer is empty
+    pub fn is_empty(&self) -> bool {
+        self.samples.is_empty()
+    }
+
+    /// Get all samples for analysis
+    pub fn samples(&self) -> &VecDeque<PowerHistorySample> {
+        &self.samples
+    }
+
+    /// Get the most recent sample
+    pub fn latest(&self) -> Option<&PowerHistorySample> {
+        self.samples.back()
+    }
+
+    /// Calculate average power over the history
+    pub fn average_power(&self) -> Option<f32> {
+        if self.samples.is_empty() {
+            return None;
+        }
+        let sum: f32 = self.samples.iter().map(|s| s.total_power_w).sum();
+        Some(sum / self.samples.len() as f32)
+    }
+
+    /// Get peak power in the history
+    pub fn peak_power(&self) -> Option<f32> {
+        self.samples.iter().map(|s| s.total_power_w).max_by(|a, b| a.partial_cmp(b).unwrap())
+    }
+
+    /// Get minimum power in the history
+    pub fn min_power(&self) -> Option<f32> {
+        self.samples.iter().map(|s| s.total_power_w).min_by(|a, b| a.partial_cmp(b).unwrap())
+    }
+
+    /// Analyze power trend over recent samples
+    pub fn trend(&self) -> PowerTrend {
+        // Need at least 5 samples for meaningful trend
+        if self.samples.len() < 5 {
+            return PowerTrend::Unknown;
+        }
+
+        // Compare last 5 samples with previous 5
+        let len = self.samples.len();
+        let recent: Vec<f32> = self.samples.iter()
+            .skip(len.saturating_sub(5))
+            .map(|s| s.total_power_w)
+            .collect();
+        let older: Vec<f32> = self.samples.iter()
+            .skip(len.saturating_sub(10))
+            .take(5)
+            .map(|s| s.total_power_w)
+            .collect();
+
+        if older.is_empty() || recent.is_empty() {
+            return PowerTrend::Unknown;
+        }
+
+        let recent_avg: f32 = recent.iter().sum::<f32>() / recent.len() as f32;
+        let older_avg: f32 = older.iter().sum::<f32>() / older.len() as f32;
+
+        // 5% threshold for trend detection
+        let threshold = older_avg * 0.05;
+
+        if recent_avg > older_avg + threshold {
+            PowerTrend::Rising
+        } else if recent_avg < older_avg - threshold {
+            PowerTrend::Falling
+        } else {
+            PowerTrend::Stable
+        }
+    }
+
+    /// Get per-rail current averages
+    pub fn rail_averages(&self) -> Vec<f32> {
+        if self.samples.is_empty() {
+            return Vec::new();
+        }
+
+        // Find max number of rails across samples
+        let max_rails = self.samples.iter()
+            .map(|s| s.rail_currents.len())
+            .max()
+            .unwrap_or(0);
+
+        (0..max_rails).map(|rail_idx| {
+            let sum: u32 = self.samples.iter()
+                .filter_map(|s| s.rail_currents.get(rail_idx))
+                .sum();
+            let count = self.samples.iter()
+                .filter(|s| s.rail_currents.get(rail_idx).is_some())
+                .count();
+            if count > 0 {
+                sum as f32 / count as f32
+            } else {
+                0.0
+            }
+        }).collect()
+    }
+
+    /// Check if any warning conditions occurred in history
+    pub fn had_warnings(&self) -> bool {
+        self.samples.iter().any(|s| matches!(s.health, PowerHealth::Warning | PowerHealth::Critical))
+    }
+
+    /// Count of warning samples
+    pub fn warning_count(&self) -> usize {
+        self.samples.iter().filter(|s| matches!(s.health, PowerHealth::Warning | PowerHealth::Critical)).count()
+    }
+
+    /// Clear all history
+    pub fn clear(&mut self) {
+        self.samples.clear();
+        self.start_time = Instant::now();
+        self.last_sample = None;
+    }
+
+    /// Export history to JSON string
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string_pretty(&self.samples.iter().collect::<Vec<_>>())
+    }
+}
+
+/// Thread-safe power history wrapper
+pub type SharedPowerHistory = Arc<Mutex<PowerHistory>>;
+
+/// Create a new shared power history buffer
+pub fn create_shared_history() -> SharedPowerHistory {
+    Arc::new(Mutex::new(PowerHistory::new()))
 }
 
 /// ASUS Power Detector+ interface
@@ -448,6 +695,98 @@ impl AsusPowerDetector {
 
         Ok(output)
     }
+
+    /// Get status string with history statistics
+    pub fn status_string_with_history(&self, history: &PowerHistory) -> NvResult<String> {
+        let status = self.read_power_rails()?;
+
+        let reset = "\x1b[0m";
+        let health_color = status.health.color_code();
+
+        let mut output = String::new();
+        output.push_str(&format!("ASUS Power Detector+ - {}\n", status.model));
+        output.push_str("═══════════════════════════════════════\n");
+
+        // Health status prominently displayed
+        output.push_str(&format!(
+            "Connector Health: {}[{}]{}\n",
+            health_color,
+            status.health.label(),
+            reset
+        ));
+        output.push_str(&format!(
+            "I2C Bus: {} @ 0x{:02X}\n\n",
+            status.i2c_bus, self.i2c_addr
+        ));
+
+        output.push_str("12V-2x6 Power Rails:\n");
+        for rail in &status.rails {
+            let warning_str = if rail.warning { " ⚠️ HIGH" } else { "" };
+            let current_str = rail
+                .current_ma
+                .map(|c| format!("{:.2}A", c as f32 / 1000.0))
+                .unwrap_or_else(|| "N/A".to_string());
+
+            output.push_str(&format!(
+                "  Rail {}: 0x{:04X} (~{}){}\n",
+                rail.rail_id, rail.raw_value, current_str, warning_str
+            ));
+        }
+
+        if let Some(power) = status.total_power_w {
+            output.push_str(&format!("\nCurrent Power: {:.1}W\n", power));
+        }
+
+        // Add history statistics if available
+        if !history.is_empty() {
+            output.push_str(&format!("\n─── History ({} samples) ───\n", history.len()));
+
+            if let Some(avg) = history.average_power() {
+                output.push_str(&format!("  Average: {:.1}W\n", avg));
+            }
+            if let Some(peak) = history.peak_power() {
+                output.push_str(&format!("  Peak:    {:.1}W\n", peak));
+            }
+            if let Some(min) = history.min_power() {
+                output.push_str(&format!("  Min:     {:.1}W\n", min));
+            }
+
+            let trend = history.trend();
+            output.push_str(&format!("  Trend:   {}\n", trend.label()));
+
+            let warnings = history.warning_count();
+            if warnings > 0 {
+                output.push_str(&format!(
+                    "  ⚠️  {} warning{} in history\n",
+                    warnings,
+                    if warnings == 1 { "" } else { "s" }
+                ));
+            }
+
+            // Show per-rail averages
+            let rail_avgs = history.rail_averages();
+            if !rail_avgs.is_empty() {
+                output.push_str("\n  Rail Averages:\n");
+                for (i, avg) in rail_avgs.iter().enumerate() {
+                    output.push_str(&format!("    Rail {}: {:.2}A\n", i, avg / 1000.0));
+                }
+            }
+        }
+
+        if status.has_warnings {
+            output.push_str("\n⚠️  WARNING: One or more rails exceeding safe current!\n");
+            output.push_str("    Check 12V-2x6 connector seating and cable quality.\n");
+        }
+
+        Ok(output)
+    }
+
+    /// Read power rails and record to history buffer
+    pub fn read_and_record(&self, history: &mut PowerHistory) -> NvResult<PowerConnectorStatus> {
+        let status = self.read_power_rails()?;
+        history.record(&status);
+        Ok(status)
+    }
 }
 
 /// Detect all ASUS ROG GPUs in the system
@@ -512,5 +851,120 @@ mod tests {
         assert!(current.is_some());
         // 0x200 = 512, × 3.9 ≈ 1997mA ≈ 2A
         assert!(current.unwrap() > 1500 && current.unwrap() < 2500);
+    }
+
+    #[test]
+    fn test_power_history() {
+        let mut history = PowerHistory::with_interval(Duration::from_millis(0)); // No rate limiting for test
+
+        // Create mock status readings
+        for i in 0..10 {
+            let status = PowerConnectorStatus {
+                model: "Test".to_string(),
+                i2c_bus: 0,
+                rails: vec![
+                    PowerRailReading {
+                        rail_id: 0,
+                        raw_value: 0x0200,
+                        current_ma: Some(1000 + i * 100),
+                        warning: false,
+                    },
+                ],
+                total_power_w: Some(12.0 + i as f32),
+                has_warnings: false,
+                health: PowerHealth::Good,
+                timestamp: i as u64,
+            };
+            history.record(&status);
+        }
+
+        assert_eq!(history.len(), 10);
+        assert!(!history.is_empty());
+
+        // Check statistics
+        let avg = history.average_power().unwrap();
+        assert!(avg > 16.0 && avg < 17.5); // Average of 12..22
+
+        let peak = history.peak_power().unwrap();
+        assert!((peak - 21.0).abs() < 0.1); // Last value: 12 + 9 = 21
+
+        let min = history.min_power().unwrap();
+        assert!((min - 12.0).abs() < 0.1); // First value
+
+        // Trend should be rising
+        assert_eq!(history.trend(), PowerTrend::Rising);
+
+        // Rail averages
+        let rail_avgs = history.rail_averages();
+        assert_eq!(rail_avgs.len(), 1);
+        assert!(rail_avgs[0] > 1400.0 && rail_avgs[0] < 1500.0); // Average of 1000..1900
+
+        // No warnings
+        assert!(!history.had_warnings());
+        assert_eq!(history.warning_count(), 0);
+    }
+
+    #[test]
+    fn test_power_history_buffer_limit() {
+        let mut history = PowerHistory::with_interval(Duration::from_millis(0));
+
+        // Add more than POWER_HISTORY_SIZE samples
+        for i in 0..70 {
+            let status = PowerConnectorStatus {
+                model: "Test".to_string(),
+                i2c_bus: 0,
+                rails: vec![],
+                total_power_w: Some(i as f32),
+                has_warnings: false,
+                health: PowerHealth::Good,
+                timestamp: i,
+            };
+            history.record(&status);
+        }
+
+        // Should only keep POWER_HISTORY_SIZE (60) samples
+        assert_eq!(history.len(), POWER_HISTORY_SIZE);
+
+        // First sample should be 10 (oldest after dropping 0-9)
+        let first = history.samples().front().unwrap();
+        assert!((first.total_power_w - 10.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_power_trend_detection() {
+        let mut history = PowerHistory::with_interval(Duration::from_millis(0));
+
+        // Add stable samples
+        for _ in 0..15 {
+            let status = PowerConnectorStatus {
+                model: "Test".to_string(),
+                i2c_bus: 0,
+                rails: vec![],
+                total_power_w: Some(100.0),
+                has_warnings: false,
+                health: PowerHealth::Good,
+                timestamp: 0,
+            };
+            history.record(&status);
+        }
+
+        assert_eq!(history.trend(), PowerTrend::Stable);
+
+        // Add falling samples
+        history.clear();
+        for i in 0..15 {
+            let status = PowerConnectorStatus {
+                model: "Test".to_string(),
+                i2c_bus: 0,
+                rails: vec![],
+                total_power_w: Some(200.0 - i as f32 * 10.0),
+                has_warnings: false,
+                health: PowerHealth::Good,
+                timestamp: i as u64,
+            };
+            history.record(&status);
+        }
+
+        assert_eq!(history.trend(), PowerTrend::Falling);
     }
 }

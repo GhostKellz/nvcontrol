@@ -1688,16 +1688,24 @@ enum AsusSubcommand {
 enum AsusAuraAction {
     /// Show Aura status
     Status,
-    /// Set Aura mode
+    /// Set Aura mode (off, static, breathing, rainbow, cycle, cyberpunk, purple, performance, silent)
     Mode {
-        /// Mode: off, static, breathing, rainbow, cycle
+        /// Mode: off, static, breathing, rainbow, cycle, cyberpunk, purple, performance, silent
         mode: String,
     },
-    /// Set Aura color
+    /// Set Aura color (static mode)
     Color {
         /// RGB hex color (e.g., FF0000 for red)
         color: String,
     },
+    /// Enable/disable temperature-reactive RGB (color changes with GPU temp)
+    TempReactive {
+        /// Enable (true) or disable (false)
+        #[arg(value_parser = clap::value_parser!(bool))]
+        enabled: bool,
+    },
+    /// Restore saved Aura configuration from config file
+    Restore,
 }
 
 fn main() {
@@ -5931,20 +5939,132 @@ fn main() {
                     println!();
                 }
             }
-            AsusSubcommand::Aura { action } => match action {
-                AsusAuraAction::Status => {
-                    println!("🌈 ASUS Aura RGB Status");
-                    println!("   (Aura control coming soon)");
+            AsusSubcommand::Aura { action } => {
+                use nvcontrol::asus_aura::{AsusAuraController, AuraEffect, AuraMode, AuraSpeed, AuraPresets, RgbColor, AuraConfig};
+
+                let mut controller = AsusAuraController::new();
+
+                match action {
+                    AsusAuraAction::Status => {
+                        println!("🌈 ASUS Aura RGB Status\n");
+
+                        if !controller.is_available() {
+                            println!("❌ OpenRGB not installed");
+                            println!("   Install: paru -S openrgb");
+                            println!("   Then: sudo modprobe i2c-dev i2c-nvidia_gpu");
+                        } else {
+                            println!("✅ OpenRGB available");
+
+                            match controller.detect_gpu() {
+                                Ok(found) => {
+                                    if found {
+                                        println!("✅ ASUS GPU detected (device {})", controller.device_id().unwrap_or(0));
+                                    } else {
+                                        println!("⚠️  No ASUS GPU found in OpenRGB");
+                                        println!("   Run: openrgb --list-devices");
+                                    }
+                                }
+                                Err(e) => println!("❌ Detection error: {}", e),
+                            }
+
+                            // Show saved config
+                            if let Ok(config) = AuraConfig::load() {
+                                println!("\n📋 Saved Configuration:");
+                                println!("   Mode: {:?}", config.effect.mode);
+                                println!("   Brightness: {}%", config.effect.brightness);
+                                println!("   Apply on startup: {}", if config.apply_on_startup { "Yes" } else { "No" });
+                                println!("   Temp-reactive: {}", if config.temperature_reactive { "Yes" } else { "No" });
+                            }
+                        }
+                    }
+                    AsusAuraAction::Mode { mode } => {
+                        if let Err(e) = controller.detect_gpu() {
+                            eprintln!("❌ Failed to detect GPU: {}", e);
+                            return;
+                        }
+
+                        let effect = match mode.to_lowercase().as_str() {
+                            "off" | "stealth" => AuraPresets::stealth_mode(),
+                            "static" => AuraPresets::rog_red(),
+                            "breathing" => AuraEffect::breathing(RgbColor::red(), AuraSpeed::Medium),
+                            "rainbow" => AuraPresets::rog_rainbow(),
+                            "cycle" | "color_cycle" => AuraEffect {
+                                mode: AuraMode::ColorCycle,
+                                speed: AuraSpeed::Medium,
+                                colors: Vec::new(),
+                                brightness: 100,
+                            },
+                            "cyberpunk" => AuraPresets::cyberpunk(),
+                            "purple" => AuraPresets::purple_glow(),
+                            "performance" => AuraPresets::performance_mode(),
+                            "silent" => AuraPresets::silent_mode(),
+                            _ => {
+                                eprintln!("❌ Unknown mode: {}", mode);
+                                println!("   Available: off, static, breathing, rainbow, cycle, cyberpunk, purple, performance, silent");
+                                return;
+                            }
+                        };
+
+                        match controller.apply_effect_and_save(&effect) {
+                            Ok(()) => println!("✅ Aura mode set to: {}", mode),
+                            Err(e) => eprintln!("❌ Failed to set mode: {}", e),
+                        }
+                    }
+                    AsusAuraAction::Color { color } => {
+                        if let Err(e) = controller.detect_gpu() {
+                            eprintln!("❌ Failed to detect GPU: {}", e);
+                            return;
+                        }
+
+                        // Parse hex color
+                        let color_str = color.trim_start_matches('#');
+                        if color_str.len() != 6 {
+                            eprintln!("❌ Invalid color format. Use 6-digit hex (e.g., FF0000)");
+                            return;
+                        }
+
+                        let r = u8::from_str_radix(&color_str[0..2], 16).unwrap_or(255);
+                        let g = u8::from_str_radix(&color_str[2..4], 16).unwrap_or(0);
+                        let b = u8::from_str_radix(&color_str[4..6], 16).unwrap_or(0);
+
+                        let rgb = RgbColor::new(r, g, b);
+
+                        match controller.set_static_color(rgb, 100) {
+                            Ok(()) => println!("✅ Aura color set to: #{}", color_str.to_uppercase()),
+                            Err(e) => eprintln!("❌ Failed to set color: {}", e),
+                        }
+                    }
+                    AsusAuraAction::TempReactive { enabled } => {
+                        match controller.set_temperature_reactive(enabled) {
+                            Ok(()) => {
+                                if enabled {
+                                    println!("✅ Temperature-reactive RGB enabled");
+                                    println!("   Colors will change based on GPU temperature:");
+                                    println!("   < 50°C: Blue/Cyan");
+                                    println!("   50-60°C: Green");
+                                    println!("   60-70°C: Yellow");
+                                    println!("   70-80°C: Orange");
+                                    println!("   > 80°C: Red");
+                                } else {
+                                    println!("✅ Temperature-reactive RGB disabled");
+                                }
+                            }
+                            Err(e) => eprintln!("❌ Failed to set temp-reactive mode: {}", e),
+                        }
+                    }
+                    AsusAuraAction::Restore => {
+                        if let Err(e) = controller.detect_gpu() {
+                            eprintln!("❌ Failed to detect GPU: {}", e);
+                            return;
+                        }
+
+                        match controller.restore_saved_effect() {
+                            Ok(()) => println!("✅ Restored saved Aura configuration"),
+                            Err(e) => eprintln!("❌ Failed to restore: {}", e),
+                        }
+                    }
                 }
-                AsusAuraAction::Mode { mode } => {
-                    println!("🌈 Setting Aura mode to: {}", mode);
-                    println!("   (Aura control coming soon)");
-                }
-                AsusAuraAction::Color { color } => {
-                    println!("🌈 Setting Aura color to: #{}", color);
-                    println!("   (Aura control coming soon)");
-                }
-            },
+            }
         },
     }
 }

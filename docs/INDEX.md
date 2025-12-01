@@ -1,6 +1,6 @@
 # nvcontrol Documentation Hub
 
-Complete documentation for nvcontrol v0.7.1 - Modern NVIDIA Settings Manager for Linux + Wayland.
+Complete documentation for nvcontrol v0.7.3 - Modern NVIDIA Settings Manager for Linux + Wayland.
 
 ## Quick Start
 
@@ -52,6 +52,28 @@ Complete documentation for nvcontrol v0.7.1 - Modern NVIDIA Settings Manager for
   - Wayland support (nVibrant)
   - Per-display configuration
   - Gaming profiles
+
+### Display & Graphics Guides
+
+- [**VRR/G-SYNC Control**](VRR_GSYNC.md) - Variable refresh rate
+  - G-SYNC and FreeSync support
+  - Per-compositor configuration
+  - Gaming optimizations
+
+- [**HDR Control**](HDR_CONTROL.md) - High Dynamic Range
+  - KDE/GNOME/Hyprland HDR
+  - Color depth settings
+  - Display capabilities
+
+- [**Image Sharpening**](IMAGE_SHARPENING.md) - GPU post-processing
+  - NVKMS-based sharpening
+  - Per-display control
+  - Gaming presets
+
+- [**Overclocking Guide**](OVERCLOCKING.md) - Performance tuning
+  - Safe overclocking methods
+  - Auto-tuning wizard
+  - Architecture-specific guidance
 
 ---
 
@@ -462,4 +484,4 @@ nvcontrol/
 
 ---
 
-**Last Updated**: November 2024 (v0.7.1 - Pop!_OS COSMIC support, display controls)
+**Last Updated**: December 2024 (v0.7.3 - ASUS Astral 5090, Power Detector+, enhanced GPU info)

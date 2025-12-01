@@ -27,6 +27,17 @@ pub struct GpuInfo {
     pub fan_speed: u32,
     pub gpu_utilization: u32,
     pub memory_utilization: u32,
+    // Enhanced info fields
+    pub cuda_compute: Option<String>,
+    pub pcie_gen: Option<u32>,
+    pub pcie_width: Option<u32>,
+    pub power_limit: Option<f32>,
+    pub power_limit_min: Option<f32>,
+    pub power_limit_max: Option<f32>,
+    pub gpu_clock: Option<u32>,
+    pub memory_clock: Option<u32>,
+    pub architecture: Option<String>,
+    pub throttle_reason: Option<String>,
 }
 
 /// Check if NVIDIA GPU is available on the system
@@ -72,6 +83,33 @@ pub fn get_gpu_info() -> NvResult<GpuInfo> {
                         nvml_wrapper::struct_wrappers::device::Utilization { gpu: 0, memory: 0 }
                     });
 
+                    // Get CUDA compute capability
+                    let cuda_compute = device.cuda_compute_capability().ok()
+                        .map(|cc| format!("{}.{}", cc.major, cc.minor));
+
+                    // Get PCIe info
+                    let pcie_gen = device.current_pcie_link_gen().ok();
+                    let pcie_width = device.current_pcie_link_width().ok();
+
+                    // Get power limits
+                    let power_limit = device.power_management_limit().ok()
+                        .map(|p| p as f32 / 1000.0);
+                    let power_limit_constraints = device.power_management_limit_constraints().ok();
+                    let power_limit_min = power_limit_constraints.as_ref()
+                        .map(|c| c.min_limit as f32 / 1000.0);
+                    let power_limit_max = power_limit_constraints.as_ref()
+                        .map(|c| c.max_limit as f32 / 1000.0);
+
+                    // Get clock speeds
+                    let gpu_clock = device.clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics).ok();
+                    let memory_clock = device.clock_info(nvml_wrapper::enum_wrappers::device::Clock::Memory).ok();
+
+                    // Detect architecture from name
+                    let architecture = detect_architecture(&name);
+
+                    // Get throttle reason
+                    let throttle_reason = get_throttle_reason(&device);
+
                     Ok(GpuInfo {
                         name,
                         driver_version: driver,
@@ -82,6 +120,16 @@ pub fn get_gpu_info() -> NvResult<GpuInfo> {
                         fan_speed: device.fan_speed(0).unwrap_or(0),
                         gpu_utilization: utilization.gpu,
                         memory_utilization: utilization.memory,
+                        cuda_compute,
+                        pcie_gen,
+                        pcie_width,
+                        power_limit,
+                        power_limit_min,
+                        power_limit_max,
+                        gpu_clock,
+                        memory_clock,
+                        architecture,
+                        throttle_reason,
                     })
                 } else {
                     Err(NvControlError::GpuQueryFailed(
@@ -98,6 +146,53 @@ pub fn get_gpu_info() -> NvResult<GpuInfo> {
             "Failed to initialize NVML: {}",
             e
         ))),
+    }
+}
+
+/// Detect GPU architecture from name
+fn detect_architecture(name: &str) -> Option<String> {
+    let name_lower = name.to_lowercase();
+    if name_lower.contains("5090") || name_lower.contains("5080") || name_lower.contains("5070") || name_lower.contains("5060") {
+        Some("Blackwell".to_string())
+    } else if name_lower.contains("4090") || name_lower.contains("4080") || name_lower.contains("4070") || name_lower.contains("4060") {
+        Some("Ada Lovelace".to_string())
+    } else if name_lower.contains("3090") || name_lower.contains("3080") || name_lower.contains("3070") || name_lower.contains("3060") {
+        Some("Ampere".to_string())
+    } else if name_lower.contains("2080") || name_lower.contains("2070") || name_lower.contains("2060") {
+        Some("Turing".to_string())
+    } else if name_lower.contains("1080") || name_lower.contains("1070") || name_lower.contains("1060") {
+        Some("Pascal".to_string())
+    } else if name_lower.contains("1660") || name_lower.contains("1650") {
+        Some("Turing (GTX)".to_string())
+    } else {
+        None
+    }
+}
+
+/// Get current throttle reason from device
+fn get_throttle_reason(device: &nvml_wrapper::Device) -> Option<String> {
+    // Check various throttle reasons
+    let mut reasons = Vec::new();
+
+    // Try to get current throttle reasons via supported clocks
+    if let Ok(temp) = device.temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu) {
+        if temp > 83 {
+            reasons.push("Thermal");
+        }
+    }
+
+    if let Ok(power) = device.power_usage() {
+        if let Ok(limit) = device.power_management_limit() {
+            if power > limit {
+                reasons.push("Power");
+            }
+        }
+    }
+
+    if reasons.is_empty() {
+        None
+    } else {
+        Some(reasons.join(", "))
     }
 }
 
@@ -228,48 +323,90 @@ pub fn get_gpu_info_with_format(format: OutputFormat) -> NvResult<()> {
         OutputFormat::Human => {
             println!("🖥️  GPU Information:");
             println!("   Name: {}", gpu_info.name);
+            if let Some(ref arch) = gpu_info.architecture {
+                println!("   Architecture: {}", arch);
+            }
             println!("   Driver: {}", gpu_info.driver_version);
-            println!("   Memory: {} MB", gpu_info.memory_total);
+            if let Some(ref cuda) = gpu_info.cuda_compute {
+                println!("   CUDA Compute: {}", cuda);
+            }
+            println!("   Memory: {} MB ({} MB used)", gpu_info.memory_total, gpu_info.memory_used);
+            if let (Some(pcie_gen), Some(pcie_width)) = (gpu_info.pcie_gen, gpu_info.pcie_width) {
+                println!("   PCIe: Gen{} x{}", pcie_gen, pcie_width);
+            }
             println!("   Temperature: {}°C", gpu_info.temperature);
-            println!("   Power Draw: {} W", gpu_info.power_draw);
+            println!("   Power Draw: {:.1} W", gpu_info.power_draw);
+            if let (Some(limit), Some(max)) = (gpu_info.power_limit, gpu_info.power_limit_max) {
+                println!("   Power Limit: {:.0} W (max: {:.0} W)", limit, max);
+            }
             println!("   Fan Speed: {}%", gpu_info.fan_speed);
             println!("   GPU Utilization: {}%", gpu_info.gpu_utilization);
             println!("   Memory Utilization: {}%", gpu_info.memory_utilization);
+            if let (Some(gpu_clk), Some(mem_clk)) = (gpu_info.gpu_clock, gpu_info.memory_clock) {
+                println!("   Clocks: {} MHz (GPU) / {} MHz (Mem)", gpu_clk, mem_clk);
+            }
+            if let Some(ref reason) = gpu_info.throttle_reason {
+                println!("   Throttling: {}", reason);
+            }
         }
         OutputFormat::Json => {
             println!("{}", serde_json::to_string_pretty(&gpu_info).unwrap());
         }
         OutputFormat::Table => {
-            println!("┌─────────────────────┬─────────────────────────┐");
-            println!("│ Property            │ Value                   │");
-            println!("├─────────────────────┼─────────────────────────┤");
-            println!("│ Name                │ {:<23} │", gpu_info.name);
-            println!("│ Driver              │ {:<23} │", gpu_info.driver_version);
+            println!("┌──────────────────────┬──────────────────────────────┐");
+            println!("│ Property             │ Value                        │");
+            println!("├──────────────────────┼──────────────────────────────┤");
+            println!("│ Name                 │ {:<28} │", gpu_info.name);
+            if let Some(ref arch) = gpu_info.architecture {
+                println!("│ Architecture         │ {:<28} │", arch);
+            }
+            println!("│ Driver               │ {:<28} │", gpu_info.driver_version);
+            if let Some(ref cuda) = gpu_info.cuda_compute {
+                println!("│ CUDA Compute         │ {:<28} │", cuda);
+            }
             println!(
-                "│ Memory              │ {:<23} │",
-                format!("{} MB", gpu_info.memory_total)
+                "│ Memory               │ {:<28} │",
+                format!("{} / {} MB", gpu_info.memory_used, gpu_info.memory_total)
             );
+            if let (Some(pcie_gen), Some(pcie_width)) = (gpu_info.pcie_gen, gpu_info.pcie_width) {
+                println!("│ PCIe                 │ {:<28} │", format!("Gen{} x{}", pcie_gen, pcie_width));
+            }
             println!(
-                "│ Temperature         │ {:<23} │",
+                "│ Temperature          │ {:<28} │",
                 format!("{}°C", gpu_info.temperature)
             );
             println!(
-                "│ Power Draw          │ {:<23} │",
-                format!("{} W", gpu_info.power_draw)
+                "│ Power Draw           │ {:<28} │",
+                format!("{:.1} W", gpu_info.power_draw)
             );
+            if let (Some(limit), Some(max)) = (gpu_info.power_limit, gpu_info.power_limit_max) {
+                println!(
+                    "│ Power Limit          │ {:<28} │",
+                    format!("{:.0} W (max: {:.0} W)", limit, max)
+                );
+            }
             println!(
-                "│ Fan Speed           │ {:<23} │",
+                "│ Fan Speed            │ {:<28} │",
                 format!("{}%", gpu_info.fan_speed)
             );
             println!(
-                "│ GPU Utilization     │ {:<23} │",
+                "│ GPU Utilization      │ {:<28} │",
                 format!("{}%", gpu_info.gpu_utilization)
             );
             println!(
-                "│ Memory Utilization  │ {:<23} │",
+                "│ Memory Utilization   │ {:<28} │",
                 format!("{}%", gpu_info.memory_utilization)
             );
-            println!("└─────────────────────┴─────────────────────────┘");
+            if let (Some(gpu_clk), Some(mem_clk)) = (gpu_info.gpu_clock, gpu_info.memory_clock) {
+                println!(
+                    "│ Clocks               │ {:<28} │",
+                    format!("{} / {} MHz", gpu_clk, mem_clk)
+                );
+            }
+            if let Some(ref reason) = gpu_info.throttle_reason {
+                println!("│ Throttling           │ {:<28} │", reason);
+            }
+            println!("└──────────────────────┴──────────────────────────────┘");
         }
     }
 

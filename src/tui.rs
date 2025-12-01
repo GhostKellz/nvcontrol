@@ -2409,26 +2409,128 @@ impl TuiApp {
     }
 
     fn apply_overclock(&mut self) {
-        // Call actual overclocking implementation
-        // TODO: Wire up to actual overclocking module when ready
-        self.set_status_message(format!(
-            "✅ OC Settings Saved! GPU:{:+}, MEM:{:+}, Power:{}% (Apply on next boot)",
-            self.gpu_offset, self.memory_offset, self.power_limit_percent
-        ));
+        // Use TunerState for consistent OC implementation with GUI
+        if let Some(tuner) = self.tuner_states.get_mut(self.selected_gpu) {
+            // Sync TUI values to tuner state
+            tuner.core_clock_offset = self.gpu_offset;
+            tuner.memory_clock_offset = self.memory_offset;
+            tuner.power_limit = self.power_limit_percent;
 
-        // For now, just save to profile
-        // In production, this would call:
-        // overclocking::apply_overclock(gpu_id, gpu_offset, mem_offset, power_limit)
+            // Apply via tuner (uses nvidia-smi + NVML like GUI)
+            match tuner.apply_overclock() {
+                Ok(()) => {
+                    self.set_status_message(format!(
+                        "✅ Applied OC: GPU {:+}MHz, MEM {:+}MHz, Power {}%",
+                        self.gpu_offset, self.memory_offset, self.power_limit_percent
+                    ));
+                }
+                Err(e) => {
+                    self.set_status_message(format!("❌ OC failed: {}", e));
+                }
+            }
+        } else {
+            // Fallback: create tuner state and apply
+            let mut tuner = gui_tuner::TunerState::new(self.selected_gpu as u32);
+            tuner.core_clock_offset = self.gpu_offset;
+            tuner.memory_clock_offset = self.memory_offset;
+            tuner.power_limit = self.power_limit_percent;
+
+            match tuner.apply_overclock() {
+                Ok(()) => {
+                    self.set_status_message(format!(
+                        "✅ Applied OC: GPU {:+}MHz, MEM {:+}MHz, Power {}%",
+                        self.gpu_offset, self.memory_offset, self.power_limit_percent
+                    ));
+                }
+                Err(e) => {
+                    self.set_status_message(format!("❌ OC failed: {}", e));
+                }
+            }
+        }
     }
 
     fn apply_fan_curve(&mut self) {
-        // Call actual fan curve implementation
-        // TODO: Wire up to actual fan module when ready
-        self.set_status_message("✅ Fan curve saved! Will apply on next boot".to_string());
+        // Use TunerState for consistent fan control implementation with GUI
+        if let Some(tuner) = self.tuner_states.get_mut(self.selected_gpu) {
+            // Sync TUI curve to tuner state
+            tuner.fan_curve = self.fan_curve_points
+                .iter()
+                .map(|(t, s)| (*t as i32, *s))
+                .collect();
+            tuner.fan_mode = gui_tuner::FanControlMode::Curve;
 
-        // For now, just save the curve
-        // In production, this would call:
-        // fan::apply_custom_curve(gpu_id, &curve_points)
+            // Apply via tuner (uses nvidia-settings like GUI)
+            match tuner.apply_fan_control() {
+                Ok(()) => {
+                    self.set_status_message(format!(
+                        "✅ Fan curve applied ({} points)",
+                        self.fan_curve_points.len()
+                    ));
+                }
+                Err(e) => {
+                    // Try saving to fan profile as fallback
+                    use crate::fan::{FanCurve, FanCurvePoint, FanProfile, save_fan_profiles};
+
+                    let curve = FanCurve {
+                        name: "TUI Custom".to_string(),
+                        points: self.fan_curve_points.iter().map(|(t, s)| FanCurvePoint {
+                            temperature: *t as u8,
+                            duty_cycle: *s as u8,
+                        }).collect(),
+                        hysteresis: 2,
+                        min_duty_cycle: self.fan_curve_points.first().map(|(_, s)| *s as u8).unwrap_or(0),
+                        max_duty_cycle: 100,
+                        zero_rpm_threshold: if self.fan_curve_points.first().map(|(_, s)| *s).unwrap_or(0) == 0 {
+                            Some(self.fan_curve_points.first().map(|(t, _)| *t as u8).unwrap_or(30))
+                        } else {
+                            None
+                        },
+                    };
+
+                    let mut curves = std::collections::HashMap::new();
+                    curves.insert(self.selected_gpu, curve);
+
+                    let profile = FanProfile {
+                        name: "TUI Custom".to_string(),
+                        description: "Custom curve from TUI".to_string(),
+                        curves,
+                        enabled: true,
+                        load_based_scaling: false,
+                        aggressive_mode: false,
+                    };
+
+                    if save_fan_profiles(&[profile]).is_ok() {
+                        self.set_status_message(format!(
+                            "⚠️ Fan curve saved (direct control: {})", e
+                        ));
+                    } else {
+                        self.set_status_message(format!("❌ Fan control failed: {}", e));
+                    }
+                }
+            }
+        } else {
+            // No tuner state, try direct fan module
+            use crate::fan::set_fan_curve;
+
+            let curve_points: Vec<(u8, u8)> = self.fan_curve_points
+                .iter()
+                .map(|(t, s)| (*t as u8, *s as u8))
+                .collect();
+
+            let fan_id = self.selected_gpu * 10;
+
+            match set_fan_curve(fan_id, &curve_points) {
+                Ok(()) => {
+                    self.set_status_message(format!(
+                        "✅ Fan curve applied ({} points)",
+                        curve_points.len()
+                    ));
+                }
+                Err(e) => {
+                    self.set_status_message(format!("❌ Fan control failed: {}", e));
+                }
+            }
+        }
     }
 
     /// Export metrics to JSON file

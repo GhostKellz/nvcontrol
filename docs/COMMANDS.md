@@ -1,8 +1,8 @@
 # nvcontrol Command Reference
 
-Complete CLI command reference for nvcontrol with pure Rust digital vibrance and container GPU passthrough.
+Complete CLI command reference for nvcontrol.
 
-## 🌈 Pure Rust Digital Vibrance (Zero Dependencies)
+## 🌈 Digital Vibrance
 
 ### Simple Vibrance Commands
 ```bash
@@ -523,4 +523,19 @@ nvctl drivers status
 
 ---
 
-For detailed technical documentation, see [DOCS.md](DOCS.md). For building from source, see [BUILDING.md](BUILDING.md).
+## Related Documentation
+
+For more GPU controls, see:
+
+- [VRR/G-SYNC Control](VRR_GSYNC.md) - Variable refresh rate and G-SYNC
+- [HDR Control](HDR_CONTROL.md) - High Dynamic Range display management
+- [Image Sharpening](IMAGE_SHARPENING.md) - GPU image post-processing
+- [Overclocking Guide](OVERCLOCKING.md) - Comprehensive overclocking reference
+
+For detailed technical documentation, see [INDEX.md](INDEX.md). For building from source, see [BUILDING.md](BUILDING.md).
+
+---
+
+## License
+
+MIT License - See [LICENSE](../LICENSE) file.
