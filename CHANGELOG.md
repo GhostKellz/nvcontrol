@@ -62,6 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `BackendStatus` integrated for displaying error banners when NVML/display unavailable
 - `src/tray.rs`: `SystemTray::with_backend()` accepts shared backend, eliminates duplicate NVML sessions
 - `src/notifications.rs`: `AlertMonitorThread::with_backend()` uses shared backend for metrics polling
+- nvbind and bolt moved to expirmental and testing functionality. Still early concept and not ready for daily use. 
 
 ### Security
 - **ShellDisplayRunner Hardening**: Command allow-list with absolute paths
