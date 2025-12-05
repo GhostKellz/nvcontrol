@@ -75,7 +75,6 @@ pub fn add(left: u64, right: u64) -> u64 {
 }
 
 pub mod benchmark;
-pub mod bolt_integration;
 pub mod config;
 pub mod display;
 pub mod display_controls;
@@ -87,7 +86,6 @@ pub mod gpu;
 pub mod gui_widgets;
 pub mod hdr;
 pub mod notifications;
-pub mod nvbind_integration;
 pub mod nvkms_bindings;
 pub mod osd;
 pub mod profiles;

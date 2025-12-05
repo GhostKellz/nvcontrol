@@ -425,7 +425,7 @@ mod tests {
     fn test_runtime_detection() {
         // This will depend on the environment
         let available = is_nvidia_runtime_available();
-        // Just ensure it doesn't panic
-        assert!(available || !available);
+        // Just ensure it doesn't panic - result depends on system
+        let _ = available;
     }
 }

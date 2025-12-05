@@ -6,34 +6,39 @@ This directory documents nvcontrol's integrations with other tools in the CKTech
 
 | Integration | Status | Description |
 |-------------|--------|-------------|
-| [nvbind](./NVBIND.md) | ✅ Active | GPU container runtime with sub-microsecond latency |
-| [Bolt](./BOLT.md) | ✅ Active | Gaming-optimized container runtime |
-| [ghostwave](./GHOSTWAVE.md) | ✅ Active | GPU-accelerated audio denoising |
 | [nvhud](./NVHUD.md) | 🔄 Planned | Zig-based GPU monitoring overlay |
 
-## Quick Start
+## Experimental Integrations
 
-### nvbind + nvcontrol (Gaming Containers)
+The following integrations have been moved to `experimental/` for future re-integration:
+
+| Integration | Status | Description |
+|-------------|--------|-------------|
+| nvbind | 🧪 Experimental | GPU container runtime with sub-microsecond latency |
+| Bolt | 🧪 Experimental | Gaming-optimized container runtime |
+| ghostwave | 🧪 Experimental | GPU-accelerated audio denoising |
+
+See [experimental/README.md](../../experimental/README.md) for details on these features.
+
+## Container Runtime
+
+nvcontrol provides native container runtime support for:
+- **Docker** with nvidia-container-toolkit
+- **Podman** with GPU support
+- **containerd** with NVIDIA runtime
+- **NixOS** container integration
+
+### Quick Start
 
 ```bash
-# Apply nvcontrol gaming profile
-nvctl profile apply gaming
+# List GPU containers
+nvctl container list
 
-# Launch container with nvbind
-nvbind run --runtime bolt --gpu all steam:latest
+# Launch container with GPU support
+nvctl container launch -i nvidia/cuda:latest --gpu all
 
-# Monitor combined performance
-nvctl gpu stat --container-aware
-```
-
-### ghostwave + nvcontrol (Audio Production)
-
-```bash
-# Apply quiet profile for audio work
-nvctl profile apply audio-production
-
-# Launch ghostwave with optimized GPU
-ghostwave start
+# Monitor container GPU usage
+nvctl container monitor -c my-container
 ```
 
 ## Architecture
@@ -41,25 +46,25 @@ ghostwave start
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    Application Layer                         │
-│  ┌─────────┐  ┌─────────┐  ┌───────────┐  ┌─────────────┐  │
-│  │ nvbind  │  │  Bolt   │  │ ghostwave │  │   nvhud     │  │
-│  └────┬────┘  └────┬────┘  └─────┬─────┘  └──────┬──────┘  │
-│       │            │             │               │          │
-│       └────────────┴──────┬──────┴───────────────┘          │
-│                           │                                  │
-│                           ▼                                  │
-│                    ┌─────────────┐                          │
-│                    │  nvcontrol  │                          │
-│                    │  (GPU API)  │                          │
-│                    └──────┬──────┘                          │
-│                           │                                  │
-└───────────────────────────┼─────────────────────────────────┘
-                            │
-                            ▼
-                   ┌─────────────────┐
-                   │  NVIDIA Driver  │
-                   │  (NVML / NVKMS) │
-                   └─────────────────┘
+│  ┌─────────────┐  ┌─────────────────┐  ┌─────────────┐     │
+│  │   Docker    │  │     Podman      │  │   nvhud     │     │
+│  └──────┬──────┘  └────────┬────────┘  └──────┬──────┘     │
+│         │                  │                   │            │
+│         └──────────────────┴───────────────────┘            │
+│                            │                                │
+│                            ▼                                │
+│                     ┌─────────────┐                         │
+│                     │  nvcontrol  │                         │
+│                     │  (GPU API)  │                         │
+│                     └──────┬──────┘                         │
+│                            │                                │
+└────────────────────────────┼────────────────────────────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │  NVIDIA Driver  │
+                    │  (NVML / NVKMS) │
+                    └─────────────────┘
 ```
 
 ## See Also

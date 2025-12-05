@@ -1,0 +1,10 @@
+{
+  "rustc": {
+    "source": "discover"
+  },
+  "cargo": {
+    "extraEnv": {
+      "RUSTUP_TOOLCHAIN": "nightly"
+    }
+  }
+}

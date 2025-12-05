@@ -185,8 +185,9 @@ fn test_multi_gpu_coordinator() {
     let coordinator = MultiGpuCoordinator::new();
 
     if let Ok(coord) = coordinator {
-        println!("GPU count: {}", coord.gpu_count());
-        assert!(coord.gpu_count() >= 0);
+        let count = coord.gpu_count();
+        println!("GPU count: {}", count);
+        // Just verify we got a valid count (usize is always >= 0)
         println!("✓ Multi-GPU coordinator test passed");
     } else {
         println!("⚠️  Multi-GPU coordinator unavailable (no NVML)");

@@ -283,7 +283,8 @@ mod tests {
     fn test_cuda_availability() {
         // Should not crash even if CUDA is not available
         let available = is_cuda_available();
-        assert!(available || !available); // Just check it returns a boolean
+        // Just verify function runs without panic - result depends on system
+        let _ = available;
     }
 
     #[test]
