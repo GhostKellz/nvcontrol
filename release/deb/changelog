@@ -1,3 +1,12 @@
+nvcontrol (0.7.6-1) unstable; urgency=medium
+
+  * Backend abstraction layer for NVML/display with mock support
+  * BackendStatus indicators + cached metrics for GUI/TUI reliability
+  * TUI session persistence and CLI/backend integration refactor
+  * Deterministic backend tests and release prep for v0.7.6
+
+ -- CK Technology LLC <info@cktechx.com>  Thu, 04 Dec 2025 12:00:00 +0000
+
 nvcontrol (0.7.2-1) unstable; urgency=medium
 
   * ASUS Power Detector+ support for ROG Astral RTX 5090
@@ -5,7 +14,7 @@ nvcontrol (0.7.2-1) unstable; urgency=medium
   * Experimental warning for overclocking/voltage features
   * ASUS documentation (ASTRAL_OWNERS.md, POWER_DETECTION.md)
 
- -- CK Technology LLC <contact@ck-technology.com>  Wed, 27 Nov 2024 18:00:00 +0000
+ -- CK Technology LLC <info@cktechx.com>  Wed, 27 Nov 2024 18:00:00 +0000
 
 nvcontrol (0.7.1-1) unstable; urgency=medium
 
@@ -15,7 +24,7 @@ nvcontrol (0.7.1-1) unstable; urgency=medium
   * Improved Wayland compositor detection
   * Native digital vibrance implementation (no nvidia-settings required)
 
- -- CK Technology LLC <contact@ck-technology.com>  Wed, 27 Nov 2024 12:00:00 +0000
+ -- CK Technology LLC <info@cktechx.com>  Wed, 27 Nov 2024 12:00:00 +0000
 
 nvcontrol (0.7.0-1) unstable; urgency=medium
 
@@ -25,4 +34,4 @@ nvcontrol (0.7.0-1) unstable; urgency=medium
   * Multi-compositor support (KDE, GNOME, Hyprland, Sway)
   * Container GPU passthrough
 
- -- CK Technology LLC <contact@ck-technology.com>  Mon, 25 Nov 2024 12:00:00 +0000
+ -- CK Technology LLC <info@cktechx.com>  Mon, 25 Nov 2024 12:00:00 +0000

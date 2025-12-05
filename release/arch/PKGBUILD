@@ -1,9 +1,9 @@
-# Maintainer: CK Technology LLC <contact@ck-technology.com>
+# Maintainer: CK Technology LLC <info@cktechx.com>
 # nvcontrol - Modern NVIDIA Settings Manager for Linux + Wayland
 # Premier platform: Arch Linux
 
 pkgname=nvcontrol
-pkgver=0.7.2
+pkgver=0.7.6
 pkgrel=1
 pkgdesc="Modern NVIDIA Settings Manager for Linux + Wayland - Digital Vibrance, VRR, HDR, Overclocking"
 arch=('x86_64')

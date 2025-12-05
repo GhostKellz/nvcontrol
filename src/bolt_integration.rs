@@ -188,32 +188,16 @@ pub struct NvidiaConfig {
     pub cuda: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GamingConfig {
     pub gpu: Option<GpuConfig>,
 }
 
-impl Default for GamingConfig {
-    fn default() -> Self {
-        Self { gpu: None }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GpuConfig {
     pub nvidia: Option<NvidiaConfig>,
     pub amd: Option<AmdConfig>,
     pub passthrough: Option<bool>,
-}
-
-impl Default for GpuConfig {
-    fn default() -> Self {
-        Self {
-            nvidia: None,
-            amd: None,
-            passthrough: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -334,7 +318,6 @@ impl NvControlBoltManager {
                 amd: None,
                 passthrough: Some(true),
             }),
-            ..Default::default()
         };
 
         // Create high-performance network

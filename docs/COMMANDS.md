@@ -402,6 +402,21 @@ nvctl ct runtime configure         # Configure NVIDIA Container Runtime
   - Automatic DKMS cleanup
   - Configuration preservation
 
+- `nvctl driver info`  
+  Show current driver capabilities and requirements:
+  - Highlights minimum Wayland/glibc versions for your installed driver
+  - Indicates whether advanced features (USB4 DP, Vulkan swapchain fixes, PREEMPT_RT) are available
+  - Useful before switching kernels, compositors, or enabling experimental paths
+
+- `nvctl driver validate --driver <major>`  
+  Validate system readiness for a target driver branch (e.g., 590):
+  ```bash
+  nvctl driver validate --driver 590
+  ```
+  - Verifies Wayland and glibc versions against the requested branch
+  - Warns about PREEMPT_RT kernels or other potential incompatibilities
+  - Produces actionable warnings/errors before installing new drivers
+
 ## 🐚 Shell Completion
 
 - **Install shell completions** for enhanced CLI experience:

@@ -1,5 +1,5 @@
+use crate::nvml_backend::SharedNvmlBackend;
 use crate::{NvControlError, NvResult};
-use nvml_wrapper::{Device, Nvml};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::Write;
@@ -39,14 +39,12 @@ pub struct MetricSnapshot {
 }
 
 /// Live GPU monitoring with text output (like htop but for GPU)
-pub fn live_gpu_watch(interval_seconds: u64, max_count: u32) -> NvResult<()> {
-    let nvml = Nvml::init().map_err(|e| {
-        NvControlError::DisplayDetectionFailed(format!("NVML initialization failed: {}", e))
-    })?;
-
-    let device_count = nvml.device_count().map_err(|e| {
-        NvControlError::DisplayDetectionFailed(format!("Failed to get device count: {}", e))
-    })?;
+pub fn live_gpu_watch(
+    interval_seconds: u64,
+    max_count: u32,
+    backend: &SharedNvmlBackend,
+) -> NvResult<()> {
+    let device_count = backend.device_count()?;
 
     if device_count == 0 {
         return Err(NvControlError::DisplayDetectionFailed(
@@ -79,10 +77,8 @@ pub fn live_gpu_watch(interval_seconds: u64, max_count: u32) -> NvResult<()> {
         println!("{}", "=".repeat(80));
 
         for gpu_id in 0..device_count {
-            if let Ok(device) = nvml.device_by_index(gpu_id) {
-                print_live_gpu_stats(&device, gpu_id)?;
-                println!();
-            }
+            print_live_gpu_stats(backend, gpu_id)?;
+            println!();
         }
 
         thread::sleep(Duration::from_secs(interval_seconds));
@@ -92,44 +88,35 @@ pub fn live_gpu_watch(interval_seconds: u64, max_count: u32) -> NvResult<()> {
     Ok(())
 }
 
-fn print_live_gpu_stats(device: &Device, gpu_id: u32) -> NvResult<()> {
-    let name = device.name().unwrap_or("Unknown".to_string());
+fn print_live_gpu_stats(backend: &SharedNvmlBackend, gpu_id: u32) -> NvResult<()> {
+    let name = backend
+        .get_name(gpu_id)
+        .unwrap_or_else(|_| "Unknown".to_string());
 
     // Get utilization
-    let utilization = device
-        .utilization_rates()
-        .map(|u| (u.gpu, u.memory))
-        .unwrap_or((0, 0));
+    let utilization = backend.get_utilization(gpu_id).unwrap_or((0, 0));
 
     // Get temperature
-    let temp = device
-        .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
-        .unwrap_or(0);
+    let temp = backend.get_temperature(gpu_id).unwrap_or(0);
 
     // Get power
-    let power = device
-        .power_usage()
+    let power = backend
+        .get_power_usage(gpu_id)
         .map(|p| p as f64 / 1000.0) // mW to W
         .unwrap_or(0.0);
 
     // Get memory info
-    let memory = device.memory_info().ok();
-    let (mem_used, mem_total) = if let Some(mem) = memory {
-        (mem.used as f64 / 1e9, mem.total as f64 / 1e9)
-    } else {
-        (0.0, 0.0)
-    };
+    let (mem_used, mem_total) = backend
+        .get_memory_info(gpu_id)
+        .map(|(used, total)| (used as f64 / 1e9, total as f64 / 1e9))
+        .unwrap_or((0.0, 0.0));
 
     // Get clocks
-    let gpu_clock = device
-        .clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics)
-        .unwrap_or(0);
-    let mem_clock = device
-        .clock_info(nvml_wrapper::enum_wrappers::device::Clock::Memory)
-        .unwrap_or(0);
+    let gpu_clock = backend.get_gpu_clock(gpu_id).unwrap_or(0);
+    let mem_clock = backend.get_memory_clock(gpu_id).unwrap_or(0);
 
     // Get fan speed
-    let fan_speed = device.fan_speed(0).unwrap_or(0);
+    let fan_speed = backend.get_fan_speed(gpu_id, 0).unwrap_or(0);
 
     println!("GPU {}: {}", gpu_id, name);
     println!(
@@ -179,14 +166,9 @@ pub fn export_gpu_metrics(
     format: &str,
     output_path: Option<&str>,
     duration_seconds: u32,
+    backend: &SharedNvmlBackend,
 ) -> NvResult<()> {
-    let nvml = Nvml::init().map_err(|e| {
-        NvControlError::DisplayDetectionFailed(format!("NVML initialization failed: {}", e))
-    })?;
-
-    let device_count = nvml.device_count().map_err(|e| {
-        NvControlError::DisplayDetectionFailed(format!("Failed to get device count: {}", e))
-    })?;
+    let device_count = backend.device_count()?;
 
     if device_count == 0 {
         return Err(NvControlError::DisplayDetectionFailed(
@@ -205,10 +187,8 @@ pub fn export_gpu_metrics(
 
     while start_time.elapsed().as_secs() < duration_seconds as u64 {
         for gpu_id in 0..device_count {
-            if let Ok(device) = nvml.device_by_index(gpu_id) {
-                if let Ok(metrics) = collect_device_metrics(&device, gpu_id) {
-                    all_metrics.push(metrics);
-                }
+            if let Ok(metrics) = collect_device_metrics(backend, gpu_id) {
+                all_metrics.push(metrics);
             }
         }
 
@@ -248,42 +228,34 @@ pub fn export_gpu_metrics(
     Ok(())
 }
 
-fn collect_device_metrics(device: &Device, _gpu_id: u32) -> NvResult<MetricSnapshot> {
+fn collect_device_metrics(backend: &SharedNvmlBackend, gpu_id: u32) -> NvResult<MetricSnapshot> {
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs();
 
-    let utilization = device
-        .utilization_rates()
-        .map(|u| (u.gpu as f64, u.memory as f64))
+    let utilization = backend
+        .get_utilization(gpu_id)
+        .map(|(gpu, mem)| (gpu as f64, mem as f64))
         .unwrap_or((0.0, 0.0));
 
-    let temperature = device
-        .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
-        .unwrap_or(0) as f64;
+    let temperature = backend.get_temperature(gpu_id).unwrap_or(0) as f64;
 
-    let power_draw = device
-        .power_usage()
+    let power_draw = backend
+        .get_power_usage(gpu_id)
         .map(|p| p as f64 / 1000.0)
         .unwrap_or(0.0);
 
-    let fan_speed = device.fan_speed(0).unwrap_or(0) as f64;
+    let fan_speed = backend.get_fan_speed(gpu_id, 0).unwrap_or(0) as f64;
 
-    let gpu_clock = device
-        .clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics)
-        .unwrap_or(0) as f64;
+    let gpu_clock = backend.get_gpu_clock(gpu_id).unwrap_or(0) as f64;
 
-    let memory_clock = device
-        .clock_info(nvml_wrapper::enum_wrappers::device::Clock::Memory)
-        .unwrap_or(0) as f64;
+    let memory_clock = backend.get_memory_clock(gpu_id).unwrap_or(0) as f64;
 
-    let memory = device.memory_info().ok();
-    let (memory_used_mb, memory_total_mb) = if let Some(mem) = memory {
-        (mem.used as f64 / 1e6, mem.total as f64 / 1e6)
-    } else {
-        (0.0, 0.0)
-    };
+    let (memory_used_mb, memory_total_mb) = backend
+        .get_memory_info(gpu_id)
+        .map(|(used, total)| (used as f64 / 1e6, total as f64 / 1e6))
+        .unwrap_or((0.0, 0.0));
 
     Ok(MetricSnapshot {
         timestamp,
@@ -355,21 +327,23 @@ pub fn run_gpu_benchmark(
     test_type: &str,
     intensity: &str,
     log_results: bool,
+    backend: &SharedNvmlBackend,
 ) -> NvResult<()> {
     println!("🏁 Starting GPU benchmark...");
     println!("  Test Type: {}", test_type);
     println!("  Duration: {} seconds", duration_seconds);
     println!("  Intensity: {}", intensity);
 
-    let nvml = Nvml::init().map_err(|e| {
-        NvControlError::DisplayDetectionFailed(format!("NVML initialization failed: {}", e))
-    })?;
+    let device_count = backend.device_count()?;
+    if device_count == 0 {
+        return Err(NvControlError::DisplayDetectionFailed(
+            "No NVIDIA GPUs found".to_string(),
+        ));
+    }
 
-    let device = nvml.device_by_index(0).map_err(|e| {
-        NvControlError::DisplayDetectionFailed(format!("Failed to get GPU 0: {}", e))
-    })?;
-
-    let gpu_name = device.name().unwrap_or("Unknown GPU".to_string());
+    let gpu_name = backend
+        .get_name(0)
+        .unwrap_or_else(|_| "Unknown GPU".to_string());
     println!("  GPU: {}", gpu_name);
     println!();
 
@@ -384,7 +358,7 @@ pub fn run_gpu_benchmark(
     println!("📊 Monitoring performance...");
 
     while start_time.elapsed().as_secs() < duration_seconds as u64 {
-        if let Ok(snapshot) = collect_device_metrics(&device, 0) {
+        if let Ok(snapshot) = collect_device_metrics(backend, 0) {
             // Print progress every 10 samples
             if sample_count % 10 == 0 {
                 println!(

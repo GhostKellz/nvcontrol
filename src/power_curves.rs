@@ -255,7 +255,7 @@ impl GamePowerProfiles {
 }
 
 /// Master power management configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PowerManagementConfig {
     pub curve_enabled: bool,
     pub schedule_enabled: bool,
@@ -263,19 +263,6 @@ pub struct PowerManagementConfig {
     pub power_curve: PowerCurve,
     pub schedule: PowerSchedule,
     pub game_profiles: GamePowerProfiles,
-}
-
-impl Default for PowerManagementConfig {
-    fn default() -> Self {
-        Self {
-            curve_enabled: false,
-            schedule_enabled: false,
-            game_profiles_enabled: false,
-            power_curve: PowerCurve::default(),
-            schedule: PowerSchedule::default(),
-            game_profiles: GamePowerProfiles::default(),
-        }
-    }
 }
 
 impl PowerManagementConfig {

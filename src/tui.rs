@@ -1,3 +1,5 @@
+use crate::config::TuiSessionState;
+use crate::nvml_backend::{BackendStatus, GuiBackendContext};
 use crate::{
     NvControlError, NvResult, asus_power_detector, gui_tuner, nvidia_profiler, themes, vrr,
 };
@@ -9,8 +11,7 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use nvml_wrapper::enums::device::UsedGpuMemory;
-use nvml_wrapper::{Device, Nvml};
+use nvml_wrapper::Nvml;
 use ratatui::{
     Frame, Terminal,
     backend::CrosstermBackend,
@@ -37,6 +38,10 @@ pub struct GpuMetrics {
 }
 
 pub struct TuiApp {
+    /// Backend context for all GPU/display operations
+    backend_ctx: GuiBackendContext,
+    /// Legacy NVML handle (being phased out - use backend_ctx instead)
+    #[allow(dead_code)]
     nvml: Option<Nvml>,
     device_count: u32,
     metrics_history: Vec<VecDeque<GpuMetrics>>,
@@ -75,6 +80,9 @@ pub struct TuiApp {
     osd_enabled: bool,
     #[allow(dead_code)]
     osd_selected_metric: usize,
+    // Driver validation state (cached readiness check)
+    driver_validation: Option<crate::state::DriverValidationState>,
+    driver_capabilities: Option<crate::drivers::DriverCapabilities>,
 }
 
 #[derive(Clone, Copy)]
@@ -91,6 +99,7 @@ enum Tab {
     Tuner,    // MSI Afterburner-style tuner
     Profiler, // GPU profiler (radeon-profile equivalent)
     Osd,      // MangoHud OSD configuration
+    Drivers,  // Driver readiness and capability info
     Settings, // Settings panel
 }
 
@@ -117,6 +126,7 @@ impl Tab {
             "Tuner",
             "Profiler",
             "OSD",
+            "Drivers",
             "Settings",
         ]
     }
@@ -135,7 +145,8 @@ impl Tab {
             9 => Tab::Tuner,
             10 => Tab::Profiler,
             11 => Tab::Osd,
-            12 => Tab::Settings,
+            12 => Tab::Drivers,
+            13 => Tab::Settings,
             _ => Tab::Overview,
         }
     }
@@ -149,12 +160,14 @@ impl Default for TuiApp {
 
 impl TuiApp {
     pub fn new() -> Self {
+        Self::with_context(GuiBackendContext::new())
+    }
+
+    /// Create TuiApp with a custom backend context (for testing)
+    pub fn with_context(backend_ctx: GuiBackendContext) -> Self {
+        // Legacy nvml handle - keep for methods not yet migrated
         let nvml = Nvml::init().ok();
-        let device_count = if let Some(ref nvml) = nvml {
-            nvml.device_count().unwrap_or(0)
-        } else {
-            0
-        };
+        let device_count = backend_ctx.device_count;
 
         let metrics_history = (0..device_count)
             .map(|_| VecDeque::with_capacity(MAX_HISTORY))
@@ -169,33 +182,62 @@ impl TuiApp {
         let current_theme = Self::detect_gpu_vendor_theme(&nvml);
         let theme = themes::ColorPalette::from_variant(current_theme);
 
-        // Default fan curve (performance)
-        let fan_curve_points = vec![
-            (30, 20),  // 30°C -> 20%
-            (50, 40),  // 50°C -> 40%
-            (70, 60),  // 70°C -> 60%
-            (80, 80),  // 80°C -> 80%
-            (90, 100), // 90°C -> 100%
-        ];
+        // Load saved session state
+        let saved_state = TuiSessionState::load();
+
+        // Use saved fan curve if available, otherwise default
+        let fan_curve_points = if !saved_state.fan_curve_points.is_empty() {
+            saved_state
+                .fan_curve_points
+                .iter()
+                .map(|(t, f)| (*t as u32, *f as u32))
+                .collect()
+        } else {
+            vec![
+                (30, 20),  // 30°C -> 20%
+                (50, 40),  // 50°C -> 40%
+                (70, 60),  // 70°C -> 60%
+                (80, 80),  // 80°C -> 80%
+                (90, 100), // 90°C -> 100%
+            ]
+        };
+
+        // Validate saved GPU selection against current device count
+        let selected_gpu = if saved_state.selected_gpu < device_count as usize {
+            saved_state.selected_gpu
+        } else {
+            0
+        };
+
+        // Parse OC preset from saved state
+        let oc_preset = match saved_state.oc_preset.as_str() {
+            "MildOc" => OcPreset::MildOc,
+            "Performance" => OcPreset::Performance,
+            "Extreme" => OcPreset::Extreme,
+            _ => OcPreset::Stock,
+        };
 
         // Initialize tuner states for each GPU
-        let tuner_states = (0..device_count)
-            .map(|gpu_id| gui_tuner::TunerState::new(gpu_id))
-            .collect();
+        let tuner_states = (0..device_count).map(gui_tuner::TunerState::new).collect();
 
         // Initialize profiler (for selected GPU initially)
         let profiler = if device_count > 0 {
-            Some(nvidia_profiler::NvidiaProfiler::new(0, 100, 10000))
+            Some(nvidia_profiler::NvidiaProfiler::new(
+                selected_gpu as u32,
+                100,
+                10000,
+            ))
         } else {
             None
         };
 
         Self {
+            backend_ctx,
             nvml,
             device_count,
             metrics_history,
-            current_tab: 0,
-            selected_gpu: 0,
+            current_tab: saved_state.current_tab.min(10), // Cap at max tab index
+            selected_gpu,
             show_help: false,
             show_settings: false,
             paused: false,
@@ -210,10 +252,10 @@ impl TuiApp {
             fan_speed_target: 50,
             current_theme,
             theme,
-            gpu_offset: 0,
-            memory_offset: 0,
-            power_limit_percent: 80,
-            oc_preset: OcPreset::Stock,
+            gpu_offset: saved_state.gpu_offset,
+            memory_offset: saved_state.memory_offset,
+            power_limit_percent: u32::from(saved_state.power_limit_percent),
+            oc_preset,
             fan_curve_points,
             selected_curve_point: 0,
             tuner_states,
@@ -221,6 +263,8 @@ impl TuiApp {
             profiler_recording: false,
             osd_enabled: crate::osd::OsdManager::check_mangohud_installed(),
             osd_selected_metric: 0,
+            driver_validation: crate::state::DriverValidationState::load(),
+            driver_capabilities: crate::drivers::get_driver_capabilities().ok(),
         }
     }
 
@@ -366,7 +410,7 @@ impl TuiApp {
                             KeyCode::Down => {
                                 let idx = self.selected_curve_point;
                                 if let Some(point) = self.fan_curve_points.get_mut(idx) {
-                                    point.1 = (point.1.saturating_sub(5)).max(0);
+                                    point.1 = point.1.saturating_sub(5);
                                     let temp = point.0;
                                     let fan = point.1;
                                     self.set_status_message(format!(
@@ -405,7 +449,14 @@ impl TuiApp {
                         KeyCode::Char('s') => self.show_settings = !self.show_settings,
                         KeyCode::Char(' ') => self.paused = !self.paused, // Space for pause
                         KeyCode::Char('p') => self.paused = !self.paused, // Also 'p' for pause
-                        KeyCode::Char('r') => self.reset_metrics(),
+                        KeyCode::Char('r') => {
+                            if self.current_tab == 12 {
+                                // On Drivers tab, run validation
+                                self.validate_driver();
+                            } else {
+                                self.reset_metrics();
+                            }
+                        }
                         // Direct tab navigation
                         KeyCode::Char('1') => self.current_tab = 0,
                         KeyCode::Char('2') => self.current_tab = 1,
@@ -461,6 +512,9 @@ impl TuiApp {
             terminal.draw(|f| self.draw(f))?;
         }
 
+        // Save session state before exiting
+        self.save_session_state();
+
         // Cleanup
         disable_raw_mode()?;
         execute!(
@@ -474,58 +528,35 @@ impl TuiApp {
     }
 
     fn update_metrics(&mut self) {
-        if let Some(ref nvml) = self.nvml {
-            for gpu_id in 0..self.device_count {
-                if let Ok(device) = nvml.device_by_index(gpu_id) {
-                    if let Ok(metrics) = self.get_device_metrics(&device) {
-                        if let Some(history) = self.metrics_history.get_mut(gpu_id as usize) {
-                            history.push_back(metrics);
-                            if history.len() > MAX_HISTORY {
-                                history.pop_front();
-                            }
-                        }
+        if !self.backend_ctx.is_nvml_available() {
+            return;
+        }
+
+        for gpu_id in 0..self.device_count {
+            if let Ok(metrics) = self.get_device_metrics_from_backend(gpu_id) {
+                if let Some(history) = self.metrics_history.get_mut(gpu_id as usize) {
+                    history.push_back(metrics);
+                    if history.len() > MAX_HISTORY {
+                        history.pop_front();
                     }
                 }
             }
         }
     }
 
-    fn get_device_metrics(&self, device: &Device) -> NvResult<GpuMetrics> {
-        let temperature = device
-            .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
-            .unwrap_or(0) as f64;
-
-        let utilization = device
-            .utilization_rates()
-            .map(|u| (u.gpu as f64, u.memory as f64))
-            .unwrap_or((0.0, 0.0));
-
-        let power_draw = device
-            .power_usage()
-            .map(|p| p as f64 / 1000.0) // mW to W
-            .unwrap_or(0.0);
-
-        let fan_speed = device.fan_speed(0).unwrap_or(0) as f64;
-
-        let clocks = device
-            .clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics)
-            .map(|g| {
-                let mem = device
-                    .clock_info(nvml_wrapper::enum_wrappers::device::Clock::Memory)
-                    .unwrap_or(0);
-                (g as f64, mem as f64)
-            })
-            .unwrap_or((0.0, 0.0));
+    /// Get device metrics using the backend context (new implementation)
+    fn get_device_metrics_from_backend(&self, gpu_id: u32) -> NvResult<GpuMetrics> {
+        let backend_metrics = self.backend_ctx.get_metrics(gpu_id)?;
 
         Ok(GpuMetrics {
             timestamp: Instant::now(),
-            temperature,
-            gpu_utilization: utilization.0,
-            memory_utilization: utilization.1,
-            power_draw,
-            fan_speed,
-            gpu_clock: clocks.0,
-            memory_clock: clocks.1,
+            temperature: backend_metrics.temperature as f64,
+            gpu_utilization: backend_metrics.gpu_utilization as f64,
+            memory_utilization: backend_metrics.memory_utilization as f64,
+            power_draw: backend_metrics.power_draw_mw as f64 / 1000.0, // mW to W
+            fan_speed: backend_metrics.fan_speed as f64,
+            gpu_clock: backend_metrics.gpu_clock_mhz as f64,
+            memory_clock: backend_metrics.memory_clock_mhz as f64,
         })
     }
 
@@ -575,6 +606,7 @@ impl TuiApp {
             Tab::Tuner => self.draw_tuner(f, chunks[2]),
             Tab::Profiler => self.draw_profiler(f, chunks[2]),
             Tab::Osd => self.draw_osd(f, chunks[2]),
+            Tab::Drivers => self.draw_drivers(f, chunks[2]),
             Tab::Settings => self.draw_settings(f, chunks[2]),
         }
 
@@ -605,14 +637,19 @@ impl TuiApp {
             "-- | -- | --".to_string()
         };
 
+        // Get backend status indicator
+        let (status_icon, _status_color) = self.get_backend_status_indicator();
+
         let title = format!(
-            "{} nvcontrol v0.7.1 │ GPU {} │ {} │ {} │ {} │ {}",
+            "{} nvcontrol v{} │ GPU {} │ {} │ {} │ {} │ {} │ {}",
             themes::icons::GPU,
+            env!("CARGO_PKG_VERSION"),
             self.selected_gpu,
             stats_str,
             status,
             format!("{}m {}s", uptime / 60, uptime % 60),
-            self.current_theme.name()
+            self.current_theme.name(),
+            status_icon
         );
 
         let header = Paragraph::new(title)
@@ -678,58 +715,63 @@ impl TuiApp {
     }
 
     fn draw_overview(&self, f: &mut Frame, area: Rect) {
-        if self.device_count == 0 {
+        if self.device_count == 0 || !self.backend_ctx.is_nvml_available() {
             let placeholder = Paragraph::new("No NVIDIA GPUs detected")
                 .block(Block::default().borders(Borders::ALL).title("GPU Overview"));
             f.render_widget(placeholder, area);
             return;
         }
 
-        if let Some(ref nvml) = self.nvml {
-            if let Ok(device) = nvml.device_by_index(self.selected_gpu as u32) {
-                let metrics = self
-                    .metrics_history
-                    .get(self.selected_gpu)
-                    .and_then(|h| h.back());
+        let gpu_index = self.selected_gpu as u32;
+        let metrics = self
+            .metrics_history
+            .get(self.selected_gpu)
+            .and_then(|h| h.back());
 
-                // Split into sections
-                let chunks = Layout::default()
-                    .direction(Direction::Vertical)
-                    .constraints([
-                        Constraint::Length(6), // GPU info
-                        Constraint::Length(8), // Quick stats
-                        Constraint::Min(0),    // Mini graphs
-                    ])
-                    .split(area);
+        // Split into sections
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(6), // GPU info
+                Constraint::Length(8), // Quick stats
+                Constraint::Min(0),    // Mini graphs
+            ])
+            .split(area);
 
-                // GPU Information
-                self.draw_gpu_info(f, chunks[0], &device);
+        // GPU Information (uses backend)
+        self.draw_gpu_info(f, chunks[0], gpu_index);
 
-                // Quick Stats Gauges
-                if let Some(metrics) = metrics {
-                    self.draw_quick_stats(f, chunks[1], metrics);
-                }
-
-                // Mini graphs
-                self.draw_mini_graphs(f, chunks[2]);
-            }
+        // Quick Stats Gauges
+        if let Some(metrics) = metrics {
+            self.draw_quick_stats(f, chunks[1], metrics);
         }
+
+        // Mini graphs
+        self.draw_mini_graphs(f, chunks[2]);
     }
 
-    fn draw_gpu_info(&self, f: &mut Frame, area: Rect, device: &Device) {
-        let name = device.name().unwrap_or("Unknown GPU".to_string());
-        let memory = device.memory_info().ok();
-        let power_limit = device.power_management_limit_default().ok();
+    fn draw_gpu_info(&self, f: &mut Frame, area: Rect, gpu_index: u32) {
+        let name = self
+            .backend_ctx
+            .nvml
+            .get_name(gpu_index)
+            .unwrap_or("Unknown GPU".to_string());
+        let memory = self.backend_ctx.nvml.get_memory_info(gpu_index).ok();
+        let power_limit = self
+            .backend_ctx
+            .nvml
+            .get_power_limit_default(gpu_index)
+            .ok();
 
         let info = vec![
             format!("Name: {}", name),
             format!(
                 "Memory: {}",
-                if let Some(mem) = memory {
+                if let Some((used, total)) = memory {
                     format!(
                         "{:.1} GB ({:.1} GB used)",
-                        mem.total as f64 / 1e9,
-                        mem.used as f64 / 1e9
+                        total as f64 / 1e9,
+                        used as f64 / 1e9
                     )
                 } else {
                     "Unknown".to_string()
@@ -900,8 +942,8 @@ impl TuiApp {
         f.render_widget(header, chunks[0]);
 
         // Performance metrics
-        if let Some(ref _nvml) = self.nvml {
-            if let Some(history) = self.metrics_history.get(self.selected_gpu as usize) {
+        if self.backend_ctx.is_nvml_available() {
+            if let Some(history) = self.metrics_history.get(self.selected_gpu) {
                 if let Some(latest) = history.back() {
                     let perf_chunks = Layout::default()
                         .direction(Direction::Horizontal)
@@ -962,7 +1004,10 @@ impl TuiApp {
                 }
             }
         } else {
-            let no_nvml = Paragraph::new("NVML not available - install NVIDIA drivers")
+            let banner_text = self
+                .get_unavailability_banner()
+                .unwrap_or("GPU not available");
+            let no_nvml = Paragraph::new(banner_text)
                 .alignment(Alignment::Center)
                 .block(Block::default().borders(Borders::ALL))
                 .style(Style::default().fg(Color::Red));
@@ -983,97 +1028,92 @@ impl TuiApp {
             .style(Style::default().fg(Color::Cyan));
         f.render_widget(header, chunks[0]);
 
-        if let Some(ref nvml) = self.nvml {
-            if self.selected_gpu < self.device_count as usize {
-                if let Ok(device) = nvml.device_by_index(self.selected_gpu as u32) {
-                    let memory_chunks = Layout::default()
-                        .direction(Direction::Horizontal)
-                        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
-                        .split(chunks[1]);
+        if self.backend_ctx.is_nvml_available() && self.selected_gpu < self.device_count as usize {
+            let gpu_index = self.selected_gpu as u32;
+            let memory_chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+                .split(chunks[1]);
 
-                    // Left side - Memory stats
-                    let mut memory_info = Vec::new();
+            // Left side - Memory stats
+            let mut memory_info = Vec::new();
 
-                    if let Ok(mem_info) = device.memory_info() {
-                        let used_gb = mem_info.used as f64 / 1024.0 / 1024.0 / 1024.0;
-                        let total_gb = mem_info.total as f64 / 1024.0 / 1024.0 / 1024.0;
-                        let free_gb = total_gb - used_gb;
-                        let usage_percent = (used_gb / total_gb) * 100.0;
+            if let Ok((used, total)) = self.backend_ctx.nvml.get_memory_info(gpu_index) {
+                let used_gb = used as f64 / 1024.0 / 1024.0 / 1024.0;
+                let total_gb = total as f64 / 1024.0 / 1024.0 / 1024.0;
+                let free_gb = total_gb - used_gb;
+                let usage_percent = (used_gb / total_gb) * 100.0;
 
-                        memory_info.push(format!("Total VRAM: {:.2} GB", total_gb));
-                        memory_info.push(format!(
-                            "Used VRAM: {:.2} GB ({:.1}%)",
-                            used_gb, usage_percent
-                        ));
-                        memory_info.push(format!("Free VRAM: {:.2} GB", free_gb));
-                    }
+                memory_info.push(format!("Total VRAM: {:.2} GB", total_gb));
+                memory_info.push(format!(
+                    "Used VRAM: {:.2} GB ({:.1}%)",
+                    used_gb, usage_percent
+                ));
+                memory_info.push(format!("Free VRAM: {:.2} GB", free_gb));
+            }
 
-                    if let Ok(processes) = device.running_graphics_processes() {
-                        memory_info.push(String::new());
-                        memory_info.push(format!("Active Processes: {}", processes.len()));
+            if let Ok(processes) = self
+                .backend_ctx
+                .nvml
+                .get_running_graphics_processes(gpu_index)
+            {
+                memory_info.push(String::new());
+                memory_info.push(format!("Active Processes: {}", processes.len()));
 
-                        for (i, process) in processes.iter().take(5).enumerate() {
-                            let mem_mb = match process.used_gpu_memory {
-                                UsedGpuMemory::Used(bytes) => bytes as f64 / 1024.0 / 1024.0,
-                                UsedGpuMemory::Unavailable => 0.0,
-                            };
-                            memory_info.push(format!("  Process {}: {:.1} MB", i + 1, mem_mb));
-                        }
+                for (i, process) in processes.iter().take(5).enumerate() {
+                    let mem_mb =
+                        process.used_gpu_memory_bytes.unwrap_or(0) as f64 / 1024.0 / 1024.0;
+                    memory_info.push(format!("  Process {}: {:.1} MB", i + 1, mem_mb));
+                }
 
-                        if processes.len() > 5 {
-                            memory_info.push(format!("  ... and {} more", processes.len() - 5));
-                        }
-                    }
-
-                    // Add memory clock info
-                    if let Some(history) = self.metrics_history.get(self.selected_gpu as usize) {
-                        if let Some(latest) = history.back() {
-                            memory_info.push(String::new());
-                            memory_info.push(format!("Memory Clock: {} MHz", latest.memory_clock));
-                            memory_info.push(format!(
-                                "Memory Utilization: {:.1}%",
-                                latest.memory_utilization
-                            ));
-                        }
-                    }
-
-                    let memory_list: Vec<ListItem> =
-                        memory_info.into_iter().map(ListItem::new).collect();
-                    let memory_widget = List::new(memory_list)
-                        .block(
-                            Block::default()
-                                .borders(Borders::ALL)
-                                .title("Memory Statistics"),
-                        )
-                        .style(Style::default().fg(Color::White));
-                    f.render_widget(memory_widget, memory_chunks[0]);
-
-                    // Right side - Memory usage gauge
-                    if let Ok(mem_info) = device.memory_info() {
-                        let usage_ratio = mem_info.used as f64 / mem_info.total as f64;
-                        let gauge = Gauge::default()
-                            .block(Block::default().borders(Borders::ALL).title("VRAM Usage"))
-                            .gauge_style(Style::default().fg(if usage_ratio > 0.9 {
-                                Color::Red
-                            } else if usage_ratio > 0.7 {
-                                Color::Yellow
-                            } else {
-                                Color::Green
-                            }))
-                            .ratio(usage_ratio)
-                            .label(format!("{:.1}%", usage_ratio * 100.0));
-                        f.render_widget(gauge, memory_chunks[1]);
-                    }
-                } else {
-                    let error = Paragraph::new("Failed to access GPU memory information")
-                        .alignment(Alignment::Center)
-                        .block(Block::default().borders(Borders::ALL))
-                        .style(Style::default().fg(Color::Red));
-                    f.render_widget(error, chunks[1]);
+                if processes.len() > 5 {
+                    memory_info.push(format!("  ... and {} more", processes.len() - 5));
                 }
             }
+
+            // Add memory clock info
+            if let Some(history) = self.metrics_history.get(self.selected_gpu) {
+                if let Some(latest) = history.back() {
+                    memory_info.push(String::new());
+                    memory_info.push(format!("Memory Clock: {} MHz", latest.memory_clock));
+                    memory_info.push(format!(
+                        "Memory Utilization: {:.1}%",
+                        latest.memory_utilization
+                    ));
+                }
+            }
+
+            let memory_list: Vec<ListItem> = memory_info.into_iter().map(ListItem::new).collect();
+            let memory_widget = List::new(memory_list)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title("Memory Statistics"),
+                )
+                .style(Style::default().fg(Color::White));
+            f.render_widget(memory_widget, memory_chunks[0]);
+
+            // Right side - Memory usage gauge
+            if let Ok((used, total)) = self.backend_ctx.nvml.get_memory_info(gpu_index) {
+                let usage_ratio = used as f64 / total as f64;
+                let gauge = Gauge::default()
+                    .block(Block::default().borders(Borders::ALL).title("VRAM Usage"))
+                    .gauge_style(Style::default().fg(if usage_ratio > 0.9 {
+                        Color::Red
+                    } else if usage_ratio > 0.7 {
+                        Color::Yellow
+                    } else {
+                        Color::Green
+                    }))
+                    .ratio(usage_ratio)
+                    .label(format!("{:.1}%", usage_ratio * 100.0));
+                f.render_widget(gauge, memory_chunks[1]);
+            }
         } else {
-            let no_nvml = Paragraph::new("NVML not available - install NVIDIA drivers")
+            let banner_text = self
+                .get_unavailability_banner()
+                .unwrap_or("GPU not available");
+            let no_nvml = Paragraph::new(banner_text)
                 .alignment(Alignment::Center)
                 .block(Block::default().borders(Borders::ALL))
                 .style(Style::default().fg(Color::Red));
@@ -1414,10 +1454,14 @@ impl TuiApp {
     }
 
     fn draw_processes(&self, f: &mut Frame, area: Rect) {
-        if self.nvml.is_none() {
-            let placeholder = Paragraph::new("NVML not available")
+        if !self.backend_ctx.is_nvml_available() {
+            let banner_text = self
+                .get_unavailability_banner()
+                .unwrap_or("GPU not available");
+            let placeholder = Paragraph::new(banner_text)
                 .alignment(Alignment::Center)
-                .block(Block::default().borders(Borders::ALL).title("Processes"));
+                .block(Block::default().borders(Borders::ALL).title("Processes"))
+                .style(Style::default().fg(Color::Red));
             f.render_widget(placeholder, area);
             return;
         }
@@ -1437,55 +1481,57 @@ impl TuiApp {
             .block(Block::default().borders(Borders::ALL));
         f.render_widget(header, chunks[0]);
 
-        // Try to get processes for the selected GPU
-        let processes = if let Some(ref nvml) = self.nvml {
-            match nvml.device_by_index(self.selected_gpu as u32) {
-                Ok(device) => {
-                    match device.running_graphics_processes() {
-                        Ok(graphics_procs) => {
-                            let mut all_processes = Vec::new();
+        // Try to get processes for the selected GPU via backend
+        let gpu_index = self.selected_gpu as u32;
+        let processes = if !self.backend_ctx.is_nvml_available() {
+            vec![
+                self.get_unavailability_banner()
+                    .unwrap_or("GPU not available")
+                    .to_string(),
+            ]
+        } else {
+            match self
+                .backend_ctx
+                .nvml
+                .get_running_graphics_processes(gpu_index)
+            {
+                Ok(graphics_procs) => {
+                    let mut all_processes = Vec::new();
 
-                            // Add graphics processes
-                            for proc in graphics_procs {
-                                let memory_mb = match proc.used_gpu_memory {
-                                    UsedGpuMemory::Used(bytes) => bytes / 1024 / 1024,
-                                    UsedGpuMemory::Unavailable => 0,
-                                };
-                                all_processes.push(format!(
-                                    "GFX  PID: {:>6} | VRAM: {:>8} MB | Name: {}",
-                                    proc.pid,
-                                    memory_mb,
-                                    format!("Process {}", proc.pid) // We could enhance this with actual process names
-                                ));
-                            }
+                    // Add graphics processes
+                    for proc in graphics_procs {
+                        let memory_mb = proc.used_gpu_memory_bytes.unwrap_or(0) / 1024 / 1024;
+                        all_processes.push(format!(
+                            "GFX  PID: {:>6} | VRAM: {:>8} MB | Name: {}",
+                            proc.pid,
+                            memory_mb,
+                            format!("Process {}", proc.pid)
+                        ));
+                    }
 
-                            // Try to add compute processes
-                            if let Ok(compute_procs) = device.running_compute_processes() {
-                                for proc in compute_procs {
-                                    let memory_mb = match proc.used_gpu_memory {
-                                        UsedGpuMemory::Used(bytes) => bytes / 1024 / 1024,
-                                        UsedGpuMemory::Unavailable => 0,
-                                    };
-                                    all_processes.push(format!(
-                                        "COMP PID: {:>6} | VRAM: {:>8} MB | Name: {}",
-                                        proc.pid,
-                                        memory_mb,
-                                        format!("Process {}", proc.pid)
-                                    ));
-                                }
-                            }
-
-                            all_processes
-                        }
-                        Err(_) => {
-                            vec!["No graphics processes found or permission denied".to_string()]
+                    // Try to add compute processes
+                    if let Ok(compute_procs) = self
+                        .backend_ctx
+                        .nvml
+                        .get_running_compute_processes(gpu_index)
+                    {
+                        for proc in compute_procs {
+                            let memory_mb = proc.used_gpu_memory_bytes.unwrap_or(0) / 1024 / 1024;
+                            all_processes.push(format!(
+                                "COMP PID: {:>6} | VRAM: {:>8} MB | Name: {}",
+                                proc.pid,
+                                memory_mb,
+                                format!("Process {}", proc.pid)
+                            ));
                         }
                     }
+
+                    all_processes
                 }
-                Err(_) => vec!["Failed to access GPU device".to_string()],
+                Err(_) => {
+                    vec!["No graphics processes found or permission denied".to_string()]
+                }
             }
-        } else {
-            vec!["NVML not initialized".to_string()]
         };
 
         // Process list
@@ -1504,21 +1550,20 @@ impl TuiApp {
         f.render_widget(process_list, chunks[1]);
 
         // Summary
-        let total_procs = if let Some(ref nvml) = self.nvml {
-            match nvml.device_by_index(self.selected_gpu as u32) {
-                Ok(device) => {
-                    let graphics_count = device
-                        .running_graphics_processes()
-                        .map(|p| p.len())
-                        .unwrap_or(0);
-                    let compute_count = device
-                        .running_compute_processes()
-                        .map(|p| p.len())
-                        .unwrap_or(0);
-                    graphics_count + compute_count
-                }
-                Err(_) => 0,
-            }
+        let total_procs = if self.backend_ctx.is_nvml_available() {
+            let graphics_count = self
+                .backend_ctx
+                .nvml
+                .get_running_graphics_processes(gpu_index)
+                .map(|p| p.len())
+                .unwrap_or(0);
+            let compute_count = self
+                .backend_ctx
+                .nvml
+                .get_running_compute_processes(gpu_index)
+                .map(|p| p.len())
+                .unwrap_or(0);
+            graphics_count + compute_count
         } else {
             0
         };
@@ -1565,78 +1610,71 @@ impl TuiApp {
         );
         f.render_widget(header, chunks[0]);
 
-        // Current OC status
-        if let Some(ref nvml) = self.nvml {
-            if let Ok(device) = nvml.device_by_index(self.selected_gpu as u32) {
-                let mut oc_info = Vec::new();
+        // Current OC status via backend
+        let gpu_index = self.selected_gpu as u32;
+        if self.backend_ctx.is_nvml_available() {
+            let mut oc_info = Vec::new();
 
-                oc_info.push(format!(
-                    "{} Current Overclocking Status:",
-                    themes::icons::GPU
-                ));
-                oc_info.push(String::new());
+            oc_info.push(format!(
+                "{} Current Overclocking Status:",
+                themes::icons::GPU
+            ));
+            oc_info.push(String::new());
 
-                // Current clocks
-                if let Ok(gpu_clock) =
-                    device.clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics)
-                {
-                    if let Ok(max_clock) =
-                        device.max_clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics)
-                    {
-                        oc_info.push(format!(
-                            "  {} GPU Clock: {} MHz (Max: {} MHz)",
-                            themes::icons::CLOCK,
-                            gpu_clock,
-                            max_clock
-                        ));
-                    }
+            // Current clocks via backend
+            if let Ok(gpu_clock) = self.backend_ctx.nvml.get_gpu_clock(gpu_index) {
+                if let Ok(max_clock) = self.backend_ctx.nvml.get_max_gpu_clock(gpu_index) {
+                    oc_info.push(format!(
+                        "  {} GPU Clock: {} MHz (Max: {} MHz)",
+                        themes::icons::CLOCK,
+                        gpu_clock,
+                        max_clock
+                    ));
                 }
-
-                if let Ok(mem_clock) =
-                    device.clock_info(nvml_wrapper::enum_wrappers::device::Clock::Memory)
-                {
-                    if let Ok(max_mem) =
-                        device.max_clock_info(nvml_wrapper::enum_wrappers::device::Clock::Memory)
-                    {
-                        oc_info.push(format!(
-                            "  {} Memory Clock: {} MHz (Max: {} MHz)",
-                            themes::icons::MEMORY,
-                            mem_clock,
-                            max_mem
-                        ));
-                    }
-                }
-
-                // Power limit
-                if let Ok(power_limit) = device.power_management_limit() {
-                    if let Ok(max_power) = device.power_management_limit_constraints() {
-                        oc_info.push(format!(
-                            "  {} Power Limit: {:.0}W / {:.0}W",
-                            themes::icons::POWER,
-                            power_limit as f32 / 1000.0,
-                            max_power.max_limit as f32 / 1000.0
-                        ));
-                    }
-                }
-
-                oc_info.push(String::new());
-                oc_info.push(format!("{} Current OC Settings:", themes::icons::PROFILE));
-                oc_info.push(format!("  GPU Offset: {:+} MHz", self.gpu_offset));
-                oc_info.push(format!("  Memory Offset: {:+} MHz", self.memory_offset));
-                oc_info.push(format!("  Power Limit: {}%", self.power_limit_percent));
-                oc_info.push(format!("  Active Preset: {:?}", self.oc_preset));
-
-                let oc_list: Vec<ListItem> = oc_info.into_iter().map(ListItem::new).collect();
-                let oc_widget = List::new(oc_list)
-                    .block(
-                        Block::default()
-                            .borders(Borders::ALL)
-                            .title("Overclocking Status")
-                            .style(Style::default().fg(self.theme.border.to_ratatui())),
-                    )
-                    .style(Style::default().fg(self.theme.text().to_ratatui()));
-                f.render_widget(oc_widget, chunks[1]);
             }
+
+            if let Ok(mem_clock) = self.backend_ctx.nvml.get_memory_clock(gpu_index) {
+                if let Ok(max_mem) = self.backend_ctx.nvml.get_max_memory_clock(gpu_index) {
+                    oc_info.push(format!(
+                        "  {} Memory Clock: {} MHz (Max: {} MHz)",
+                        themes::icons::MEMORY,
+                        mem_clock,
+                        max_mem
+                    ));
+                }
+            }
+
+            // Power limit via backend
+            if let Ok(power_limit) = self.backend_ctx.nvml.get_power_limit(gpu_index) {
+                if let Ok((_, max_power)) =
+                    self.backend_ctx.nvml.get_power_limit_constraints(gpu_index)
+                {
+                    oc_info.push(format!(
+                        "  {} Power Limit: {:.0}W / {:.0}W",
+                        themes::icons::POWER,
+                        power_limit as f32 / 1000.0,
+                        max_power as f32 / 1000.0
+                    ));
+                }
+            }
+
+            oc_info.push(String::new());
+            oc_info.push(format!("{} Current OC Settings:", themes::icons::PROFILE));
+            oc_info.push(format!("  GPU Offset: {:+} MHz", self.gpu_offset));
+            oc_info.push(format!("  Memory Offset: {:+} MHz", self.memory_offset));
+            oc_info.push(format!("  Power Limit: {}%", self.power_limit_percent));
+            oc_info.push(format!("  Active Preset: {:?}", self.oc_preset));
+
+            let oc_list: Vec<ListItem> = oc_info.into_iter().map(ListItem::new).collect();
+            let oc_widget = List::new(oc_list)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title("Overclocking Status")
+                        .style(Style::default().fg(self.theme.border.to_ratatui())),
+                )
+                .style(Style::default().fg(self.theme.text().to_ratatui()));
+            f.render_widget(oc_widget, chunks[1]);
         }
 
         // OC Controls with live sliders
@@ -1727,59 +1765,57 @@ impl TuiApp {
             );
         f.render_widget(header, chunks[0]);
 
-        // Current fan status
-        if let Some(ref nvml) = self.nvml {
-            if let Ok(device) = nvml.device_by_index(self.selected_gpu as u32) {
-                let mut fan_info = Vec::new();
+        // Current fan status via backend
+        let gpu_index = self.selected_gpu as u32;
+        if self.backend_ctx.is_nvml_available() {
+            let mut fan_info = Vec::new();
 
-                // Try to get fan speed for multiple fans (ASUS Astral has 4 fans)
-                for fan_id in 0..4 {
-                    if let Ok(fan_speed) = device.fan_speed(fan_id) {
-                        let fan_icon = if fan_speed > 80 {
-                            "󰈐" // High speed
-                        } else if fan_speed > 50 {
-                            "󰈐" // Medium speed
-                        } else {
-                            "󰈐" // Low speed
-                        };
-                        fan_info.push(format!(
-                            "  {} Fan {}: {}% ({} RPM est.)",
-                            fan_icon,
-                            fan_id,
-                            fan_speed,
-                            fan_speed * 25
-                        ));
-                    }
-                }
-
-                if fan_info.is_empty() {
-                    fan_info.push("  Fan control not available on this GPU".to_string());
-                }
-
-                fan_info.push(String::new());
-                if let Some(latest) = self
-                    .metrics_history
-                    .get(self.selected_gpu)
-                    .and_then(|h| h.back())
-                {
-                    let temp_icon = if latest.temperature > 80.0 { "" } else { "" };
+            // Try to get fan speed for multiple fans (ASUS Astral has 4 fans)
+            for fan_id in 0..4 {
+                if let Ok(fan_speed) = self.backend_ctx.nvml.get_fan_speed(gpu_index, fan_id) {
+                    // Fan speed indicator - use same icon with different styled labels
+                    let fan_icon = "󰈐";
                     fan_info.push(format!(
-                        "  {} Current Temperature: {:.1}°C",
-                        temp_icon, latest.temperature
+                        "  {} Fan {}: {}% ({} RPM est.)",
+                        fan_icon,
+                        fan_id,
+                        fan_speed,
+                        fan_speed * 25
                     ));
                 }
-
-                let fan_list: Vec<ListItem> = fan_info.into_iter().map(ListItem::new).collect();
-                let fan_widget = List::new(fan_list)
-                    .block(
-                        Block::default()
-                            .borders(Borders::ALL)
-                            .title("Current Fan Status")
-                            .style(Style::default().fg(self.theme.border.to_ratatui())),
-                    )
-                    .style(Style::default().fg(self.theme.text().to_ratatui()));
-                f.render_widget(fan_widget, chunks[1]);
             }
+
+            if fan_info.is_empty() {
+                fan_info.push("  Fan control not available on this GPU".to_string());
+            }
+
+            fan_info.push(String::new());
+            if let Some(latest) = self
+                .metrics_history
+                .get(self.selected_gpu)
+                .and_then(|h| h.back())
+            {
+                let temp_icon = if latest.temperature > 80.0 {
+                    "🔥"
+                } else {
+                    ""
+                };
+                fan_info.push(format!(
+                    "  {} Current Temperature: {:.1}°C",
+                    temp_icon, latest.temperature
+                ));
+            }
+
+            let fan_list: Vec<ListItem> = fan_info.into_iter().map(ListItem::new).collect();
+            let fan_widget = List::new(fan_list)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title("Current Fan Status")
+                        .style(Style::default().fg(self.theme.border.to_ratatui())),
+                )
+                .style(Style::default().fg(self.theme.text().to_ratatui()));
+            f.render_widget(fan_widget, chunks[1]);
         }
 
         // Fan curve editor with actual curve points
@@ -2114,10 +2150,10 @@ impl TuiApp {
         // Left section: main status
         let main_status = if self.paused {
             "󰏤 PAUSED - Press Space to resume"
-        } else if let Some(msg) = self.get_status_message() {
-            msg
         } else {
-            "Press 'h' for help, 'q' to quit, 't' for themes, 'v' for VRR, 'g' for gaming"
+            self.get_status_message().unwrap_or(
+                "Press 'h' for help, 'q' to quit, 't' for themes, 'v' for VRR, 'g' for gaming",
+            )
         };
 
         let status_bar = Paragraph::new(main_status)
@@ -2276,15 +2312,9 @@ impl TuiApp {
         if let Some(perf_profile) = profiles.iter().find(|p| p.name == "Performance") {
             // Apply performance fan profile
             for (fan_id, curve) in &perf_profile.curves {
-                // Get current temperature for fan curve application
-                if let Some(ref nvml) = self.nvml {
-                    if let Ok(device) = nvml.device_by_index(0) {
-                        if let Ok(temp) = device.temperature(
-                            nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu,
-                        ) {
-                            let _ = crate::fan::apply_fan_curve(*fan_id, curve, temp as u8, None);
-                        }
-                    }
+                // Get current temperature for fan curve application via backend
+                if let Ok(temp) = self.backend_ctx.nvml.get_temperature(0) {
+                    let _ = crate::fan::apply_fan_curve(*fan_id, curve, temp as u8, None);
                 }
             }
         }
@@ -2295,6 +2325,59 @@ impl TuiApp {
     fn set_status_message(&mut self, message: String) {
         self.status_message = Some(message);
         self.status_message_time = Some(Instant::now());
+    }
+
+    /// Save current session state to disk
+    fn save_session_state(&self) {
+        let oc_preset_str = match self.oc_preset {
+            OcPreset::Stock => "Stock",
+            OcPreset::MildOc => "MildOc",
+            OcPreset::Performance => "Performance",
+            OcPreset::Extreme => "Extreme",
+        };
+
+        let state = TuiSessionState {
+            version: 0, // Will be set to current version on save()
+            selected_gpu: self.selected_gpu,
+            current_tab: self.current_tab,
+            fan_curve_points: self
+                .fan_curve_points
+                .iter()
+                .map(|(t, f)| (*t as u8, *f as u8))
+                .collect(),
+            gpu_offset: self.gpu_offset,
+            memory_offset: self.memory_offset,
+            power_limit_percent: self.power_limit_percent.min(255) as u8,
+            oc_preset: oc_preset_str.to_string(),
+        };
+
+        state.save();
+    }
+
+    /// Get unavailability banner text based on backend status
+    fn get_unavailability_banner(&self) -> Option<&'static str> {
+        match &self.backend_ctx.status {
+            BackendStatus::Available => None,
+            BackendStatus::NvmlUnavailable(_) => {
+                Some("NVIDIA driver not available - install nvidia-driver package")
+            }
+            BackendStatus::DisplayUnavailable(_) => {
+                Some("Display server not available - running headless?")
+            }
+            BackendStatus::AllUnavailable { .. } => {
+                Some("NVIDIA driver and display server unavailable")
+            }
+        }
+    }
+
+    /// Get a short status indicator for the header bar
+    fn get_backend_status_indicator(&self) -> (&'static str, Color) {
+        match &self.backend_ctx.status {
+            BackendStatus::Available => ("●", Color::Green),
+            BackendStatus::NvmlUnavailable(_) => ("○", Color::Red),
+            BackendStatus::DisplayUnavailable(_) => ("◐", Color::Yellow),
+            BackendStatus::AllUnavailable { .. } => ("○", Color::Red),
+        }
     }
 
     fn get_status_message(&self) -> Option<&str> {
@@ -2317,7 +2400,7 @@ impl TuiApp {
                 let col = mouse.column;
 
                 // Tab bar is at row 3-5 (after header)
-                if row >= 3 && row < 6 {
+                if (3..6).contains(&row) {
                     // Calculate which tab was clicked
                     // Each tab title is ~12 chars wide
                     let tab_index = (col / 12) as usize;
@@ -3031,6 +3114,254 @@ impl TuiApp {
         f.render_widget(commands, right_chunks[1]);
     }
 
+    /// Draw Drivers tab with readiness info
+    fn draw_drivers(&self, f: &mut Frame, area: Rect) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),  // Title
+                Constraint::Length(10), // Driver info
+                Constraint::Length(12), // Readiness check
+                Constraint::Min(0),     // Features / instructions
+            ])
+            .split(area);
+
+        // Title
+        let title = Paragraph::new("Driver Readiness & Capabilities")
+            .style(Style::default().fg(self.theme.cyan.to_ratatui()))
+            .block(Block::default().borders(Borders::ALL));
+        f.render_widget(title, chunks[0]);
+
+        // Driver Info section
+        let driver_info = if let Some(ref caps) = self.driver_capabilities {
+            vec![
+                format!(
+                    "Driver Version: {} (Major: {})",
+                    caps.version, caps.major_version
+                ),
+                format!("Beta Release: {}", if caps.is_beta { "Yes" } else { "No" }),
+                format!(""),
+                format!("Minimum Requirements for 590+:"),
+                format!("  Wayland: >= {}", caps.wayland_min_version),
+                format!("  glibc:   >= {}", caps.glibc_min_version),
+            ]
+        } else {
+            vec![
+                "Driver information unavailable".to_string(),
+                "".to_string(),
+                "Run 'nvctl driver info' or 'nvidia-smi' to check driver status.".to_string(),
+            ]
+        };
+        let driver_para = Paragraph::new(driver_info.join("\n"))
+            .style(Style::default().fg(self.theme.fg.to_ratatui()))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Driver Information")
+                    .border_style(Style::default().fg(self.theme.border.to_ratatui())),
+            );
+        f.render_widget(driver_para, chunks[1]);
+
+        // Readiness Check section
+        let readiness_text = if let Some(ref validation) = self.driver_validation {
+            let status_icon = if validation.passed { "PASS" } else { "FAIL" };
+            let status_color = if validation.passed {
+                self.theme.green.to_ratatui()
+            } else {
+                self.theme.red.to_ratatui()
+            };
+
+            let mut lines = vec![
+                format!(
+                    "Status: {} (checked {})",
+                    status_icon,
+                    validation.time_since_validation()
+                ),
+                format!(
+                    "Driver: {} (Major {})",
+                    validation.driver_version, validation.major_version
+                ),
+                format!(""),
+            ];
+
+            // Show requirement checks
+            if let Some(wayland_ver) = &validation.wayland_version {
+                let ok_str = validation
+                    .wayland_ok
+                    .map_or("?", |ok| if ok { "OK" } else { "FAIL" });
+                lines.push(format!("Wayland: {} [{}]", wayland_ver, ok_str));
+            }
+            if let Some(glibc_ver) = &validation.glibc_version {
+                let ok_str = validation
+                    .glibc_ok
+                    .map_or("?", |ok| if ok { "OK" } else { "FAIL" });
+                lines.push(format!("glibc:   {} [{}]", glibc_ver, ok_str));
+            }
+            lines.push(format!(
+                "PREEMPT_RT Kernel: {}",
+                if validation.preempt_rt_kernel {
+                    "Yes"
+                } else {
+                    "No"
+                }
+            ));
+
+            // Warnings
+            if !validation.warnings.is_empty() {
+                lines.push(format!(""));
+                lines.push(format!("Warnings: {}", validation.warnings.len()));
+                for w in validation.warnings.iter().take(2) {
+                    lines.push(format!("  - {}", w));
+                }
+            }
+
+            // Use status color for the block title
+            let block = Block::default()
+                .borders(Borders::ALL)
+                .title("Readiness Check")
+                .border_style(Style::default().fg(status_color));
+
+            (lines.join("\n"), block)
+        } else {
+            let text = "No cached validation available.\n\n\
+                Run validation with:\n  \
+                nvctl driver validate --driver 590\n\n\
+                Press 'r' to run validation now.";
+            let block = Block::default()
+                .borders(Borders::ALL)
+                .title("Readiness Check")
+                .border_style(Style::default().fg(self.theme.yellow.to_ratatui()));
+
+            (text.to_string(), block)
+        };
+
+        let readiness_para = Paragraph::new(readiness_text.0)
+            .style(Style::default().fg(self.theme.fg.to_ratatui()))
+            .block(readiness_text.1);
+        f.render_widget(readiness_para, chunks[2]);
+
+        // Features / Help section
+        let features_text = if let Some(ref caps) = self.driver_capabilities {
+            if caps.major_version >= 590 {
+                vec![
+                    "Driver 590+ Features:".to_string(),
+                    format!(
+                        "  USB4 DisplayPort: {}",
+                        if caps.has_usb4_dp_support {
+                            "Yes"
+                        } else {
+                            "No"
+                        }
+                    ),
+                    format!(
+                        "  Vulkan Swapchain Perf: {}",
+                        if caps.has_vulkan_swapchain_perf {
+                            "Yes"
+                        } else {
+                            "No"
+                        }
+                    ),
+                    format!(
+                        "  PREEMPT_RT Support: {}",
+                        if caps.supports_preempt_rt {
+                            "Yes"
+                        } else {
+                            "No"
+                        }
+                    ),
+                    format!(
+                        "  PowerMizer Wayland Fix: {}",
+                        if caps.has_powermizer_wayland_fix {
+                            "Yes"
+                        } else {
+                            "No"
+                        }
+                    ),
+                    "".to_string(),
+                    "Press 'r' to refresh validation.".to_string(),
+                ]
+            } else {
+                vec![
+                    format!("Current driver ({}) is older than 590.", caps.major_version),
+                    "".to_string(),
+                    "Consider upgrading for:".to_string(),
+                    "  - USB4 DisplayPort support".to_string(),
+                    "  - Vulkan swapchain performance".to_string(),
+                    "  - PREEMPT_RT kernel support".to_string(),
+                    "  - PowerMizer Wayland fixes".to_string(),
+                    "".to_string(),
+                    "Press 'r' to run validation.".to_string(),
+                ]
+            }
+        } else {
+            vec![
+                "Commands:".to_string(),
+                "  nvctl driver info              Show driver capabilities".to_string(),
+                "  nvctl driver validate          Validate system for driver 590".to_string(),
+                "  nvctl driver validate --driver 560  Validate for specific version".to_string(),
+                "".to_string(),
+                "Press 'r' to run validation now.".to_string(),
+            ]
+        };
+
+        let features_para = Paragraph::new(features_text.join("\n"))
+            .style(Style::default().fg(self.theme.fg.to_ratatui()))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Features & Commands")
+                    .border_style(Style::default().fg(self.theme.border.to_ratatui())),
+            );
+        f.render_widget(features_para, chunks[3]);
+    }
+
+    /// Run driver validation and update cached state
+    fn validate_driver(&mut self) {
+        let check = crate::drivers::validate_system_for_driver(590);
+        let caps = self.driver_capabilities.clone().unwrap_or_else(|| {
+            crate::drivers::DriverCapabilities {
+                version: "unknown".to_string(),
+                major_version: 0,
+                is_beta: false,
+                wayland_min_version: "1.20".to_string(),
+                glibc_min_version: "2.27".to_string(),
+                has_vulkan_swapchain_perf: false,
+                has_usb4_dp_support: false,
+                supports_preempt_rt: false,
+                has_powermizer_wayland_fix: false,
+            }
+        });
+
+        let validation = crate::state::DriverValidationState {
+            driver_version: caps.version.clone(),
+            major_version: caps.major_version,
+            is_beta: caps.is_beta,
+            wayland_version: check.wayland_version.clone(),
+            wayland_ok: check.wayland_ok,
+            glibc_version: check.glibc_version.clone(),
+            glibc_ok: check.glibc_ok,
+            preempt_rt_kernel: check.preempt_rt_kernel,
+            passed: check.passed,
+            warnings: check.warnings.clone(),
+            errors: check.errors.clone(),
+            validated_at: std::time::SystemTime::now(),
+        };
+
+        // Save to disk
+        if let Err(e) = validation.save() {
+            self.set_status_message(format!("Failed to save validation: {}", e));
+        } else {
+            let status = if validation.passed {
+                "PASSED"
+            } else {
+                "FAILED"
+            };
+            self.set_status_message(format!("Driver validation: {}", status));
+        }
+
+        self.driver_validation = Some(validation);
+    }
+
     /// Draw Settings tab
     fn draw_settings(&self, f: &mut Frame, area: Rect) {
         let chunks = Layout::default()
@@ -3094,7 +3425,11 @@ impl TuiApp {
             ),
             format!(
                 "│ NVML Available: {}                                 │",
-                if self.nvml.is_some() { "Yes" } else { "No" }
+                if self.backend_ctx.is_nvml_available() {
+                    "Yes"
+                } else {
+                    "No"
+                }
             ),
             format!(
                 "│ Uptime: {:.0}s                                      │",

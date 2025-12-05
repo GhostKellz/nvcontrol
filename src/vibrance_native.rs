@@ -8,7 +8,6 @@ use std::os::unix::io::AsRawFd;
 /// Native Digital Vibrance Implementation using NVKMS ioctls
 /// Based on nvibrant's approach - iterate connectors, get dpyId from static data
 /// Direct interface with NVIDIA Open Drivers (515+)
-
 const NVIDIA_MODESET_DEVICE: &str = "/dev/nvidia-modeset";
 
 // Vibrance range: -1024 (grayscale) to 1023 (200% saturation), 0 = default

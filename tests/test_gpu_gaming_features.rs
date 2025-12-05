@@ -128,7 +128,11 @@ fn test_fan_optimizer_trend_detection() {
 
 #[test]
 fn test_power_mode_detection() {
-    let mut manager = DynamicPowerManager::new(0);
+    use nvcontrol::nvml_backend::MockNvmlBackend;
+    use std::sync::Arc;
+
+    let backend = Arc::new(MockNvmlBackend::single_gpu());
+    let mut manager = DynamicPowerManager::new(0, backend);
 
     // Simulate high load
     for _ in 0..15 {
@@ -165,7 +169,11 @@ fn test_power_profile_manager() {
 
 #[test]
 fn test_battery_boost() {
-    let boost = BatteryBoost::new(0, 60);
+    use nvcontrol::nvml_backend::MockNvmlBackend;
+    use std::sync::Arc;
+
+    let backend = Arc::new(MockNvmlBackend::single_gpu());
+    let boost = BatteryBoost::new(0, 60, backend);
 
     assert!(!boost.is_enabled());
     // target_fps is private, just verify object was created

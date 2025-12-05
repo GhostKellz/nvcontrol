@@ -5,7 +5,7 @@
 
   **Modern NVIDIA Settings Manager for Linux + Wayland**
 
-  [![Version](https://img.shields.io/badge/version-0.7.2-blue.svg)](https://github.com/GhostKellz/nvcontrol/releases)
+  [![Crates.io](https://img.shields.io/crates/v/nvcontrol.svg)](https://crates.io/crates/nvcontrol)
   [![Rust](https://img.shields.io/badge/rust-1.75+-orange.svg)](https://www.rust-lang.org)
   [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
   [![NVIDIA](https://img.shields.io/badge/NVIDIA-Open%20Drivers%20580+-76B900.svg)](https://github.com/NVIDIA/open-gpu-kernel-modules)
@@ -37,6 +37,12 @@ nvcontrol is a comprehensive NVIDIA GPU control tool for Linux, designed from th
 # GPU information (like nvidia-smi)
 nvctl gpu info
 
+# Driver capabilities and requirements
+nvctl driver info
+
+# Validate readiness for driver 590 branch
+nvctl driver validate --driver 590
+
 # Live monitoring dashboard
 nvctl gpu stat
 
@@ -62,15 +68,15 @@ makepkg -si -p release/arch/PKGBUILD
 
 ### Debian/Ubuntu
 ```bash
-# Download from releases
-wget https://github.com/GhostKellz/nvcontrol/releases/latest/download/nvcontrol_0.7.2-1_amd64.deb
-sudo apt install ./nvcontrol_0.7.2-1_amd64.deb
+# Download latest from releases
+wget https://github.com/GhostKellz/nvcontrol/releases/latest/download/nvcontrol_amd64.deb
+sudo apt install ./nvcontrol_amd64.deb
 ```
 
 ### Fedora/Nobara
 ```bash
-# Download from releases
-sudo dnf install https://github.com/GhostKellz/nvcontrol/releases/latest/download/nvcontrol-0.7.2-1.fc39.x86_64.rpm
+# Download latest from releases
+sudo dnf install https://github.com/GhostKellz/nvcontrol/releases/latest/download/nvcontrol.x86_64.rpm
 ```
 
 ### From Source
@@ -206,7 +212,7 @@ See [ASTRAL_OWNERS.md](ASTRAL_OWNERS.md) for Astral-specific guide.
 Launch with `nvctl gpu stat`:
 
 ```
-┌─ nvcontrol v0.7.2 │ GPU 0 │ 55°C │ 85% │ LIVE ─────────────┐
+┌─ nvcontrol │ GPU 0 │ 55°C │ 85% │ LIVE ───────────────────┐
 ├─ Overview ─ Performance ─ Memory ─ Temp ─ Power ─ OC ─────┤
 │                                                            │
 │  GPU Stats                                                 │

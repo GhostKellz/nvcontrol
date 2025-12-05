@@ -489,19 +489,19 @@ pub fn optimize_memory_latency() -> NvResult<bool> {
     ];
 
     for (path, value) in memory_params {
-        if Path::new(path).exists() {
-            if let Ok(_) = Command::new("sudo")
-                .args(&["tee", path])
+        if Path::new(path).exists()
+            && Command::new("sudo")
+                .args(["tee", path])
                 .arg(value)
                 .output()
-            {
-                success_count += 1;
-                println!(
-                    "  ✓ Set {} = {}",
-                    path.split('/').last().unwrap_or(path),
-                    value
-                );
-            }
+                .is_ok()
+        {
+            success_count += 1;
+            println!(
+                "  ✓ Set {} = {}",
+                path.rsplit('/').next().unwrap_or(path),
+                value
+            );
         }
     }
 

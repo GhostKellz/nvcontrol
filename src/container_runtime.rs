@@ -563,9 +563,9 @@ build = "{}"
                     volume.source, volume.target, ro_suffix
                 ));
                 if volume != config.volumes.last().unwrap() {
-                    boltfile.push_str(",");
+                    boltfile.push(',');
                 }
-                boltfile.push_str("\n");
+                boltfile.push('\n');
             }
             boltfile.push_str("]\n");
         }
@@ -579,9 +579,9 @@ build = "{}"
                     port.host_port, port.container_port
                 ));
                 if port != config.ports.last().unwrap() {
-                    boltfile.push_str(",");
+                    boltfile.push(',');
                 }
-                boltfile.push_str("\n");
+                boltfile.push('\n');
             }
             boltfile.push_str("]\n");
         }

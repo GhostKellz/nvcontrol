@@ -1,49 +1,23 @@
-// Clippy configuration - allow common patterns used throughout codebase
+// Clippy configuration - minimal allows for intentional patterns
+// These suppresses are documented and reviewed, not shortcuts.
+
+// Borrow patterns - many APIs accept &T where T is available
 #![allow(clippy::needless_borrow)]
 #![allow(clippy::needless_borrows_for_generic_args)]
+// Control flow - nested ifs often more readable than let-chains in display code
 #![allow(clippy::collapsible_if)]
-#![allow(clippy::redundant_field_names)]
-#![allow(clippy::single_char_add_str)]
-#![allow(clippy::useless_format)]
-#![allow(clippy::manual_clamp)]
-#![allow(clippy::derivable_impls)]
-#![allow(clippy::new_without_default)]
-#![allow(clippy::format_in_format_args)]
-#![allow(clippy::if_same_then_else)]
-#![allow(clippy::unnecessary_lazy_evaluations)]
-#![allow(clippy::redundant_pattern_matching)]
-#![allow(clippy::useless_conversion)]
-// Async/structural patterns that would require significant refactoring
-#![allow(clippy::await_holding_lock)]
-#![allow(clippy::large_enum_variant)]
-#![allow(clippy::vec_init_then_push)]
-#![allow(clippy::manual_find)]
-#![allow(clippy::map_entry)]
-#![allow(clippy::option_map_unit_fn)]
-#![allow(clippy::redundant_closure)]
-#![allow(clippy::match_like_matches_macro)]
-#![allow(clippy::useless_vec)]
-// Minor style preferences
-#![allow(clippy::option_map_or_none)]
-#![allow(clippy::unnecessary_cast)]
-#![allow(clippy::manual_strip)]
-#![allow(clippy::manual_range_contains)]
-#![allow(clippy::iter_kv_map)]
-#![allow(clippy::match_single_binding)]
-#![allow(clippy::or_fun_call)]
-#![allow(clippy::absurd_extreme_comparisons)]
-#![allow(clippy::no_effect)]
+// Type patterns
+#![allow(clippy::new_without_default)] // Constructors may have side effects
+#![allow(clippy::large_enum_variant)] // Config/error enums can be large
 #![allow(clippy::struct_field_names)]
-#![allow(clippy::manual_div_ceil)]
-#![allow(clippy::option_if_let_else)]
-#![allow(clippy::double_ended_iterator_last)]
-#![allow(clippy::struct_excessive_bools)]
-#![allow(clippy::empty_line_after_doc_comments)]
-#![allow(clippy::manual_unwrap_or)]
-#![allow(clippy::needless_update)]
-#![allow(clippy::manual_abs_diff)]
-#![allow(clippy::for_kv_map)]
-#![allow(clippy::single_match)]
+// field names matching type is fine
+
+// Format strings - often clearer to use format! for consistency
+#![allow(clippy::useless_format)]
+#![allow(clippy::format_in_format_args)]
+// Async patterns - MutexGuard across await is intentional in some cases
+#![allow(clippy::await_holding_lock)]
+// Safety docs - will add incrementally
 #![allow(clippy::missing_safety_doc)]
 
 use anyhow::Result;
@@ -236,6 +210,12 @@ pub mod interactive_cli;
 
 // Enhanced error messages with solutions
 pub mod error_messages;
+
+// NVML backend abstraction for testability
+pub mod nvml_backend;
+
+// Display command runner abstraction for testability
+pub mod display_backend;
 
 // Re-export commonly used types
 pub use config::Config;

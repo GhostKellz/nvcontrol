@@ -1,3 +1,4 @@
+use crate::display_backend::SharedDisplayRunner;
 use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -34,7 +35,16 @@ pub struct DisplayVrrCapability {
     pub current_settings: VrrSettings,
 }
 
+/// Detect VRR displays (legacy - creates own runner internally)
 pub fn detect_vrr_displays() -> NvResult<Vec<DisplayVrrCapability>> {
+    let runner = crate::display_backend::create_real_runner();
+    detect_vrr_displays_with_backend(&runner)
+}
+
+/// Detect VRR displays using the provided display backend
+pub fn detect_vrr_displays_with_backend(
+    runner: &SharedDisplayRunner,
+) -> NvResult<Vec<DisplayVrrCapability>> {
     let mut displays = Vec::new();
 
     // Try different methods based on desktop environment
@@ -46,58 +56,51 @@ pub fn detect_vrr_displays() -> NvResult<Vec<DisplayVrrCapability>> {
     let is_kde = desktop.contains("KDE")
         || desktop.contains("PLASMA")
         || std::env::var("KDE_SESSION_VERSION").is_ok()
-        || std::process::Command::new("which")
-            .arg("kscreen-doctor")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false);
+        || runner.run_command("which", &["kscreen-doctor"]).is_ok();
 
     if is_kde {
-        if let Ok(kde_displays) = detect_vrr_kde() {
+        if let Ok(kde_displays) = detect_vrr_kde_with_backend(runner) {
             if !kde_displays.is_empty() {
                 displays = kde_displays;
             }
         }
     } else if desktop.contains("GNOME") {
-        displays = detect_vrr_gnome()?;
+        displays = detect_vrr_gnome_with_backend(runner)?;
     } else if desktop.contains("HYPRLAND") {
-        displays = detect_vrr_hyprland()?;
+        displays = detect_vrr_hyprland_with_backend(runner)?;
     } else if desktop.contains("SWAY") {
-        displays = detect_vrr_sway()?;
+        displays = detect_vrr_sway_with_backend(runner)?;
     }
 
     // If still empty, try multiple methods as fallback
     if displays.is_empty() {
-        if let Ok(kde_displays) = detect_vrr_kde() {
+        if let Ok(kde_displays) = detect_vrr_kde_with_backend(runner) {
             if !kde_displays.is_empty() {
                 displays = kde_displays;
             }
         }
     }
     if displays.is_empty() {
-        if let Ok(x11_displays) = detect_vrr_x11() {
+        if let Ok(x11_displays) = detect_vrr_x11_with_backend(runner) {
             displays = x11_displays;
         }
     }
 
     if displays.is_empty() {
         // Try to get display names from xrandr as fallback
-        if let Ok(output) = std::process::Command::new("xrandr").arg("--query").output() {
-            if output.status.success() {
-                let output_str = String::from_utf8_lossy(&output.stdout);
-                for line in output_str.lines() {
-                    if line.contains(" connected") {
-                        if let Some(name) = line.split_whitespace().next() {
-                            displays.push(DisplayVrrCapability {
-                                display_name: name.to_string(),
-                                supports_vrr: true,
-                                supports_gsync: name.starts_with("DP-"),
-                                supports_freesync: true,
-                                min_refresh: 48,
-                                max_refresh: 144,
-                                current_settings: VrrSettings::default(),
-                            });
-                        }
+        if let Ok(output) = runner.run_command("xrandr", &["--query"]) {
+            for line in output.lines() {
+                if line.contains(" connected") {
+                    if let Some(name) = line.split_whitespace().next() {
+                        displays.push(DisplayVrrCapability {
+                            display_name: name.to_string(),
+                            supports_vrr: true,
+                            supports_gsync: name.starts_with("DP-"),
+                            supports_freesync: true,
+                            min_refresh: 48,
+                            max_refresh: 144,
+                            current_settings: VrrSettings::default(),
+                        });
                     }
                 }
             }
@@ -107,16 +110,12 @@ pub fn detect_vrr_displays() -> NvResult<Vec<DisplayVrrCapability>> {
     Ok(displays)
 }
 
-fn detect_vrr_kde() -> NvResult<Vec<DisplayVrrCapability>> {
+fn detect_vrr_kde_with_backend(
+    runner: &SharedDisplayRunner,
+) -> NvResult<Vec<DisplayVrrCapability>> {
     // Use kscreen-doctor to query display capabilities
-    if let Ok(output) = std::process::Command::new("kscreen-doctor")
-        .arg("-j")
-        .output()
-    {
-        if output.status.success() {
-            let output_str = String::from_utf8_lossy(&output.stdout);
-            return parse_kscreen_vrr_info(&output_str);
-        }
+    if let Ok(output) = runner.run_command("kscreen-doctor", &["-j"]) {
+        return parse_kscreen_vrr_info(&output);
     }
 
     Ok(vec![])
@@ -187,14 +186,17 @@ fn parse_kscreen_vrr_info(json_str: &str) -> NvResult<Vec<DisplayVrrCapability>>
     Ok(displays)
 }
 
-fn detect_vrr_gnome() -> NvResult<Vec<DisplayVrrCapability>> {
+fn detect_vrr_gnome_with_backend(
+    runner: &SharedDisplayRunner,
+) -> NvResult<Vec<DisplayVrrCapability>> {
     // GNOME VRR support via mutter experimental features
-    let output = std::process::Command::new("gsettings")
-        .args(["get", "org.gnome.mutter", "experimental-features"])
-        .output()
+    let settings = runner
+        .run_command(
+            "gsettings",
+            &["get", "org.gnome.mutter", "experimental-features"],
+        )
         .map_err(|e| NvControlError::DisplayDetectionFailed(format!("gsettings failed: {e}")))?;
 
-    let settings = String::from_utf8_lossy(&output.stdout);
     let vrr_enabled = settings.contains("variable-refresh-rate");
 
     Ok(vec![DisplayVrrCapability {
@@ -211,15 +213,11 @@ fn detect_vrr_gnome() -> NvResult<Vec<DisplayVrrCapability>> {
     }])
 }
 
-fn detect_vrr_hyprland() -> NvResult<Vec<DisplayVrrCapability>> {
-    if let Ok(output) = std::process::Command::new("hyprctl")
-        .args(["monitors", "-j"])
-        .output()
-    {
-        if output.status.success() {
-            let output_str = String::from_utf8_lossy(&output.stdout);
-            return parse_hyprland_vrr_info(&output_str);
-        }
+fn detect_vrr_hyprland_with_backend(
+    runner: &SharedDisplayRunner,
+) -> NvResult<Vec<DisplayVrrCapability>> {
+    if let Ok(output) = runner.run_command("hyprctl", &["monitors", "-j"]) {
+        return parse_hyprland_vrr_info(&output);
     }
 
     Ok(vec![])
@@ -299,15 +297,11 @@ fn parse_hyprland_vrr_info(json_str: &str) -> NvResult<Vec<DisplayVrrCapability>
     Ok(displays)
 }
 
-fn detect_vrr_sway() -> NvResult<Vec<DisplayVrrCapability>> {
-    if let Ok(output) = std::process::Command::new("swaymsg")
-        .args(["-t", "get_outputs"])
-        .output()
-    {
-        if output.status.success() {
-            let output_str = String::from_utf8_lossy(&output.stdout);
-            return parse_sway_vrr_info(&output_str);
-        }
+fn detect_vrr_sway_with_backend(
+    runner: &SharedDisplayRunner,
+) -> NvResult<Vec<DisplayVrrCapability>> {
+    if let Ok(output) = runner.run_command("swaymsg", &["-t", "get_outputs"]) {
+        return parse_sway_vrr_info(&output);
     }
 
     Ok(vec![])
@@ -326,16 +320,12 @@ fn parse_sway_vrr_info(json_str: &str) -> NvResult<Vec<DisplayVrrCapability>> {
     }])
 }
 
-fn detect_vrr_x11() -> NvResult<Vec<DisplayVrrCapability>> {
+fn detect_vrr_x11_with_backend(
+    runner: &SharedDisplayRunner,
+) -> NvResult<Vec<DisplayVrrCapability>> {
     // X11 VRR detection via xrandr
-    if let Ok(output) = std::process::Command::new("xrandr")
-        .args(["--verbose"])
-        .output()
-    {
-        if output.status.success() {
-            let output_str = String::from_utf8_lossy(&output.stdout);
-            return parse_xrandr_vrr_info(&output_str);
-        }
+    if let Ok(output) = runner.run_command("xrandr", &["--verbose"]) {
+        return parse_xrandr_vrr_info(&output);
     }
 
     Ok(vec![])
@@ -371,19 +361,34 @@ fn parse_xrandr_vrr_info(xrandr_output: &str) -> NvResult<Vec<DisplayVrrCapabili
     Ok(displays)
 }
 
+/// Apply VRR settings (legacy - creates own runner internally)
 pub fn apply_vrr_settings(display_name: &str, settings: &VrrSettings) -> NvResult<()> {
+    let runner = crate::display_backend::create_real_runner();
+    apply_vrr_settings_with_backend(display_name, settings, &runner)
+}
+
+/// Apply VRR settings using the provided display backend
+pub fn apply_vrr_settings_with_backend(
+    display_name: &str,
+    settings: &VrrSettings,
+    runner: &SharedDisplayRunner,
+) -> NvResult<()> {
     let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default();
 
     match desktop.as_str() {
-        "KDE" => apply_vrr_kde(display_name, settings),
-        "GNOME" => apply_vrr_gnome(settings),
-        "Hyprland" => apply_vrr_hyprland(display_name, settings),
-        "sway" => apply_vrr_sway(display_name, settings),
-        _ => apply_vrr_x11(display_name, settings),
+        "KDE" => apply_vrr_kde_with_backend(display_name, settings, runner),
+        "GNOME" => apply_vrr_gnome_with_backend(settings, runner),
+        "Hyprland" => apply_vrr_hyprland_with_backend(display_name, settings, runner),
+        "sway" => apply_vrr_sway_with_backend(display_name, settings, runner),
+        _ => apply_vrr_x11_with_backend(display_name, settings, runner),
     }
 }
 
-fn apply_vrr_kde(display_name: &str, settings: &VrrSettings) -> NvResult<()> {
+fn apply_vrr_kde_with_backend(
+    display_name: &str,
+    settings: &VrrSettings,
+    runner: &SharedDisplayRunner,
+) -> NvResult<()> {
     // VRR policy values: 0 = Never, 1 = Always, 2 = Automatic
     let vrr_policy = if settings.enabled {
         if settings.adaptive_sync { "2" } else { "1" }
@@ -392,25 +397,22 @@ fn apply_vrr_kde(display_name: &str, settings: &VrrSettings) -> NvResult<()> {
     };
 
     // Try kscreen-doctor first with vrrpolicy parameter
-    let output = std::process::Command::new("kscreen-doctor")
-        .arg(format!("output.{}.vrrpolicy.{}", display_name, vrr_policy))
-        .output()
-        .map_err(|e| {
-            NvControlError::DisplayDetectionFailed(format!("kscreen-doctor failed: {e}"))
-        })?;
-
-    if output.status.success() {
-        let vrr_state = match vrr_policy {
-            "0" => "disabled",
-            "1" => "enabled (always)",
-            "2" => "enabled (automatic)",
-            _ => "unknown",
-        };
-        println!("VRR {} for display {}", vrr_state, display_name);
-        Ok(())
-    } else {
-        // If kscreen-doctor fails, try direct config file modification
-        apply_vrr_kde_config(display_name, settings)
+    let arg = format!("output.{}.vrrpolicy.{}", display_name, vrr_policy);
+    match runner.run_command("kscreen-doctor", &[&arg]) {
+        Ok(_) => {
+            let vrr_state = match vrr_policy {
+                "0" => "disabled",
+                "1" => "enabled (always)",
+                "2" => "enabled (automatic)",
+                _ => "unknown",
+            };
+            println!("VRR {} for display {}", vrr_state, display_name);
+            Ok(())
+        }
+        Err(_) => {
+            // If kscreen-doctor fails, try direct config file modification
+            apply_vrr_kde_config(display_name, settings)
+        }
     }
 }
 
@@ -488,134 +490,127 @@ fn apply_vrr_kde_config(display_name: &str, settings: &VrrSettings) -> NvResult<
     )))
 }
 
-fn apply_vrr_gnome(settings: &VrrSettings) -> NvResult<()> {
+fn apply_vrr_gnome_with_backend(
+    settings: &VrrSettings,
+    runner: &SharedDisplayRunner,
+) -> NvResult<()> {
     let features = if settings.enabled {
         "['variable-refresh-rate']"
     } else {
         "[]"
     };
 
-    let output = std::process::Command::new("gsettings")
-        .args(["set", "org.gnome.mutter", "experimental-features", features])
-        .output()
+    runner
+        .run_command(
+            "gsettings",
+            &["set", "org.gnome.mutter", "experimental-features", features],
+        )
         .map_err(|e| NvControlError::DisplayDetectionFailed(format!("gsettings failed: {e}")))?;
 
-    if output.status.success() {
-        println!(
-            "GNOME VRR {}",
-            if settings.enabled {
-                "enabled"
-            } else {
-                "disabled"
-            }
-        );
-        Ok(())
-    } else {
-        Err(NvControlError::DisplayDetectionFailed(
-            "Failed to set GNOME VRR".to_string(),
-        ))
-    }
+    println!(
+        "GNOME VRR {}",
+        if settings.enabled {
+            "enabled"
+        } else {
+            "disabled"
+        }
+    );
+    Ok(())
 }
 
-fn apply_vrr_hyprland(display_name: &str, settings: &VrrSettings) -> NvResult<()> {
+fn apply_vrr_hyprland_with_backend(
+    display_name: &str,
+    settings: &VrrSettings,
+    runner: &SharedDisplayRunner,
+) -> NvResult<()> {
     let vrr_value = if settings.enabled { "1" } else { "0" };
+    let monitor_arg = format!("{},vrr,{}", display_name, vrr_value);
 
-    let output = std::process::Command::new("hyprctl")
-        .args([
-            "keyword",
-            "monitor",
-            &format!("{},vrr,{}", display_name, vrr_value),
-        ])
-        .output()
+    runner
+        .run_command("hyprctl", &["keyword", "monitor", &monitor_arg])
         .map_err(|e| NvControlError::DisplayDetectionFailed(format!("hyprctl failed: {e}")))?;
 
-    if output.status.success() {
-        println!(
-            "Hyprland VRR {} for {}",
-            if settings.enabled {
-                "enabled"
-            } else {
-                "disabled"
-            },
-            display_name
-        );
-        Ok(())
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(NvControlError::DisplayDetectionFailed(format!(
-            "hyprctl error: {stderr}"
-        )))
-    }
+    println!(
+        "Hyprland VRR {} for {}",
+        if settings.enabled {
+            "enabled"
+        } else {
+            "disabled"
+        },
+        display_name
+    );
+    Ok(())
 }
 
-fn apply_vrr_sway(display_name: &str, settings: &VrrSettings) -> NvResult<()> {
+fn apply_vrr_sway_with_backend(
+    display_name: &str,
+    settings: &VrrSettings,
+    runner: &SharedDisplayRunner,
+) -> NvResult<()> {
     let adaptive_sync = if settings.enabled {
         "enable"
     } else {
         "disable"
     };
 
-    let output = std::process::Command::new("swaymsg")
-        .args(["output", display_name, "adaptive_sync", adaptive_sync])
-        .output()
+    runner
+        .run_command(
+            "swaymsg",
+            &["output", display_name, "adaptive_sync", adaptive_sync],
+        )
         .map_err(|e| NvControlError::DisplayDetectionFailed(format!("swaymsg failed: {e}")))?;
 
-    if output.status.success() {
-        println!("Sway adaptive sync {} for {}", adaptive_sync, display_name);
-        Ok(())
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(NvControlError::DisplayDetectionFailed(format!(
-            "swaymsg error: {stderr}"
-        )))
-    }
+    println!("Sway adaptive sync {} for {}", adaptive_sync, display_name);
+    Ok(())
 }
 
-fn apply_vrr_x11(display_name: &str, settings: &VrrSettings) -> NvResult<()> {
+fn apply_vrr_x11_with_backend(
+    display_name: &str,
+    settings: &VrrSettings,
+    runner: &SharedDisplayRunner,
+) -> NvResult<()> {
     // X11 VRR via xrandr (limited support)
     let vrr_option = if settings.enabled { "on" } else { "off" };
 
-    let output = std::process::Command::new("xrandr")
-        .args(["--output", display_name, "--set", "vrr", vrr_option])
-        .output()
-        .map_err(|e| NvControlError::DisplayDetectionFailed(format!("xrandr failed: {e}")))?;
-
-    if output.status.success() {
-        println!("X11 VRR {} for {}", vrr_option, display_name);
-        Ok(())
-    } else {
-        // Try nvidia-settings as fallback
-        apply_vrr_nvidia_settings(display_name, settings)
+    match runner.run_command(
+        "xrandr",
+        &["--output", display_name, "--set", "vrr", vrr_option],
+    ) {
+        Ok(_) => {
+            println!("X11 VRR {} for {}", vrr_option, display_name);
+            Ok(())
+        }
+        Err(_) => {
+            // Try nvidia-settings as fallback
+            apply_vrr_nvidia_settings_with_backend(display_name, settings, runner)
+        }
     }
 }
 
-fn apply_vrr_nvidia_settings(display_name: &str, settings: &VrrSettings) -> NvResult<()> {
+fn apply_vrr_nvidia_settings_with_backend(
+    display_name: &str,
+    settings: &VrrSettings,
+    runner: &SharedDisplayRunner,
+) -> NvResult<()> {
     let gsync_state = if settings.enabled { "1" } else { "0" };
+    let gsync_arg = format!("[gpu:0]/GPUGSyncAllowed={}", gsync_state);
 
-    let output = std::process::Command::new("nvidia-settings")
-        .args(["-a", &format!("[gpu:0]/GPUGSyncAllowed={}", gsync_state)])
-        .output()
+    runner
+        .run_command("nvidia-settings", &["-a", &gsync_arg])
         .map_err(|e| {
             NvControlError::DisplayDetectionFailed(format!("nvidia-settings failed: {e}"))
         })?;
 
-    if output.status.success() {
-        println!(
-            "NVIDIA G-SYNC {} for {}",
-            if settings.enabled {
-                "enabled"
-            } else {
-                "disabled"
-            },
-            display_name
-        );
-        Ok(())
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(NvControlError::DisplayDetectionFailed(format!(
-            "nvidia-settings error: {stderr}"
-        )))
-    }
+    println!(
+        "NVIDIA G-SYNC {} for {}",
+        if settings.enabled {
+            "enabled"
+        } else {
+            "disabled"
+        },
+        display_name
+    );
+    Ok(())
 }
 
 pub fn get_per_app_vrr_settings() -> HashMap<String, VrrSettings> {

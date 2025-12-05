@@ -254,7 +254,7 @@ impl TunerState {
                 let temp_offset = self.temperature - temp1;
 
                 let speed = speed1 as i32 + (speed_range * temp_offset / temp_range);
-                return speed.max(0).min(100) as u32;
+                return speed.clamp(0, 100) as u32;
             }
         }
 

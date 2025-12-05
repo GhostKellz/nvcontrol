@@ -1,6 +1,7 @@
 // Desktop Notifications & Alert System
 // Temperature warnings, fan failures, GPU alerts
 
+use crate::nvml_backend::SharedNvmlBackend;
 use crate::{NvControlError, NvResult};
 use notify_rust::{Notification, Timeout, Urgency};
 use serde::{Deserialize, Serialize};
@@ -294,14 +295,25 @@ impl NotificationManager {
 pub struct AlertMonitorThread {
     notification_manager: NotificationManager,
     check_interval_ms: u64,
+    backend: SharedNvmlBackend,
 }
 
 impl AlertMonitorThread {
-    pub fn new(check_interval_ms: u64) -> NvResult<Self> {
+    /// Create monitor with shared backend (preferred)
+    pub fn with_backend(check_interval_ms: u64, backend: SharedNvmlBackend) -> NvResult<Self> {
         Ok(Self {
             notification_manager: NotificationManager::new()?,
             check_interval_ms,
+            backend,
         })
+    }
+
+    /// Create monitor (legacy - creates own backend)
+    pub fn new(check_interval_ms: u64) -> NvResult<Self> {
+        Self::with_backend(
+            check_interval_ms,
+            crate::nvml_backend::create_real_backend(),
+        )
     }
 
     /// Run the monitoring loop (blocking)
@@ -309,25 +321,20 @@ impl AlertMonitorThread {
         println!("🔔 Alert monitoring started");
 
         loop {
-            // Get GPU stats
-            if let Ok(nvml) = nvml_wrapper::Nvml::init() {
-                if let Ok(device) = nvml.device_by_index(0) {
-                    let temp = device
-                        .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
-                        .unwrap_or(0) as f32;
+            // Get GPU stats via backend
+            if self.backend.is_available() {
+                let temp = self.backend.get_temperature(0).unwrap_or(0) as f32;
+                let power = self
+                    .backend
+                    .get_power_usage(0)
+                    .map(|p| p as f32 / 1000.0)
+                    .unwrap_or(0.0);
+                let fan_rpm = self.backend.get_fan_speed(0, 0).unwrap_or(0);
 
-                    let power = device
-                        .power_usage()
-                        .map(|p| p as f32 / 1000.0)
-                        .unwrap_or(0.0);
-
-                    let fan_rpm = device.fan_speed(0).unwrap_or(0);
-
-                    // Check all metrics
-                    let _ = self
-                        .notification_manager
-                        .check_all_metrics(temp, power, fan_rpm);
-                }
+                // Check all metrics
+                let _ = self
+                    .notification_manager
+                    .check_all_metrics(temp, power, fan_rpm);
             }
 
             std::thread::sleep(std::time::Duration::from_millis(self.check_interval_ms));

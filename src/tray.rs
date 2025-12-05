@@ -1,6 +1,5 @@
 use crate::fan;
-use nvml_wrapper::Nvml;
-use nvml_wrapper::struct_wrappers::device::MemoryInfo;
+use crate::nvml_backend::SharedNvmlBackend;
 #[cfg(feature = "tray")]
 use std::sync::mpsc;
 #[cfg(feature = "tray")]
@@ -42,11 +41,13 @@ pub struct SystemTray {
     last_update: Instant,
     gaming_mode_enabled: bool,
     vrr_enabled: bool,
+    backend: SharedNvmlBackend,
 }
 
 #[cfg(feature = "tray")]
 impl SystemTray {
-    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
+    /// Create tray with shared backend (preferred)
+    pub fn with_backend(backend: SharedNvmlBackend) -> Result<Self, Box<dyn std::error::Error>> {
         let (_sender, receiver) = mpsc::channel();
 
         // Create simplified menu for now
@@ -57,8 +58,8 @@ impl SystemTray {
         let _gaming_toggle = MenuItem::new("🎯 Gaming Mode", true, None);
         let _exit_item = MenuItem::new("❌ Exit", true, None);
 
-        // Get initial GPU stats for tooltip
-        let initial_tooltip = Self::generate_tooltip();
+        // Get initial GPU stats for tooltip using backend
+        let initial_tooltip = Self::generate_tooltip_with_backend(&backend);
 
         let tray_icon = TrayIconBuilder::new()
             .with_menu(Box::new(menu))
@@ -71,7 +72,13 @@ impl SystemTray {
             last_update: Instant::now(),
             gaming_mode_enabled: false,
             vrr_enabled: false,
+            backend,
         })
+    }
+
+    /// Create tray (legacy - creates own backend)
+    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
+        Self::with_backend(crate::nvml_backend::create_real_backend())
     }
 
     pub fn try_recv(&self) -> Option<TrayEvent> {
@@ -82,15 +89,15 @@ impl SystemTray {
     pub fn update_tooltip(&mut self) {
         // Update every 5 seconds to avoid excessive polling
         if self.last_update.elapsed() > Duration::from_secs(5) {
-            let tooltip = Self::generate_tooltip();
+            let tooltip = Self::generate_tooltip_with_backend(&self.backend);
             let _ = self.tray_icon.set_tooltip(Some(&tooltip));
             self.last_update = Instant::now();
         }
     }
 
-    /// Generate rich tooltip with current GPU stats
-    fn generate_tooltip() -> String {
-        match get_gpu_stats() {
+    /// Generate rich tooltip with current GPU stats using backend
+    fn generate_tooltip_with_backend(backend: &SharedNvmlBackend) -> String {
+        match get_gpu_stats_with_backend(backend) {
             Ok(stats) => {
                 format!(
                     "nvcontrol - NVIDIA GPU Control\n\
@@ -162,31 +169,24 @@ impl SystemTray {
     }
 }
 
-/// Get current GPU statistics for tray display
+/// Get current GPU statistics for tray display using backend
 #[allow(dead_code)]
-fn get_gpu_stats() -> Result<GpuStats, Box<dyn std::error::Error>> {
-    let nvml = Nvml::init()?;
-    let device = nvml.device_by_index(0)?;
-
-    let name = device.name().unwrap_or_else(|_| "Unknown GPU".to_string());
-    let temperature = device
-        .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
-        .unwrap_or(0);
-    let utilization = device.utilization_rates().map(|u| u.gpu).unwrap_or(0);
-    let memory_info = device.memory_info().unwrap_or_else(|_| MemoryInfo {
-        total: 0,
-        free: 0,
-        used: 0,
-        reserved: 0,
-        version: 0,
-    });
-    let power_draw = device
-        .power_usage()
+fn get_gpu_stats_with_backend(
+    backend: &SharedNvmlBackend,
+) -> Result<GpuStats, Box<dyn std::error::Error>> {
+    let name = backend
+        .get_name(0)
+        .unwrap_or_else(|_| "Unknown GPU".to_string());
+    let temperature = backend.get_temperature(0).unwrap_or(0);
+    let (gpu_util, _mem_util) = backend.get_utilization(0).unwrap_or((0, 0));
+    let (memory_used, memory_total) = backend.get_memory_info(0).unwrap_or((0, 0));
+    let power_draw = backend
+        .get_power_usage(0)
         .map(|p| p as f32 / 1000.0)
         .unwrap_or(0.0);
 
-    // Get fan info
-    let fans = fan::list_fans();
+    // Get fan info using backend
+    let fans = fan::list_fans_with_backend(backend);
     let (fan_speed, fan_health) = if let Some(fan) = fans.first() {
         (fan.rpm.unwrap_or(0), fan.health_status.clone())
     } else {
@@ -196,13 +196,20 @@ fn get_gpu_stats() -> Result<GpuStats, Box<dyn std::error::Error>> {
     Ok(GpuStats {
         name,
         temperature,
-        utilization,
-        memory_used: memory_info.used,
-        memory_total: memory_info.total,
+        utilization: gpu_util,
+        memory_used,
+        memory_total,
         power_draw,
         fan_speed,
         fan_health,
     })
+}
+
+/// Get current GPU statistics for tray display (legacy - creates own backend)
+#[allow(dead_code)]
+fn get_gpu_stats() -> Result<GpuStats, Box<dyn std::error::Error>> {
+    let backend = crate::nvml_backend::create_real_backend();
+    get_gpu_stats_with_backend(&backend)
 }
 
 #[allow(dead_code)]

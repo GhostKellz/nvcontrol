@@ -1,5 +1,5 @@
+use crate::nvml_backend::SharedNvmlBackend;
 use crate::{NvControlError, NvResult};
-use nvml_wrapper::Nvml;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -279,41 +279,37 @@ fn create_aggressive_profile() -> FanProfile {
     }
 }
 
-/// List all fans with real NVML integration and health monitoring
-pub fn list_fans() -> Vec<FanInfo> {
+/// List all fans using backend
+pub fn list_fans_with_backend(backend: &SharedNvmlBackend) -> Vec<FanInfo> {
     let mut fans = Vec::new();
 
-    // Try NVML first
-    if let Ok(nvml) = Nvml::init() {
-        if let Ok(device_count) = nvml.device_count() {
-            for gpu_id in 0..device_count {
-                if let Ok(device) = nvml.device_by_index(gpu_id) {
-                    // Try to get fan count for this GPU
-                    let fan_count = get_fan_count_for_gpu(&device).unwrap_or(1);
+    if let Ok(device_count) = backend.device_count() {
+        for gpu_id in 0..device_count {
+            let fan_count = backend.get_fan_count(gpu_id).unwrap_or(1);
+            let temp = backend.get_temperature(gpu_id).unwrap_or(0);
+            let gpu_name = backend.get_name(gpu_id).unwrap_or_default();
+            let max_rpm = estimate_max_rpm_from_name(&gpu_name);
 
-                    for fan_id in 0..fan_count {
-                        let rpm = device.fan_speed(fan_id).ok();
-                        let percent = rpm.map(|r| ((r as f32 / 3000.0) * 100.0) as u8); // Estimate percentage
-                        let controllable = can_control_fan(&device, fan_id);
-                        let health_status = assess_fan_health(&device, fan_id, rpm);
-                        let max_rpm = estimate_max_rpm(&device, fan_id);
+            for fan_id in 0..fan_count {
+                let rpm = backend.get_fan_speed(gpu_id, fan_id).ok();
+                let percent = rpm.map(|r| r.min(100) as u8);
+                let controllable = backend.is_fan_control_supported(gpu_id);
+                let health_status = assess_fan_health_from_metrics(temp, rpm);
 
-                        fans.push(FanInfo {
-                            id: (gpu_id * 10 + fan_id) as usize, // Unique ID across GPUs
-                            rpm,
-                            percent,
-                            controllable,
-                            health_status,
-                            max_rpm,
-                            target_rpm: None,
-                        });
-                    }
-                }
+                fans.push(FanInfo {
+                    id: (gpu_id * 10 + fan_id) as usize,
+                    rpm,
+                    percent,
+                    controllable,
+                    health_status,
+                    max_rpm: Some(max_rpm),
+                    target_rpm: None,
+                });
             }
         }
     }
 
-    // Fallback to nvidia-smi if NVML fails
+    // Fallback to nvidia-smi if backend has no data
     if fans.is_empty() {
         fans = get_fans_via_nvidia_smi();
     }
@@ -324,7 +320,7 @@ pub fn list_fans() -> Vec<FanInfo> {
             id: 0,
             rpm: Some(1500),
             percent: Some(40),
-            controllable: false, // Conservative default
+            controllable: false,
             health_status: FanHealthStatus::Unknown,
             max_rpm: Some(3000),
             target_rpm: None,
@@ -334,71 +330,31 @@ pub fn list_fans() -> Vec<FanInfo> {
     fans
 }
 
-fn get_fan_count_for_gpu(device: &nvml_wrapper::Device) -> NvResult<u32> {
-    // Try to determine fan count - most consumer GPUs have 1-3 fans
-    for fan_id in 0..4 {
-        if device.fan_speed(fan_id).is_err() {
-            return Ok(fan_id);
-        }
-    }
-    Ok(1) // Default to 1 fan
+/// List all fans (legacy - creates own backend)
+pub fn list_fans() -> Vec<FanInfo> {
+    let backend = crate::nvml_backend::create_real_backend();
+    list_fans_with_backend(&backend)
 }
 
-fn can_control_fan(device: &nvml_wrapper::Device, fan_id: u32) -> bool {
-    // Check if we can control this fan
-    // This is typically limited by driver permissions and GPU capabilities
-    match device.fan_speed(fan_id) {
-        Ok(_) => {
-            // If we can read fan speed, we might be able to control it
-            // But fan control often requires additional permissions
-            false // Conservative default - most systems don't allow fan control
-        }
-        Err(_) => false,
-    }
-}
-
-/// Assess fan health based on RPM and temperature data
-fn assess_fan_health(
-    device: &nvml_wrapper::Device,
-    _fan_id: u32,
-    rpm: Option<u32>,
-) -> FanHealthStatus {
-    // Get temperature for context
-    let temp = device
-        .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
-        .unwrap_or(0);
-
+/// Assess fan health from temperature and RPM metrics
+fn assess_fan_health_from_metrics(temp: u32, rpm: Option<u32>) -> FanHealthStatus {
     match rpm {
-        Some(current_rpm) => {
-            // Check for concerning patterns
-            if temp > 80 && current_rpm < 1000 {
-                FanHealthStatus::Critical // High temp with low fan speed
-            } else if current_rpm > 4000 {
-                FanHealthStatus::Warning // Unusually high RPM
-            } else if current_rpm == 0 && temp > 60 {
-                FanHealthStatus::Critical // Fan stopped at high temp
-            } else {
-                FanHealthStatus::Healthy
-            }
-        }
+        Some(r) if r == 0 && temp > 50 => FanHealthStatus::Critical,
+        Some(r) if r < 500 && temp > 60 => FanHealthStatus::Warning,
+        Some(_) => FanHealthStatus::Healthy,
         None => FanHealthStatus::Unknown,
     }
 }
 
-/// Estimate maximum RPM for a fan
-fn estimate_max_rpm(device: &nvml_wrapper::Device, _fan_id: u32) -> Option<u32> {
+/// Estimate maximum RPM for a fan based on GPU name
+fn estimate_max_rpm_from_name(name: &str) -> u32 {
     // Most modern GPU fans range from 2000-5000 RPM max
-    // We can estimate based on GPU model or use a safe default
-    if let Ok(name) = device.name() {
-        if name.contains("RTX 40") || name.contains("RTX 30") {
-            Some(4500) // Modern high-end cards
-        } else if name.contains("RTX 20") || name.contains("GTX 16") {
-            Some(3500) // Mid-range cards
-        } else {
-            Some(3000) // Conservative default
-        }
+    if name.contains("RTX 40") || name.contains("RTX 50") || name.contains("RTX 30") {
+        4500 // Modern high-end cards
+    } else if name.contains("RTX 20") || name.contains("GTX 16") {
+        3500 // Mid-range cards
     } else {
-        Some(3000)
+        3000 // Conservative default
     }
 }
 
@@ -445,17 +401,8 @@ pub fn set_fan_speed(fan_id: usize, speed_percent: u8) -> NvResult<()> {
         return Err(NvControlError::FanControlNotSupported);
     }
 
-    // Try NVML first
-    if let Ok(nvml) = Nvml::init() {
-        let gpu_id = fan_id / 10; // Extract GPU ID from fan ID
-        let _local_fan_id = (fan_id % 10) as u32; // Extract local fan ID
-
-        if let Ok(_device) = nvml.device_by_index(gpu_id as u32) {
-            // Note: NVML fan control is typically not available in consumer drivers
-            // This would require special permissions and enterprise drivers
-            println!("NVML fan control not available in consumer drivers");
-        }
-    }
+    // Note: NVML fan control is typically not available in consumer drivers
+    // Consumer drivers require nvidia-settings (X11) or sysfs for fan control
 
     // Try nvidia-settings (X11 only)
     if std::env::var("DISPLAY").is_ok() {
@@ -646,7 +593,7 @@ pub fn apply_fan_curve(
                 let interpolated_speed =
                     p1.duty_cycle as i16 + (speed_range * temp_offset as i16) / temp_range as i16;
 
-                result = interpolated_speed.max(0).min(100) as u8;
+                result = interpolated_speed.clamp(0, 100) as u8;
                 break;
             }
         }
@@ -673,11 +620,7 @@ pub fn apply_fan_curve(
 
 /// Apply hysteresis to prevent fan speed oscillation
 fn apply_hysteresis(target_speed: u8, previous_speed: u8, hysteresis: u8, _current_temp: u8) -> u8 {
-    let speed_diff = if target_speed > previous_speed {
-        target_speed - previous_speed
-    } else {
-        previous_speed - target_speed
-    };
+    let speed_diff = target_speed.abs_diff(previous_speed);
 
     // Only change speed if the difference exceeds hysteresis threshold
     if speed_diff > hysteresis {
@@ -752,8 +695,12 @@ pub fn test_fan(fan_id: usize) -> NvResult<FanTestResult> {
     Ok(test_result)
 }
 
-/// Enable zero RPM mode (fan stops at low temperatures)
-pub fn enable_zero_rpm_mode(fan_id: usize, threshold_temp: u8) -> NvResult<()> {
+/// Enable zero RPM mode using backend (fan stops at low temperatures)
+pub fn enable_zero_rpm_mode_with_backend(
+    fan_id: usize,
+    threshold_temp: u8,
+    backend: &SharedNvmlBackend,
+) -> NvResult<()> {
     println!(
         "Enabling zero RPM mode for fan {} at {}°C threshold",
         fan_id, threshold_temp
@@ -761,26 +708,30 @@ pub fn enable_zero_rpm_mode(fan_id: usize, threshold_temp: u8) -> NvResult<()> {
 
     // This would typically involve setting fan curves with zero RPM points
     // For now, we'll set a very low speed when temperature is below threshold
+    let gpu_id = (fan_id / 10) as u32;
 
-    if let Ok(nvml) = Nvml::init() {
-        let gpu_id = fan_id / 10;
-        if let Ok(device) = nvml.device_by_index(gpu_id as u32) {
-            if let Ok(temp) =
-                device.temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
-            {
-                if temp < threshold_temp as u32 {
-                    set_fan_speed(fan_id, 0)?;
-                    println!("Fan {} stopped (zero RPM mode active)", fan_id);
-                }
-            }
+    if let Ok(temp) = backend.get_temperature(gpu_id) {
+        if temp < threshold_temp as u32 {
+            set_fan_speed(fan_id, 0)?;
+            println!("Fan {} stopped (zero RPM mode active)", fan_id);
         }
     }
 
     Ok(())
 }
 
-/// Monitor fan health over time
-pub fn monitor_fan_health(fan_id: usize, duration_minutes: u32) -> NvResult<FanHealthReport> {
+/// Enable zero RPM mode (legacy - creates own backend)
+pub fn enable_zero_rpm_mode(fan_id: usize, threshold_temp: u8) -> NvResult<()> {
+    let backend = crate::nvml_backend::create_real_backend();
+    enable_zero_rpm_mode_with_backend(fan_id, threshold_temp, &backend)
+}
+
+/// Monitor fan health over time using backend
+pub fn monitor_fan_health_with_backend(
+    fan_id: usize,
+    duration_minutes: u32,
+    backend: &SharedNvmlBackend,
+) -> NvResult<FanHealthReport> {
     println!(
         "Monitoring fan {} health for {} minutes...",
         fan_id, duration_minutes
@@ -800,33 +751,27 @@ pub fn monitor_fan_health(fan_id: usize, duration_minutes: u32) -> NvResult<FanH
     let start_time = Instant::now();
     let sample_interval = Duration::from_secs(30); // Sample every 30 seconds
     let total_duration = Duration::from_secs(duration_minutes as u64 * 60);
+    let gpu_id = (fan_id / 10) as u32;
+    let local_fan_id = (fan_id % 10) as u32;
 
     while start_time.elapsed() < total_duration {
-        if let Some(fan_info) = get_fan_info(fan_id) {
-            if let Some(rpm) = fan_info.rpm {
-                report.rpm_samples.push(rpm);
+        // Get fan speed via backend
+        if let Ok(rpm) = backend.get_fan_speed(gpu_id, local_fan_id) {
+            report.rpm_samples.push(rpm);
 
-                // Check for concerning patterns
-                if rpm == 0 {
-                    report.health_events.push("Fan stopped".to_string());
-                } else if rpm > 4500 {
-                    report
-                        .health_events
-                        .push(format!("High RPM detected: {}", rpm));
-                }
+            // Check for concerning patterns
+            if rpm == 0 {
+                report.health_events.push("Fan stopped".to_string());
+            } else if rpm > 4500 {
+                report
+                    .health_events
+                    .push(format!("High RPM detected: {}", rpm));
             }
+        }
 
-            // Get temperature if available
-            if let Ok(nvml) = Nvml::init() {
-                let gpu_id = fan_id / 10;
-                if let Ok(device) = nvml.device_by_index(gpu_id as u32) {
-                    if let Ok(temp) = device
-                        .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
-                    {
-                        report.temperature_samples.push(temp);
-                    }
-                }
-            }
+        // Get temperature via backend
+        if let Ok(temp) = backend.get_temperature(gpu_id) {
+            report.temperature_samples.push(temp);
         }
 
         std::thread::sleep(sample_interval);
@@ -845,7 +790,11 @@ pub fn monitor_fan_health(fan_id: usize, duration_minutes: u32) -> NvResult<FanH
             .sum::<f64>()
             / report.rpm_samples.len() as f64;
         let std_dev = variance.sqrt();
-        report.rpm_stability = (std_dev / report.average_rpm) * 100.0; // CV percentage
+        report.rpm_stability = if report.average_rpm > 0.0 {
+            (std_dev / report.average_rpm) * 100.0 // CV percentage
+        } else {
+            0.0
+        };
     }
 
     // Assess overall health
@@ -858,6 +807,12 @@ pub fn monitor_fan_health(fan_id: usize, duration_minutes: u32) -> NvResult<FanH
     };
 
     Ok(report)
+}
+
+/// Monitor fan health over time (legacy - creates own backend)
+pub fn monitor_fan_health(fan_id: usize, duration_minutes: u32) -> NvResult<FanHealthReport> {
+    let backend = crate::nvml_backend::create_real_backend();
+    monitor_fan_health_with_backend(fan_id, duration_minutes, &backend)
 }
 
 /// Load fan profiles from configuration

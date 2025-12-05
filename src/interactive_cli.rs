@@ -1,17 +1,20 @@
+use crate::NvResult;
 /// Interactive CLI Mode for nvcontrol
 ///
 /// Menu-driven interface for users who prefer guided workflows
-use crate::NvResult;
+use crate::nvml_backend::SharedNvmlBackend;
 use console::{Key, Term, style};
 
 pub struct InteractiveCli {
     term: Term,
+    backend: SharedNvmlBackend,
 }
 
 impl InteractiveCli {
-    pub fn new() -> Self {
+    pub fn new(backend: SharedNvmlBackend) -> Self {
         Self {
             term: Term::stdout(),
+            backend,
         }
     }
 
@@ -83,7 +86,9 @@ Select option (1-8): "#,
             .ok();
 
         // Call GPU info command
-        if let Err(e) = crate::gpu::get_gpu_info_with_format(crate::gpu::OutputFormat::Human) {
+        if let Err(e) =
+            crate::gpu::get_gpu_info_with_format(crate::gpu::OutputFormat::Human, &self.backend)
+        {
             self.term.write_line(&format!("❌ Error: {}", e)).ok();
         }
 
@@ -117,7 +122,7 @@ Select option (1-8): "#,
             }
             2 => {
                 // Quick stats
-                if let Err(e) = crate::monitoring::live_gpu_watch(1, 1) {
+                if let Err(e) = crate::monitoring::live_gpu_watch(1, 1, &self.backend) {
                     self.term
                         .write_line(&format!("❌ Monitor failed: {}", e))
                         .ok();
@@ -302,20 +307,17 @@ Select option (1-8): "#,
         self.term.write_str("\nSelect: ").ok();
         self.term.flush().ok();
 
-        match self.get_choice(1, 4)? {
-            1 => {
-                let profiles = crate::profiles::list_profiles();
-                if profiles.is_empty() {
-                    self.term.write_line("No profiles found.").ok();
-                } else {
-                    self.term.write_line("Available profiles:").ok();
-                    for profile in profiles {
-                        self.term.write_line(&format!("  - {}", profile)).ok();
-                    }
+        if self.get_choice(1, 4)? == 1 {
+            let profiles = crate::profiles::list_profiles();
+            if profiles.is_empty() {
+                self.term.write_line("No profiles found.").ok();
+            } else {
+                self.term.write_line("Available profiles:").ok();
+                for profile in profiles {
+                    self.term.write_line(&format!("  - {}", profile)).ok();
                 }
-                self.wait_for_key()?;
             }
-            _ => {}
+            self.wait_for_key()?;
         }
 
         Ok(())

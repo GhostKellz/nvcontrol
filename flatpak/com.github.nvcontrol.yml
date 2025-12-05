@@ -38,10 +38,11 @@ modules:
       - cargo --offline fetch --manifest-path Cargo.toml
       - cargo --offline build --release --all-features
       - install -Dm755 target/release/nvctl -t /app/bin/
+      - install -Dm755 target/release/nvcontrol -t /app/bin/
       - install -Dm644 assets/nvcontrol.desktop /app/share/applications/com.github.nvcontrol.desktop
       - install -Dm644 assets/nvcontrol.png /app/share/icons/hicolor/256x256/apps/com.github.nvcontrol.png
     sources:
       - type: git
         url: https://github.com/GhostKellz/nvcontrol.git
-        tag: v0.7.0
+        tag: v0.7.6
       - cargo-sources.json

@@ -344,7 +344,7 @@ impl GamescopePreset {
                     thermal_throttling: true,
                     async_compute: true,
                     shader_cache_precompile: true,
-                    memory_pool_size: Some(1 * 1024 * 1024 * 1024), // 1GB
+                    memory_pool_size: Some(1024 * 1024 * 1024), // 1GB
                     thread_priority: Some(-5),
                 },
                 filter_settings: Default::default(),
@@ -563,13 +563,13 @@ impl GamescopePreset {
 
 /// Generate advanced command arguments
 pub fn generate_advanced_command(config: &GamescopeConfig, command: &str) -> Vec<String> {
-    let mut args = vec![];
-
     // Basic settings
-    args.push("-w".to_string());
-    args.push(config.width.to_string());
-    args.push("-h".to_string());
-    args.push(config.height.to_string());
+    let mut args = vec![
+        "-w".to_string(),
+        config.width.to_string(),
+        "-h".to_string(),
+        config.height.to_string(),
+    ];
 
     if let Some(refresh) = config.refresh_rate {
         args.push("-r".to_string());

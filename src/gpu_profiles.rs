@@ -46,7 +46,7 @@ pub fn get_gpu_spec(model_name: &str) -> Option<GpuModelSpec> {
             memory_bus_width: 512,
             memory_type: "GDDR7".to_string(),
             default_tdp: tdp,
-            max_tdp: max_tdp,
+            max_tdp,
             default_temp_limit: 90,
             max_temp_limit: 92,
             safe_gpu_offset: safe_offset,

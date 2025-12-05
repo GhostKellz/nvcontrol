@@ -251,24 +251,25 @@ impl GameDetector {
         #[cfg(target_os = "linux")]
         {
             // Find process by executable name
-            self.system
+            if let Some((pid, _)) = self
+                .system
                 .processes()
                 .iter()
                 .find(|(_, proc)| proc.name() == profile.executable.as_str())
-                .map(|(pid, _)| {
-                    let nice_value = match profile.priority {
-                        ProcessPriority::Realtime => -20,
-                        ProcessPriority::High => -10,
-                        ProcessPriority::Normal => 0,
-                        ProcessPriority::Low => 10,
-                    };
+            {
+                let nice_value = match profile.priority {
+                    ProcessPriority::Realtime => -20,
+                    ProcessPriority::High => -10,
+                    ProcessPriority::Normal => 0,
+                    ProcessPriority::Low => 10,
+                };
 
-                    let _ = Command::new("renice")
-                        .arg(nice_value.to_string())
-                        .arg("-p")
-                        .arg(pid.as_u32().to_string())
-                        .output();
-                });
+                let _ = Command::new("renice")
+                    .arg(nice_value.to_string())
+                    .arg("-p")
+                    .arg(pid.as_u32().to_string())
+                    .output();
+            }
         }
 
         Ok(())

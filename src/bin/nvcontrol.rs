@@ -251,6 +251,10 @@ struct NvControlApp {
     osd_font_size: u32,
     osd_opacity: f32,
     mangohud_installed: bool,
+
+    // Driver readiness validation (cached)
+    driver_validation: Option<nvcontrol::state::DriverValidationState>,
+    driver_capabilities: Option<nvcontrol::drivers::DriverCapabilities>,
 }
 
 #[cfg(feature = "gui")]
@@ -297,85 +301,83 @@ impl NvControlApp {
         std::thread::spawn(move || {
             loop {
                 // Fetch GPU stats in background
-                if let Ok(nvml) = nvml_wrapper::Nvml::init() {
-                    if let Ok(device) = nvml.device_by_index(0) {
-                        let name = device.name().unwrap_or_else(|_| "Unknown GPU".to_string());
-                        let temperature = device
-                            .temperature(
-                                nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu,
-                            )
-                            .unwrap_or(0) as f32;
-                        let power_draw = device
-                            .power_usage()
-                            .map(|p| p as f32 / 1000.0)
-                            .unwrap_or(0.0);
-                        let power_limit = device
-                            .power_management_limit()
-                            .map(|p| p as f32 / 1000.0)
-                            .unwrap_or(0.0);
-                        let utilization_rates = device.utilization_rates().ok();
-                        let utilization = utilization_rates.map(|u| u.gpu as f32).unwrap_or(0.0);
-                        let mem_info = device.memory_info().ok();
-                        let memory_used = mem_info.as_ref().map(|m| m.used).unwrap_or(0);
-                        let memory_total = mem_info.as_ref().map(|m| m.total).unwrap_or(0);
-                        let fan_speed = device.fan_speed(0).unwrap_or(0);
-                        let gpu_clock = device
-                            .clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics)
-                            .unwrap_or(0);
-                        let memory_clock = device
-                            .clock_info(nvml_wrapper::enum_wrappers::device::Clock::Memory)
-                            .unwrap_or(0);
+                if let Ok(nvml) = nvml_wrapper::Nvml::init()
+                    && let Ok(device) = nvml.device_by_index(0)
+                {
+                    let name = device.name().unwrap_or_else(|_| "Unknown GPU".to_string());
+                    let temperature = device
+                        .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
+                        .unwrap_or(0) as f32;
+                    let power_draw = device
+                        .power_usage()
+                        .map(|p| p as f32 / 1000.0)
+                        .unwrap_or(0.0);
+                    let power_limit = device
+                        .power_management_limit()
+                        .map(|p| p as f32 / 1000.0)
+                        .unwrap_or(0.0);
+                    let utilization_rates = device.utilization_rates().ok();
+                    let utilization = utilization_rates.map(|u| u.gpu as f32).unwrap_or(0.0);
+                    let mem_info = device.memory_info().ok();
+                    let memory_used = mem_info.as_ref().map(|m| m.used).unwrap_or(0);
+                    let memory_total = mem_info.as_ref().map(|m| m.total).unwrap_or(0);
+                    let fan_speed = device.fan_speed(0).unwrap_or(0);
+                    let gpu_clock = device
+                        .clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics)
+                        .unwrap_or(0);
+                    let memory_clock = device
+                        .clock_info(nvml_wrapper::enum_wrappers::device::Clock::Memory)
+                        .unwrap_or(0);
 
-                        // Additional info (fetch once per second to reduce overhead)
-                        let driver_version = nvml
-                            .sys_driver_version()
-                            .unwrap_or_else(|_| "Unknown".to_string());
-                        let pci_info = device.pci_info().ok();
-                        let pci_bus = pci_info
-                            .map(|p| format!("{:04x}:{:02x}:{:02x}.0", p.domain, p.bus, p.device))
-                            .unwrap_or_else(|| "Unknown".to_string());
+                    // Additional info (fetch once per second to reduce overhead)
+                    let driver_version = nvml
+                        .sys_driver_version()
+                        .unwrap_or_else(|_| "Unknown".to_string());
+                    let pci_info = device.pci_info().ok();
+                    let pci_bus = pci_info
+                        .map(|p| format!("{:04x}:{:02x}:{:02x}.0", p.domain, p.bus, p.device))
+                        .unwrap_or_else(|| "Unknown".to_string());
 
-                        // Compute capability and architecture detection
-                        let compute_cap = device.cuda_compute_capability().ok();
-                        let (architecture, compute_capability) = if let Some(cc) = compute_cap {
-                            let arch = match (cc.major, cc.minor) {
-                                (10, _) => "Blackwell",
-                                (8, 9) => "Ada Lovelace",
-                                (8, 6) | (8, 0) => "Ampere",
-                                (7, 5) => "Turing",
-                                (7, 0) => "Volta",
-                                (6, _) => "Pascal",
-                                _ => "Unknown",
-                            };
-                            (arch.to_string(), format!("{}.{}", cc.major, cc.minor))
-                        } else {
-                            ("Unknown".to_string(), "N/A".to_string())
+                    // Compute capability and architecture detection
+                    let compute_cap = device.cuda_compute_capability().ok();
+                    let (architecture, compute_capability) = if let Some(cc) = compute_cap {
+                        let arch = match (cc.major, cc.minor) {
+                            (10, _) => "Blackwell",
+                            (8, 9) => "Ada Lovelace",
+                            (8, 6) | (8, 0) => "Ampere",
+                            (7, 5) => "Turing",
+                            (7, 0) => "Volta",
+                            (6, _) => "Pascal",
+                            _ => "Unknown",
                         };
+                        (arch.to_string(), format!("{}.{}", cc.major, cc.minor))
+                    } else {
+                        ("Unknown".to_string(), "N/A".to_string())
+                    };
 
-                        // Estimate CUDA cores based on architecture
-                        let cuda_cores = device.num_cores().unwrap_or(0);
+                    // Estimate CUDA cores based on architecture
+                    let cuda_cores = device.num_cores().unwrap_or(0);
 
-                        let stats = GpuStats {
-                            name,
-                            temperature,
-                            utilization,
-                            memory_used,
-                            memory_total,
-                            power_draw,
-                            power_limit,
-                            fan_speed,
-                            gpu_clock,
-                            memory_clock,
-                            pci_bus,
-                            driver_version,
-                            cuda_cores,
-                            architecture,
-                            compute_capability,
-                        };
+                    let stats = GpuStats {
+                        name,
+                        temperature,
+                        utilization,
+                        memory_used,
+                        memory_total,
+                        power_draw,
+                        power_limit,
+                        fan_speed,
+                        gpu_clock,
+                        memory_clock,
+                        pci_bus,
+                        driver_version,
+                        cuda_cores,
+                        architecture,
+                        compute_capability,
+                    };
 
-                        // Send stats to UI thread (ignore errors if channel closed)
-                        let _ = tx.send(stats);
-                    }
+                    // Send stats to UI thread (ignore errors if channel closed)
+                    let _ = tx.send(stats);
                 }
 
                 // Update every 500ms
@@ -442,6 +444,41 @@ impl NvControlApp {
             osd_font_size: 24,
             osd_opacity: 0.8,
             mangohud_installed: nvcontrol::osd::OsdManager::check_mangohud_installed(),
+
+            // Driver validation - load cached or fetch new
+            driver_validation: nvcontrol::state::DriverValidationState::load(),
+            driver_capabilities: nvcontrol::drivers::DriverCapabilities::detect().ok(),
+        }
+    }
+
+    /// Run driver validation and cache results
+    fn validate_driver(&mut self) {
+        use nvcontrol::drivers;
+        use nvcontrol::state::DriverValidationState;
+
+        if let Ok(caps) = drivers::DriverCapabilities::detect() {
+            let check = drivers::validate_system_for_driver(caps.major_version);
+
+            let validation = DriverValidationState {
+                driver_version: caps.version.clone(),
+                major_version: caps.major_version,
+                is_beta: caps.is_beta,
+                wayland_version: check.wayland_version.clone(),
+                wayland_ok: check.wayland_ok,
+                glibc_version: check.glibc_version.clone(),
+                glibc_ok: check.glibc_ok,
+                preempt_rt_kernel: check.preempt_rt_kernel,
+                passed: check.passed,
+                warnings: check.warnings.clone(),
+                errors: check.errors.clone(),
+                validated_at: std::time::SystemTime::now(),
+            };
+
+            // Save to disk
+            let _ = validation.save();
+
+            self.driver_validation = Some(validation);
+            self.driver_capabilities = Some(caps);
         }
     }
 
@@ -1847,12 +1884,11 @@ impl eframe::App for NvControlApp {
                                                             .text("Vibrance"),
                                                     )
                                                     .changed()
-                                                {
-                                                    if let Err(e) = nvcontrol::vibrance_native::set_display_vibrance_native(
+                                                    && let Err(e) = nvcontrol::vibrance_native::set_display_vibrance_native(
                                                         0, *connector_idx, percentage as u32
-                                                    ) {
-                                                        eprintln!("Failed to set vibrance: {}", e);
-                                                    }
+                                                    )
+                                                {
+                                                    eprintln!("Failed to set vibrance: {}", e);
                                                 }
                                             });
                                         }
@@ -1915,52 +1951,51 @@ impl eframe::App for NvControlApp {
                         ui.separator();
 
                         ui.horizontal(|ui| {
-                            if ui.button(format!("{} Gaming (150%)", icons::GAME)).clicked() {
-                                if let Err(e) = vibrance::set_vibrance_all(
+                            if ui.button(format!("{} Gaming (150%)", icons::GAME)).clicked()
+                                && let Err(e) = vibrance::set_vibrance_all(
                                     vibrance::percentage_to_vibrance(150),
-                                ) {
-                                    eprintln!("Failed to set gaming preset: {}", e);
-                                }
+                                )
+                            {
+                                eprintln!("Failed to set gaming preset: {}", e);
                             }
 
-                            if ui.button(format!("{} Content Creation (120%)", icons::RGB)).clicked() {
-                                if let Err(e) = vibrance::set_vibrance_all(
+                            if ui.button(format!("{} Content Creation (120%)", icons::RGB)).clicked()
+                                && let Err(e) = vibrance::set_vibrance_all(
                                     vibrance::percentage_to_vibrance(120),
-                                ) {
-                                    eprintln!("Failed to set content creation preset: {}", e);
-                                }
+                                )
+                            {
+                                eprintln!("Failed to set content creation preset: {}", e);
                             }
 
-                            if ui.button(format!("{} Default (100%)", icons::REFRESH)).clicked() {
-                                if let Err(e) = vibrance::set_vibrance_all(0) {
-                                    eprintln!("Failed to reset vibrance: {}", e);
-                                }
+                            if ui.button(format!("{} Default (100%)", icons::REFRESH)).clicked()
+                                && let Err(e) = vibrance::set_vibrance_all(0)
+                            {
+                                eprintln!("Failed to reset vibrance: {}", e);
                             }
 
-                            if ui.button("Grayscale (0%)").clicked() {
-                                if let Err(e) =
+                            if ui.button("Grayscale (0%)").clicked()
+                                && let Err(e) =
                                     vibrance::set_vibrance_all(vibrance::percentage_to_vibrance(0))
-                                {
-                                    eprintln!("Failed to set grayscale: {}", e);
-                                }
+                            {
+                                eprintln!("Failed to set grayscale: {}", e);
                             }
                         });
 
                         ui.horizontal(|ui| {
-                            if ui.button(format!("{} Max Vibrance (200%)", icons::TARGET)).clicked() {
-                                if let Err(e) = vibrance::set_vibrance_all(
+                            if ui.button(format!("{} Max Vibrance (200%)", icons::TARGET)).clicked()
+                                && let Err(e) = vibrance::set_vibrance_all(
                                     vibrance::percentage_to_vibrance(200),
-                                ) {
-                                    eprintln!("Failed to set max vibrance: {}", e);
-                                }
+                                )
+                            {
+                                eprintln!("Failed to set max vibrance: {}", e);
                             }
 
-                            if ui.button(format!("{} Movie Mode (110%)", icons::DISPLAY)).clicked() {
-                                if let Err(e) = vibrance::set_vibrance_all(
+                            if ui.button(format!("{} Movie Mode (110%)", icons::DISPLAY)).clicked()
+                                && let Err(e) = vibrance::set_vibrance_all(
                                     vibrance::percentage_to_vibrance(110),
-                                ) {
-                                    eprintln!("Failed to set movie mode: {}", e);
-                                }
+                                )
+                            {
+                                eprintln!("Failed to set movie mode: {}", e);
                             }
                         });
                     });
@@ -3021,45 +3056,41 @@ impl eframe::App for NvControlApp {
                         ui.separator();
 
                         ui.horizontal(|ui| {
-                            if ui.button("🏆 Competitive Mode").clicked() {
-                                if let Err(e) =
+                            if ui.button("🏆 Competitive Mode").clicked()
+                                && let Err(e) =
                                     latency::set_latency_mode(latency::LatencyMode::Competitive)
-                                {
-                                    eprintln!("Failed to set competitive mode: {}", e);
-                                }
+                            {
+                                eprintln!("Failed to set competitive mode: {}", e);
                             }
                             ui.label("Ultra-low latency, maximum performance");
                         });
 
                         ui.horizontal(|ui| {
-                            if ui.button("⚖️ Balanced Mode").clicked() {
-                                if let Err(e) =
+                            if ui.button("⚖️ Balanced Mode").clicked()
+                                && let Err(e) =
                                     latency::set_latency_mode(latency::LatencyMode::Balanced)
-                                {
-                                    eprintln!("Failed to set balanced mode: {}", e);
-                                }
+                            {
+                                eprintln!("Failed to set balanced mode: {}", e);
                             }
                             ui.label("Good latency with system stability");
                         });
 
                         ui.horizontal(|ui| {
-                            if ui.button("🔋 Power Saver").clicked() {
-                                if let Err(e) =
+                            if ui.button("🔋 Power Saver").clicked()
+                                && let Err(e) =
                                     latency::set_latency_mode(latency::LatencyMode::PowerSaver)
-                                {
-                                    eprintln!("Failed to set power saver mode: {}", e);
-                                }
+                            {
+                                eprintln!("Failed to set power saver mode: {}", e);
                             }
                             ui.label("Higher latency but lower power usage");
                         });
 
                         ui.horizontal(|ui| {
-                            if ui.button("🔄 Reset to Default").clicked() {
-                                if let Err(e) =
+                            if ui.button("🔄 Reset to Default").clicked()
+                                && let Err(e) =
                                     latency::set_latency_mode(latency::LatencyMode::Default)
-                                {
-                                    eprintln!("Failed to reset latency mode: {}", e);
-                                }
+                            {
+                                eprintln!("Failed to reset latency mode: {}", e);
                             }
                             ui.label("Restore system defaults");
                         });
@@ -3069,10 +3100,10 @@ impl eframe::App for NvControlApp {
                         ui.label("🎮 Gaming-Specific Optimizations");
                         ui.separator();
 
-                        if ui.button("🎯 Apply Full Latency Optimization").clicked() {
-                            if let Err(e) = latency::optimize_latency() {
-                                eprintln!("Failed to apply latency optimizations: {}", e);
-                            }
+                        if ui.button("🎯 Apply Full Latency Optimization").clicked()
+                            && let Err(e) = latency::optimize_latency()
+                        {
+                            eprintln!("Failed to apply latency optimizations: {}", e);
                         }
 
                         ui.label("💡 Optimization Tips:");
@@ -3217,10 +3248,10 @@ impl eframe::App for NvControlApp {
                                 }
                             }
 
-                            if ui.button("⏹️ Stop Recording").clicked() {
-                                if let Err(e) = recording::stop_recording() {
-                                    eprintln!("Failed to stop recording: {}", e);
-                                }
+                            if ui.button("⏹️ Stop Recording").clicked()
+                                && let Err(e) = recording::stop_recording()
+                            {
+                                eprintln!("Failed to stop recording: {}", e);
                             }
 
                             ui.colored_label(
@@ -3607,37 +3638,253 @@ impl eframe::App for NvControlApp {
             }
             Tab::Drivers => {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    ui.heading(format!("{} Driver Management", icons::DRIVER));
+                    ui.heading(format!("{} Driver Management & Readiness", icons::DRIVER));
 
+                    // Driver Information Panel (dynamic)
                     ui.group(|ui| {
                         ui.label("📋 Current Driver Information");
                         ui.separator();
 
                         egui::Grid::new("driver_info")
                             .num_columns(2)
+                            .spacing([40.0, 4.0])
                             .show(ui, |ui| {
-                                ui.label("Driver Version:");
-                                ui.label("525.147.05"); // This would be dynamically detected
-                                ui.end_row();
+                                if let Some(ref caps) = self.driver_capabilities {
+                                    ui.label("Driver Version:");
+                                    ui.horizontal(|ui| {
+                                        ui.label(&caps.version);
+                                        if caps.is_beta {
+                                            ui.colored_label(egui::Color32::YELLOW, "(Beta)");
+                                        }
+                                    });
+                                    ui.end_row();
 
-                                ui.label("CUDA Version:");
-                                ui.label("12.0");
-                                ui.end_row();
+                                    ui.label("Major Version:");
+                                    ui.label(format!("{}", caps.major_version));
+                                    ui.end_row();
 
-                                ui.label("Installation Date:");
-                                ui.label("2024-12-15");
-                                ui.end_row();
+                                    ui.label("Wayland Requirement:");
+                                    ui.label(format!("{}+", caps.wayland_min_version));
+                                    ui.end_row();
 
-                                ui.label("Driver Type:");
-                                ui.label("Production Branch");
-                                ui.end_row();
-
-                                ui.label("Architecture:");
-                                ui.label("x86_64");
-                                ui.end_row();
+                                    ui.label("glibc Requirement:");
+                                    ui.label(format!("{}+", caps.glibc_min_version));
+                                    ui.end_row();
+                                } else if let Some(ref stats) = self.gpu_stats {
+                                    ui.label("Driver Version:");
+                                    ui.label(&stats.driver_version);
+                                    ui.end_row();
+                                } else {
+                                    ui.label("Driver Version:");
+                                    ui.colored_label(egui::Color32::GRAY, "Detecting...");
+                                    ui.end_row();
+                                }
                             });
                     });
 
+                    // Driver Readiness Panel (NEW)
+                    ui.group(|ui| {
+                        ui.horizontal(|ui| {
+                            ui.label("🎯 Driver Readiness Check");
+                            if let Some(ref validation) = self.driver_validation {
+                                ui.label(format!(
+                                    "(checked {})",
+                                    validation.time_since_validation()
+                                ));
+                            }
+                        });
+                        ui.separator();
+
+                        if let Some(ref validation) = self.driver_validation {
+                            // Overall status
+                            ui.horizontal(|ui| {
+                                ui.label("Overall Status:");
+                                if validation.passed {
+                                    ui.colored_label(egui::Color32::GREEN, "✓ System Ready");
+                                } else {
+                                    ui.colored_label(egui::Color32::RED, "✗ Issues Found");
+                                }
+                            });
+
+                            ui.add_space(5.0);
+
+                            // Detailed checks grid
+                            egui::Grid::new("readiness_checks")
+                                .num_columns(3)
+                                .spacing([20.0, 4.0])
+                                .show(ui, |ui| {
+                                    // Wayland check
+                                    ui.label("Wayland:");
+                                    if let Some(ref ver) = validation.wayland_version {
+                                        ui.label(ver);
+                                        match validation.wayland_ok {
+                                            Some(true) => {
+                                                ui.colored_label(egui::Color32::GREEN, "✓")
+                                            }
+                                            Some(false) => {
+                                                ui.colored_label(egui::Color32::RED, "✗")
+                                            }
+                                            None => ui.label("?"),
+                                        };
+                                    } else {
+                                        ui.colored_label(egui::Color32::GRAY, "Not detected");
+                                        ui.label("-");
+                                    }
+                                    ui.end_row();
+
+                                    // glibc check
+                                    ui.label("glibc:");
+                                    if let Some(ref ver) = validation.glibc_version {
+                                        ui.label(ver);
+                                        match validation.glibc_ok {
+                                            Some(true) => {
+                                                ui.colored_label(egui::Color32::GREEN, "✓")
+                                            }
+                                            Some(false) => {
+                                                ui.colored_label(egui::Color32::RED, "✗")
+                                            }
+                                            None => ui.label("?"),
+                                        };
+                                    } else {
+                                        ui.colored_label(egui::Color32::GRAY, "Not detected");
+                                        ui.label("-");
+                                    }
+                                    ui.end_row();
+
+                                    // PREEMPT_RT kernel
+                                    ui.label("PREEMPT_RT Kernel:");
+                                    ui.label(if validation.preempt_rt_kernel {
+                                        "Yes"
+                                    } else {
+                                        "No"
+                                    });
+                                    if validation.preempt_rt_kernel
+                                        && validation.major_version >= 590
+                                    {
+                                        ui.colored_label(egui::Color32::GREEN, "✓ Supported");
+                                    } else if validation.preempt_rt_kernel {
+                                        ui.colored_label(
+                                            egui::Color32::YELLOW,
+                                            "⚠ Upgrade recommended",
+                                        );
+                                    } else {
+                                        ui.label("-");
+                                    }
+                                    ui.end_row();
+                                });
+
+                            // Warnings
+                            if !validation.warnings.is_empty() {
+                                ui.add_space(5.0);
+                                ui.colored_label(egui::Color32::YELLOW, "Warnings:");
+                                for warning in &validation.warnings {
+                                    ui.horizontal(|ui| {
+                                        ui.label("  ⚠");
+                                        ui.label(warning);
+                                    });
+                                }
+                            }
+
+                            // Errors
+                            if !validation.errors.is_empty() {
+                                ui.add_space(5.0);
+                                ui.colored_label(egui::Color32::RED, "Errors:");
+                                for error in &validation.errors {
+                                    ui.horizontal(|ui| {
+                                        ui.label("  ✗");
+                                        ui.label(error);
+                                    });
+                                }
+                            }
+                        } else {
+                            ui.colored_label(
+                                egui::Color32::GRAY,
+                                "No validation data. Click 'Run Validation' to check.",
+                            );
+                        }
+
+                        ui.add_space(5.0);
+                        if ui.button("🔄 Run Validation").clicked() {
+                            self.validate_driver();
+                        }
+                    });
+
+                    // Driver Capabilities Panel (590+ features)
+                    if let Some(ref caps) = self.driver_capabilities
+                        && caps.major_version >= 590
+                    {
+                        ui.group(|ui| {
+                            ui.label("✨ Driver 590+ Features");
+                            ui.separator();
+
+                            egui::Grid::new("driver_features")
+                                .num_columns(2)
+                                .spacing([20.0, 4.0])
+                                .show(ui, |ui| {
+                                    ui.label("Vulkan Swapchain Optimization:");
+                                    ui.colored_label(
+                                        if caps.has_vulkan_swapchain_perf {
+                                            egui::Color32::GREEN
+                                        } else {
+                                            egui::Color32::GRAY
+                                        },
+                                        if caps.has_vulkan_swapchain_perf {
+                                            "✓ Enabled"
+                                        } else {
+                                            "✗ Not available"
+                                        },
+                                    );
+                                    ui.end_row();
+
+                                    ui.label("USB4 DisplayPort Support:");
+                                    ui.colored_label(
+                                        if caps.has_usb4_dp_support {
+                                            egui::Color32::GREEN
+                                        } else {
+                                            egui::Color32::GRAY
+                                        },
+                                        if caps.has_usb4_dp_support {
+                                            "✓ Enabled"
+                                        } else {
+                                            "✗ Not available"
+                                        },
+                                    );
+                                    ui.end_row();
+
+                                    ui.label("PREEMPT_RT Kernel Support:");
+                                    ui.colored_label(
+                                        if caps.supports_preempt_rt {
+                                            egui::Color32::GREEN
+                                        } else {
+                                            egui::Color32::GRAY
+                                        },
+                                        if caps.supports_preempt_rt {
+                                            "✓ Fixed"
+                                        } else {
+                                            "✗ May freeze"
+                                        },
+                                    );
+                                    ui.end_row();
+
+                                    ui.label("PowerMizer on Wayland:");
+                                    ui.colored_label(
+                                        if caps.has_powermizer_wayland_fix {
+                                            egui::Color32::GREEN
+                                        } else {
+                                            egui::Color32::YELLOW
+                                        },
+                                        if caps.has_powermizer_wayland_fix {
+                                            "✓ Fixed"
+                                        } else {
+                                            "⚠ May have issues"
+                                        },
+                                    );
+                                    ui.end_row();
+                                });
+                        });
+                    }
+
+                    // Driver Actions
                     ui.group(|ui| {
                         ui.label("🔄 Driver Actions");
                         ui.separator();
@@ -3652,13 +3899,7 @@ impl eframe::App for NvControlApp {
                                 }
                             }
 
-                            if ui.button("🔧 Reinstall Driver").clicked() {
-                                println!("🔄 Reinstalling driver...");
-                                println!("   This will reinstall the current NVIDIA driver");
-                                println!("   Run: sudo nvctl drivers reinstall");
-                            }
-
-                            if ui.button("📊 Driver Validation").clicked() {
+                            if ui.button("📊 Validate Installation").clicked() {
                                 use nvcontrol::drivers;
                                 match drivers::validate_driver_installation() {
                                     Ok(true) => println!("✅ Driver installation is valid"),
@@ -3666,86 +3907,20 @@ impl eframe::App for NvControlApp {
                                     Err(e) => eprintln!("❌ Failed to validate: {}", e),
                                 }
                             }
-                        });
 
-                        ui.horizontal(|ui| {
                             if ui.button("📜 View Logs").clicked() {
                                 use std::process::Command;
-                                let _ = Command::new("xdg-open")
-                                    .arg("/var/log/Xorg.0.log")
-                                    .spawn()
-                                    .or_else(|_| {
-                                        Command::new("less").arg("/var/log/Xorg.0.log").spawn()
-                                    });
-                                println!("📜 Opening driver logs...");
-                            }
-
-                            if ui.button("🧹 Clean Install").clicked() {
-                                println!("🧹 Clean driver installation:");
-                                println!("   1. sudo nvctl drivers remove");
-                                println!("   2. Reboot");
-                                println!("   3. sudo nvctl drivers install open");
+                                let _ = Command::new("xdg-open").arg("/var/log/Xorg.0.log").spawn();
                             }
                         });
                     });
 
-                    ui.group(|ui| {
-                        ui.label("⚙️ Driver Settings");
-                        ui.separator();
-
-                        ui.checkbox(&mut true, "Enable automatic driver updates");
-                        ui.checkbox(&mut false, "Use beta/development drivers");
-                        ui.checkbox(&mut true, "Install GeForce Experience (if available)");
-                        ui.checkbox(&mut false, "Enable driver telemetry");
-
-                        ui.horizontal(|ui| {
-                            ui.label("Update Channel:");
-                            egui::ComboBox::from_label("")
-                                .selected_text("Production")
-                                .show_ui(ui, |ui| {
-                                    ui.selectable_value(
-                                        &mut "Production",
-                                        "Production",
-                                        "Production",
-                                    );
-                                    ui.selectable_value(&mut "Production", "Beta", "Beta");
-                                    ui.selectable_value(
-                                        &mut "Production",
-                                        "Developer",
-                                        "Developer",
-                                    );
-                                });
-                        });
-                    });
-
-                    ui.group(|ui| {
-                        ui.label("🚨 Driver Status");
-                        ui.separator();
-
-                        ui.horizontal(|ui| {
-                            ui.label("Status:");
-                            ui.colored_label(egui::Color32::GREEN, "✅ Working Properly");
-                        });
-
-                        ui.horizontal(|ui| {
-                            ui.label("Last Update:");
-                            ui.label("No updates available");
-                        });
-
-                        ui.horizontal(|ui| {
-                            ui.label("Compatibility:");
-                            ui.colored_label(egui::Color32::GREEN, "✅ Compatible");
-                        });
-                    });
-
+                    // Tips
                     ui.group(|ui| {
                         ui.label("💡 Driver Tips:");
-                        ui.label("• Always backup important data before driver updates");
-                        ui.label("• Clean installs can resolve stability issues");
-                        ui.label(
-                            "• Beta drivers may have performance improvements but less stability",
-                        );
-                        ui.label("• Check release notes before updating for game compatibility");
+                        ui.label("• Driver 590+ is recommended for Wayland and PREEMPT_RT kernels");
+                        ui.label("• Run validation after driver updates to check compatibility");
+                        ui.label("• Beta drivers may have newer features but less stability");
                     });
                 });
             }
@@ -3793,163 +3968,154 @@ impl eframe::App for NvControlApp {
                         ui.label("📈 Benchmark History");
                         ui.separator();
 
-                        if let Ok(suite) = nvcontrol::benchmark::BenchmarkSuite::new() {
-                            if let Ok(results) = suite.load_all_results() {
-                                if results.is_empty() {
-                                    ui.label(
-                                        "No benchmark results yet. Run a benchmark to get started!",
-                                    );
-                                } else {
-                                    // Show latest result
-                                    if let Some(latest) = results.first() {
-                                        ui.label(format!(
-                                            "🏆 Latest Score: {:.2}",
-                                            latest.total_score
-                                        ));
-                                        ui.label(format!(
-                                            "📅 Date: {}",
-                                            latest.timestamp.format("%Y-%m-%d %H:%M")
-                                        ));
-                                        ui.add_space(5.0);
-                                    }
+                        if let Ok(suite) = nvcontrol::benchmark::BenchmarkSuite::new()
+                            && let Ok(results) = suite.load_all_results()
+                        {
+                            if results.is_empty() {
+                                ui.label(
+                                    "No benchmark results yet. Run a benchmark to get started!",
+                                );
+                            } else {
+                                // Show latest result
+                                if let Some(latest) = results.first() {
+                                    ui.label(format!("🏆 Latest Score: {:.2}", latest.total_score));
+                                    ui.label(format!(
+                                        "📅 Date: {}",
+                                        latest.timestamp.format("%Y-%m-%d %H:%M")
+                                    ));
+                                    ui.add_space(5.0);
+                                }
 
-                                    // Performance history graph
-                                    use egui_plot::{Line, Plot, PlotPoints};
+                                // Performance history graph
+                                use egui_plot::{Line, Plot, PlotPoints};
 
-                                    let score_points: PlotPoints = results
-                                        .iter()
-                                        .rev()
-                                        .enumerate()
-                                        .map(|(i, r)| [i as f64, r.total_score])
-                                        .collect();
+                                let score_points: PlotPoints = results
+                                    .iter()
+                                    .rev()
+                                    .enumerate()
+                                    .map(|(i, r)| [i as f64, r.total_score])
+                                    .collect();
 
-                                    Plot::new("benchmark_history")
-                                        .height(200.0)
-                                        .width(ui.available_width())
-                                        .y_axis_label("Total Score")
-                                        .x_axis_label("Test #")
-                                        .show(ui, |plot_ui| {
-                                            plot_ui.line(
-                                                Line::new(score_points)
-                                                    .color(egui::Color32::from_rgb(59, 130, 246))
-                                                    .name("Total Score"),
-                                            );
-                                        });
+                                Plot::new("benchmark_history")
+                                    .height(200.0)
+                                    .width(ui.available_width())
+                                    .y_axis_label("Total Score")
+                                    .x_axis_label("Test #")
+                                    .show(ui, |plot_ui| {
+                                        plot_ui.line(
+                                            Line::new(score_points)
+                                                .color(egui::Color32::from_rgb(59, 130, 246))
+                                                .name("Total Score"),
+                                        );
+                                    });
 
-                                    ui.add_space(10.0);
+                                ui.add_space(10.0);
 
-                                    // Detailed results table
-                                    ui.label("📋 Detailed Results:");
+                                // Detailed results table
+                                ui.label("📋 Detailed Results:");
+                                ui.separator();
+
+                                egui::ScrollArea::vertical()
+                                    .max_height(300.0)
+                                    .show(ui, |ui| {
+                                        for result in results.iter().take(10) {
+                                            ui.horizontal(|ui| {
+                                                ui.label(
+                                                    result
+                                                        .timestamp
+                                                        .format("%Y-%m-%d %H:%M")
+                                                        .to_string(),
+                                                );
+                                                ui.separator();
+                                                ui.label(format!(
+                                                    "Score: {:.2}",
+                                                    result.total_score
+                                                ));
+                                                ui.separator();
+                                                ui.label(format!("Temp: {:.1}°C", result.avg_temp));
+                                                ui.separator();
+                                                ui.label(format!(
+                                                    "Power: {:.1}W",
+                                                    result.avg_power
+                                                ));
+
+                                                if let (Some(gpu), Some(mem)) =
+                                                    (result.gpu_offset, result.memory_offset)
+                                                {
+                                                    ui.separator();
+                                                    ui.label(format!("OC: {:+}/{:+}MHz", gpu, mem));
+                                                }
+                                            });
+                                        }
+                                    });
+
+                                ui.add_space(10.0);
+
+                                // Comparison section
+                                if results.len() >= 2 {
+                                    ui.label("🔄 Compare Results:");
                                     ui.separator();
 
-                                    egui::ScrollArea::vertical()
-                                        .max_height(300.0)
-                                        .show(ui, |ui| {
-                                            for result in results.iter().take(10) {
-                                                ui.horizontal(|ui| {
-                                                    ui.label(
-                                                        result
-                                                            .timestamp
-                                                            .format("%Y-%m-%d %H:%M")
-                                                            .to_string(),
-                                                    );
-                                                    ui.separator();
-                                                    ui.label(format!(
-                                                        "Score: {:.2}",
-                                                        result.total_score
-                                                    ));
-                                                    ui.separator();
-                                                    ui.label(format!(
-                                                        "Temp: {:.1}°C",
-                                                        result.avg_temp
-                                                    ));
-                                                    ui.separator();
-                                                    ui.label(format!(
-                                                        "Power: {:.1}W",
-                                                        result.avg_power
-                                                    ));
+                                    let baseline = &results[results.len() - 1];
+                                    let current = &results[0];
+                                    let comparison = suite.compare(baseline, current);
 
-                                                    if let (Some(gpu), Some(mem)) =
-                                                        (result.gpu_offset, result.memory_offset)
-                                                    {
-                                                        ui.separator();
-                                                        ui.label(format!(
-                                                            "OC: {:+}/{:+}MHz",
-                                                            gpu, mem
-                                                        ));
-                                                    }
-                                                });
-                                            }
-                                        });
+                                    ui.horizontal(|ui| {
+                                        ui.label("Baseline:");
+                                        ui.label(format!("{:.2}", baseline.total_score));
+                                        ui.label(format!(
+                                            "({})",
+                                            baseline.timestamp.format("%Y-%m-%d")
+                                        ));
+                                    });
 
-                                    ui.add_space(10.0);
+                                    ui.horizontal(|ui| {
+                                        ui.label("Latest:");
+                                        ui.label(format!("{:.2}", current.total_score));
+                                        ui.label(format!(
+                                            "({})",
+                                            current.timestamp.format("%Y-%m-%d")
+                                        ));
+                                    });
 
-                                    // Comparison section
-                                    if results.len() >= 2 {
-                                        ui.label("🔄 Compare Results:");
-                                        ui.separator();
+                                    ui.horizontal(|ui| {
+                                        ui.label("Performance Gain:");
+                                        let color = if comparison.performance_gain >= 0.0 {
+                                            egui::Color32::GREEN
+                                        } else {
+                                            egui::Color32::RED
+                                        };
+                                        ui.colored_label(
+                                            color,
+                                            format!("{:+.2}%", comparison.performance_gain),
+                                        );
+                                    });
 
-                                        let baseline = &results[results.len() - 1];
-                                        let current = &results[0];
-                                        let comparison = suite.compare(baseline, current);
+                                    ui.horizontal(|ui| {
+                                        ui.label("Temperature Delta:");
+                                        let color = if comparison.temp_delta <= 0.0 {
+                                            egui::Color32::GREEN
+                                        } else {
+                                            egui::Color32::YELLOW
+                                        };
+                                        ui.colored_label(
+                                            color,
+                                            format!("{:+.1}°C", comparison.temp_delta),
+                                        );
+                                    });
 
-                                        ui.horizontal(|ui| {
-                                            ui.label("Baseline:");
-                                            ui.label(format!("{:.2}", baseline.total_score));
-                                            ui.label(format!(
-                                                "({})",
-                                                baseline.timestamp.format("%Y-%m-%d")
-                                            ));
-                                        });
-
-                                        ui.horizontal(|ui| {
-                                            ui.label("Latest:");
-                                            ui.label(format!("{:.2}", current.total_score));
-                                            ui.label(format!(
-                                                "({})",
-                                                current.timestamp.format("%Y-%m-%d")
-                                            ));
-                                        });
-
-                                        ui.horizontal(|ui| {
-                                            ui.label("Performance Gain:");
-                                            let color = if comparison.performance_gain >= 0.0 {
-                                                egui::Color32::GREEN
-                                            } else {
-                                                egui::Color32::RED
-                                            };
-                                            ui.colored_label(
-                                                color,
-                                                format!("{:+.2}%", comparison.performance_gain),
-                                            );
-                                        });
-
-                                        ui.horizontal(|ui| {
-                                            ui.label("Temperature Delta:");
-                                            let color = if comparison.temp_delta <= 0.0 {
-                                                egui::Color32::GREEN
-                                            } else {
-                                                egui::Color32::YELLOW
-                                            };
-                                            ui.colored_label(
-                                                color,
-                                                format!("{:+.1}°C", comparison.temp_delta),
-                                            );
-                                        });
-
-                                        ui.horizontal(|ui| {
-                                            ui.label("Power Delta:");
-                                            let color = if comparison.power_delta <= 0.0 {
-                                                egui::Color32::GREEN
-                                            } else {
-                                                egui::Color32::YELLOW
-                                            };
-                                            ui.colored_label(
-                                                color,
-                                                format!("{:+.1}W", comparison.power_delta),
-                                            );
-                                        });
-                                    }
+                                    ui.horizontal(|ui| {
+                                        ui.label("Power Delta:");
+                                        let color = if comparison.power_delta <= 0.0 {
+                                            egui::Color32::GREEN
+                                        } else {
+                                            egui::Color32::YELLOW
+                                        };
+                                        ui.colored_label(
+                                            color,
+                                            format!("{:+.1}W", comparison.power_delta),
+                                        );
+                                    });
                                 }
                             }
                         }
@@ -4927,14 +5093,14 @@ impl eframe::App for NvControlApp {
                             ui.add_space(8.0);
 
                             ui.horizontal(|ui| {
-                                if ui.button("📋 Copy System Info").on_hover_text("Copy system info to clipboard").clicked() {
-                                    if let Some(ref stats) = self.gpu_stats {
-                                        let info = format!(
-                                            "nvcontrol v0.7.0\n\nGPU: {}\nArchitecture: {}\nDriver: {}\nVRAM: {:.0} GB\nTheme: {}",
-                                            stats.name, stats.architecture, stats.driver_version, stats.memory_total as f64 / 1e9, self.current_theme.name()
-                                        );
-                                        ctx.copy_text(info);
-                                    }
+                                if ui.button("📋 Copy System Info").on_hover_text("Copy system info to clipboard").clicked()
+                                    && let Some(ref stats) = self.gpu_stats
+                                {
+                                    let info = format!(
+                                        "nvcontrol v0.7.5\n\nGPU: {}\nArchitecture: {}\nDriver: {}\nVRAM: {:.0} GB\nTheme: {}",
+                                        stats.name, stats.architecture, stats.driver_version, stats.memory_total as f64 / 1e9, self.current_theme.name()
+                                    );
+                                    ctx.copy_text(info);
                                 }
 
                                 if ui.button("🔗 GitHub").on_hover_text("Open project on GitHub").clicked() {
@@ -5029,36 +5195,36 @@ impl eframe::App for NvControlApp {
                         ui.separator();
 
                         ui.horizontal(|ui| {
-                            if ui.button("📥 Export Current Profile").clicked() {
-                                if let Ok(manager) = nvcontrol::profile_manager::ProfileManager::new() {
-                                    let bundle = nvcontrol::profile_manager::ProfileBundle {
-                                        name: format!("Profile_{}", chrono::Local::now().format("%Y%m%d_%H%M%S")),
-                                        description: "Exported from GUI".to_string(),
-                                        created_at: chrono::Utc::now(),
-                                        fan_curve: Some(self.fan_curve.clone()),
-                                        voltage_curve: Some(self.voltage_curve.clone()),
-                                        overclock: Some(self.overclock_profile.clone()),
-                                        game_profiles: vec![],
-                                        vibrance_settings: Some(nvcontrol::profile_manager::VibranceSettings {
-                                            display_levels: self.vibrance_levels.clone(),
-                                            per_game_vibrance: false,
-                                        }),
-                                    };
+                            if ui.button("📥 Export Current Profile").clicked()
+                                && let Ok(manager) = nvcontrol::profile_manager::ProfileManager::new()
+                            {
+                                let bundle = nvcontrol::profile_manager::ProfileBundle {
+                                    name: format!("Profile_{}", chrono::Local::now().format("%Y%m%d_%H%M%S")),
+                                    description: "Exported from GUI".to_string(),
+                                    created_at: chrono::Utc::now(),
+                                    fan_curve: Some(self.fan_curve.clone()),
+                                    voltage_curve: Some(self.voltage_curve.clone()),
+                                    overclock: Some(self.overclock_profile.clone()),
+                                    game_profiles: vec![],
+                                    vibrance_settings: Some(nvcontrol::profile_manager::VibranceSettings {
+                                        display_levels: self.vibrance_levels.clone(),
+                                        per_game_vibrance: false,
+                                    }),
+                                };
 
-                                    match manager.export_profile(&bundle, None) {
-                                        Ok(path) => println!("✅ Profile exported to: {}", path.display()),
-                                        Err(e) => eprintln!("❌ Export failed: {}", e),
-                                    }
+                                match manager.export_profile(&bundle, None) {
+                                    Ok(path) => println!("✅ Profile exported to: {}", path.display()),
+                                    Err(e) => eprintln!("❌ Export failed: {}", e),
                                 }
                             }
 
-                            if ui.button("📂 Open Profiles Folder").clicked() {
-                                if let Ok(manager) = nvcontrol::profile_manager::ProfileManager::new() {
-                                    let path = manager.get_profiles_dir();
-                                    let _ = std::process::Command::new("xdg-open")
-                                        .arg(path)
-                                        .spawn();
-                                }
+                            if ui.button("📂 Open Profiles Folder").clicked()
+                                && let Ok(manager) = nvcontrol::profile_manager::ProfileManager::new()
+                            {
+                                let path = manager.get_profiles_dir();
+                                let _ = std::process::Command::new("xdg-open")
+                                    .arg(path)
+                                    .spawn();
                             }
                         });
 
@@ -5068,42 +5234,42 @@ impl eframe::App for NvControlApp {
                         ui.label("📋 Available Profiles:");
                         ui.separator();
 
-                        if let Ok(manager) = nvcontrol::profile_manager::ProfileManager::new() {
-                            if let Ok(profiles) = manager.list_profiles() {
-                                if profiles.is_empty() {
-                                    ui.label("No profiles found. Export your current settings to create one.");
-                                } else {
-                                    egui::ScrollArea::vertical()
-                                        .max_height(200.0)
-                                        .show(ui, |ui| {
-                                            for profile in profiles {
-                                                ui.horizontal(|ui| {
-                                                    ui.label(&profile.name);
-                                                    ui.label(format!("({})", profile.created_at.format("%Y-%m-%d")));
+                        if let Ok(manager) = nvcontrol::profile_manager::ProfileManager::new()
+                            && let Ok(profiles) = manager.list_profiles()
+                        {
+                            if profiles.is_empty() {
+                                ui.label("No profiles found. Export your current settings to create one.");
+                            } else {
+                                egui::ScrollArea::vertical()
+                                    .max_height(200.0)
+                                    .show(ui, |ui| {
+                                        for profile in profiles {
+                                            ui.horizontal(|ui| {
+                                                ui.label(&profile.name);
+                                                ui.label(format!("({})", profile.created_at.format("%Y-%m-%d")));
 
-                                                    if ui.button("📥 Load").clicked() {
-                                                        if let Some(fan) = profile.fan_curve {
-                                                            self.fan_curve = fan;
-                                                        }
-                                                        if let Some(voltage) = profile.voltage_curve {
-                                                            self.voltage_curve = voltage;
-                                                        }
-                                                        if let Some(oc) = profile.overclock {
-                                                            self.overclock_profile = oc;
-                                                        }
-                                                        if let Some(vib) = profile.vibrance_settings {
-                                                            self.vibrance_levels = vib.display_levels;
-                                                        }
-                                                        println!("✅ Profile loaded: {}", profile.name);
+                                                if ui.button("📥 Load").clicked() {
+                                                    if let Some(fan) = profile.fan_curve {
+                                                        self.fan_curve = fan;
                                                     }
+                                                    if let Some(voltage) = profile.voltage_curve {
+                                                        self.voltage_curve = voltage;
+                                                    }
+                                                    if let Some(oc) = profile.overclock {
+                                                        self.overclock_profile = oc;
+                                                    }
+                                                    if let Some(vib) = profile.vibrance_settings {
+                                                        self.vibrance_levels = vib.display_levels;
+                                                    }
+                                                    println!("✅ Profile loaded: {}", profile.name);
+                                                }
 
-                                                    if ui.button("🗑️").clicked() {
-                                                        let _ = manager.delete_profile(&profile.name);
-                                                    }
-                                                });
-                                            }
-                                        });
-                                }
+                                                if ui.button("🗑️").clicked() {
+                                                    let _ = manager.delete_profile(&profile.name);
+                                                }
+                                            });
+                                        }
+                                    });
                             }
                         }
                     });

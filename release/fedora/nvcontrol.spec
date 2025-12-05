@@ -1,7 +1,7 @@
 %global crate nvcontrol
 
 Name:           nvcontrol
-Version:        0.7.2
+Version:        0.7.6
 Release:        1%{?dist}
 Summary:        Modern NVIDIA Settings Manager for Linux + Wayland
 
@@ -117,11 +117,16 @@ cargo test --release --lib -- --skip hardware --skip nvml || true
 %{_userunitdir}/nvcontrol-monitor.service
 
 %changelog
-* Wed Nov 27 2024 CK Technology LLC <contact@ck-technology.com> - 0.7.1-1
+* Thu Dec 04 2025 CK Technology LLC <info@cktechx.com> - 0.7.6-1
+- Backend abstraction layer + BackendStatus indicators
+- Cached metrics, TUI session persistence, deterministic backend tests
+- CLI/GUI now share a unified backend context for reliability
+
+* Wed Nov 27 2024 CK Technology LLC <info@cktechx.com> - 0.7.1-1
 - New display controls: color range, color space, dithering
 - Tokyo Night Moon as default theme
 - RTX 5090/Blackwell architecture support
 - Improved Wayland compositor detection
 
-* Mon Nov 25 2024 CK Technology LLC <contact@ck-technology.com> - 0.7.0-1
+* Mon Nov 25 2024 CK Technology LLC <info@cktechx.com> - 0.7.0-1
 - Initial Fedora package release

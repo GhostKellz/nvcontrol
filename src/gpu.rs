@@ -1,11 +1,10 @@
-use crate::{NvControlError, NvResult};
+use crate::{NvControlError, NvResult, nvml_backend::SharedNvmlBackend};
 use clap::ValueEnum;
 use crossterm::{
     event::{self, Event, KeyCode},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use nvml_wrapper::Nvml;
 use ratatui::{
     Terminal,
     backend::CrosstermBackend,
@@ -41,122 +40,59 @@ pub struct GpuInfo {
 }
 
 /// Check if NVIDIA GPU is available on the system
-pub fn is_nvidia_available() -> bool {
-    match Nvml::init() {
-        Ok(nvml) => match nvml.device_count() {
-            Ok(count) => count > 0,
-            Err(_) => false,
-        },
-        Err(_) => false,
-    }
+pub fn is_nvidia_available(backend: &SharedNvmlBackend) -> bool {
+    backend
+        .device_count()
+        .map(|count| count > 0)
+        .unwrap_or(false)
 }
 
-pub fn get_gpu_info() -> NvResult<GpuInfo> {
-    match Nvml::init() {
-        Ok(nvml) => match nvml.device_count() {
-            Ok(count) => {
-                if count == 0 {
-                    return Err(NvControlError::GpuQueryFailed(
-                        "No NVIDIA GPUs found".to_string(),
-                    ));
-                }
-
-                // Get info for first GPU
-                if let Ok(device) = nvml.device_by_index(0) {
-                    let name = device.name().unwrap_or("Unknown".to_string());
-                    let driver = nvml.sys_driver_version().unwrap_or("Unknown".to_string());
-                    let mem = device.memory_info().unwrap_or_else(|_| {
-                        nvml_wrapper::struct_wrappers::device::MemoryInfo {
-                            total: 0,
-                            free: 0,
-                            used: 0,
-                            reserved: 0,
-                            version: 0,
-                        }
-                    });
-                    let temp = device
-                        .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
-                        .unwrap_or(0);
-
-                    // Get utilization if available
-                    let utilization = device.utilization_rates().unwrap_or_else(|_| {
-                        nvml_wrapper::struct_wrappers::device::Utilization { gpu: 0, memory: 0 }
-                    });
-
-                    // Get CUDA compute capability
-                    let cuda_compute = device
-                        .cuda_compute_capability()
-                        .ok()
-                        .map(|cc| format!("{}.{}", cc.major, cc.minor));
-
-                    // Get PCIe info
-                    let pcie_gen = device.current_pcie_link_gen().ok();
-                    let pcie_width = device.current_pcie_link_width().ok();
-
-                    // Get power limits
-                    let power_limit = device
-                        .power_management_limit()
-                        .ok()
-                        .map(|p| p as f32 / 1000.0);
-                    let power_limit_constraints = device.power_management_limit_constraints().ok();
-                    let power_limit_min = power_limit_constraints
-                        .as_ref()
-                        .map(|c| c.min_limit as f32 / 1000.0);
-                    let power_limit_max = power_limit_constraints
-                        .as_ref()
-                        .map(|c| c.max_limit as f32 / 1000.0);
-
-                    // Get clock speeds
-                    let gpu_clock = device
-                        .clock_info(nvml_wrapper::enum_wrappers::device::Clock::Graphics)
-                        .ok();
-                    let memory_clock = device
-                        .clock_info(nvml_wrapper::enum_wrappers::device::Clock::Memory)
-                        .ok();
-
-                    // Detect architecture from name
-                    let architecture = detect_architecture(&name);
-
-                    // Get throttle reason
-                    let throttle_reason = get_throttle_reason(&device);
-
-                    Ok(GpuInfo {
-                        name,
-                        driver_version: driver,
-                        memory_total: mem.total / (1024 * 1024), // Convert to MB
-                        memory_used: mem.used / (1024 * 1024),
-                        temperature: temp,
-                        power_draw: device.power_usage().unwrap_or(0) as f32 / 1000.0, // Convert to watts
-                        fan_speed: device.fan_speed(0).unwrap_or(0),
-                        gpu_utilization: utilization.gpu,
-                        memory_utilization: utilization.memory,
-                        cuda_compute,
-                        pcie_gen,
-                        pcie_width,
-                        power_limit,
-                        power_limit_min,
-                        power_limit_max,
-                        gpu_clock,
-                        memory_clock,
-                        architecture,
-                        throttle_reason,
-                    })
-                } else {
-                    Err(NvControlError::GpuQueryFailed(
-                        "Failed to access GPU".to_string(),
-                    ))
-                }
-            }
-            Err(e) => Err(NvControlError::GpuQueryFailed(format!(
-                "Failed to get device count: {}",
-                e
-            ))),
-        },
-        Err(e) => Err(NvControlError::GpuQueryFailed(format!(
-            "Failed to initialize NVML: {}",
-            e
-        ))),
+pub fn get_gpu_info(backend: &SharedNvmlBackend) -> NvResult<GpuInfo> {
+    let device_count = backend.device_count()?;
+    if device_count == 0 {
+        return Err(NvControlError::GpuQueryFailed(
+            "No NVIDIA GPUs found".to_string(),
+        ));
     }
+
+    let info = backend.get_device_info(0)?;
+    let metrics = backend.get_metrics(0)?;
+    let (mem_used, mem_total) = backend.get_memory_info(0)?;
+    let driver = backend
+        .get_name(0)
+        .unwrap_or_else(|_| "Unknown".to_string());
+    let cuda_compute = None; // Not available via backend yet
+    let pcie_gen = None; // Not available via backend yet
+    let pcie_width = None; // Not available via backend yet
+    let power_limit = None; // Not available via backend yet
+    let power_limit_min = None;
+    let power_limit_max = None;
+    let gpu_clock = backend.get_gpu_clock(0).ok();
+    let memory_clock = backend.get_memory_clock(0).ok();
+    let architecture = detect_architecture(&info.name);
+    let throttle_reason = None; // Not available via backend yet
+
+    Ok(GpuInfo {
+        name: info.name,
+        driver_version: driver,
+        memory_total: mem_total / (1024 * 1024),
+        memory_used: mem_used / (1024 * 1024),
+        temperature: metrics.temperature,
+        power_draw: metrics.power_draw_mw as f32 / 1000.0,
+        fan_speed: metrics.fan_speed,
+        gpu_utilization: metrics.gpu_utilization,
+        memory_utilization: metrics.memory_utilization,
+        cuda_compute,
+        pcie_gen,
+        pcie_width,
+        power_limit,
+        power_limit_min,
+        power_limit_max,
+        gpu_clock,
+        memory_clock,
+        architecture,
+        throttle_reason,
+    })
 }
 
 /// Detect GPU architecture from name
@@ -197,25 +133,26 @@ fn detect_architecture(name: &str) -> Option<String> {
     }
 }
 
-/// Get current throttle reason from device
-fn get_throttle_reason(device: &nvml_wrapper::Device) -> Option<String> {
-    // Check various throttle reasons
+/// Get current throttle reason from backend metrics
+#[allow(dead_code)]
+fn get_throttle_reason_from_metrics(
+    backend: &SharedNvmlBackend,
+    index: u32,
+    power_limit_mw: Option<u32>,
+) -> Option<String> {
     let mut reasons = Vec::new();
 
-    // Try to get current throttle reasons via supported clocks
-    if let Ok(temp) =
-        device.temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
-    {
+    // Check temperature-based throttling
+    if let Ok(temp) = backend.get_temperature(index) {
         if temp > 83 {
             reasons.push("Thermal");
         }
     }
 
-    if let Ok(power) = device.power_usage() {
-        if let Ok(limit) = device.power_management_limit() {
-            if power > limit {
-                reasons.push("Power");
-            }
+    // Check power-based throttling
+    if let (Ok(power_mw), Some(limit_mw)) = (backend.get_power_usage(index), power_limit_mw) {
+        if power_mw > limit_mw {
+            reasons.push("Power");
         }
     }
 
@@ -226,16 +163,14 @@ fn get_throttle_reason(device: &nvml_wrapper::Device) -> Option<String> {
     }
 }
 
-pub fn monitor_gpu_stat() {
+pub fn monitor_gpu_stat(backend: &SharedNvmlBackend) {
     // Setup terminal
     enable_raw_mode().unwrap();
     let mut stdout = std::io::stdout();
     execute!(stdout, EnterAlternateScreen).unwrap();
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend).unwrap();
+    let term_backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(term_backend).unwrap();
 
-    // Try to init NVML
-    let nvml = Nvml::init();
     let mut last_update = Instant::now();
     let mut gpu_rows: Vec<Vec<String>> = Vec::new();
     let mut uptime = 0u64;
@@ -255,47 +190,14 @@ pub fn monitor_gpu_stat() {
         // Refresh stats every second
         if last_update.elapsed() >= Duration::from_secs(1) {
             gpu_rows.clear();
-            match &nvml {
-                Ok(nvml) => match nvml.device_count() {
-                    Ok(count) => {
-                        for idx in 0..count {
-                            let row = match nvml.device_by_index(idx) {
-                                Ok(device) => {
-                                    let name = device.name().unwrap_or("Unknown".to_string());
-                                    let temp = device.temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu).unwrap_or(0);
-                                    let fan = device.fan_speed(0).unwrap_or(0);
-                                    let mem = device.memory_info().ok();
-                                    let mem_str = if let Some(m) = mem {
-                                        format!(
-                                            "{:.1}/{:.1} GB",
-                                            m.used as f64 / 1e9,
-                                            m.total as f64 / 1e9
-                                        )
-                                    } else {
-                                        "N/A".to_string()
-                                    };
-                                    let util =
-                                        device.utilization_rates().map(|u| u.gpu).unwrap_or(0);
-                                    let power = device
-                                        .power_usage()
-                                        .map(|p| p as f64 / 1000.0)
-                                        .unwrap_or(0.0);
-                                    vec![
-                                        name,
-                                        format!("{temp}°C"),
-                                        format!("{fan}%"),
-                                        mem_str,
-                                        format!("{util}%"),
-                                        format!("{:.1}W", power),
-                                    ]
-                                }
-                                Err(_) => vec!["No NVIDIA GPU found.".to_string(); 6],
-                            };
-                            gpu_rows.push(row);
-                        }
+            match backend.device_count() {
+                Ok(count) if count > 0 => {
+                    for idx in 0..count {
+                        let row = build_gpu_row(backend, idx);
+                        gpu_rows.push(row);
                     }
-                    Err(_) => gpu_rows.push(vec!["No NVIDIA GPU found.".to_string(); 6]),
-                },
+                }
+                Ok(_) => gpu_rows.push(vec!["No NVIDIA GPU found.".to_string(); 6]),
                 Err(_) => gpu_rows.push(vec!["NVML not available.".to_string(); 6]),
             }
             last_update = Instant::now();
@@ -345,9 +247,36 @@ pub fn monitor_gpu_stat() {
     terminal.show_cursor().unwrap();
 }
 
+/// Build a row of GPU stats for the monitor table
+fn build_gpu_row(backend: &SharedNvmlBackend, idx: u32) -> Vec<String> {
+    let name = backend
+        .get_name(idx)
+        .unwrap_or_else(|_| "Unknown".to_string());
+    let temp = backend.get_temperature(idx).unwrap_or(0);
+    let fan = backend.get_fan_speed(idx, 0).unwrap_or(0);
+    let mem_str = match backend.get_memory_info(idx) {
+        Ok((used, total)) => format!("{:.1}/{:.1} GB", used as f64 / 1e9, total as f64 / 1e9),
+        Err(_) => "N/A".to_string(),
+    };
+    let util = backend.get_utilization(idx).map(|(g, _)| g).unwrap_or(0);
+    let power = backend
+        .get_power_usage(idx)
+        .map(|p| p as f64 / 1000.0)
+        .unwrap_or(0.0);
+
+    vec![
+        name,
+        format!("{temp}°C"),
+        format!("{fan}%"),
+        mem_str,
+        format!("{util}%"),
+        format!("{:.1}W", power),
+    ]
+}
+
 /// Get GPU info with specified format
-pub fn get_gpu_info_with_format(format: OutputFormat) -> NvResult<()> {
-    let gpu_info = get_gpu_info()?;
+pub fn get_gpu_info_with_format(format: OutputFormat, backend: &SharedNvmlBackend) -> NvResult<()> {
+    let gpu_info = get_gpu_info(backend)?;
 
     match format {
         OutputFormat::Human => {

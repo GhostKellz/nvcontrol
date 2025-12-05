@@ -452,8 +452,8 @@ impl AsusPowerDetector {
         if let Ok(entries) = fs::read_dir(&pci_path) {
             for entry in entries.flatten() {
                 let name = entry.file_name().to_string_lossy().to_string();
-                if name.starts_with("i2c-") {
-                    if let Ok(bus_num) = name[4..].parse::<u8>() {
+                if let Some(suffix) = name.strip_prefix("i2c-") {
+                    if let Ok(bus_num) = suffix.parse::<u8>() {
                         buses.push(bus_num);
                     }
                 }
@@ -462,13 +462,9 @@ impl AsusPowerDetector {
 
         // Sort and probe each bus to find the one with power monitor at 0x2b
         buses.sort();
-        for bus in buses {
-            if Self::probe_power_monitor(bus, 0x2b) {
-                return Some(bus);
-            }
-        }
-
-        None
+        buses
+            .into_iter()
+            .find(|&bus| Self::probe_power_monitor(bus, 0x2b))
     }
 
     /// Probe an I2C bus to check if power monitor exists at given address

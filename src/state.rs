@@ -58,12 +58,121 @@ pub struct CustomThemeColors {
 }
 
 /// Session state
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SessionState {
     pub total_runtime_seconds: u64,
     pub last_tab: usize,
     pub favorite_profiles: Vec<String>,
     pub recent_exports: Vec<String>,
+}
+
+/// Driver validation state (cached readiness check results)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DriverValidationState {
+    /// Driver version that was validated
+    pub driver_version: String,
+    /// Major version number (e.g., 590)
+    pub major_version: u32,
+    /// Whether the driver is a beta release
+    pub is_beta: bool,
+    /// Wayland version found on system
+    pub wayland_version: Option<String>,
+    /// Whether Wayland meets requirements
+    pub wayland_ok: Option<bool>,
+    /// glibc version found on system
+    pub glibc_version: Option<String>,
+    /// Whether glibc meets requirements
+    pub glibc_ok: Option<bool>,
+    /// Whether running a PREEMPT_RT kernel
+    pub preempt_rt_kernel: bool,
+    /// Overall validation passed
+    pub passed: bool,
+    /// Any warnings from validation
+    pub warnings: Vec<String>,
+    /// Any errors from validation
+    pub errors: Vec<String>,
+    /// When the validation was performed
+    pub validated_at: std::time::SystemTime,
+}
+
+impl Default for DriverValidationState {
+    fn default() -> Self {
+        Self {
+            driver_version: String::new(),
+            major_version: 0,
+            is_beta: false,
+            wayland_version: None,
+            wayland_ok: None,
+            glibc_version: None,
+            glibc_ok: None,
+            preempt_rt_kernel: false,
+            passed: false,
+            warnings: Vec::new(),
+            errors: Vec::new(),
+            validated_at: std::time::SystemTime::UNIX_EPOCH,
+        }
+    }
+}
+
+impl DriverValidationState {
+    /// Load cached validation state from disk
+    pub fn load() -> Option<Self> {
+        let path = Self::state_file_path();
+        if path.exists() {
+            fs::read_to_string(&path)
+                .ok()
+                .and_then(|s| serde_json::from_str(&s).ok())
+        } else {
+            None
+        }
+    }
+
+    /// Save validation state to disk
+    pub fn save(&self) -> crate::NvResult<()> {
+        let path = Self::state_file_path();
+        let json = serde_json::to_string_pretty(self).map_err(|e| {
+            crate::NvControlError::ConfigError(format!("Failed to serialize state: {}", e))
+        })?;
+        fs::write(&path, json).map_err(|e| {
+            crate::NvControlError::ConfigError(format!("Failed to write state: {}", e))
+        })?;
+        Ok(())
+    }
+
+    fn state_file_path() -> PathBuf {
+        let config_dir = dirs::config_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("nvcontrol");
+        fs::create_dir_all(&config_dir).ok();
+        config_dir.join("driver_validation.json")
+    }
+
+    /// Check if cached validation is still valid (less than 24 hours old)
+    pub fn is_valid(&self) -> bool {
+        if let Ok(elapsed) = self.validated_at.elapsed() {
+            elapsed.as_secs() < 86400 // 24 hours
+        } else {
+            false
+        }
+    }
+
+    /// Get human-readable time since validation
+    pub fn time_since_validation(&self) -> String {
+        if let Ok(elapsed) = self.validated_at.elapsed() {
+            let secs = elapsed.as_secs();
+            if secs < 60 {
+                "just now".to_string()
+            } else if secs < 3600 {
+                format!("{} minutes ago", secs / 60)
+            } else if secs < 86400 {
+                format!("{} hours ago", secs / 3600)
+            } else {
+                format!("{} days ago", secs / 86400)
+            }
+        } else {
+            "unknown".to_string()
+        }
+    }
 }
 
 impl Default for AppState {
@@ -98,17 +207,6 @@ impl Default for ThemeState {
             current_theme: "TokyoNightNight".to_string(),
             auto_detect: true,
             custom_colors: None,
-        }
-    }
-}
-
-impl Default for SessionState {
-    fn default() -> Self {
-        Self {
-            total_runtime_seconds: 0,
-            last_tab: 0,
-            favorite_profiles: Vec::new(),
-            recent_exports: Vec::new(),
         }
     }
 }

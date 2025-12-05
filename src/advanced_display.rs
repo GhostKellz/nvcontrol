@@ -470,8 +470,8 @@ impl AdaptiveRefreshOptimizer {
         let max_range = (max_fps * 1.1) as u32;
 
         // Clamp to reasonable values
-        let min_range = min_range.max(30).min(120);
-        let max_range = max_range.max(60).min(360);
+        let min_range = min_range.clamp(30, 120);
+        let max_range = max_range.clamp(60, 360);
 
         Some((min_range, max_range))
     }

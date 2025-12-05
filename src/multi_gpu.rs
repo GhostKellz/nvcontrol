@@ -1,6 +1,7 @@
 // Multi-GPU Support
 // Detect, manage, and monitor multiple NVIDIA GPUs
 
+use crate::nvml_backend::SharedNvmlBackend;
 use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
 
@@ -23,153 +24,129 @@ pub struct GpuInfo {
     pub nvlink_enabled: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct MultiGpuConfig {
     pub selected_gpu: u32,
     pub sync_settings: bool, // Apply same settings to all GPUs
     pub per_gpu_profiles: std::collections::HashMap<u32, String>, // GPU index -> profile name
 }
 
-impl Default for MultiGpuConfig {
-    fn default() -> Self {
-        Self {
-            selected_gpu: 0,
-            sync_settings: false,
-            per_gpu_profiles: std::collections::HashMap::new(),
-        }
-    }
-}
-
-/// Detect all NVIDIA GPUs in the system
-pub fn detect_gpus() -> NvResult<Vec<GpuInfo>> {
-    let nvml = nvml_wrapper::Nvml::init()
-        .map_err(|e| NvControlError::GpuQueryFailed(format!("NVML init failed: {}", e)))?;
-
-    let device_count = nvml.device_count().map_err(|e| {
-        NvControlError::GpuQueryFailed(format!("Failed to get device count: {}", e))
-    })?;
+/// Detect all NVIDIA GPUs in the system (using backend)
+pub fn detect_gpus_with_backend(backend: &SharedNvmlBackend) -> NvResult<Vec<GpuInfo>> {
+    let device_count = backend.device_count()?;
+    let driver_version = backend
+        .get_driver_version()
+        .unwrap_or_else(|_| "Unknown".to_string());
 
     let mut gpus = Vec::new();
 
     for i in 0..device_count {
-        if let Ok(device) = nvml.device_by_index(i) {
-            let name = device.name().unwrap_or_else(|_| format!("GPU {}", i));
-            let uuid = device.uuid().unwrap_or_else(|_| format!("unknown-{}", i));
-            let pci_info = device.pci_info().ok();
-            let pci_bus_id = pci_info
-                .as_ref()
-                .map(|p| format!("{:04x}:{:02x}:{:02x}.0", p.domain, p.bus, p.device))
-                .unwrap_or_else(|| "Unknown".to_string());
+        let name = backend.get_name(i).unwrap_or_else(|_| format!("GPU {}", i));
+        let uuid = backend
+            .get_uuid(i)
+            .unwrap_or_else(|_| format!("unknown-{}", i));
+        let pci_bus_id = backend
+            .get_pci_bus_id(i)
+            .unwrap_or_else(|_| "Unknown".to_string());
 
-            let driver_version = nvml
-                .sys_driver_version()
-                .unwrap_or_else(|_| "Unknown".to_string());
+        let (_, vram_total) = backend.get_memory_info(i).unwrap_or((0, 0));
+        let temperature = backend.get_temperature(i).unwrap_or(0) as f32;
+        let power_draw = backend
+            .get_power_usage(i)
+            .map(|p| p as f32 / 1000.0)
+            .unwrap_or(0.0);
+        let power_limit = backend.get_power_limit(i).map(|p| p / 1000).unwrap_or(0);
+        let utilization = backend
+            .get_utilization(i)
+            .map(|(gpu, _)| gpu as f32)
+            .unwrap_or(0.0);
 
-            let memory_info = device.memory_info().ok();
-            let vram_total = memory_info.as_ref().map(|m| m.total).unwrap_or(0);
+        let cuda_cores = backend.get_cuda_cores(i).ok();
+        let compute_capability = backend
+            .get_compute_capability(i)
+            .ok()
+            .map(|(major, minor)| format!("{}.{}", major, minor));
 
-            let temperature = device
-                .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
-                .unwrap_or(0) as f32;
+        // SLI detection: multiple GPUs in system
+        let sli_enabled = device_count > 1;
+        let nvlink_enabled = false; // NVLink detection not yet implemented
 
-            let power_draw = device
-                .power_usage()
-                .map(|p| p as f32 / 1000.0)
-                .unwrap_or(0.0);
+        let gpu_info = GpuInfo {
+            index: i,
+            name,
+            uuid,
+            pci_bus_id,
+            driver_version: driver_version.clone(),
+            vram_total,
+            cuda_cores,
+            compute_capability,
+            temperature,
+            power_draw,
+            power_limit,
+            utilization,
+            is_primary: i == 0,
+            sli_enabled,
+            nvlink_enabled,
+        };
 
-            let power_limit = device
-                .power_management_limit()
-                .map(|p| p / 1000)
-                .unwrap_or(0);
-
-            let utilization = device
-                .utilization_rates()
-                .map(|u| u.gpu as f32)
-                .unwrap_or(0.0);
-
-            // Check for SLI/NVLink
-            let sli_enabled = check_sli_enabled(&device);
-            let nvlink_enabled = check_nvlink_enabled(&device);
-
-            // Query CUDA cores and compute capability
-            let cuda_cores = device.num_cores().ok();
-            let compute_capability = device
-                .cuda_compute_capability()
-                .ok()
-                .map(|cc| format!("{}.{}", cc.major, cc.minor));
-
-            let gpu_info = GpuInfo {
-                index: i,
-                name,
-                uuid,
-                pci_bus_id,
-                driver_version,
-                vram_total,
-                cuda_cores,
-                compute_capability,
-                temperature,
-                power_draw,
-                power_limit,
-                utilization,
-                is_primary: i == 0,
-                sli_enabled,
-                nvlink_enabled,
-            };
-
-            gpus.push(gpu_info);
-        }
+        gpus.push(gpu_info);
     }
 
     Ok(gpus)
 }
 
-/// Get detailed information for a specific GPU
-pub fn get_gpu_info(index: u32) -> NvResult<GpuInfo> {
-    let nvml = nvml_wrapper::Nvml::init()
-        .map_err(|e| NvControlError::GpuQueryFailed(format!("NVML init failed: {}", e)))?;
+/// Detect all NVIDIA GPUs in the system (legacy - creates own backend)
+pub fn detect_gpus() -> NvResult<Vec<GpuInfo>> {
+    let backend = crate::nvml_backend::create_real_backend();
+    detect_gpus_with_backend(&backend)
+}
 
-    let device = nvml
-        .device_by_index(index)
-        .map_err(|e| NvControlError::GpuQueryFailed(format!("GPU {} not found: {}", index, e)))?;
+/// Get detailed information for a specific GPU (using backend)
+pub fn get_gpu_info_with_backend(index: u32, backend: &SharedNvmlBackend) -> NvResult<GpuInfo> {
+    let device_count = backend.device_count()?;
+    if index >= device_count {
+        return Err(NvControlError::GpuQueryFailed(format!(
+            "GPU {} not found (only {} GPUs available)",
+            index, device_count
+        )));
+    }
 
-    let name = device.name().unwrap_or_else(|_| format!("GPU {}", index));
-    let uuid = device
-        .uuid()
+    let driver_version = backend
+        .get_driver_version()
+        .unwrap_or_else(|_| "Unknown".to_string());
+    let name = backend
+        .get_name(index)
+        .unwrap_or_else(|_| format!("GPU {}", index));
+    let uuid = backend
+        .get_uuid(index)
         .unwrap_or_else(|_| format!("unknown-{}", index));
-    let pci_info = device.pci_info().ok();
-    let pci_bus_id = pci_info
-        .as_ref()
-        .map(|p| format!("{:04x}:{:02x}:{:02x}.0", p.domain, p.bus, p.device))
-        .unwrap_or_else(|| "Unknown".to_string());
-
-    let driver_version = nvml
-        .sys_driver_version()
+    let pci_bus_id = backend
+        .get_pci_bus_id(index)
         .unwrap_or_else(|_| "Unknown".to_string());
 
-    let memory_info = device.memory_info().ok();
-    let vram_total = memory_info.as_ref().map(|m| m.total).unwrap_or(0);
-
-    let temperature = device
-        .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
-        .unwrap_or(0) as f32;
-
-    let power_draw = device
-        .power_usage()
+    let (_, vram_total) = backend.get_memory_info(index).unwrap_or((0, 0));
+    let temperature = backend.get_temperature(index).unwrap_or(0) as f32;
+    let power_draw = backend
+        .get_power_usage(index)
         .map(|p| p as f32 / 1000.0)
         .unwrap_or(0.0);
-
-    let power_limit = device
-        .power_management_limit()
+    let power_limit = backend
+        .get_power_limit(index)
         .map(|p| p / 1000)
         .unwrap_or(0);
-
-    let utilization = device
-        .utilization_rates()
-        .map(|u| u.gpu as f32)
+    let utilization = backend
+        .get_utilization(index)
+        .map(|(gpu, _)| gpu as f32)
         .unwrap_or(0.0);
 
-    let sli_enabled = check_sli_enabled(&device);
-    let nvlink_enabled = check_nvlink_enabled(&device);
+    let cuda_cores = backend.get_cuda_cores(index).ok();
+    let compute_capability = backend
+        .get_compute_capability(index)
+        .ok()
+        .map(|(major, minor)| format!("{}.{}", major, minor));
+
+    let sli_enabled = device_count > 1;
+    let nvlink_enabled = false;
 
     Ok(GpuInfo {
         index,
@@ -178,8 +155,8 @@ pub fn get_gpu_info(index: u32) -> NvResult<GpuInfo> {
         pci_bus_id,
         driver_version,
         vram_total,
-        cuda_cores: None,
-        compute_capability: None,
+        cuda_cores,
+        compute_capability,
         temperature,
         power_draw,
         power_limit,
@@ -190,33 +167,21 @@ pub fn get_gpu_info(index: u32) -> NvResult<GpuInfo> {
     })
 }
 
-/// Check if SLI is enabled for this GPU
-fn check_sli_enabled(_device: &nvml_wrapper::Device) -> bool {
-    // Check if multiple GPUs exist and if they're linked
-    // This is a simplified check - real SLI detection is more complex
-    if let Ok(nvml) = nvml_wrapper::Nvml::init() {
-        if let Ok(count) = nvml.device_count() {
-            return count > 1;
-        }
-    }
-    false
+/// Get detailed information for a specific GPU (legacy - creates own backend)
+pub fn get_gpu_info(index: u32) -> NvResult<GpuInfo> {
+    let backend = crate::nvml_backend::create_real_backend();
+    get_gpu_info_with_backend(index, &backend)
 }
 
-/// Check if NVLink is enabled for this GPU
-fn check_nvlink_enabled(_device: &nvml_wrapper::Device) -> bool {
-    // NVLink detection requires specific NVML calls that may not be available
-    // in all versions of nvml-wrapper. For now, return false.
-    // TODO: Implement proper NVLink detection when APIs are available
-    false
+/// Get GPU count (using backend)
+pub fn get_gpu_count_with_backend(backend: &SharedNvmlBackend) -> NvResult<u32> {
+    backend.device_count()
 }
 
-/// Get GPU count
+/// Get GPU count (legacy - creates own backend)
 pub fn get_gpu_count() -> NvResult<u32> {
-    let nvml = nvml_wrapper::Nvml::init()
-        .map_err(|e| NvControlError::GpuQueryFailed(format!("NVML init failed: {}", e)))?;
-
-    nvml.device_count()
-        .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device count: {}", e)))
+    let backend = crate::nvml_backend::create_real_backend();
+    get_gpu_count_with_backend(&backend)
 }
 
 /// Check if system has multiple GPUs

@@ -108,7 +108,7 @@ impl AsusFanCurve {
                 let temp_offset = current_temp - temp1;
 
                 let interpolated = speed1 as i32 + (speed_range * temp_offset / temp_range);
-                return interpolated.max(0).min(100) as u32;
+                return interpolated.clamp(0, 100) as u32;
             }
         }
 

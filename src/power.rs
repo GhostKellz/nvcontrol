@@ -379,7 +379,7 @@ pub fn disable_power_throttling() -> NvResult<()> {
         if Command::new("which")
             .arg(cmd)
             .output()
-            .map_or(false, |o| o.status.success())
+            .is_ok_and(|o| o.status.success())
         {
             let result = if cmd == "echo" {
                 Command::new("sudo").arg("sh").arg("-c").arg(args).output()
@@ -390,7 +390,7 @@ pub fn disable_power_throttling() -> NvResult<()> {
                     .output()
             };
 
-            if result.map_or(false, |o| o.status.success()) {
+            if result.is_ok_and(|o| o.status.success()) {
                 success_count += 1;
                 println!("  ✓ Applied {} optimization", cmd);
             }
@@ -404,11 +404,15 @@ pub fn disable_power_throttling() -> NvResult<()> {
     ];
 
     for path in cpu_throttle_paths {
-        if Path::new(path).exists() {
-            if let Ok(_) = Command::new("sudo").args(&["tee", path]).arg("0").output() {
-                success_count += 1;
-                println!("  ✓ Disabled CPU throttling at {}", path);
-            }
+        if Path::new(path).exists()
+            && Command::new("sudo")
+                .args(["tee", path])
+                .arg("0")
+                .output()
+                .is_ok()
+        {
+            success_count += 1;
+            println!("  ✓ Disabled CPU throttling at {}", path);
         }
     }
 

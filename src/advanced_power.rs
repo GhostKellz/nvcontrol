@@ -1,6 +1,7 @@
 /// Phase 3.3: Power Optimization
 ///
 /// Dynamic power management, per-application power profiles, battery boost, power analytics
+use crate::nvml_backend::SharedNvmlBackend;
 use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -32,6 +33,7 @@ pub struct PowerProfile {
 /// Dynamic power management controller
 pub struct DynamicPowerManager {
     gpu_id: u32,
+    backend: SharedNvmlBackend,
     current_mode: PowerMode,
     load_history: Vec<LoadSample>,
     idle_timeout: Duration,
@@ -48,14 +50,20 @@ struct LoadSample {
 }
 
 impl DynamicPowerManager {
-    pub fn new(gpu_id: u32) -> Self {
+    pub fn new(gpu_id: u32, backend: SharedNvmlBackend) -> Self {
         Self {
             gpu_id,
+            backend,
             current_mode: PowerMode::Balanced,
             load_history: Vec::with_capacity(60), // 1 minute history
             idle_timeout: Duration::from_secs(30),
             last_activity: Instant::now(),
         }
+    }
+
+    /// Create with default real backend (legacy compatibility)
+    pub fn new_with_real_backend(gpu_id: u32) -> Self {
+        Self::new(gpu_id, crate::nvml_backend::create_real_backend())
     }
 
     /// Update with current GPU load
@@ -117,25 +125,15 @@ impl DynamicPowerManager {
 
     /// Apply power mode
     pub fn apply_mode(&mut self, mode: PowerMode) -> NvResult<()> {
-        use nvml_wrapper::Nvml;
+        // Get power limit constraints via backend
+        let (min_limit_mw, max_limit_mw) = self.backend.get_power_limit_constraints(self.gpu_id)?;
 
-        let nvml = Nvml::init()
-            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
-
-        let mut device = nvml
-            .device_by_index(self.gpu_id)
-            .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e)))?;
-
-        // Get base power limit
-        let constraints = device.power_management_limit_constraints().map_err(|e| {
-            NvControlError::PowerManagementFailed(format!("Failed to get power constraints: {}", e))
-        })?;
-
-        let min_power = constraints.min_limit / 1000; // mW to W
-        let max_power = constraints.max_limit / 1000;
-        let default_power = device
-            .power_management_limit_default()
-            .unwrap_or(constraints.max_limit)
+        let min_power = min_limit_mw / 1000; // mW to W
+        let max_power = max_limit_mw / 1000;
+        let default_power = self
+            .backend
+            .get_power_limit_default(self.gpu_id)
+            .unwrap_or(max_limit_mw)
             / 1000;
 
         // Calculate target power based on mode
@@ -150,19 +148,16 @@ impl DynamicPowerManager {
             }
             PowerMode::Custom => {
                 // Keep current setting
-                device
-                    .power_management_limit()
+                self.backend
+                    .get_power_limit(self.gpu_id)
                     .unwrap_or(default_power * 1000)
                     / 1000
             }
         };
 
-        // Apply power limit
-        device
-            .set_power_management_limit(target_power * 1000)
-            .map_err(|e| {
-                NvControlError::PowerManagementFailed(format!("Failed to set power limit: {}", e))
-            })?;
+        // Apply power limit via backend
+        self.backend
+            .set_power_limit(self.gpu_id, target_power * 1000)?;
 
         self.current_mode = mode;
 
@@ -217,43 +212,39 @@ pub struct PowerStats {
 /// Battery boost for laptops
 pub struct BatteryBoost {
     gpu_id: u32,
+    backend: SharedNvmlBackend,
     target_fps: u32,
     enabled: bool,
 }
 
 impl BatteryBoost {
-    pub fn new(gpu_id: u32, target_fps: u32) -> Self {
+    pub fn new(gpu_id: u32, target_fps: u32, backend: SharedNvmlBackend) -> Self {
         Self {
             gpu_id,
+            backend,
             target_fps,
             enabled: false,
         }
     }
 
+    /// Create with default real backend (legacy compatibility)
+    pub fn new_with_real_backend(gpu_id: u32, target_fps: u32) -> Self {
+        Self::new(
+            gpu_id,
+            target_fps,
+            crate::nvml_backend::create_real_backend(),
+        )
+    }
+
     /// Enable battery boost mode
     pub fn enable(&mut self) -> NvResult<()> {
-        // Set conservative power limit
-        use nvml_wrapper::Nvml;
-
-        let nvml = Nvml::init()
-            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
-
-        let mut device = nvml
-            .device_by_index(self.gpu_id)
-            .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e)))?;
-
-        let constraints = device.power_management_limit_constraints().map_err(|e| {
-            NvControlError::PowerManagementFailed(format!("Failed to get power constraints: {}", e))
-        })?;
+        // Get power constraints via backend
+        let (_, max_limit_mw) = self.backend.get_power_limit_constraints(self.gpu_id)?;
 
         // Set to 60% of max power for battery savings
-        let battery_power = (constraints.max_limit as f32 * 0.6) as u32;
+        let battery_power = (max_limit_mw as f32 * 0.6) as u32;
 
-        device
-            .set_power_management_limit(battery_power)
-            .map_err(|e| {
-                NvControlError::PowerManagementFailed(format!("Failed to set power limit: {}", e))
-            })?;
+        self.backend.set_power_limit(self.gpu_id, battery_power)?;
 
         self.enabled = true;
 
@@ -266,28 +257,10 @@ impl BatteryBoost {
 
     /// Disable battery boost
     pub fn disable(&mut self) -> NvResult<()> {
-        use nvml_wrapper::Nvml;
-
-        let nvml = Nvml::init()
-            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
-
-        let mut device = nvml
-            .device_by_index(self.gpu_id)
-            .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e)))?;
-
         // Reset to default power limit
-        let default_power = device.power_management_limit_default().map_err(|e| {
-            NvControlError::PowerManagementFailed(format!(
-                "Failed to get default power limit: {}",
-                e
-            ))
-        })?;
+        let default_power = self.backend.get_power_limit_default(self.gpu_id)?;
 
-        device
-            .set_power_management_limit(default_power)
-            .map_err(|e| {
-                NvControlError::PowerManagementFailed(format!("Failed to set power limit: {}", e))
-            })?;
+        self.backend.set_power_limit(self.gpu_id, default_power)?;
 
         self.enabled = false;
 
@@ -374,8 +347,13 @@ impl PowerProfileManager {
         })
     }
 
-    /// Apply profile
-    pub fn apply_profile(&self, name: &str, gpu_id: u32) -> NvResult<()> {
+    /// Apply profile using backend
+    pub fn apply_profile_with_backend(
+        &self,
+        name: &str,
+        gpu_id: u32,
+        backend: &SharedNvmlBackend,
+    ) -> NvResult<()> {
         let profile = self
             .get_profile(name)
             .ok_or_else(|| NvControlError::ConfigError(format!("Profile not found: {}", name)))?;
@@ -387,27 +365,20 @@ impl PowerProfileManager {
             )));
         }
 
-        use nvml_wrapper::Nvml;
-
-        let nvml = Nvml::init()
-            .map_err(|e| NvControlError::NvmlNotAvailable(format!("NVML init failed: {}", e)))?;
-
-        let mut device = nvml
-            .device_by_index(gpu_id)
-            .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e)))?;
-
-        // Apply power limit
-        device
-            .set_power_management_limit(profile.power_limit_watts * 1000)
-            .map_err(|e| {
-                NvControlError::PowerManagementFailed(format!("Failed to set power limit: {}", e))
-            })?;
+        // Apply power limit via backend
+        backend.set_power_limit(gpu_id, profile.power_limit_watts * 1000)?;
 
         println!("Applied power profile: {}", profile.name);
         println!("  Power Limit: {} W", profile.power_limit_watts);
         println!("  Mode: {:?}", profile.power_mode);
 
         Ok(())
+    }
+
+    /// Apply profile (legacy - creates own backend)
+    pub fn apply_profile(&self, name: &str, gpu_id: u32) -> NvResult<()> {
+        let backend = crate::nvml_backend::create_real_backend();
+        self.apply_profile_with_backend(name, gpu_id, &backend)
     }
 
     /// List all profiles
@@ -493,10 +464,13 @@ impl Default for PowerAnalytics {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::nvml_backend::MockNvmlBackend;
+    use std::sync::Arc;
 
     #[test]
     fn test_power_mode() {
-        let mut manager = DynamicPowerManager::new(0);
+        let backend = Arc::new(MockNvmlBackend::single_gpu());
+        let mut manager = DynamicPowerManager::new(0, backend);
 
         // Simulate high load
         for _ in 0..10 {
@@ -508,7 +482,8 @@ mod tests {
 
     #[test]
     fn test_idle_detection() {
-        let mut manager = DynamicPowerManager::new(0);
+        let backend = Arc::new(MockNvmlBackend::single_gpu());
+        let mut manager = DynamicPowerManager::new(0, backend);
         manager.idle_timeout = Duration::from_millis(100);
 
         // Simulate idle
@@ -547,7 +522,8 @@ mod tests {
 
     #[test]
     fn test_battery_boost() {
-        let boost = BatteryBoost::new(0, 60);
+        let backend = Arc::new(MockNvmlBackend::single_gpu());
+        let boost = BatteryBoost::new(0, 60, backend);
         assert!(!boost.is_enabled());
         assert_eq!(boost.target_fps, 60);
     }

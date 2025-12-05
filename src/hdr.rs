@@ -1,6 +1,7 @@
 // HDR (High Dynamic Range) Control for KDE/GNOME
 // Integrates with compositor D-Bus APIs and NVKMS
 use crate::NvResult;
+use crate::display_backend::SharedDisplayRunner;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -166,12 +167,12 @@ fn detect_compositor() -> NvResult<String> {
 }
 
 fn is_process_running(name: &str) -> bool {
-    std::process::Command::new("pgrep")
-        .arg("-x")
-        .arg(name)
-        .output()
-        .map(|output| output.status.success())
-        .unwrap_or(false)
+    let runner = crate::display_backend::create_real_runner();
+    is_process_running_with_backend(name, &runner)
+}
+
+fn is_process_running_with_backend(name: &str, runner: &SharedDisplayRunner) -> bool {
+    runner.run_command("pgrep", &["-x", name]).is_ok()
 }
 
 // KDE/KWin HDR control
@@ -276,20 +277,15 @@ struct KdeDisplay {
 }
 
 fn get_kde_displays() -> NvResult<Vec<KdeDisplay>> {
-    use std::process::Command;
+    let runner = crate::display_backend::create_real_runner();
+    get_kde_displays_with_backend(&runner)
+}
 
-    let output = Command::new("kscreen-doctor")
-        .arg("-j")
-        .output()
-        .map_err(|e| {
-            crate::NvControlError::DisplayDetectionFailed(format!("kscreen-doctor failed: {}", e))
-        })?;
+fn get_kde_displays_with_backend(runner: &SharedDisplayRunner) -> NvResult<Vec<KdeDisplay>> {
+    let json_str = runner.run_command("kscreen-doctor", &["-j"]).map_err(|e| {
+        crate::NvControlError::DisplayDetectionFailed(format!("kscreen-doctor failed: {}", e))
+    })?;
 
-    if !output.status.success() {
-        return Ok(vec![]);
-    }
-
-    let json_str = String::from_utf8_lossy(&output.stdout);
     let mut displays = Vec::new();
 
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&json_str) {
@@ -336,14 +332,17 @@ fn get_kde_displays() -> NvResult<Vec<KdeDisplay>> {
 
 // GNOME/Mutter HDR control
 fn enable_hdr_gnome() -> NvResult<()> {
-    use std::process::Command;
+    let runner = crate::display_backend::create_real_runner();
+    enable_hdr_gnome_with_backend(&runner)
+}
 
+fn enable_hdr_gnome_with_backend(runner: &SharedDisplayRunner) -> NvResult<()> {
     // Get current experimental features to preserve them
-    let current = Command::new("gsettings")
-        .args(["get", "org.gnome.mutter", "experimental-features"])
-        .output()
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
+    let current = runner
+        .run_command(
+            "gsettings",
+            &["get", "org.gnome.mutter", "experimental-features"],
+        )
         .unwrap_or_default();
 
     // Build new features list including HDR
@@ -362,23 +361,22 @@ fn enable_hdr_gnome() -> NvResult<()> {
         "['variable-refresh-rate', 'hdr']"
     };
 
-    let output = Command::new("gsettings")
-        .args([
+    match runner.run_command(
+        "gsettings",
+        &[
             "set",
             "org.gnome.mutter",
             "experimental-features",
             new_features,
-        ])
-        .output();
-
-    match output {
-        Ok(out) if out.status.success() => {
+        ],
+    ) {
+        Ok(_) => {
             println!("✅ HDR experimental feature enabled in GNOME");
             println!("   📝 You may need to log out and back in");
             println!("   📝 Then enable HDR per-display in Settings → Displays");
             Ok(())
         }
-        _ => {
+        Err(_) => {
             println!("⚠️  Could not enable HDR feature");
             println!("   GNOME HDR requires GNOME 46+ with mutter HDR support");
             println!("   Check: Settings → Displays");
@@ -388,14 +386,17 @@ fn enable_hdr_gnome() -> NvResult<()> {
 }
 
 fn disable_hdr_gnome() -> NvResult<()> {
-    use std::process::Command;
+    let runner = crate::display_backend::create_real_runner();
+    disable_hdr_gnome_with_backend(&runner)
+}
 
+fn disable_hdr_gnome_with_backend(runner: &SharedDisplayRunner) -> NvResult<()> {
     // Get current features
-    let current = Command::new("gsettings")
-        .args(["get", "org.gnome.mutter", "experimental-features"])
-        .output()
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
+    let current = runner
+        .run_command(
+            "gsettings",
+            &["get", "org.gnome.mutter", "experimental-features"],
+        )
         .unwrap_or_default();
 
     // Keep VRR if it was enabled, just remove HDR
@@ -405,28 +406,31 @@ fn disable_hdr_gnome() -> NvResult<()> {
         "[]"
     };
 
-    Command::new("gsettings")
-        .args([
+    let _ = runner.run_command(
+        "gsettings",
+        &[
             "set",
             "org.gnome.mutter",
             "experimental-features",
             new_features,
-        ])
-        .output()
-        .ok();
+        ],
+    );
 
     println!("✅ HDR experimental feature disabled in GNOME");
     Ok(())
 }
 
 fn get_gnome_hdr_status() -> (bool, bool) {
-    use std::process::Command;
+    let runner = crate::display_backend::create_real_runner();
+    get_gnome_hdr_status_with_backend(&runner)
+}
 
-    let output = Command::new("gsettings")
-        .args(["get", "org.gnome.mutter", "experimental-features"])
-        .output()
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
+fn get_gnome_hdr_status_with_backend(runner: &SharedDisplayRunner) -> (bool, bool) {
+    let output = runner
+        .run_command(
+            "gsettings",
+            &["get", "org.gnome.mutter", "experimental-features"],
+        )
         .unwrap_or_default();
 
     let hdr_enabled = output.contains("hdr");
@@ -531,20 +535,19 @@ struct HyprlandMonitor {
 }
 
 fn get_hyprland_monitors() -> NvResult<Vec<HyprlandMonitor>> {
-    use std::process::Command;
+    let runner = crate::display_backend::create_real_runner();
+    get_hyprland_monitors_with_backend(&runner)
+}
 
-    let output = Command::new("hyprctl")
-        .args(["monitors", "-j"])
-        .output()
+fn get_hyprland_monitors_with_backend(
+    runner: &SharedDisplayRunner,
+) -> NvResult<Vec<HyprlandMonitor>> {
+    let json_str = runner
+        .run_command("hyprctl", &["monitors", "-j"])
         .map_err(|e| {
             crate::NvControlError::DisplayDetectionFailed(format!("hyprctl failed: {}", e))
         })?;
 
-    if !output.status.success() {
-        return Ok(vec![]);
-    }
-
-    let json_str = String::from_utf8_lossy(&output.stdout);
     let mut monitors = Vec::new();
 
     if let Ok(monitor_array) = serde_json::from_str::<Vec<serde_json::Value>>(&json_str) {
@@ -595,20 +598,18 @@ fn get_hyprland_monitors() -> NvResult<Vec<HyprlandMonitor>> {
 
 // Check HDR support via NVIDIA
 fn check_hdr_support() -> NvResult<bool> {
-    use std::process::Command;
+    let runner = crate::display_backend::create_real_runner();
+    check_hdr_support_with_backend(&runner)
+}
 
+fn check_hdr_support_with_backend(runner: &SharedDisplayRunner) -> NvResult<bool> {
     // Query NVIDIA for HDR capability
-    let output = Command::new("nvidia-settings")
-        .args(&["-q", "[gpu:0]/SupportedColorSpaces"])
-        .output();
-
-    match output {
-        Ok(out) if out.status.success() => {
-            let output_str = String::from_utf8_lossy(&out.stdout);
+    match runner.run_command("nvidia-settings", &["-q", "[gpu:0]/SupportedColorSpaces"]) {
+        Ok(output_str) => {
             // HDR typically requires BT2020 color space
             Ok(output_str.contains("BT2020") || output_str.contains("HDR"))
         }
-        _ => Ok(false),
+        Err(_) => Ok(false),
     }
 }
 

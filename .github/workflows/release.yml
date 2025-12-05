@@ -97,7 +97,7 @@ jobs:
           key: nvcontrol-gui
 
       - name: Build Release (Full GUI)
-        run: cargo build --release
+        run: cargo build --release --features gui,tray --no-default-features
 
       - name: Run Tests
         run: cargo test --lib --no-default-features

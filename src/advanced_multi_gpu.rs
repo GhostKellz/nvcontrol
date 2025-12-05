@@ -304,7 +304,7 @@ impl LoadBalancer {
     pub fn update_load(&mut self, gpu_id: u32, utilization: u32) {
         self.load_history
             .entry(gpu_id)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(utilization);
 
         // Keep only last 10 samples

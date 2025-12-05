@@ -460,7 +460,7 @@ impl PowerProfileManager {
         if self.activity_profiles.is_empty() {
             println!("   (none configured)");
         } else {
-            for (name, _config) in &self.activity_profiles {
+            for name in self.activity_profiles.keys() {
                 println!("   • {}", name);
             }
         }

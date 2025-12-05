@@ -28,6 +28,7 @@ _nvctl() {
                 'gamescope[Gamescope integration]' \
                 'container[Container management]' \
                 'drivers[Driver management]' \
+                'driver[Driver capabilities & validation]' \
                 'kde[KDE Wayland optimizations]' \
                 'power-profile[Power profile daemon]' \
                 'multimonitor[Multi-monitor management]' \
@@ -67,6 +68,19 @@ _nvctl() {
                         'set[Set fan speed]' \
                         'auto[Auto fan control]' \
                         'curve[Custom fan curve]'
+                    ;;
+                drivers)
+                    _values 'driver management' \
+                        'status[Driver status]' \
+                        'install[Install driver]' \
+                        'update[Update driver]' \
+                        'rollback[Rollback driver]' \
+                        'generate-completions[Shell completion scripts]'
+                    ;;
+                driver)
+                    _values 'driver capability commands' \
+                        'info[Show driver capabilities]' \
+                        'validate[Validate target driver branch]'
                     ;;
                 osd)
                     _values 'osd subcommands' \

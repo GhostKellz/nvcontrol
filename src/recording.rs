@@ -339,8 +339,7 @@ pub fn start_instant_replay(settings: &RecordingSettings) -> NvResult<()> {
     // Create a circular buffer recording that keeps only the last N seconds
     let temp_dir = get_recording_temp_dir();
     let segment_duration = 30; // 30 second segments
-    let total_segments =
-        (settings.instant_replay_duration + segment_duration - 1) / segment_duration;
+    let total_segments = settings.instant_replay_duration.div_ceil(segment_duration);
 
     let mut cmd = Command::new("ffmpeg");
 

@@ -37,13 +37,10 @@ jobs:
       - name: Build CLI
         run: cargo build --bin nvctl --release --no-default-features
 
-      - name: Clippy
+      - name: Clippy (zero warnings policy)
         run: |
           cargo clippy --bin nvctl --lib --no-default-features -- \
-            -W clippy::all \
-            -A clippy::needless-borrows-for-generic-args \
-            -A clippy::single-char-add-str \
-            -A clippy::redundant-field-names
+            -D warnings
 
       - name: Format Check
         run: cargo fmt --check || echo "::warning::Format issues found"

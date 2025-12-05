@@ -73,7 +73,7 @@ impl GspManager {
         let enabled = Self::is_gsp_enabled()?;
 
         // Find firmware file
-        let firmware_files = vec![
+        let firmware_files = [
             self.firmware_dir.join("gsp.bin"),
             self.firmware_dir.join("gsp_tu10x.bin"),
             self.firmware_dir.join("gsp_ga10x.bin"),

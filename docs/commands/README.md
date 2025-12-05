@@ -78,12 +78,23 @@ nvctl fan info              # Fan information
 nvctl fan set <id> <pct>    # Set fan speed
 ```
 
+### Diagnostics
+```bash
+nvctl doctor                # System diagnostics & health check
+nvctl monitor               # System monitoring
+nvctl benchmark             # GPU benchmarks
+```
+
+### Drivers
+```bash
+nvctl drivers status        # Driver information
+nvctl driver info           # Driver capabilities & requirements
+nvctl driver validate --driver 590  # Validate target branch
+```
+
 ### Other
 ```bash
-nvctl monitor               # System monitoring
 nvctl osd enable            # Enable OSD overlay
-nvctl benchmark             # GPU benchmarks
-nvctl drivers status        # Driver information
 ```
 
 ## Global Options
@@ -153,9 +164,12 @@ nvctl gaming gamescope launch --preset competitive steam
 Location: `~/.config/nvcontrol/`
 
 - `config.toml` - Main configuration
+- `tui_state.toml` - TUI session persistence (v0.7.6+)
 - `power_management.toml` - Power curves
 - `game_profile_auto.toml` - Game auto-profiles
 - `profiles/` - Saved profiles directory
+
+See [Configuration Guide](../config/README.md) for details.
 
 ## Getting Help
 

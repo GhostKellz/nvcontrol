@@ -46,3 +46,30 @@ fn test_nvctl_fan_info() {
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.contains("Fan Information"));
 }
+
+#[test]
+fn test_nvctl_driver_info() {
+    let output = Command::new("cargo")
+        .args(&["run", "--bin", "nvctl", "--", "driver", "info"])
+        .output()
+        .expect("Failed to execute nvctl driver info");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("Driver"));
+}
+
+#[test]
+fn test_nvctl_driver_validate() {
+    let output = Command::new("cargo")
+        .args(&[
+            "run", "--bin", "nvctl", "--", "driver", "validate", "--driver", "590",
+        ])
+        .output()
+        .expect("Failed to execute nvctl driver validate");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("System Validation for Driver"));
+    assert!(stdout.contains("590"));
+}

@@ -104,6 +104,11 @@ enum Command {
         #[command(subcommand)]
         subcommand: DriversSubcommand,
     },
+    /// 🧠 Driver capabilities and validation
+    Driver {
+        #[command(subcommand)]
+        subcommand: DriverSubcommand,
+    },
     /// ⚡ Power management
     Power {
         #[command(subcommand)]
@@ -872,6 +877,18 @@ enum DriversSubcommand {
     GenerateCompletions {
         /// Shell type: bash, zsh, fish
         shell: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum DriverSubcommand {
+    /// Show driver capabilities and requirements
+    Info,
+    /// Validate system readiness for a target driver version
+    Validate {
+        /// Target driver major version (e.g., 590)
+        #[arg(long)]
+        driver: u32,
     },
 }
 
@@ -1708,6 +1725,9 @@ enum AsusAuraAction {
 }
 
 fn main() {
+    // Initialize NVML backend once for all GPU commands
+    let backend = nvcontrol::nvml_backend::create_real_backend();
+
     let cli = Cli::parse();
     match cli.command {
         Command::Vibrance { percentage } => {
@@ -1737,7 +1757,7 @@ fn main() {
         }
         Command::Gpu { subcommand } => match subcommand {
             GpuSubcommand::Info { format } => {
-                if let Err(e) = gpu::get_gpu_info_with_format(format) {
+                if let Err(e) = gpu::get_gpu_info_with_format(format, &backend) {
                     eprintln!("❌ Failed to get GPU info: {}", e);
                 }
             }
@@ -1756,7 +1776,8 @@ fn main() {
                 duration,
                 test_type,
             } => {
-                if let Err(e) = monitoring::run_gpu_benchmark(duration, &test_type, "medium", false)
+                if let Err(e) =
+                    monitoring::run_gpu_benchmark(duration, &test_type, "medium", false, &backend)
                 {
                     eprintln!("❌ Benchmark failed: {}", e);
                 } else {
@@ -1764,7 +1785,7 @@ fn main() {
                 }
             }
             GpuSubcommand::Watch { interval, count } => {
-                if let Err(e) = monitoring::live_gpu_watch(interval, count) {
+                if let Err(e) = monitoring::live_gpu_watch(interval, count, &backend) {
                     eprintln!("❌ Watch failed: {}", e);
                 }
             }
@@ -1772,18 +1793,24 @@ fn main() {
                 format,
                 output,
                 duration,
-            } => match monitoring::export_gpu_metrics(&format, output.as_deref(), duration) {
-                Ok(()) => println!("✅ Export completed"),
-                Err(e) => eprintln!("❌ Export failed: {}", e),
-            },
+            } => {
+                match monitoring::export_gpu_metrics(&format, output.as_deref(), duration, &backend)
+                {
+                    Ok(()) => println!("✅ Export completed"),
+                    Err(e) => eprintln!("❌ Export failed: {}", e),
+                }
+            }
             GpuSubcommand::Stress {
                 duration,
                 intensity,
                 log,
-            } => match monitoring::run_gpu_benchmark(duration * 60, "all", &intensity, log) {
-                Ok(()) => println!("✅ Stress test completed"),
-                Err(e) => eprintln!("❌ Stress test failed: {}", e),
-            },
+            } => {
+                match monitoring::run_gpu_benchmark(duration * 60, "all", &intensity, log, &backend)
+                {
+                    Ok(()) => println!("✅ Stress test completed"),
+                    Err(e) => eprintln!("❌ Stress test failed: {}", e),
+                }
+            }
             GpuSubcommand::List { format } => match nvcontrol::multi_gpu::detect_gpus() {
                 Ok(gpus) => match format {
                     OutputFormat::Json => {
@@ -3427,6 +3454,20 @@ fn main() {
                 }
             }
         },
+        Command::Driver { subcommand } => match subcommand {
+            DriverSubcommand::Info => {
+                if let Err(e) = drivers::print_driver_info() {
+                    eprintln!("Failed to show driver info: {e}");
+                }
+            }
+            DriverSubcommand::Validate { driver } => {
+                if driver < 100 {
+                    eprintln!("Please provide the driver major version, e.g. 590");
+                } else if let Err(e) = drivers::print_validation(driver) {
+                    eprintln!("Failed to validate system: {e}");
+                }
+            }
+        },
         Command::Power { subcommand } => match subcommand {
             PowerSubcommand::Status => match power::get_power_info() {
                 Ok(power_infos) => {
@@ -3596,7 +3637,9 @@ fn main() {
         },
         Command::Monitor { subcommand } => match subcommand {
             Some(MonitorSubcommand::Start { interval, count }) => {
-                if let Err(e) = monitoring::live_gpu_watch(interval, count.unwrap_or(0) as u32) {
+                if let Err(e) =
+                    monitoring::live_gpu_watch(interval, count.unwrap_or(0) as u32, &backend)
+                {
                     eprintln!("❌ Monitor failed: {}", e);
                 }
             }
@@ -5507,7 +5550,7 @@ fn main() {
         }
         Command::Interactive => {
             println!("🎛️  Launching Interactive Menu Mode...\n");
-            if let Err(e) = nvcontrol::interactive_cli::InteractiveCli::new().run() {
+            if let Err(e) = nvcontrol::interactive_cli::InteractiveCli::new(backend.clone()).run() {
                 eprintln!("❌ Interactive mode error: {}", e);
             }
         }

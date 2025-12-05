@@ -130,19 +130,22 @@ cargo check --all-features
 ```
 
 ### Running Tests
-```sh
+```
 # Run library tests
 cargo test --lib --no-default-features
 
 # Run with all features
 cargo test --all-features
 
+# Deterministic backend tests (no NVIDIA hardware required)
+cargo test --test test_mock_backends
+
 # Integration tests
 cargo test --test integration_tests
 ```
 
 ### Code Quality
-```sh
+```
 # Format code
 cargo fmt
 
@@ -151,6 +154,9 @@ cargo clippy --all-features -- -D warnings
 
 # Check CLI-only build
 cargo clippy --no-default-features -- -D warnings
+
+# Ensure deterministic mocks stay in sync
+cargo test --test test_mock_backends -- --ignored
 ```
 
 ## CI/CD Notes

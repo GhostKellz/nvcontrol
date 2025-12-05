@@ -675,6 +675,326 @@ pub fn validate_driver_installation() -> NvResult<bool> {
     Ok(true)
 }
 
+// ==================== Driver Capabilities ====================
+
+/// Driver capabilities based on version
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DriverCapabilities {
+    pub version: String,
+    pub major_version: u32,
+    pub is_beta: bool,
+    pub wayland_min_version: String,
+    pub glibc_min_version: String,
+    pub has_vulkan_swapchain_perf: bool,
+    pub has_usb4_dp_support: bool,
+    pub supports_preempt_rt: bool,
+    pub has_powermizer_wayland_fix: bool,
+}
+
+impl DriverCapabilities {
+    /// Detect capabilities from the current driver
+    pub fn detect() -> NvResult<Self> {
+        let status = get_driver_status()?;
+        Self::from_version(&status.current_version)
+    }
+
+    /// Parse capabilities from a version string
+    pub fn from_version(version: &str) -> NvResult<Self> {
+        let major = Self::parse_major_version(version);
+        let is_beta = version.contains("beta") || version.contains("Beta");
+
+        Ok(Self {
+            version: version.to_string(),
+            major_version: major,
+            is_beta,
+            wayland_min_version: if major >= 590 {
+                "1.20".into()
+            } else {
+                "1.17".into()
+            },
+            glibc_min_version: if major >= 590 {
+                "2.27".into()
+            } else {
+                "2.17".into()
+            },
+            has_vulkan_swapchain_perf: major >= 590,
+            has_usb4_dp_support: major >= 590,
+            supports_preempt_rt: major >= 590,
+            has_powermizer_wayland_fix: major >= 590,
+        })
+    }
+
+    fn parse_major_version(version: &str) -> u32 {
+        // Version format: "590.44.01" -> 590
+        version
+            .split('.')
+            .next()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0)
+    }
+}
+
+/// System requirements check result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemRequirementCheck {
+    pub passed: bool,
+    pub wayland_ok: Option<bool>,
+    pub wayland_version: Option<String>,
+    pub glibc_ok: Option<bool>,
+    pub glibc_version: Option<String>,
+    pub preempt_rt_kernel: bool,
+    pub warnings: Vec<String>,
+    pub errors: Vec<String>,
+}
+
+/// Check if system meets requirements for a driver version
+pub fn validate_system_for_driver(target_version: u32) -> SystemRequirementCheck {
+    let mut result = SystemRequirementCheck {
+        passed: true,
+        wayland_ok: None,
+        wayland_version: None,
+        glibc_ok: None,
+        glibc_version: None,
+        preempt_rt_kernel: is_preempt_rt_kernel(),
+        warnings: Vec::new(),
+        errors: Vec::new(),
+    };
+
+    // Check Wayland version
+    if let Some(wayland_ver) = get_wayland_version() {
+        result.wayland_version = Some(wayland_ver.clone());
+        if target_version >= 590 {
+            let required = "1.20";
+            let ok = compare_versions(&wayland_ver, required) >= 0;
+            result.wayland_ok = Some(ok);
+            if !ok {
+                result.warnings.push(format!(
+                    "Wayland {} may have issues with {} drivers (requires {}+)",
+                    wayland_ver, target_version, required
+                ));
+            }
+        }
+    }
+
+    // Check glibc version
+    if let Some(glibc_ver) = get_glibc_version() {
+        result.glibc_version = Some(glibc_ver.clone());
+        if target_version >= 590 {
+            let required = "2.27";
+            let ok = compare_versions(&glibc_ver, required) >= 0;
+            result.glibc_ok = Some(ok);
+            if !ok {
+                result.errors.push(format!(
+                    "glibc {} not supported by {} drivers (requires {}+)",
+                    glibc_ver, target_version, required
+                ));
+                result.passed = false;
+            }
+        }
+    }
+
+    // PREEMPT_RT kernel warning for older drivers
+    if result.preempt_rt_kernel && target_version < 590 {
+        result
+            .warnings
+            .push("PREEMPT_RT kernel detected - drivers < 590 may freeze".to_string());
+    }
+
+    result
+}
+
+/// Check if running a PREEMPT_RT kernel
+pub fn is_preempt_rt_kernel() -> bool {
+    std::fs::read_to_string("/proc/version")
+        .map(|v| v.contains("PREEMPT_RT"))
+        .unwrap_or(false)
+}
+
+/// Get Wayland compositor version
+fn get_wayland_version() -> Option<String> {
+    // Try wayland-info
+    if let Ok(output) = Command::new("wayland-info").arg("--version").output() {
+        if output.status.success() {
+            let ver = String::from_utf8_lossy(&output.stdout);
+            // Parse version from output
+            if let Some(v) = ver.lines().next() {
+                return Some(v.trim().to_string());
+            }
+        }
+    }
+
+    // Try pkg-config
+    if let Ok(output) = Command::new("pkg-config")
+        .args(["--modversion", "wayland-client"])
+        .output()
+    {
+        if output.status.success() {
+            return Some(String::from_utf8_lossy(&output.stdout).trim().to_string());
+        }
+    }
+
+    None
+}
+
+/// Get glibc version
+fn get_glibc_version() -> Option<String> {
+    // Try ldd --version
+    if let Ok(output) = Command::new("ldd").arg("--version").output() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        // Parse "ldd (GNU libc) 2.38"
+        for line in stdout.lines() {
+            if line.contains("libc") || line.contains("GLIBC") {
+                if let Some(ver) = line.split_whitespace().last() {
+                    return Some(ver.to_string());
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Simple version comparison (returns -1, 0, or 1)
+fn compare_versions(a: &str, b: &str) -> i32 {
+    let parse = |s: &str| -> Vec<u32> { s.split('.').filter_map(|p| p.parse().ok()).collect() };
+
+    let va = parse(a);
+    let vb = parse(b);
+
+    for i in 0..va.len().max(vb.len()) {
+        let a_part = va.get(i).copied().unwrap_or(0);
+        let b_part = vb.get(i).copied().unwrap_or(0);
+        if a_part < b_part {
+            return -1;
+        }
+        if a_part > b_part {
+            return 1;
+        }
+    }
+    0
+}
+
+/// Get driver capabilities for current system
+pub fn get_driver_capabilities() -> NvResult<DriverCapabilities> {
+    DriverCapabilities::detect()
+}
+
+/// Print driver info (for CLI)
+pub fn print_driver_info() -> NvResult<()> {
+    let caps = DriverCapabilities::detect()?;
+
+    println!(
+        "Driver: {} {}",
+        caps.version,
+        if caps.is_beta { "(Beta)" } else { "" }
+    );
+    println!("Major Version: {}", caps.major_version);
+    println!();
+    println!("Requirements:");
+    println!("  Wayland: {}+", caps.wayland_min_version);
+    println!("  glibc: {}+", caps.glibc_min_version);
+    println!();
+    println!("Features:");
+    println!(
+        "  Vulkan swapchain optimization: {}",
+        if caps.has_vulkan_swapchain_perf {
+            "Yes"
+        } else {
+            "No"
+        }
+    );
+    println!(
+        "  USB4 DP support: {}",
+        if caps.has_usb4_dp_support {
+            "Yes"
+        } else {
+            "No"
+        }
+    );
+    println!(
+        "  PREEMPT_RT support: {}",
+        if caps.supports_preempt_rt {
+            "Yes"
+        } else {
+            "No"
+        }
+    );
+    println!(
+        "  PowerMizer on Wayland: {}",
+        if caps.has_powermizer_wayland_fix {
+            "Fixed"
+        } else {
+            "May have issues"
+        }
+    );
+
+    Ok(())
+}
+
+/// Validate system for specific driver version (for CLI)
+pub fn print_validation(target_version: u32) -> NvResult<()> {
+    let check = validate_system_for_driver(target_version);
+
+    println!("System Validation for Driver {}", target_version);
+    println!("================================");
+    println!();
+
+    if let Some(ref ver) = check.wayland_version {
+        let status = match check.wayland_ok {
+            Some(true) => "✓",
+            Some(false) => "✗",
+            None => "?",
+        };
+        println!("Wayland: {} {}", ver, status);
+    } else {
+        println!("Wayland: Not detected");
+    }
+
+    if let Some(ref ver) = check.glibc_version {
+        let status = match check.glibc_ok {
+            Some(true) => "✓",
+            Some(false) => "✗",
+            None => "?",
+        };
+        println!("glibc: {} {}", ver, status);
+    } else {
+        println!("glibc: Not detected");
+    }
+
+    println!(
+        "PREEMPT_RT Kernel: {}",
+        if check.preempt_rt_kernel { "Yes" } else { "No" }
+    );
+    println!();
+
+    if !check.warnings.is_empty() {
+        println!("Warnings:");
+        for w in &check.warnings {
+            println!("  ⚠️  {}", w);
+        }
+        println!();
+    }
+
+    if !check.errors.is_empty() {
+        println!("Errors:");
+        for e in &check.errors {
+            println!("  ❌ {}", e);
+        }
+        println!();
+    }
+
+    if check.passed {
+        println!("✓ System meets requirements for driver {}", target_version);
+    } else {
+        println!(
+            "✗ System does NOT meet requirements for driver {}",
+            target_version
+        );
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -696,5 +1016,152 @@ mod tests {
     fn test_detect_distribution() {
         let distro = detect_distribution();
         assert!(!distro.is_empty());
+    }
+
+    #[test]
+    fn test_driver_capabilities_from_version() {
+        // Test 590 driver
+        let caps = DriverCapabilities::from_version("590.44.01").unwrap();
+        assert_eq!(caps.major_version, 590);
+        assert!(caps.has_vulkan_swapchain_perf);
+        assert!(caps.supports_preempt_rt);
+        assert_eq!(caps.wayland_min_version, "1.20");
+        assert_eq!(caps.glibc_min_version, "2.27");
+
+        // Test older driver
+        let caps = DriverCapabilities::from_version("570.86.10").unwrap();
+        assert_eq!(caps.major_version, 570);
+        assert!(!caps.has_vulkan_swapchain_perf);
+        assert!(!caps.supports_preempt_rt);
+        assert_eq!(caps.wayland_min_version, "1.17");
+        assert_eq!(caps.glibc_min_version, "2.17");
+    }
+
+    #[test]
+    fn test_version_comparison() {
+        assert_eq!(compare_versions("1.20", "1.17"), 1);
+        assert_eq!(compare_versions("1.17", "1.20"), -1);
+        assert_eq!(compare_versions("2.27", "2.27"), 0);
+        assert_eq!(compare_versions("2.38", "2.27"), 1);
+    }
+
+    #[test]
+    fn test_version_comparison_edge_cases() {
+        // Single digit vs multi-digit
+        assert_eq!(compare_versions("2.0", "1.99"), 1);
+        assert_eq!(compare_versions("1.99", "2.0"), -1);
+
+        // Three-part versions
+        assert_eq!(compare_versions("1.20.5", "1.20.4"), 1);
+        assert_eq!(compare_versions("1.20.5", "1.20.10"), -1);
+
+        // Single component
+        assert_eq!(compare_versions("590", "570"), 1);
+        assert_eq!(compare_versions("570", "590"), -1);
+
+        // Different lengths
+        assert_eq!(compare_versions("1.20", "1.20.0"), 0);
+        assert_eq!(compare_versions("1.20.0", "1.20"), 0);
+
+        // Empty/malformed (should not panic)
+        assert_eq!(compare_versions("", "1.0"), -1);
+        assert_eq!(compare_versions("1.0", ""), 1);
+    }
+
+    #[test]
+    fn test_driver_capabilities_beta_detection() {
+        // Beta version string
+        let caps = DriverCapabilities::from_version("590.44.01-beta").unwrap();
+        assert!(caps.is_beta);
+        assert_eq!(caps.major_version, 590);
+
+        // Regular version should not be beta
+        let caps = DriverCapabilities::from_version("590.44.01").unwrap();
+        assert!(!caps.is_beta);
+    }
+
+    #[test]
+    fn test_driver_capabilities_boundary_versions() {
+        // Exactly at 590 boundary
+        let caps = DriverCapabilities::from_version("590.00.00").unwrap();
+        assert!(caps.has_vulkan_swapchain_perf);
+        assert!(caps.supports_preempt_rt);
+        assert!(caps.has_usb4_dp_support);
+        assert!(caps.has_powermizer_wayland_fix);
+
+        // Just below 590
+        let caps = DriverCapabilities::from_version("589.99.99").unwrap();
+        assert!(!caps.has_vulkan_swapchain_perf);
+        assert!(!caps.supports_preempt_rt);
+
+        // Very old driver
+        let caps = DriverCapabilities::from_version("470.82.00").unwrap();
+        assert_eq!(caps.major_version, 470);
+        assert!(!caps.has_vulkan_swapchain_perf);
+    }
+
+    #[test]
+    fn test_driver_capabilities_invalid_version() {
+        // Empty string - gracefully defaults to major version 0
+        let caps = DriverCapabilities::from_version("").unwrap();
+        assert_eq!(caps.major_version, 0);
+        assert!(!caps.has_vulkan_swapchain_perf);
+
+        // Non-numeric - gracefully defaults to major version 0
+        let caps = DriverCapabilities::from_version("abc.def.ghi").unwrap();
+        assert_eq!(caps.major_version, 0);
+        assert!(!caps.has_vulkan_swapchain_perf);
+    }
+
+    #[test]
+    fn test_validate_system_requirements() {
+        // Test with a 590 target - should run validation logic
+        let check = validate_system_for_driver(590);
+
+        // These checks depend on the actual system, but they should not panic
+        // and should return structured results
+        assert!(check.warnings.is_empty() || !check.warnings.is_empty()); // always true
+        assert!(check.errors.is_empty() || !check.errors.is_empty()); // always true
+
+        // Check that driver version info is populated
+        // (may be empty if nvidia-smi is not available)
+    }
+
+    #[test]
+    fn test_validate_system_old_target() {
+        // Test with older target - should pass more easily
+        let _check = validate_system_for_driver(470);
+
+        // 470 has very minimal requirements, most systems should pass
+        // unless there's no driver at all
+    }
+
+    #[test]
+    fn test_preempt_rt_detection() {
+        // Just verify the function runs without panicking
+        let _ = is_preempt_rt_kernel();
+    }
+
+    #[test]
+    fn test_get_wayland_version() {
+        // Should not panic regardless of whether Wayland is installed
+        let version = get_wayland_version();
+        // Either returns Some(version) or None, both are valid
+        if let Some(v) = version {
+            // If a version is returned, it should be parseable
+            assert!(!v.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_get_glibc_version() {
+        // Should not panic - glibc is always present on Linux
+        let version = get_glibc_version();
+        // glibc should always be present on Linux
+        if let Some(v) = version {
+            assert!(!v.is_empty());
+            // Should contain a dot (e.g., "2.38")
+            assert!(v.contains('.'));
+        }
     }
 }

@@ -5,6 +5,120 @@ All notable changes to nvcontrol will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.7.6] - 2025-12-04
+
+### Added
+- **Backend Abstraction Layer** for deterministic testing without NVIDIA hardware:
+  - `NvmlBackend` trait with `RealNvmlBackend` and `MockNvmlBackend` implementations
+  - `DisplayCommandRunner` trait with `ShellDisplayRunner` and `MockDisplayRunner`
+  - `SharedNvmlBackend` (`Arc<dyn NvmlBackend>`) for thread-safe sharing across modules
+  - Extended trait methods: `get_driver_version`, `get_power_limit`, `get_power_limit_constraints`, `get_power_limit_default`, `set_power_limit`, `get_cuda_cores`, `get_compute_capability`, `get_uuid`, `get_pci_bus_id`, `get_fan_count`, `is_fan_control_supported`
+- **GuiBackendContext**: Unified context struct bundling `SharedNvmlBackend` + `SharedDisplayRunner` for GUI/TUI use
+  - `GuiBackendContext::new()` for production, `GuiBackendContext::mock()` for testing
+  - Convenience methods: `get_metrics()`, `get_device_info()`, `is_nvml_available()`
+- **Process Listing API**: `ProcessInfo` struct and backend methods for GPU process queries
+  - `get_running_graphics_processes(index)` and `get_running_compute_processes(index)`
+  - Supports both real NVML and mock backends for deterministic testing
+- **Max Clock API**: `get_max_gpu_clock(index)` and `get_max_memory_clock(index)` for OC tab display
+- **Backend Status Enum**: `BackendStatus` for unified UI messaging across all interfaces
+  - Variants: `Available`, `NvmlUnavailable`, `DisplayUnavailable`, `AllUnavailable`
+  - Methods: `is_nvml_available()`, `is_display_available()`, `status_message()`
+- **Cached Metrics**: `CachedMetrics` struct with staleness detection
+  - `is_stale(max_age_secs)` and `age_secs()` for metrics freshness tracking
+- **Display Runner Availability**: `is_available()` method added to `DisplayCommandRunner` trait
+- **TUI Session Persistence**: Settings survive restarts
+  - `TuiSessionState` struct in `config.rs` saves selected GPU, tab, fan curve, OC settings
+  - Automatic load on startup and save on exit
+- Deterministic backend tests (`tests/test_mock_backends.rs`) with 37 test cases:
+  - GPU metrics collection and multi-GPU enumeration via mocks
+  - Display detection flows (X11/Wayland/headless)
+  - Monitoring loop simulation without hardware
+  - GPU info retrieval with error handling
+  - Multi-GPU detection, count, and info via backend
+  - Extended backend method tests (power limits, CUDA, fans)
+  - Fan module tests (list, multi-GPU, health assessment, graceful fallback)
+  - Compositor-specific display runner tests (KDE/GNOME/Hyprland)
+  - HDR/VRR detection flow simulation via mocks
+  - GuiBackendContext and TuiApp mock backend injection tests
+- **Compositor Mock Support**: `MockDisplayRunner` extended with:
+  - `kde()`, `gnome()`, `hyprland()` constructors with realistic mock outputs
+  - `with_compositor()`, `with_command_output()` builders for custom scenarios
+  - Mock outputs for kscreen-doctor, gsettings, hyprctl
+
+### Changed
+- `src/gpu.rs` now uses `SharedNvmlBackend` instead of direct `nvml_wrapper` calls
+- `src/monitoring.rs` refactored: `live_gpu_watch`, `export_gpu_metrics`, `run_gpu_benchmark` accept backend parameter
+- `src/multi_gpu.rs` refactored: `detect_gpus_with_backend`, `get_gpu_info_with_backend`, `get_gpu_count_with_backend` accept backend; legacy functions create backend internally
+- `src/fan.rs` refactored: `list_fans_with_backend`, `enable_zero_rpm_mode_with_backend`, `monitor_fan_health_with_backend` accept backend; legacy functions create backend internally
+- `src/advanced_power.rs` refactored: `DynamicPowerManager`, `BatteryBoost`, `PowerProfileManager` now accept `SharedNvmlBackend`; legacy constructors create backend internally
+- CLI (`nvctl`) and Interactive CLI create backend once at startup, pass to GPU commands
+- CI gate enforces zero clippy warnings and deterministic test coverage
+- `src/tui.rs`: `TuiApp` fully migrated to use `GuiBackendContext`
+  - All NVML queries (metrics, processes, clocks, power, fans) now go through backend
+  - Removed `Device`, `UsedGpuMemory` imports - only `Nvml` retained for legacy struct field
+  - `draw_memory`, `draw_processes`, `draw_overclocking`, `draw_fan` all use backend
+  - `BackendStatus` integrated for displaying error banners when NVML/display unavailable
+- `src/tray.rs`: `SystemTray::with_backend()` accepts shared backend, eliminates duplicate NVML sessions
+- `src/notifications.rs`: `AlertMonitorThread::with_backend()` uses shared backend for metrics polling
+
+### Security
+- **ShellDisplayRunner Hardening**: Command allow-list with absolute paths
+  - Only approved system utilities can be executed (xrandr, nvidia-settings, hyprctl, gsettings, etc.)
+  - Commands not in allow-list are rejected with `DisplayError::CommandNotAllowed`
+  - Multiple distro paths supported per command (e.g., `/usr/bin/qdbus`, `/usr/lib/qt6/bin/qdbus`)
+  - Prevents PATH injection attacks and ensures predictable behavior
+
+### Fixed
+- **State Migration Safeguards**: Upgrade from v0.7.5 preserves user settings
+  - Version field added to `TuiSessionState` for future migrations
+  - Values validated and clamped to safe ranges on load
+  - Corrupt state files backed up before resetting to defaults
+  - Tests cover migration from v0 (no version) to v1
+- **BackendStatus Hotplug Debouncing**: Prevents UI flicker during rapid attach/detach
+  - `StatusTracker` debounces status transitions (2-second threshold)
+  - `refresh_status()` method for periodic backend availability checks
+  - `is_status_transitioning()` indicates pending status changes
+  - Prevents indicator flicker during eGPU/USB-C dock hotplug events
+
+## [0.7.5] - 2025-12-03
+
+### Changed
+- Clippy cleanup: properly fixed lint warnings instead of suppressing them
+- Reduced `#![allow(clippy::...)]` directives in lib.rs
+- Version removed from README badges (now uses crates.io badge as source of truth)
+- Download URLs in README now use `/latest/` instead of hardcoded versions
+
+### Fixed
+- Code quality improvements across multiple modules
+
+## [0.7.4] - 2025-12-02
+
+### Added
+- Multi-runner release workflow with separate CLI and GUI builds
+- Protobuf compiler added to GUI runner Dockerfile
+
+### Changed
+- Release workflow now builds CLI (minimal) and GUI (full features) separately
+- Improved CI/CD pipeline reliability
+
+## [0.7.3] - 2025-12-01
+
+### Added
+- ASUS ROG Astral RTX 5090 enhancements
+- Power Detector+ improvements for 12V-2x6 connector monitoring
+- ASUS Aura RGB integration
+- Full Hyprland VRR/HDR support
+
+### Changed
+- Polished KDE and GNOME compositor integrations
+- Improved headless CI detection for nightly builds
+
+### Fixed
+- CI workflow fixes for self-hosted runner PATH configuration
+- Cross-compile target path corrections
+
 ## [0.7.2] - 2024-11-27
 
 ### Added
@@ -87,6 +201,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 0.7.6 | 2025-12-04 | Backend abstraction, TUI session persistence, testability |
+| 0.7.5 | 2025-12-03 | Clippy cleanup, code quality polish |
+| 0.7.4 | 2025-12-02 | Multi-runner CI/CD, CLI + GUI builds |
+| 0.7.3 | 2025-12-01 | ASUS Astral enhancements, Hyprland VRR/HDR |
 | 0.7.2 | 2024-11-27 | ASUS Power Detector+, GUI polish |
 | 0.7.1 | 2024-11-27 | Display controls, native vibrance |
 | 0.7.0 | 2024-11-24 | Full GUI, TUI, Wayland-first rewrite |
