@@ -68,6 +68,11 @@ pub struct ColorPalette {
     pub selection: Color,
     pub comment: Color,
 
+    // Button accent colors (for primary action buttons)
+    pub button_accent: Color,        // Default button state
+    pub button_accent_hover: Color,  // Hovered button state
+    pub button_accent_active: Color, // Active/pressed button state
+
     // Graph colors
     pub graph_line1: Color, // Primary metric
     pub graph_line2: Color, // Secondary metric
@@ -179,6 +184,11 @@ impl Theme {
                 selection: Color::hex(0x364a82),
                 comment: Color::hex(0x565f89),
 
+                // Button accent (teal/mint - complements Tokyo Night's aesthetic)
+                button_accent: Color::hex(0x1abc9c),        // Teal - default
+                button_accent_hover: Color::hex(0x2dd4b7),  // Lighter teal - hovered
+                button_accent_active: Color::hex(0x16a085), // Darker teal - active
+
                 // Graphs
                 graph_line1: Color::hex(0x7aa2f7), // Blue - GPU temp
                 graph_line2: Color::hex(0x9ece6a), // Green - FPS
@@ -233,6 +243,11 @@ impl Theme {
                 selection: Color::hex(0x364a82),
                 comment: Color::hex(0x565f89),
 
+                // Button accent (teal/mint - consistent with Night variant)
+                button_accent: Color::hex(0x1abc9c),
+                button_accent_hover: Color::hex(0x2dd4b7),
+                button_accent_active: Color::hex(0x16a085),
+
                 graph_line1: Color::hex(0x7aa2f7),
                 graph_line2: Color::hex(0x9ece6a),
                 graph_line3: Color::hex(0xbb9af7),
@@ -285,6 +300,11 @@ impl Theme {
                 border_highlight: Color::hex(0x82aaff),
                 selection: Color::hex(0x3e4963),
                 comment: Color::hex(0x636da6),
+
+                // Button accent (teal/mint variant - Moon's teal is brighter)
+                button_accent: Color::hex(0x4fd6be),
+                button_accent_hover: Color::hex(0x6ee4cc),
+                button_accent_active: Color::hex(0x3bc4ac),
 
                 graph_line1: Color::hex(0x82aaff),
                 graph_line2: Color::hex(0xc3e88d),
@@ -339,6 +359,11 @@ impl Theme {
                 selection: Color::hex(0x44475a),
                 comment: Color::hex(0x6272a4),
 
+                // Button accent (Dracula green - matches theme's vibrant green)
+                button_accent: Color::hex(0x50fa7b),
+                button_accent_hover: Color::hex(0x6efb92),
+                button_accent_active: Color::hex(0x3ae066),
+
                 graph_line1: Color::hex(0xbd93f9),
                 graph_line2: Color::hex(0x50fa7b),
                 graph_line3: Color::hex(0xff79c6),
@@ -391,6 +416,11 @@ impl Theme {
                 border_highlight: Color::hex(0xff0032),
                 selection: Color::hex(0x330008),
                 comment: Color::hex(0x660010),
+
+                // Button accent (ROG red - on-brand accent color)
+                button_accent: Color::hex(0xff0032),
+                button_accent_hover: Color::hex(0xff3355),
+                button_accent_active: Color::hex(0xcc0028),
 
                 graph_line1: Color::hex(0xff0032),
                 graph_line2: Color::hex(0x00ff88),
@@ -445,6 +475,11 @@ impl Theme {
                 selection: Color::hex(0x003300),
                 comment: Color::hex(0x006600),
 
+                // Button accent (Matrix green - the iconic green)
+                button_accent: Color::hex(0x00ff00),
+                button_accent_hover: Color::hex(0x33ff33),
+                button_accent_active: Color::hex(0x00cc00),
+
                 graph_line1: Color::hex(0x00ff00),
                 graph_line2: Color::hex(0x00ffcc),
                 graph_line3: Color::hex(0xccff00),
@@ -497,6 +532,11 @@ impl Theme {
                 border_highlight: Color::hex(0xff00ff),
                 selection: Color::hex(0x2a2f4a),
                 comment: Color::hex(0x4a4f6a),
+
+                // Button accent (Cyberpunk magenta/pink - neon accent)
+                button_accent: Color::hex(0xff00ff),
+                button_accent_hover: Color::hex(0xff44ff),
+                button_accent_active: Color::hex(0xcc00cc),
 
                 graph_line1: Color::hex(0xff00ff),
                 graph_line2: Color::hex(0x00ffff),

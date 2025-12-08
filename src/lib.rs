@@ -215,6 +215,10 @@ pub mod nvml_backend;
 // Display command runner abstraction for testability
 pub mod display_backend;
 
+// GUI module (requires gui feature)
+#[cfg(feature = "gui")]
+pub mod gui;
+
 // Re-export commonly used types
 pub use config::Config;
 pub use profiles::Profile;

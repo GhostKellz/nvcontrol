@@ -2,7 +2,8 @@
 use eframe::egui;
 #[cfg(feature = "gui")]
 use nvcontrol::{
-    config, display, fan, gamescope, latency, overclocking, recording, theme, vibrance, vrr,
+    asus_power_detector, config, display, fan, gamescope, latency, overclocking, recording, theme,
+    vibrance, vrr,
 };
 
 // Phosphor icon constants for clean, consistent icons
@@ -102,6 +103,16 @@ struct ContainerInfo {
 
 #[cfg(feature = "gui")]
 fn main() -> eframe::Result<()> {
+    // Check for --legacy flag to use the old monolithic GUI
+    let args: Vec<String> = std::env::args().collect();
+    let use_legacy = args.iter().any(|a| a == "--legacy" || a == "--legacy-gui");
+
+    if !use_legacy {
+        // Use the new modular GUI (default)
+        return nvcontrol::gui::run();
+    }
+
+    // Legacy GUI below (kept for compatibility during transition)
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([900.0, 600.0])
@@ -132,15 +143,12 @@ fn main() -> eframe::Result<()> {
             visuals.extreme_bg_color = colors.bg_dark.to_egui();
             visuals.widgets.noninteractive.bg_fill = colors.bg_highlight.to_egui();
             visuals.widgets.noninteractive.fg_stroke = egui::Stroke::new(1.0, colors.fg.to_egui());
-            // Minty green buttons - fresh mint green with white text
-            let mint_green = egui::Color32::from_rgb(0x3E, 0xB4, 0x89); // #3EB489 mint green
-            let mint_light = egui::Color32::from_rgb(0x50, 0xC8, 0x78); // #50C878 lighter mint
-            let mint_dark = egui::Color32::from_rgb(0x2E, 0x8B, 0x6A); // #2E8B6A darker mint
-            visuals.widgets.inactive.bg_fill = mint_dark;
+            // Button accent colors from theme palette (each theme defines its own)
+            visuals.widgets.inactive.bg_fill = colors.button_accent_active.to_egui();
             visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, egui::Color32::WHITE);
-            visuals.widgets.hovered.bg_fill = mint_green;
+            visuals.widgets.hovered.bg_fill = colors.button_accent.to_egui();
             visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.5, egui::Color32::WHITE);
-            visuals.widgets.active.bg_fill = mint_light;
+            visuals.widgets.active.bg_fill = colors.button_accent_hover.to_egui();
             visuals.widgets.active.fg_stroke = egui::Stroke::new(2.0, colors.bg_dark.to_egui());
             visuals.selection.bg_fill = colors.selection.to_egui();
             visuals.hyperlink_color = colors.blue.to_egui();
@@ -255,6 +263,11 @@ struct NvControlApp {
     // Driver readiness validation (cached)
     driver_validation: Option<nvcontrol::state::DriverValidationState>,
     driver_capabilities: Option<nvcontrol::drivers::DriverCapabilities>,
+
+    // ASUS Power Monitor+ state
+    asus_power_detector: Option<asus_power_detector::AsusPowerDetector>,
+    asus_power_status: Option<asus_power_detector::PowerConnectorStatus>,
+    asus_power_last_update: std::time::Instant,
 }
 
 #[cfg(feature = "gui")]
@@ -342,12 +355,14 @@ impl NvControlApp {
                     let compute_cap = device.cuda_compute_capability().ok();
                     let (architecture, compute_capability) = if let Some(cc) = compute_cap {
                         let arch = match (cc.major, cc.minor) {
-                            (10, _) => "Blackwell",
-                            (8, 9) => "Ada Lovelace",
-                            (8, 6) | (8, 0) => "Ampere",
-                            (7, 5) => "Turing",
-                            (7, 0) => "Volta",
-                            (6, _) => "Pascal",
+                            (12, _) => "Blackwell",         // RTX 50 series (SM 12.0)
+                            (10, _) => "Blackwell",         // Blackwell alternate
+                            (8, 9) => "Ada Lovelace",       // RTX 40 series
+                            (8, 6) | (8, 0) => "Ampere",    // RTX 30 series
+                            (7, 5) => "Turing",             // RTX 20 series
+                            (7, 0) => "Volta",              // Titan V, Tesla V100
+                            (6, _) => "Pascal",             // GTX 10 series
+                            (5, _) => "Maxwell",            // GTX 9 series
                             _ => "Unknown",
                         };
                         (arch.to_string(), format!("{}.{}", cc.major, cc.minor))
@@ -448,6 +463,17 @@ impl NvControlApp {
             // Driver validation - load cached or fetch new
             driver_validation: nvcontrol::state::DriverValidationState::load(),
             driver_capabilities: nvcontrol::drivers::DriverCapabilities::detect().ok(),
+
+            // ASUS Power Monitor+ - try to detect on startup
+            asus_power_detector: {
+                let gpus = asus_power_detector::detect_asus_gpus();
+                gpus.into_iter()
+                    .find(|(_, model)| model.supports_power_detector())
+                    .and_then(|(pci_id, _)| asus_power_detector::AsusPowerDetector::new(&pci_id).ok())
+                    .filter(|d| d.is_supported())
+            },
+            asus_power_status: None,
+            asus_power_last_update: std::time::Instant::now(),
         }
     }
 
@@ -657,25 +683,21 @@ impl NvControlApp {
         visuals.widgets.noninteractive.fg_stroke = egui::Stroke::new(1.0, colors.fg.to_egui());
         visuals.widgets.noninteractive.bg_stroke = egui::Stroke::new(1.0, colors.border.to_egui());
 
-        // Minty green buttons - fresh, vibrant mint colors with white text
-        let mint_green = egui::Color32::from_rgb(0x3E, 0xB4, 0x89); // #3EB489 mint green
-        let mint_light = egui::Color32::from_rgb(0x50, 0xC8, 0x78); // #50C878 lighter mint
-        let mint_dark = egui::Color32::from_rgb(0x2E, 0x8B, 0x6A); // #2E8B6A darker mint
-
-        // Buttons at rest - dark mint background with white text
-        visuals.widgets.inactive.bg_fill = mint_dark;
+        // Button accent colors from theme palette (each theme defines its own)
+        // Buttons at rest - darker accent background with white text
+        visuals.widgets.inactive.bg_fill = colors.button_accent_active.to_egui();
         visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, egui::Color32::WHITE);
-        visuals.widgets.inactive.bg_stroke = egui::Stroke::new(1.0, mint_green);
+        visuals.widgets.inactive.bg_stroke = egui::Stroke::new(1.0, colors.button_accent.to_egui());
 
-        // Buttons on hover - brighter mint
-        visuals.widgets.hovered.bg_fill = mint_green;
+        // Buttons on hover - main accent color
+        visuals.widgets.hovered.bg_fill = colors.button_accent.to_egui();
         visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.5, egui::Color32::WHITE);
-        visuals.widgets.hovered.bg_stroke = egui::Stroke::new(1.0, mint_light);
+        visuals.widgets.hovered.bg_stroke = egui::Stroke::new(1.0, colors.button_accent_hover.to_egui());
 
-        // Buttons when clicked/active - lightest mint
-        visuals.widgets.active.bg_fill = mint_light;
+        // Buttons when clicked/active - lightest accent
+        visuals.widgets.active.bg_fill = colors.button_accent_hover.to_egui();
         visuals.widgets.active.fg_stroke = egui::Stroke::new(2.0, colors.bg_dark.to_egui());
-        visuals.widgets.active.bg_stroke = egui::Stroke::new(1.0, mint_green);
+        visuals.widgets.active.bg_stroke = egui::Stroke::new(1.0, colors.button_accent.to_egui());
 
         visuals.widgets.open.bg_fill = colors.bg_popup.to_egui();
         visuals.widgets.open.fg_stroke = egui::Stroke::new(1.0, colors.fg.to_egui());
@@ -1234,7 +1256,7 @@ impl eframe::App for NvControlApp {
                     // Version info at bottom
                     ui.add_space(10.0);
                     ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
-                        ui.label(egui::RichText::new("v0.7.2").small().weak());
+                        ui.label(egui::RichText::new(format!("v{}", env!("CARGO_PKG_VERSION"))).small().weak());
                     });
                 });
             });
@@ -1325,9 +1347,9 @@ impl eframe::App for NvControlApp {
                             ui.separator();
 
                             if let Some(ref stats) = self.gpu_stats {
-                                // GPU Name with architecture badge
+                                // GPU Name - cyan for visibility
                                 ui.horizontal(|ui| {
-                                    ui.label(egui::RichText::new(&stats.name).strong().size(16.0));
+                                    ui.label(egui::RichText::new(&stats.name).strong().size(16.0).color(theme_colors.cyan.to_egui()));
                                 });
 
                                 ui.add_space(4.0);
@@ -1341,46 +1363,48 @@ impl eframe::App for NvControlApp {
                                         "Turing" => theme_colors.purple.to_egui(),
                                         "Volta" => theme_colors.blue.to_egui(),
                                         "Pascal" => theme_colors.orange.to_egui(),
-                                        _ => theme_colors.fg_dark.to_egui(),
+                                        _ => theme_colors.yellow.to_egui(), // Unknown gets yellow for visibility
                                     };
                                     ui.label(
                                         egui::RichText::new(format!("󰘚 {}", stats.architecture))
                                             .color(arch_color)
                                             .background_color(theme_colors.bg_highlight.to_egui()),
                                     );
-                                    ui.label(format!("SM {}", stats.compute_capability));
+                                    ui.label(egui::RichText::new(format!("SM {}", stats.compute_capability)).color(theme_colors.cyan.to_egui()));
                                 });
 
                                 ui.add_space(6.0);
 
-                                // Specs grid
+                                // Specs grid - use cyan for labels, green for values
                                 egui::Grid::new("gpu_specs")
                                     .num_columns(2)
                                     .spacing([20.0, 4.0])
                                     .show(ui, |ui| {
-                                        ui.label("CUDA Cores:");
+                                        ui.label(egui::RichText::new("CUDA Cores:").color(theme_colors.cyan.to_egui()));
                                         ui.label(
                                             egui::RichText::new(format!("{}", stats.cuda_cores))
-                                                .strong(),
+                                                .strong()
+                                                .color(theme_colors.green.to_egui()),
                                         );
                                         ui.end_row();
 
-                                        ui.label("VRAM:");
+                                        ui.label(egui::RichText::new("VRAM:").color(theme_colors.cyan.to_egui()));
                                         ui.label(
                                             egui::RichText::new(format!(
-                                                "{:.0} GB GDDR",
+                                                "{:.0} GB GDDR7",
                                                 stats.memory_total as f64 / 1e9
                                             ))
-                                            .strong(),
+                                            .strong()
+                                            .color(theme_colors.green.to_egui()),
                                         );
                                         ui.end_row();
 
-                                        ui.label("Driver:");
-                                        ui.label(&stats.driver_version);
+                                        ui.label(egui::RichText::new("Driver:").color(theme_colors.cyan.to_egui()));
+                                        ui.label(egui::RichText::new(&stats.driver_version).color(theme_colors.green.to_egui()));
                                         ui.end_row();
 
-                                        ui.label("PCI Bus:");
-                                        ui.label(egui::RichText::new(&stats.pci_bus).small());
+                                        ui.label(egui::RichText::new("PCI Bus:").color(theme_colors.cyan.to_egui()));
+                                        ui.label(egui::RichText::new(&stats.pci_bus).small().color(theme_colors.green.to_egui()));
                                         ui.end_row();
                                     });
                             } else {
@@ -1552,6 +1576,96 @@ impl eframe::App for NvControlApp {
                             }
                         });
                     });
+
+                    // ASUS Power Monitor+ Section (only shown if ASUS ROG card detected)
+                    if self.asus_power_detector.is_some() {
+                        ui.add_space(8.0);
+                        let pm_colors = self.theme_colors();
+                        ui.group(|ui| {
+                            ui.label(
+                                egui::RichText::new(format!("{} Power Monitor+", icons::POWER))
+                                    .strong()
+                                    .color(pm_colors.orange.to_egui()),
+                            );
+                            ui.separator();
+
+                            // Update power status every 2 seconds
+                            if self.asus_power_last_update.elapsed() > std::time::Duration::from_secs(2) {
+                                if let Some(ref detector) = self.asus_power_detector {
+                                    self.asus_power_status = detector.read_power_rails().ok();
+                                    self.asus_power_last_update = std::time::Instant::now();
+                                }
+                            }
+
+                            if let Some(ref status) = self.asus_power_status {
+                                // Health status with color coding
+                                let (health_color, health_icon) = match status.health {
+                                    asus_power_detector::PowerHealth::Good => (pm_colors.green.to_egui(), icons::OK),
+                                    asus_power_detector::PowerHealth::Warning => (pm_colors.yellow.to_egui(), icons::WARN),
+                                    asus_power_detector::PowerHealth::Critical => (pm_colors.red.to_egui(), icons::ERR),
+                                    asus_power_detector::PowerHealth::Unknown => (pm_colors.fg_dark.to_egui(), icons::INFO),
+                                };
+
+                                ui.horizontal(|ui| {
+                                    ui.label(egui::RichText::new(&status.model).color(pm_colors.fg.to_egui()));
+                                    ui.separator();
+                                    ui.label(
+                                        egui::RichText::new(format!("{} {}", health_icon, status.health.label()))
+                                            .color(health_color)
+                                            .strong(),
+                                    );
+                                });
+
+                                ui.add_space(4.0);
+
+                                // Power rails in a compact grid
+                                ui.horizontal(|ui| {
+                                    ui.label(egui::RichText::new("12V-2x6 Rails:").small().color(pm_colors.fg_dark.to_egui()));
+                                    for rail in &status.rails {
+                                        let rail_color = if rail.warning {
+                                            pm_colors.red.to_egui()
+                                        } else {
+                                            pm_colors.green.to_egui()
+                                        };
+                                        let current_str = rail.current_ma
+                                            .map(|c| format!("{:.1}A", c as f32 / 1000.0))
+                                            .unwrap_or_else(|| "?".to_string());
+                                        ui.label(
+                                            egui::RichText::new(current_str)
+                                                .small()
+                                                .color(rail_color),
+                                        );
+                                    }
+                                });
+
+                                // Total power estimate
+                                if let Some(power) = status.total_power_w {
+                                    ui.horizontal(|ui| {
+                                        ui.label(egui::RichText::new("Connector Power:").small().color(pm_colors.fg_dark.to_egui()));
+                                        ui.label(
+                                            egui::RichText::new(format!("{:.0}W", power))
+                                                .color(pm_colors.cyan.to_egui()),
+                                        );
+                                    });
+                                }
+
+                                if status.has_warnings {
+                                    ui.add_space(2.0);
+                                    ui.label(
+                                        egui::RichText::new("⚠ Check 12V-2x6 connector seating")
+                                            .small()
+                                            .color(pm_colors.yellow.to_egui()),
+                                    );
+                                }
+                            } else {
+                                ui.label(
+                                    egui::RichText::new("Reading power rails...")
+                                        .small()
+                                        .color(pm_colors.fg_dark.to_egui()),
+                                );
+                            }
+                        });
+                    }
 
                     ui.add_space(10.0);
 
@@ -4413,7 +4527,7 @@ impl eframe::App for NvControlApp {
 
                     ui.add_space(10.0);
                     ui.separator();
-                    ui.label("⚠️  Note: Auto-overclocking will take 10-30 minutes depending on safety mode.");
+                    ui.colored_label(egui::Color32::YELLOW, "Note: Auto-overclocking will take 10-30 minutes depending on safety mode.");
                     ui.label("The wizard will test stability at each step and auto-rollback if unstable.");
                 });
             }
@@ -4680,25 +4794,18 @@ impl eframe::App for NvControlApp {
                 egui::CentralPanel::default().show(ctx, |ui| {
                     ui.heading(format!("{} On-Screen Display (OSD)", icons::CHART));
                     ui.label(
-                        egui::RichText::new(
-                            "Configure performance overlay • Future: envyhub integration",
-                        )
-                        .small()
-                        .color(egui::Color32::GRAY),
+                        egui::RichText::new("Configure performance overlay via MangoHud")
+                            .small()
+                            .color(egui::Color32::GRAY),
                     );
                     ui.add_space(8.0);
 
-                    // Backend status (MangoHud for now, envyhub later)
+                    // Backend status
                     ui.group(|ui| {
                         ui.label(egui::RichText::new("🔧 OSD Backend").strong());
                         ui.horizontal(|ui| {
                             if self.mangohud_installed {
                                 ui.label("✅ MangoHud detected");
-                                ui.label(
-                                    egui::RichText::new("(envyhub coming soon)")
-                                        .small()
-                                        .color(egui::Color32::GRAY),
-                                );
                             } else {
                                 ui.label("❌ No OSD backend installed");
                                 if ui.button("📋 Install MangoHud").clicked() {
@@ -5078,7 +5185,7 @@ impl eframe::App for NvControlApp {
 
                             egui::Grid::new("about_info").num_columns(2).spacing([20.0, 4.0]).show(ui, |ui| {
                                 ui.label("Version:");
-                                ui.label(egui::RichText::new("0.7.0").strong().color(settings_colors.green.to_egui()));
+                                ui.label(egui::RichText::new(env!("CARGO_PKG_VERSION")).strong().color(settings_colors.green.to_egui()));
                                 ui.end_row();
 
                                 ui.label("Theme:");
@@ -5097,8 +5204,8 @@ impl eframe::App for NvControlApp {
                                     && let Some(ref stats) = self.gpu_stats
                                 {
                                     let info = format!(
-                                        "nvcontrol v0.7.5\n\nGPU: {}\nArchitecture: {}\nDriver: {}\nVRAM: {:.0} GB\nTheme: {}",
-                                        stats.name, stats.architecture, stats.driver_version, stats.memory_total as f64 / 1e9, self.current_theme.name()
+                                        "nvcontrol v{}\n\nGPU: {}\nArchitecture: {}\nDriver: {}\nVRAM: {:.0} GB\nTheme: {}",
+                                        env!("CARGO_PKG_VERSION"), stats.name, stats.architecture, stats.driver_version, stats.memory_total as f64 / 1e9, self.current_theme.name()
                                     );
                                     ctx.copy_text(info);
                                 }
@@ -5110,78 +5217,73 @@ impl eframe::App for NvControlApp {
                                 }
                             });
 
-                            ui.add_space(8.0);
-
-                            // Ecosystem links
-                            ui.collapsing("🔗 Related Projects", |ui| {
-                                ui.horizontal_wrapped(|ui| {
-                                    if ui.small_button("nvprime").on_hover_text("Unified NVIDIA platform").clicked() {
-                                        let _ = std::process::Command::new("xdg-open").arg("https://github.com/ghostkellz/nvprime").spawn();
-                                    }
-                                    if ui.small_button("envyhub").on_hover_text("Performance overlay").clicked() {
-                                        let _ = std::process::Command::new("xdg-open").arg("https://github.com/ghostkellz/envyhub").spawn();
-                                    }
-                                    if ui.small_button("nvproton").on_hover_text("Proton integration").clicked() {
-                                        let _ = std::process::Command::new("xdg-open").arg("https://github.com/ghostkellz/nvproton").spawn();
-                                    }
-                                    if ui.small_button("nvshader").on_hover_text("Shader cache management").clicked() {
-                                        let _ = std::process::Command::new("xdg-open").arg("https://github.com/ghostkellz/nvshader").spawn();
-                                    }
-                                });
-                            });
                         });
                     });
 
                     ui.add_space(10.0);
 
                     // Keyboard shortcuts section
+                    let kb_colors = self.theme_colors();
                     ui.columns(2, |columns| {
                         columns[0].group(|ui| {
-                            let settings_colors = self.theme_colors();
-                            ui.label(egui::RichText::new("⌨️ Keyboard Shortcuts").strong().color(settings_colors.yellow.to_egui()));
+                            ui.label(egui::RichText::new("⌨️ Keyboard Shortcuts").strong().color(kb_colors.yellow.to_egui()));
                             ui.separator();
 
                             egui::Grid::new("shortcuts_grid").num_columns(2).spacing([40.0, 4.0]).show(ui, |ui| {
-                                let key_style = |text: &str| egui::RichText::new(text).monospace().strong();
-                                let desc_style = |text: &str| egui::RichText::new(text).small();
-
-                                ui.label(key_style("1-9"));
-                                ui.label(desc_style("Quick tab navigation"));
+                                ui.label(egui::RichText::new("1-9").monospace().strong().color(kb_colors.cyan.to_egui()));
+                                ui.label(egui::RichText::new("Quick tab navigation").small().color(kb_colors.fg.to_egui()));
                                 ui.end_row();
 
-                                ui.label(key_style("Ctrl+S"));
-                                ui.label(desc_style("Save configuration"));
+                                ui.label(egui::RichText::new("Ctrl+S").monospace().strong().color(kb_colors.cyan.to_egui()));
+                                ui.label(egui::RichText::new("Save configuration").small().color(kb_colors.fg.to_egui()));
                                 ui.end_row();
 
-                                ui.label(key_style("Ctrl+R"));
-                                ui.label(desc_style("Reset OC to stock"));
+                                ui.label(egui::RichText::new("Ctrl+R").monospace().strong().color(kb_colors.cyan.to_egui()));
+                                ui.label(egui::RichText::new("Reset OC to stock").small().color(kb_colors.fg.to_egui()));
                                 ui.end_row();
 
-                                ui.label(key_style("Ctrl+T"));
-                                ui.label(desc_style("Cycle themes"));
+                                ui.label(egui::RichText::new("Ctrl+T").monospace().strong().color(kb_colors.cyan.to_egui()));
+                                ui.label(egui::RichText::new("Cycle themes").small().color(kb_colors.fg.to_egui()));
                                 ui.end_row();
 
-                                ui.label(key_style("F5"));
-                                ui.label(desc_style("Refresh display"));
+                                ui.label(egui::RichText::new("F5").monospace().strong().color(kb_colors.cyan.to_egui()));
+                                ui.label(egui::RichText::new("Refresh display").small().color(kb_colors.fg.to_egui()));
                                 ui.end_row();
                             });
                         });
 
                         columns[1].group(|ui| {
-                            let settings_colors = self.theme_colors();
-                            ui.label(egui::RichText::new("🔢 Tab Shortcuts").strong().color(settings_colors.cyan.to_egui()));
+                            ui.label(egui::RichText::new("🔢 Tab Shortcuts").strong().color(kb_colors.cyan.to_egui()));
                             ui.separator();
 
                             egui::Grid::new("tab_shortcuts").num_columns(2).spacing([20.0, 2.0]).show(ui, |ui| {
-                                ui.label(egui::RichText::new("1").monospace()); ui.label("GPU Status"); ui.end_row();
-                                ui.label(egui::RichText::new("2").monospace()); ui.label("Overclock"); ui.end_row();
-                                ui.label(egui::RichText::new("3").monospace()); ui.label("Fan Control"); ui.end_row();
-                                ui.label(egui::RichText::new("4").monospace()); ui.label("Display"); ui.end_row();
-                                ui.label(egui::RichText::new("5").monospace()); ui.label("Vibrance"); ui.end_row();
-                                ui.label(egui::RichText::new("6").monospace()); ui.label("HDR"); ui.end_row();
-                                ui.label(egui::RichText::new("7").monospace()); ui.label("Profiles"); ui.end_row();
-                                ui.label(egui::RichText::new("8").monospace()); ui.label("OSD"); ui.end_row();
-                                ui.label(egui::RichText::new("9").monospace()); ui.label("Settings"); ui.end_row();
+                                ui.label(egui::RichText::new("1").monospace().color(kb_colors.purple.to_egui()));
+                                ui.label(egui::RichText::new("GPU Status").color(kb_colors.fg.to_egui()));
+                                ui.end_row();
+                                ui.label(egui::RichText::new("2").monospace().color(kb_colors.purple.to_egui()));
+                                ui.label(egui::RichText::new("Overclock").color(kb_colors.fg.to_egui()));
+                                ui.end_row();
+                                ui.label(egui::RichText::new("3").monospace().color(kb_colors.purple.to_egui()));
+                                ui.label(egui::RichText::new("Fan Control").color(kb_colors.fg.to_egui()));
+                                ui.end_row();
+                                ui.label(egui::RichText::new("4").monospace().color(kb_colors.purple.to_egui()));
+                                ui.label(egui::RichText::new("Display").color(kb_colors.fg.to_egui()));
+                                ui.end_row();
+                                ui.label(egui::RichText::new("5").monospace().color(kb_colors.purple.to_egui()));
+                                ui.label(egui::RichText::new("Vibrance").color(kb_colors.fg.to_egui()));
+                                ui.end_row();
+                                ui.label(egui::RichText::new("6").monospace().color(kb_colors.purple.to_egui()));
+                                ui.label(egui::RichText::new("HDR").color(kb_colors.fg.to_egui()));
+                                ui.end_row();
+                                ui.label(egui::RichText::new("7").monospace().color(kb_colors.purple.to_egui()));
+                                ui.label(egui::RichText::new("Profiles").color(kb_colors.fg.to_egui()));
+                                ui.end_row();
+                                ui.label(egui::RichText::new("8").monospace().color(kb_colors.purple.to_egui()));
+                                ui.label(egui::RichText::new("OSD").color(kb_colors.fg.to_egui()));
+                                ui.end_row();
+                                ui.label(egui::RichText::new("9").monospace().color(kb_colors.purple.to_egui()));
+                                ui.label(egui::RichText::new("Settings").color(kb_colors.fg.to_egui()));
+                                ui.end_row();
                             });
                         });
                     });
