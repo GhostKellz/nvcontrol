@@ -75,34 +75,39 @@ impl NvControlApp {
 
     /// Handle keyboard shortcuts
     fn handle_keyboard(&mut self, ctx: &egui::Context) {
+        // Don't process number key shortcuts if a text field has focus
+        let has_focus = ctx.memory(|m| m.focused().is_some());
+
         ctx.input(|i| {
-            // Number keys for tab switching
-            if i.key_pressed(egui::Key::Num1) {
-                self.state.tab = Tab::Gpu;
-            }
-            if i.key_pressed(egui::Key::Num2) {
-                self.state.tab = Tab::Overclock;
-            }
-            if i.key_pressed(egui::Key::Num3) {
-                self.state.tab = Tab::Fan;
-            }
-            if i.key_pressed(egui::Key::Num4) {
-                self.state.tab = Tab::Display;
-            }
-            if i.key_pressed(egui::Key::Num5) {
-                self.state.tab = Tab::Vibrance;
-            }
-            if i.key_pressed(egui::Key::Num6) {
-                self.state.tab = Tab::Hdr;
-            }
-            if i.key_pressed(egui::Key::Num7) {
-                self.state.tab = Tab::GameProfiles;
-            }
-            if i.key_pressed(egui::Key::Num8) {
-                self.state.tab = Tab::Osd;
-            }
-            if i.key_pressed(egui::Key::Num9) {
-                self.state.tab = Tab::Settings;
+            // Number keys for tab switching (only when no text input is focused)
+            if !has_focus {
+                if i.key_pressed(egui::Key::Num1) {
+                    self.state.tab = Tab::Gpu;
+                }
+                if i.key_pressed(egui::Key::Num2) {
+                    self.state.tab = Tab::Overclock;
+                }
+                if i.key_pressed(egui::Key::Num3) {
+                    self.state.tab = Tab::Fan;
+                }
+                if i.key_pressed(egui::Key::Num4) {
+                    self.state.tab = Tab::Display;
+                }
+                if i.key_pressed(egui::Key::Num5) {
+                    self.state.tab = Tab::Vibrance;
+                }
+                if i.key_pressed(egui::Key::Num6) {
+                    self.state.tab = Tab::Hdr;
+                }
+                if i.key_pressed(egui::Key::Num7) {
+                    self.state.tab = Tab::GameProfiles;
+                }
+                if i.key_pressed(egui::Key::Num8) {
+                    self.state.tab = Tab::Osd;
+                }
+                if i.key_pressed(egui::Key::Num9) {
+                    self.state.tab = Tab::Settings;
+                }
             }
 
             // Ctrl+T to cycle themes
@@ -141,12 +146,11 @@ impl NvControlApp {
                     let selected = self.state.tab == tab;
                     let response = ui.add(
                         egui::Button::new(
-                            egui::RichText::new(format!("{} {}", icon, label))
-                                .color(if selected {
-                                    colors.cyan.to_egui()
-                                } else {
-                                    colors.fg.to_egui()
-                                }),
+                            egui::RichText::new(format!("{} {}", icon, label)).color(if selected {
+                                colors.cyan.to_egui()
+                            } else {
+                                colors.fg.to_egui()
+                            }),
                         )
                         .fill(if selected {
                             colors.selection.to_egui()
@@ -188,7 +192,12 @@ impl NvControlApp {
         }
 
         // Add status indicators
-        if self.state.driver_validation.as_ref().map_or(false, |d| d.passed) {
+        if self
+            .state
+            .driver_validation
+            .as_ref()
+            .map_or(false, |d| d.passed)
+        {
             header = header.add_status("Driver OK", StatusState::Ok);
         }
 
@@ -237,22 +246,20 @@ impl eframe::App for NvControlApp {
             });
 
         // Render main content
-        egui::CentralPanel::default().show(ctx, |ui| {
-            match self.state.tab {
-                Tab::Gpu => super::tabs::gpu::render(ui, &mut self.state, ctx),
-                Tab::Overclock => super::tabs::overclock::render(ui, &mut self.state, ctx),
-                Tab::Fan => super::tabs::fan::render(ui, &mut self.state, ctx),
-                Tab::Display => super::tabs::display::render(ui, &mut self.state, ctx),
-                Tab::Vibrance => super::tabs::vibrance::render(ui, &mut self.state, ctx),
-                Tab::Hdr => super::tabs::hdr::render(ui, &mut self.state, ctx),
-                Tab::Vrr => super::tabs::vrr::render(ui, &mut self.state, ctx),
-                Tab::GameProfiles => super::tabs::game_profiles::render(ui, &mut self.state, ctx),
-                Tab::Osd => super::tabs::osd::render(ui, &mut self.state, ctx),
-                Tab::Latency => super::tabs::latency::render(ui, &mut self.state, ctx),
-                Tab::Gamescope => super::tabs::gamescope::render(ui, &mut self.state, ctx),
-                Tab::Recording => super::tabs::recording::render(ui, &mut self.state, ctx),
-                Tab::Settings => super::tabs::settings::render(ui, &mut self.state, ctx),
-            }
+        egui::CentralPanel::default().show(ctx, |ui| match self.state.tab {
+            Tab::Gpu => super::tabs::gpu::render(ui, &mut self.state, ctx),
+            Tab::Overclock => super::tabs::overclock::render(ui, &mut self.state, ctx),
+            Tab::Fan => super::tabs::fan::render(ui, &mut self.state, ctx),
+            Tab::Display => super::tabs::display::render(ui, &mut self.state, ctx),
+            Tab::Vibrance => super::tabs::vibrance::render(ui, &mut self.state, ctx),
+            Tab::Hdr => super::tabs::hdr::render(ui, &mut self.state, ctx),
+            Tab::Vrr => super::tabs::vrr::render(ui, &mut self.state, ctx),
+            Tab::GameProfiles => super::tabs::game_profiles::render(ui, &mut self.state, ctx),
+            Tab::Osd => super::tabs::osd::render(ui, &mut self.state, ctx),
+            Tab::Latency => super::tabs::latency::render(ui, &mut self.state, ctx),
+            Tab::Gamescope => super::tabs::gamescope::render(ui, &mut self.state, ctx),
+            Tab::Recording => super::tabs::recording::render(ui, &mut self.state, ctx),
+            Tab::Settings => super::tabs::settings::render(ui, &mut self.state, ctx),
         });
 
         // Render toasts

@@ -1993,7 +1993,10 @@ impl TuiApp {
         let area = centered_rect(75, 90, f.area());
         f.render_widget(Clear, area);
 
-        let version_line = format!("║          󰢮 nvcontrol v{} - TUI Keyboard Reference              ║", env!("CARGO_PKG_VERSION"));
+        let version_line = format!(
+            "║          󰢮 nvcontrol v{} - TUI Keyboard Reference              ║",
+            env!("CARGO_PKG_VERSION")
+        );
         let help_text: Vec<&str> = vec![
             "╔═══════════════════════════════════════════════════════════════════╗",
             &version_line,

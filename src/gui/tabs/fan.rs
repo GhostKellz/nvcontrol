@@ -79,11 +79,7 @@ fn render_fan_status(
                 });
 
                 if fan_info.controllable {
-                    let current_speed = state
-                        .fan_speeds
-                        .get(&fan_info.id)
-                        .copied()
-                        .unwrap_or(50);
+                    let current_speed = state.fan_speeds.get(&fan_info.id).copied().unwrap_or(50);
                     let mut new_speed = current_speed;
                     ui.horizontal(|ui| {
                         ui.label("Speed:");
@@ -93,7 +89,9 @@ fn render_fan_status(
                         {
                             state.fan_speeds.insert(fan_info.id, new_speed);
                             if let Err(e) = fan::set_fan_speed(fan_info.id, new_speed) {
-                                state.toasts.error(format!("Failed to set fan speed: {}", e));
+                                state
+                                    .toasts
+                                    .error(format!("Failed to set fan speed: {}", e));
                             }
                         }
                     });
@@ -197,7 +195,11 @@ fn render_fan_status(
 }
 
 /// Render thermal status card
-fn render_thermal_status(ui: &mut egui::Ui, state: &GuiState, colors: &crate::themes::ColorPalette) {
+fn render_thermal_status(
+    ui: &mut egui::Ui,
+    state: &GuiState,
+    colors: &crate::themes::ColorPalette,
+) {
     Card::new(colors)
         .title("Thermal Status")
         .icon(icons::TEMP)
@@ -237,11 +239,7 @@ fn render_thermal_status(ui: &mut egui::Ui, state: &GuiState, colors: &crate::th
 
                 // Thermal status indicator
                 let (icon, color, desc) = if stats.temperature > 85.0 {
-                    (
-                        "🔥 CRITICAL",
-                        colors.red.to_egui(),
-                        "GPU is overheating!",
-                    )
+                    ("🔥 CRITICAL", colors.red.to_egui(), "GPU is overheating!")
                 } else if stats.temperature > 80.0 {
                     (
                         "⚠️ HOT",
@@ -255,17 +253,9 @@ fn render_thermal_status(ui: &mut egui::Ui, state: &GuiState, colors: &crate::th
                         "Normal gaming temperature",
                     )
                 } else if stats.temperature > 50.0 {
-                    (
-                        "✅ GOOD",
-                        colors.green.to_egui(),
-                        "Healthy operating range",
-                    )
+                    ("✅ GOOD", colors.green.to_egui(), "Healthy operating range")
                 } else {
-                    (
-                        "❄️ COOL",
-                        colors.cyan.to_egui(),
-                        "Low load temperature",
-                    )
+                    ("❄️ COOL", colors.cyan.to_egui(), "Low load temperature")
                 };
 
                 ui.horizontal(|ui| {
@@ -285,7 +275,11 @@ fn render_thermal_status(ui: &mut egui::Ui, state: &GuiState, colors: &crate::th
                     );
                 });
             } else {
-                ui.label(egui::RichText::new("Waiting for GPU stats...").weak().italics());
+                ui.label(
+                    egui::RichText::new("Waiting for GPU stats...")
+                        .weak()
+                        .italics(),
+                );
             }
         });
 }

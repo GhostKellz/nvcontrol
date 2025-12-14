@@ -28,7 +28,10 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
             // Enable/disable toggle
             ui.horizontal(|ui| {
                 let was_enabled = state.game_auto_config.enabled;
-                ui.checkbox(&mut state.game_auto_config.enabled, "Enable Auto-Application");
+                ui.checkbox(
+                    &mut state.game_auto_config.enabled,
+                    "Enable Auto-Application",
+                );
                 if state.game_auto_config.enabled != was_enabled {
                     // Status changed
                     if state.game_auto_config.enabled {
@@ -80,9 +83,11 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                 }
             });
             ui.label(
-                egui::RichText::new("Wait before applying profile (prevents issues if game crashes on start)")
-                    .small()
-                    .weak(),
+                egui::RichText::new(
+                    "Wait before applying profile (prevents issues if game crashes on start)",
+                )
+                .small()
+                .weak(),
             );
 
             ui.add_space(8.0);
@@ -185,8 +190,10 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                     .color(colors.cyan.to_egui()),
             );
             ui.label(
-                egui::RichText::new("   Create .toml files in the profiles directory with game executable names")
-                    .small(),
+                egui::RichText::new(
+                    "   Create .toml files in the profiles directory with game executable names",
+                )
+                .small(),
             );
 
             ui.add_space(4.0);
@@ -209,8 +216,10 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                     .color(colors.cyan.to_egui()),
             );
             ui.label(
-                egui::RichText::new("   nvcontrol detects the game and applies the matching profile")
-                    .small(),
+                egui::RichText::new(
+                    "   nvcontrol detects the game and applies the matching profile",
+                )
+                .small(),
             );
 
             ui.add_space(8.0);

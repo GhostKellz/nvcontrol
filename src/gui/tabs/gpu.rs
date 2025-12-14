@@ -46,8 +46,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, ctx: &egui::Context) {
                         });
 
                     if ui.button(format!("{} Refresh", icons::REFRESH)).clicked() {
-                        state.available_gpus =
-                            crate::multi_gpu::detect_gpus().unwrap_or_default();
+                        state.available_gpus = crate::multi_gpu::detect_gpus().unwrap_or_default();
                         state.toasts.info("GPU list refreshed");
                     }
                 });
@@ -120,8 +119,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, ctx: &egui::Context) {
                         .spacing([20.0, 4.0])
                         .show(ui, |ui| {
                             ui.label(
-                                egui::RichText::new("CUDA Cores:")
-                                    .color(colors.cyan.to_egui()),
+                                egui::RichText::new("CUDA Cores:").color(colors.cyan.to_egui()),
                             );
                             ui.label(
                                 egui::RichText::new(format!("{}", stats.cuda_cores))
@@ -130,10 +128,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, ctx: &egui::Context) {
                             );
                             ui.end_row();
 
-                            ui.label(
-                                egui::RichText::new("VRAM:")
-                                    .color(colors.cyan.to_egui()),
-                            );
+                            ui.label(egui::RichText::new("VRAM:").color(colors.cyan.to_egui()));
                             ui.label(
                                 egui::RichText::new(format!(
                                     "{:.0} GB GDDR7",
@@ -144,20 +139,14 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, ctx: &egui::Context) {
                             );
                             ui.end_row();
 
-                            ui.label(
-                                egui::RichText::new("Driver:")
-                                    .color(colors.cyan.to_egui()),
-                            );
+                            ui.label(egui::RichText::new("Driver:").color(colors.cyan.to_egui()));
                             ui.label(
                                 egui::RichText::new(&stats.driver_version)
                                     .color(colors.green.to_egui()),
                             );
                             ui.end_row();
 
-                            ui.label(
-                                egui::RichText::new("PCI Bus:")
-                                    .color(colors.cyan.to_egui()),
-                            );
+                            ui.label(egui::RichText::new("PCI Bus:").color(colors.cyan.to_egui()));
                             ui.label(
                                 egui::RichText::new(&stats.pci_bus)
                                     .small()
@@ -166,7 +155,9 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, ctx: &egui::Context) {
                             ui.end_row();
                         });
                 } else {
-                    ui.label(egui::RichText::new("No GPU data available").color(colors.yellow.to_egui()));
+                    ui.label(
+                        egui::RichText::new("No GPU data available").color(colors.yellow.to_egui()),
+                    );
                 }
             });
 
@@ -234,9 +225,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, ctx: &egui::Context) {
                         .num_columns(2)
                         .spacing([20.0, 4.0])
                         .show(ui, |ui| {
-                            ui.label(
-                                egui::RichText::new("Power:").color(colors.fg.to_egui()),
-                            );
+                            ui.label(egui::RichText::new("Power:").color(colors.fg.to_egui()));
                             ui.label(
                                 egui::RichText::new(format!(
                                     "{:.0}W / {:.0}W",
@@ -247,9 +236,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, ctx: &egui::Context) {
                             );
                             ui.end_row();
 
-                            ui.label(
-                                egui::RichText::new("Core:").color(colors.fg.to_egui()),
-                            );
+                            ui.label(egui::RichText::new("Core:").color(colors.fg.to_egui()));
                             ui.label(
                                 egui::RichText::new(format!("{} MHz", stats.core_clock))
                                     .strong()
@@ -257,9 +244,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, ctx: &egui::Context) {
                             );
                             ui.end_row();
 
-                            ui.label(
-                                egui::RichText::new("Memory:").color(colors.fg.to_egui()),
-                            );
+                            ui.label(egui::RichText::new("Memory:").color(colors.fg.to_egui()));
                             ui.label(
                                 egui::RichText::new(format!("{} MHz", stats.memory_clock))
                                     .strong()
@@ -267,9 +252,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, ctx: &egui::Context) {
                             );
                             ui.end_row();
 
-                            ui.label(
-                                egui::RichText::new("Fan:").color(colors.fg.to_egui()),
-                            );
+                            ui.label(egui::RichText::new("Fan:").color(colors.fg.to_egui()));
                             ui.label(
                                 egui::RichText::new(format!("{}%", stats.fan_speed))
                                     .strong()
@@ -278,7 +261,10 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, ctx: &egui::Context) {
                             ui.end_row();
                         });
                 } else {
-                    ui.label(egui::RichText::new("Waiting for GPU data...").color(colors.yellow.to_egui()));
+                    ui.label(
+                        egui::RichText::new("Waiting for GPU data...")
+                            .color(colors.yellow.to_egui()),
+                    );
                 }
             });
     });
@@ -297,10 +283,18 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, ctx: &egui::Context) {
                         ("Warning", colors.yellow.to_egui())
                     } else {
                         match status.health {
-                            crate::asus_power_detector::PowerHealth::Good => ("Good", colors.green.to_egui()),
-                            crate::asus_power_detector::PowerHealth::Warning => ("Warning", colors.yellow.to_egui()),
-                            crate::asus_power_detector::PowerHealth::Critical => ("Critical", colors.red.to_egui()),
-                            crate::asus_power_detector::PowerHealth::Unknown => ("Unknown", colors.fg_dark.to_egui()),
+                            crate::asus_power_detector::PowerHealth::Good => {
+                                ("Good", colors.green.to_egui())
+                            }
+                            crate::asus_power_detector::PowerHealth::Warning => {
+                                ("Warning", colors.yellow.to_egui())
+                            }
+                            crate::asus_power_detector::PowerHealth::Critical => {
+                                ("Critical", colors.red.to_egui())
+                            }
+                            crate::asus_power_detector::PowerHealth::Unknown => {
+                                ("Unknown", colors.fg_dark.to_egui())
+                            }
                         }
                     };
 
@@ -338,9 +332,12 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, ctx: &egui::Context) {
 
                     // Model and bus info
                     ui.label(
-                        egui::RichText::new(format!("Model: {} (I2C bus {})", status.model, status.i2c_bus))
-                            .small()
-                            .color(colors.fg_dark.to_egui()),
+                        egui::RichText::new(format!(
+                            "Model: {} (I2C bus {})",
+                            status.model, status.i2c_bus
+                        ))
+                        .small()
+                        .color(colors.fg_dark.to_egui()),
                     );
 
                     ui.add_space(8.0);
@@ -352,18 +349,42 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, ctx: &egui::Context) {
                             .spacing([20.0, 6.0])
                             .show(ui, |ui| {
                                 // Headers
-                                ui.label(egui::RichText::new("Rail").strong().color(colors.fg.to_egui()));
-                                ui.label(egui::RichText::new("Current").strong().color(colors.fg.to_egui()));
-                                ui.label(egui::RichText::new("Status").strong().color(colors.fg.to_egui()));
+                                ui.label(
+                                    egui::RichText::new("Rail")
+                                        .strong()
+                                        .color(colors.fg.to_egui()),
+                                );
+                                ui.label(
+                                    egui::RichText::new("Current")
+                                        .strong()
+                                        .color(colors.fg.to_egui()),
+                                );
+                                ui.label(
+                                    egui::RichText::new("Status")
+                                        .strong()
+                                        .color(colors.fg.to_egui()),
+                                );
                                 ui.end_row();
 
                                 for rail in &status.rails {
-                                    ui.label(egui::RichText::new(format!("Rail {}", rail.rail_id)).color(colors.fg_dark.to_egui()));
+                                    ui.label(
+                                        egui::RichText::new(format!("Rail {}", rail.rail_id))
+                                            .color(colors.fg_dark.to_egui()),
+                                    );
 
                                     if let Some(current_ma) = rail.current_ma {
-                                        ui.label(egui::RichText::new(format!("{:.2}A", current_ma as f32 / 1000.0)).color(colors.cyan.to_egui()));
+                                        ui.label(
+                                            egui::RichText::new(format!(
+                                                "{:.2}A",
+                                                current_ma as f32 / 1000.0
+                                            ))
+                                            .color(colors.cyan.to_egui()),
+                                        );
                                     } else {
-                                        ui.label(egui::RichText::new("-").color(colors.fg_dark.to_egui()));
+                                        ui.label(
+                                            egui::RichText::new("-")
+                                                .color(colors.fg_dark.to_egui()),
+                                        );
                                     }
 
                                     let rail_color = if rail.warning {
@@ -371,9 +392,14 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, ctx: &egui::Context) {
                                     } else {
                                         colors.green.to_egui()
                                     };
-                                    ui.label(egui::RichText::new(
-                                        if rail.warning { "Warning" } else { "OK" }
-                                    ).color(rail_color));
+                                    ui.label(
+                                        egui::RichText::new(if rail.warning {
+                                            "Warning"
+                                        } else {
+                                            "OK"
+                                        })
+                                        .color(rail_color),
+                                    );
                                     ui.end_row();
                                 }
                             });
@@ -386,12 +412,22 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, ctx: &egui::Context) {
                         ui.add_space(4.0);
 
                         ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new(icons::WARN).color(colors.yellow.to_egui()));
-                            ui.label(egui::RichText::new("Power rail warning detected - check connector seating").color(colors.yellow.to_egui()));
+                            ui.label(
+                                egui::RichText::new(icons::WARN).color(colors.yellow.to_egui()),
+                            );
+                            ui.label(
+                                egui::RichText::new(
+                                    "Power rail warning detected - check connector seating",
+                                )
+                                .color(colors.yellow.to_egui()),
+                            );
                         });
                     }
                 } else {
-                    ui.label(egui::RichText::new("Initializing power monitoring...").color(colors.fg_dark.to_egui()));
+                    ui.label(
+                        egui::RichText::new("Initializing power monitoring...")
+                            .color(colors.fg_dark.to_egui()),
+                    );
                 }
             });
     }

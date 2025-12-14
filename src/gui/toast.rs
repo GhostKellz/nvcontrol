@@ -168,7 +168,11 @@ impl ToastManager {
 
     /// Render all visible toasts
     /// Returns true if any action button was clicked (with the toast index)
-    pub fn show(&mut self, ctx: &egui::Context, colors: &crate::themes::ColorPalette) -> Option<usize> {
+    pub fn show(
+        &mut self,
+        ctx: &egui::Context,
+        colors: &crate::themes::ColorPalette,
+    ) -> Option<usize> {
         self.cleanup();
 
         let mut clicked_action = None;
@@ -234,19 +238,19 @@ impl ToastManager {
 
                                 // Message
                                 ui.vertical(|ui| {
-                                    ui.label(
-                                        egui::RichText::new(&toast.message)
-                                            .color(egui::Color32::from_rgba_unmultiplied(
-                                                colors.fg.r,
-                                                colors.fg.g,
-                                                colors.fg.b,
-                                                alpha,
-                                            )),
-                                    );
+                                    ui.label(egui::RichText::new(&toast.message).color(
+                                        egui::Color32::from_rgba_unmultiplied(
+                                            colors.fg.r,
+                                            colors.fg.g,
+                                            colors.fg.b,
+                                            alpha,
+                                        ),
+                                    ));
 
                                     // Progress bar
                                     let progress_rect = ui.available_rect_before_wrap();
-                                    let progress_width = progress_rect.width() * toast.remaining_fraction();
+                                    let progress_width =
+                                        progress_rect.width() * toast.remaining_fraction();
                                     ui.painter().rect_filled(
                                         egui::Rect::from_min_size(
                                             progress_rect.min,
@@ -257,23 +261,23 @@ impl ToastManager {
                                     );
                                 });
 
-                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                    // Close button
-                                    if ui
-                                        .add(egui::Button::new("×").small())
-                                        .clicked()
-                                    {
-                                        to_remove.push(i);
-                                    }
-
-                                    // Action button if present
-                                    if let Some(ref action) = toast.action {
-                                        if ui.small_button(action).clicked() {
-                                            clicked_action = Some(i);
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        // Close button
+                                        if ui.add(egui::Button::new("×").small()).clicked() {
                                             to_remove.push(i);
                                         }
-                                    }
-                                });
+
+                                        // Action button if present
+                                        if let Some(ref action) = toast.action {
+                                            if ui.small_button(action).clicked() {
+                                                clicked_action = Some(i);
+                                                to_remove.push(i);
+                                            }
+                                        }
+                                    },
+                                );
                             });
                         });
                 });

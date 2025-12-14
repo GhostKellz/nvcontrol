@@ -74,10 +74,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                     }
                 });
             } else {
-                ui.colored_label(
-                    colors.yellow.to_egui(),
-                    "Unable to detect HDR capabilities",
-                );
+                ui.colored_label(colors.yellow.to_egui(), "Unable to detect HDR capabilities");
             }
         });
 
@@ -214,16 +211,8 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                             Eotf::Gamma22,
                             "Gamma 2.2 (SDR)",
                         );
-                        ui.selectable_value(
-                            &mut state.hdr_config.eotf,
-                            Eotf::PQ,
-                            "PQ (HDR10)",
-                        );
-                        ui.selectable_value(
-                            &mut state.hdr_config.eotf,
-                            Eotf::HLG,
-                            "HLG (HDR10+)",
-                        );
+                        ui.selectable_value(&mut state.hdr_config.eotf, Eotf::PQ, "PQ (HDR10)");
+                        ui.selectable_value(&mut state.hdr_config.eotf, Eotf::HLG, "HLG (HDR10+)");
                     });
             });
 
@@ -233,7 +222,9 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
             ui.horizontal(|ui| {
                 if ui.button("💾 Save Config").clicked() {
                     if let Err(e) = state.hdr_config.save() {
-                        state.toasts.error(format!("Failed to save HDR config: {}", e));
+                        state
+                            .toasts
+                            .error(format!("Failed to save HDR config: {}", e));
                     } else {
                         state.toasts.success("HDR configuration saved");
                     }

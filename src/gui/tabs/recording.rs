@@ -24,83 +24,81 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
     Card::new(&colors)
         .title("NVENC Capabilities")
         .icon(icons::GPU)
-        .show(ui, |ui| {
-            match recording::get_nvenc_capabilities() {
-                Ok(caps) => {
-                    ui.horizontal(|ui| {
-                        ui.label("GPU:");
-                        ui.label(
-                            egui::RichText::new(&caps.gpu_name)
-                                .strong()
-                                .color(colors.cyan.to_egui()),
-                        );
-                    });
-
-                    ui.add_space(4.0);
-
-                    egui::Grid::new("nvenc_caps_grid")
-                        .num_columns(2)
-                        .spacing([20.0, 4.0])
-                        .show(ui, |ui| {
-                            ui.label("H.264 NVENC:");
-                            ui.colored_label(
-                                if caps.h264_available {
-                                    colors.green.to_egui()
-                                } else {
-                                    colors.red.to_egui()
-                                },
-                                if caps.h264_available {
-                                    "✅ Available"
-                                } else {
-                                    "❌ Not Available"
-                                },
-                            );
-                            ui.end_row();
-
-                            ui.label("H.265 NVENC:");
-                            ui.colored_label(
-                                if caps.h265_available {
-                                    colors.green.to_egui()
-                                } else {
-                                    colors.red.to_egui()
-                                },
-                                if caps.h265_available {
-                                    "✅ Available"
-                                } else {
-                                    "❌ Not Available"
-                                },
-                            );
-                            ui.end_row();
-
-                            ui.label("AV1 NVENC:");
-                            ui.colored_label(
-                                if caps.av1_available {
-                                    colors.green.to_egui()
-                                } else {
-                                    colors.red.to_egui()
-                                },
-                                if caps.av1_available {
-                                    "✅ Available (RTX 40+ Series)"
-                                } else {
-                                    "❌ Not Available"
-                                },
-                            );
-                            ui.end_row();
-
-                            ui.label("Max Encoding Sessions:");
-                            ui.label(
-                                egui::RichText::new(caps.max_encoding_sessions.to_string())
-                                    .color(colors.yellow.to_egui()),
-                            );
-                            ui.end_row();
-                        });
-                }
-                Err(e) => {
-                    ui.colored_label(
-                        colors.red.to_egui(),
-                        format!("Error detecting NVENC: {}", e),
+        .show(ui, |ui| match recording::get_nvenc_capabilities() {
+            Ok(caps) => {
+                ui.horizontal(|ui| {
+                    ui.label("GPU:");
+                    ui.label(
+                        egui::RichText::new(&caps.gpu_name)
+                            .strong()
+                            .color(colors.cyan.to_egui()),
                     );
-                }
+                });
+
+                ui.add_space(4.0);
+
+                egui::Grid::new("nvenc_caps_grid")
+                    .num_columns(2)
+                    .spacing([20.0, 4.0])
+                    .show(ui, |ui| {
+                        ui.label("H.264 NVENC:");
+                        ui.colored_label(
+                            if caps.h264_available {
+                                colors.green.to_egui()
+                            } else {
+                                colors.red.to_egui()
+                            },
+                            if caps.h264_available {
+                                "✅ Available"
+                            } else {
+                                "❌ Not Available"
+                            },
+                        );
+                        ui.end_row();
+
+                        ui.label("H.265 NVENC:");
+                        ui.colored_label(
+                            if caps.h265_available {
+                                colors.green.to_egui()
+                            } else {
+                                colors.red.to_egui()
+                            },
+                            if caps.h265_available {
+                                "✅ Available"
+                            } else {
+                                "❌ Not Available"
+                            },
+                        );
+                        ui.end_row();
+
+                        ui.label("AV1 NVENC:");
+                        ui.colored_label(
+                            if caps.av1_available {
+                                colors.green.to_egui()
+                            } else {
+                                colors.red.to_egui()
+                            },
+                            if caps.av1_available {
+                                "✅ Available (RTX 40+ Series)"
+                            } else {
+                                "❌ Not Available"
+                            },
+                        );
+                        ui.end_row();
+
+                        ui.label("Max Encoding Sessions:");
+                        ui.label(
+                            egui::RichText::new(caps.max_encoding_sessions.to_string())
+                                .color(colors.yellow.to_egui()),
+                        );
+                        ui.end_row();
+                    });
+            }
+            Err(e) => {
+                ui.colored_label(
+                    colors.red.to_egui(),
+                    format!("Error detecting NVENC: {}", e),
+                );
             }
         });
 
@@ -188,7 +186,9 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                         let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
                         let output_path = format!("nvcontrol_recording_{}.mp4", timestamp);
                         match recording::start_recording(&state.recording_settings, &output_path) {
-                            Ok(_) => state.toasts.success(format!("Recording to {}", output_path)),
+                            Ok(_) => state
+                                .toasts
+                                .success(format!("Recording to {}", output_path)),
                             Err(e) => state.toasts.error(format!("Failed to start: {}", e)),
                         }
                     }
@@ -226,7 +226,9 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                     .clicked()
                 {
                     match recording::start_instant_replay(&state.recording_settings) {
-                        Ok(_) => state.toasts.success("Instant replay started (buffering last 5 min)"),
+                        Ok(_) => state
+                            .toasts
+                            .success("Instant replay started (buffering last 5 min)"),
                         Err(e) => state.toasts.error(format!("Failed: {}", e)),
                     }
                 }
@@ -239,7 +241,9 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                     let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
                     let output_path = format!("instant_replay_{}.mp4", timestamp);
                     match recording::save_instant_replay(&output_path) {
-                        Ok(_) => state.toasts.success(format!("Saved replay to {}", output_path)),
+                        Ok(_) => state
+                            .toasts
+                            .success(format!("Saved replay to {}", output_path)),
                         Err(e) => state.toasts.error(format!("Failed: {}", e)),
                     }
                 }
@@ -332,7 +336,11 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                 ui.label("Bitrate:");
                 let mut bitrate = state.recording_settings.bitrate_mbps as i32;
                 if ui
-                    .add(egui::DragValue::new(&mut bitrate).range(5..=200).suffix(" Mbps"))
+                    .add(
+                        egui::DragValue::new(&mut bitrate)
+                            .range(5..=200)
+                            .suffix(" Mbps"),
+                    )
                     .changed()
                 {
                     state.recording_settings.bitrate_mbps = bitrate as u32;
@@ -344,7 +352,11 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                 ui.label("Framerate:");
                 let mut framerate = state.recording_settings.framerate as i32;
                 if ui
-                    .add(egui::DragValue::new(&mut framerate).range(30..=120).suffix(" fps"))
+                    .add(
+                        egui::DragValue::new(&mut framerate)
+                            .range(30..=120)
+                            .suffix(" fps"),
+                    )
                     .changed()
                 {
                     state.recording_settings.framerate = framerate as u32;
@@ -371,7 +383,9 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                     .color(colors.cyan.to_egui()),
             );
             ui.label(egui::RichText::new("• Use H.265 NVENC for best quality/size ratio").small());
-            ui.label(egui::RichText::new("• Enable instant replay for capturing highlights").small());
+            ui.label(
+                egui::RichText::new("• Enable instant replay for capturing highlights").small(),
+            );
             ui.label(egui::RichText::new("• 50 Mbps bitrate provides excellent quality").small());
 
             ui.add_space(4.0);
@@ -384,12 +398,8 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
             ui.label(
                 egui::RichText::new("• Use AV1 NVENC on RTX 40+ for best compression").small(),
             );
-            ui.label(
-                egui::RichText::new("• Record at 1440p or 4K for future-proofing").small(),
-            );
-            ui.label(
-                egui::RichText::new("• Consider lossless mode for editing workflows").small(),
-            );
+            ui.label(egui::RichText::new("• Record at 1440p or 4K for future-proofing").small());
+            ui.label(egui::RichText::new("• Consider lossless mode for editing workflows").small());
 
             ui.add_space(4.0);
 

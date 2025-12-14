@@ -26,7 +26,10 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
         .show(ui, |ui| {
             // Refresh button
             ui.horizontal(|ui| {
-                if ui.button(format!("{} Refresh Displays", icons::REFRESH)).clicked() {
+                if ui
+                    .button(format!("{} Refresh Displays", icons::REFRESH))
+                    .clicked()
+                {
                     state.refresh_vrr_displays();
                     state.toasts.info("VRR displays refreshed");
                 }
@@ -42,21 +45,34 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                 );
             } else {
                 // Collect display info to avoid borrow issues
-                let display_info: Vec<_> = state.vrr_displays.iter().map(|d| {
-                    (
-                        d.display_name.clone(),
-                        d.supports_vrr,
-                        d.current_settings.enabled,
-                        d.min_refresh,
-                        d.max_refresh,
-                        d.supports_gsync,
-                        d.supports_freesync,
-                    )
-                }).collect();
+                let display_info: Vec<_> = state
+                    .vrr_displays
+                    .iter()
+                    .map(|d| {
+                        (
+                            d.display_name.clone(),
+                            d.supports_vrr,
+                            d.current_settings.enabled,
+                            d.min_refresh,
+                            d.max_refresh,
+                            d.supports_gsync,
+                            d.supports_freesync,
+                        )
+                    })
+                    .collect();
 
                 let mut vrr_changes: Vec<(String, bool)> = Vec::new();
 
-                for (display_name, supports_vrr, vrr_enabled, min_refresh, max_refresh, supports_gsync, supports_freesync) in &display_info {
+                for (
+                    display_name,
+                    supports_vrr,
+                    vrr_enabled,
+                    min_refresh,
+                    max_refresh,
+                    supports_gsync,
+                    supports_freesync,
+                ) in &display_info
+                {
                     egui::Frame::none()
                         .fill(colors.bg_dark.to_egui())
                         .rounding(6.0)
@@ -64,8 +80,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                         .show(ui, |ui| {
                             ui.horizontal(|ui| {
                                 ui.label(
-                                    egui::RichText::new(format!("📺 {}", display_name))
-                                        .strong(),
+                                    egui::RichText::new(format!("📺 {}", display_name)).strong(),
                                 );
 
                                 if *supports_vrr {
@@ -117,18 +132,12 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
             // These are display-wide settings
             ui.horizontal(|ui| {
                 ui.label("Low Framerate Compensation (LFC):");
-                ui.label(
-                    egui::RichText::new("Enabled")
-                        .color(colors.green.to_egui()),
-                );
+                ui.label(egui::RichText::new("Enabled").color(colors.green.to_egui()));
             });
 
             ui.horizontal(|ui| {
                 ui.label("Adaptive Sync Mode:");
-                ui.label(
-                    egui::RichText::new("Active")
-                        .color(colors.green.to_egui()),
-                );
+                ui.label(egui::RichText::new("Active").color(colors.green.to_egui()));
             });
 
             ui.add_space(8.0);
@@ -136,7 +145,9 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
             // Quick actions
             ui.horizontal(|ui| {
                 if ui.button("Enable All VRR").clicked() {
-                    let displays: Vec<_> = state.vrr_displays.iter()
+                    let displays: Vec<_> = state
+                        .vrr_displays
+                        .iter()
                         .filter(|d| d.supports_vrr)
                         .map(|d| d.display_name.clone())
                         .collect();
@@ -146,7 +157,9 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                 }
 
                 if ui.button("Disable All VRR").clicked() {
-                    let displays: Vec<_> = state.vrr_displays.iter()
+                    let displays: Vec<_> = state
+                        .vrr_displays
+                        .iter()
                         .filter(|d| d.supports_vrr)
                         .map(|d| d.display_name.clone())
                         .collect();

@@ -355,14 +355,14 @@ impl NvControlApp {
                     let compute_cap = device.cuda_compute_capability().ok();
                     let (architecture, compute_capability) = if let Some(cc) = compute_cap {
                         let arch = match (cc.major, cc.minor) {
-                            (12, _) => "Blackwell",         // RTX 50 series (SM 12.0)
-                            (10, _) => "Blackwell",         // Blackwell alternate
-                            (8, 9) => "Ada Lovelace",       // RTX 40 series
-                            (8, 6) | (8, 0) => "Ampere",    // RTX 30 series
-                            (7, 5) => "Turing",             // RTX 20 series
-                            (7, 0) => "Volta",              // Titan V, Tesla V100
-                            (6, _) => "Pascal",             // GTX 10 series
-                            (5, _) => "Maxwell",            // GTX 9 series
+                            (12, _) => "Blackwell",      // RTX 50 series (SM 12.0)
+                            (10, _) => "Blackwell",      // Blackwell alternate
+                            (8, 9) => "Ada Lovelace",    // RTX 40 series
+                            (8, 6) | (8, 0) => "Ampere", // RTX 30 series
+                            (7, 5) => "Turing",          // RTX 20 series
+                            (7, 0) => "Volta",           // Titan V, Tesla V100
+                            (6, _) => "Pascal",          // GTX 10 series
+                            (5, _) => "Maxwell",         // GTX 9 series
                             _ => "Unknown",
                         };
                         (arch.to_string(), format!("{}.{}", cc.major, cc.minor))
@@ -469,7 +469,9 @@ impl NvControlApp {
                 let gpus = asus_power_detector::detect_asus_gpus();
                 gpus.into_iter()
                     .find(|(_, model)| model.supports_power_detector())
-                    .and_then(|(pci_id, _)| asus_power_detector::AsusPowerDetector::new(&pci_id).ok())
+                    .and_then(|(pci_id, _)| {
+                        asus_power_detector::AsusPowerDetector::new(&pci_id).ok()
+                    })
                     .filter(|d| d.is_supported())
             },
             asus_power_status: None,
@@ -692,7 +694,8 @@ impl NvControlApp {
         // Buttons on hover - main accent color
         visuals.widgets.hovered.bg_fill = colors.button_accent.to_egui();
         visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.5, egui::Color32::WHITE);
-        visuals.widgets.hovered.bg_stroke = egui::Stroke::new(1.0, colors.button_accent_hover.to_egui());
+        visuals.widgets.hovered.bg_stroke =
+            egui::Stroke::new(1.0, colors.button_accent_hover.to_egui());
 
         // Buttons when clicked/active - lightest accent
         visuals.widgets.active.bg_fill = colors.button_accent_hover.to_egui();
@@ -1256,7 +1259,11 @@ impl eframe::App for NvControlApp {
                     // Version info at bottom
                     ui.add_space(10.0);
                     ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
-                        ui.label(egui::RichText::new(format!("v{}", env!("CARGO_PKG_VERSION"))).small().weak());
+                        ui.label(
+                            egui::RichText::new(format!("v{}", env!("CARGO_PKG_VERSION")))
+                                .small()
+                                .weak(),
+                        );
                     });
                 });
             });
@@ -1349,7 +1356,12 @@ impl eframe::App for NvControlApp {
                             if let Some(ref stats) = self.gpu_stats {
                                 // GPU Name - cyan for visibility
                                 ui.horizontal(|ui| {
-                                    ui.label(egui::RichText::new(&stats.name).strong().size(16.0).color(theme_colors.cyan.to_egui()));
+                                    ui.label(
+                                        egui::RichText::new(&stats.name)
+                                            .strong()
+                                            .size(16.0)
+                                            .color(theme_colors.cyan.to_egui()),
+                                    );
                                 });
 
                                 ui.add_space(4.0);
@@ -1370,7 +1382,13 @@ impl eframe::App for NvControlApp {
                                             .color(arch_color)
                                             .background_color(theme_colors.bg_highlight.to_egui()),
                                     );
-                                    ui.label(egui::RichText::new(format!("SM {}", stats.compute_capability)).color(theme_colors.cyan.to_egui()));
+                                    ui.label(
+                                        egui::RichText::new(format!(
+                                            "SM {}",
+                                            stats.compute_capability
+                                        ))
+                                        .color(theme_colors.cyan.to_egui()),
+                                    );
                                 });
 
                                 ui.add_space(6.0);
@@ -1380,7 +1398,10 @@ impl eframe::App for NvControlApp {
                                     .num_columns(2)
                                     .spacing([20.0, 4.0])
                                     .show(ui, |ui| {
-                                        ui.label(egui::RichText::new("CUDA Cores:").color(theme_colors.cyan.to_egui()));
+                                        ui.label(
+                                            egui::RichText::new("CUDA Cores:")
+                                                .color(theme_colors.cyan.to_egui()),
+                                        );
                                         ui.label(
                                             egui::RichText::new(format!("{}", stats.cuda_cores))
                                                 .strong()
@@ -1388,7 +1409,10 @@ impl eframe::App for NvControlApp {
                                         );
                                         ui.end_row();
 
-                                        ui.label(egui::RichText::new("VRAM:").color(theme_colors.cyan.to_egui()));
+                                        ui.label(
+                                            egui::RichText::new("VRAM:")
+                                                .color(theme_colors.cyan.to_egui()),
+                                        );
                                         ui.label(
                                             egui::RichText::new(format!(
                                                 "{:.0} GB GDDR7",
@@ -1399,12 +1423,25 @@ impl eframe::App for NvControlApp {
                                         );
                                         ui.end_row();
 
-                                        ui.label(egui::RichText::new("Driver:").color(theme_colors.cyan.to_egui()));
-                                        ui.label(egui::RichText::new(&stats.driver_version).color(theme_colors.green.to_egui()));
+                                        ui.label(
+                                            egui::RichText::new("Driver:")
+                                                .color(theme_colors.cyan.to_egui()),
+                                        );
+                                        ui.label(
+                                            egui::RichText::new(&stats.driver_version)
+                                                .color(theme_colors.green.to_egui()),
+                                        );
                                         ui.end_row();
 
-                                        ui.label(egui::RichText::new("PCI Bus:").color(theme_colors.cyan.to_egui()));
-                                        ui.label(egui::RichText::new(&stats.pci_bus).small().color(theme_colors.green.to_egui()));
+                                        ui.label(
+                                            egui::RichText::new("PCI Bus:")
+                                                .color(theme_colors.cyan.to_egui()),
+                                        );
+                                        ui.label(
+                                            egui::RichText::new(&stats.pci_bus)
+                                                .small()
+                                                .color(theme_colors.green.to_egui()),
+                                        );
                                         ui.end_row();
                                     });
                             } else {
@@ -1590,7 +1627,9 @@ impl eframe::App for NvControlApp {
                             ui.separator();
 
                             // Update power status every 2 seconds
-                            if self.asus_power_last_update.elapsed() > std::time::Duration::from_secs(2) {
+                            if self.asus_power_last_update.elapsed()
+                                > std::time::Duration::from_secs(2)
+                            {
                                 if let Some(ref detector) = self.asus_power_detector {
                                     self.asus_power_status = detector.read_power_rails().ok();
                                     self.asus_power_last_update = std::time::Instant::now();
@@ -1600,19 +1639,34 @@ impl eframe::App for NvControlApp {
                             if let Some(ref status) = self.asus_power_status {
                                 // Health status with color coding
                                 let (health_color, health_icon) = match status.health {
-                                    asus_power_detector::PowerHealth::Good => (pm_colors.green.to_egui(), icons::OK),
-                                    asus_power_detector::PowerHealth::Warning => (pm_colors.yellow.to_egui(), icons::WARN),
-                                    asus_power_detector::PowerHealth::Critical => (pm_colors.red.to_egui(), icons::ERR),
-                                    asus_power_detector::PowerHealth::Unknown => (pm_colors.fg_dark.to_egui(), icons::INFO),
+                                    asus_power_detector::PowerHealth::Good => {
+                                        (pm_colors.green.to_egui(), icons::OK)
+                                    }
+                                    asus_power_detector::PowerHealth::Warning => {
+                                        (pm_colors.yellow.to_egui(), icons::WARN)
+                                    }
+                                    asus_power_detector::PowerHealth::Critical => {
+                                        (pm_colors.red.to_egui(), icons::ERR)
+                                    }
+                                    asus_power_detector::PowerHealth::Unknown => {
+                                        (pm_colors.fg_dark.to_egui(), icons::INFO)
+                                    }
                                 };
 
                                 ui.horizontal(|ui| {
-                                    ui.label(egui::RichText::new(&status.model).color(pm_colors.fg.to_egui()));
+                                    ui.label(
+                                        egui::RichText::new(&status.model)
+                                            .color(pm_colors.fg.to_egui()),
+                                    );
                                     ui.separator();
                                     ui.label(
-                                        egui::RichText::new(format!("{} {}", health_icon, status.health.label()))
-                                            .color(health_color)
-                                            .strong(),
+                                        egui::RichText::new(format!(
+                                            "{} {}",
+                                            health_icon,
+                                            status.health.label()
+                                        ))
+                                        .color(health_color)
+                                        .strong(),
                                     );
                                 });
 
@@ -1620,14 +1674,19 @@ impl eframe::App for NvControlApp {
 
                                 // Power rails in a compact grid
                                 ui.horizontal(|ui| {
-                                    ui.label(egui::RichText::new("12V-2x6 Rails:").small().color(pm_colors.fg_dark.to_egui()));
+                                    ui.label(
+                                        egui::RichText::new("12V-2x6 Rails:")
+                                            .small()
+                                            .color(pm_colors.fg_dark.to_egui()),
+                                    );
                                     for rail in &status.rails {
                                         let rail_color = if rail.warning {
                                             pm_colors.red.to_egui()
                                         } else {
                                             pm_colors.green.to_egui()
                                         };
-                                        let current_str = rail.current_ma
+                                        let current_str = rail
+                                            .current_ma
                                             .map(|c| format!("{:.1}A", c as f32 / 1000.0))
                                             .unwrap_or_else(|| "?".to_string());
                                         ui.label(
@@ -1641,7 +1700,11 @@ impl eframe::App for NvControlApp {
                                 // Total power estimate
                                 if let Some(power) = status.total_power_w {
                                     ui.horizontal(|ui| {
-                                        ui.label(egui::RichText::new("Connector Power:").small().color(pm_colors.fg_dark.to_egui()));
+                                        ui.label(
+                                            egui::RichText::new("Connector Power:")
+                                                .small()
+                                                .color(pm_colors.fg_dark.to_egui()),
+                                        );
                                         ui.label(
                                             egui::RichText::new(format!("{:.0}W", power))
                                                 .color(pm_colors.cyan.to_egui()),

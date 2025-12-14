@@ -59,6 +59,51 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, ctx: &egui::Context) {
                     state.cycle_theme();
                     crate::gui::theme::apply_theme(ctx, state.current_theme);
                 }
+
+                ui.add_space(12.0);
+                ui.separator();
+                ui.add_space(8.0);
+
+                // UI Scale setting for 4K displays
+                ui.label(egui::RichText::new("UI Scale (for 4K/HiDPI):").strong());
+                ui.add_space(4.0);
+
+                ui.horizontal(|ui| {
+                    let scale_text = format!("{:.0}%", state.ui_scale * 100.0);
+                    ui.add(
+                        egui::Slider::new(&mut state.ui_scale, 0.75..=2.5)
+                            .text(scale_text)
+                            .step_by(0.25)
+                    );
+                });
+
+                ui.horizontal(|ui| {
+                    if ui.button("100%").clicked() {
+                        state.ui_scale = 1.0;
+                        ctx.set_pixels_per_point(state.ui_scale);
+                    }
+                    if ui.button("125%").clicked() {
+                        state.ui_scale = 1.25;
+                        ctx.set_pixels_per_point(state.ui_scale);
+                    }
+                    if ui.button("150%").clicked() {
+                        state.ui_scale = 1.5;
+                        ctx.set_pixels_per_point(state.ui_scale);
+                    }
+                    if ui.button("175% (4K)").clicked() {
+                        state.ui_scale = 1.75;
+                        ctx.set_pixels_per_point(state.ui_scale);
+                    }
+                    if ui.button("200%").clicked() {
+                        state.ui_scale = 2.0;
+                        ctx.set_pixels_per_point(state.ui_scale);
+                    }
+                });
+
+                // Apply scale when slider changes
+                if ui.input(|i| i.pointer.any_released()) {
+                    ctx.set_pixels_per_point(state.ui_scale);
+                }
             });
 
         columns[0].add_space(8.0);

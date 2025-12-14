@@ -199,9 +199,12 @@ fn render_presets_column(
                                         .color(colors.fg_dark.to_egui()),
                                 );
                             });
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                ui.label(egui::RichText::new(risk).small().color(color));
-                            });
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    ui.label(egui::RichText::new(risk).small().color(color));
+                                },
+                            );
                         });
                     });
 
@@ -361,10 +364,7 @@ fn render_monitoring_column(
                         "⚠️ GPU is HOT! Consider reducing overclock.",
                     );
                 } else if stats.temperature > 70.0 {
-                    ui.colored_label(
-                        colors.yellow.to_egui(),
-                        "ℹ️ Temperature elevated but safe.",
-                    );
+                    ui.colored_label(colors.yellow.to_egui(), "ℹ️ Temperature elevated but safe.");
                 } else {
                     ui.colored_label(
                         colors.green.to_egui(),
@@ -386,7 +386,9 @@ fn render_monitoring_column(
                             egui::RichText::new("• RTX 50 series responds well to memory OC")
                                 .small(),
                         );
-                        ui.label(egui::RichText::new("• GDDR7 can handle +1500 MHz safely").small());
+                        ui.label(
+                            egui::RichText::new("• GDDR7 can handle +1500 MHz safely").small(),
+                        );
                         ui.label(
                             egui::RichText::new("• Core benefits from slight undervolt").small(),
                         );
@@ -487,7 +489,11 @@ fn render_monitoring_column(
                         ui.end_row();
                     });
             } else {
-                ui.label(egui::RichText::new("Waiting for GPU stats...").weak().italics());
+                ui.label(
+                    egui::RichText::new("Waiting for GPU stats...")
+                        .weak()
+                        .italics(),
+                );
             }
         });
 }

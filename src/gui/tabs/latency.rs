@@ -23,57 +23,58 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
     Card::new(&colors)
         .title("Current Latency Status")
         .icon(icons::TARGET)
-        .show(ui, |ui| {
-            match latency::get_latency_info() {
-                Ok(info) => {
-                    egui::Grid::new("latency_info_grid")
-                        .num_columns(2)
-                        .spacing([20.0, 4.0])
-                        .show(ui, |ui| {
-                            ui.label("NVIDIA Reflex:");
-                            if info.nvidia_reflex_available {
-                                let (text, color) = if info.nvidia_reflex_enabled {
-                                    ("✅ Enabled", colors.green.to_egui())
-                                } else {
-                                    ("⚠️ Available", colors.yellow.to_egui())
-                                };
-                                ui.colored_label(color, text);
-                            } else {
-                                ui.colored_label(colors.red.to_egui(), "❌ Not Available");
-                            }
-                            ui.end_row();
-
-                            ui.label("GPU Scheduling:");
-                            let (text, color) = if info.gpu_scheduling_enabled {
+        .show(ui, |ui| match latency::get_latency_info() {
+            Ok(info) => {
+                egui::Grid::new("latency_info_grid")
+                    .num_columns(2)
+                    .spacing([20.0, 4.0])
+                    .show(ui, |ui| {
+                        ui.label("NVIDIA Reflex:");
+                        if info.nvidia_reflex_available {
+                            let (text, color) = if info.nvidia_reflex_enabled {
                                 ("✅ Enabled", colors.green.to_egui())
                             } else {
-                                ("❌ Disabled", colors.yellow.to_egui())
+                                ("⚠️ Available", colors.yellow.to_egui())
                             };
                             ui.colored_label(color, text);
-                            ui.end_row();
+                        } else {
+                            ui.colored_label(colors.red.to_egui(), "❌ Not Available");
+                        }
+                        ui.end_row();
 
-                            ui.label("CPU Scheduler:");
-                            ui.label(&info.current_cpu_scheduler);
-                            ui.end_row();
+                        ui.label("GPU Scheduling:");
+                        let (text, color) = if info.gpu_scheduling_enabled {
+                            ("✅ Enabled", colors.green.to_egui())
+                        } else {
+                            ("❌ Disabled", colors.yellow.to_egui())
+                        };
+                        ui.colored_label(color, text);
+                        ui.end_row();
 
-                            ui.label("Estimated Input Lag:");
-                            let lag_color = if info.estimated_input_lag_ms < 10.0 {
-                                colors.green.to_egui()
-                            } else if info.estimated_input_lag_ms < 20.0 {
-                                colors.yellow.to_egui()
-                            } else {
-                                colors.red.to_egui()
-                            };
-                            ui.colored_label(lag_color, format!("{:.1}ms", info.estimated_input_lag_ms));
-                            ui.end_row();
-                        });
-                }
-                Err(e) => {
-                    ui.colored_label(
-                        colors.red.to_egui(),
-                        format!("Error getting latency info: {}", e),
-                    );
-                }
+                        ui.label("CPU Scheduler:");
+                        ui.label(&info.current_cpu_scheduler);
+                        ui.end_row();
+
+                        ui.label("Estimated Input Lag:");
+                        let lag_color = if info.estimated_input_lag_ms < 10.0 {
+                            colors.green.to_egui()
+                        } else if info.estimated_input_lag_ms < 20.0 {
+                            colors.yellow.to_egui()
+                        } else {
+                            colors.red.to_egui()
+                        };
+                        ui.colored_label(
+                            lag_color,
+                            format!("{:.1}ms", info.estimated_input_lag_ms),
+                        );
+                        ui.end_row();
+                    });
+            }
+            Err(e) => {
+                ui.colored_label(
+                    colors.red.to_egui(),
+                    format!("Error getting latency info: {}", e),
+                );
             }
         });
 
@@ -147,15 +148,9 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                     .color(colors.cyan.to_egui()),
             );
             ui.label(egui::RichText::new("• Use exclusive fullscreen mode in games").small());
-            ui.label(
-                egui::RichText::new("• Enable VRR/G-Sync for consistent frame times").small(),
-            );
-            ui.label(
-                egui::RichText::new("• Close unnecessary background applications").small(),
-            );
-            ui.label(
-                egui::RichText::new("• Use a high-frequency gaming mouse (1000Hz+)").small(),
-            );
+            ui.label(egui::RichText::new("• Enable VRR/G-Sync for consistent frame times").small());
+            ui.label(egui::RichText::new("• Close unnecessary background applications").small());
+            ui.label(egui::RichText::new("• Use a high-frequency gaming mouse (1000Hz+)").small());
             ui.label(
                 egui::RichText::new("• Consider overclocking GPU/CPU for higher framerates")
                     .small(),

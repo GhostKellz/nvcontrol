@@ -12,6 +12,6 @@ pub mod toast;
 pub mod widgets;
 
 // Re-export main types
-pub use app::{run, NvControlApp};
+pub use app::{NvControlApp, run};
 pub use state::GuiState;
 pub use toast::{Toast, ToastKind, ToastManager};

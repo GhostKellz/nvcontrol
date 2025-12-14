@@ -40,11 +40,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                     }
 
                     // Show raw value for advanced users
-                    ui.label(
-                        egui::RichText::new(format!("({})", level))
-                            .small()
-                            .weak(),
-                    );
+                    ui.label(egui::RichText::new(format!("({})", level)).small().weak());
 
                     // Quick preset buttons
                     if ui.small_button("Off").clicked() {
@@ -105,11 +101,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                     )
                     .show_ui(ui, |cb_ui| {
                         for (i, profile) in state.available_icc_profiles.iter().enumerate() {
-                            cb_ui.selectable_value(
-                                &mut state.selected_icc_profile_idx,
-                                i,
-                                profile,
-                            );
+                            cb_ui.selectable_value(&mut state.selected_icc_profile_idx, i, profile);
                         }
                     });
 
@@ -125,7 +117,9 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                                 state.toasts.success("ICC profile applied successfully");
                             }
                             Err(e) => {
-                                state.toasts.error(format!("Failed to apply profile: {}", e));
+                                state
+                                    .toasts
+                                    .error(format!("Failed to apply profile: {}", e));
                             }
                         }
                     }
@@ -151,11 +145,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
         .show(ui, |ui| {
             let displays = display::list_displays();
             if displays.is_empty() {
-                ui.label(
-                    egui::RichText::new("No displays detected")
-                        .weak()
-                        .italics(),
-                );
+                ui.label(egui::RichText::new("No displays detected").weak().italics());
             } else {
                 for disp in displays {
                     egui::Frame::none()
@@ -195,5 +185,4 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                 state.toggle_hdr();
             }
         });
-
 }

@@ -100,7 +100,7 @@ impl<'a> HeaderBar<'a> {
             ui.horizontal(|ui| {
                 // Left side: Logo and GPU name
                 ui.label(
-                    egui::RichText::new("󰢮")
+                    egui::RichText::new(icons::GPU)
                         .size(24.0)
                         .color(self.colors.green.to_egui()),
                 );
@@ -188,15 +188,9 @@ impl<'a> HeaderBar<'a> {
                             .inner_margin(egui::Margin::symmetric(6.0, 2.0))
                             .show(ui, |ui| {
                                 ui.horizontal(|ui| {
+                                    ui.label(egui::RichText::new(icon).size(10.0).color(color));
                                     ui.label(
-                                        egui::RichText::new(icon)
-                                            .size(10.0)
-                                            .color(color),
-                                    );
-                                    ui.label(
-                                        egui::RichText::new(&pill.label)
-                                            .size(10.0)
-                                            .color(color),
+                                        egui::RichText::new(&pill.label).size(10.0).color(color),
                                     );
                                 });
                             });

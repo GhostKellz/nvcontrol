@@ -70,9 +70,9 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                             Ok(info) => {
                                 ui.label(egui::RichText::new(format!("Driver: {}", info)).small())
                             }
-                            Err(_) => {
-                                ui.label(egui::RichText::new("Driver version unknown").small().weak())
-                            }
+                            Err(_) => ui.label(
+                                egui::RichText::new("Driver version unknown").small().weak(),
+                            ),
                         };
                     } else {
                         ui.colored_label(
@@ -107,19 +107,12 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                     if let Some(controller) = guard.as_ref() {
                         let displays = controller.list_displays();
                         if displays.is_empty() {
-                            ui.label(
-                                egui::RichText::new("No displays detected")
-                                    .weak()
-                                    .italics(),
-                            );
+                            ui.label(egui::RichText::new("No displays detected").weak().italics());
                         } else {
                             for (_device_id, connector_idx, name, connected) in &displays {
                                 ui.horizontal(|ui| {
-                                    let status_icon = if *connected {
-                                        icons::OK
-                                    } else {
-                                        icons::ERR
-                                    };
+                                    let status_icon =
+                                        if *connected { icons::OK } else { icons::ERR };
                                     ui.label(
                                         egui::RichText::new(format!("{} {}", status_icon, name))
                                             .strong(),
@@ -151,10 +144,9 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                                                 percentage as u32,
                                             )
                                         {
-                                            state.toasts.error(format!(
-                                                "Failed to set vibrance: {}",
-                                                e
-                                            ));
+                                            state
+                                                .toasts
+                                                .error(format!("Failed to set vibrance: {}", e));
                                         }
                                     }
                                 });
@@ -193,10 +185,9 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                                             vibrance::percentage_to_vibrance(percentage as u32);
                                         let display_values = vec![(i, vibrance_val)];
                                         if let Err(e) = vibrance::set_vibrance(&display_values) {
-                                            state.toasts.error(format!(
-                                                "Failed to set vibrance: {}",
-                                                e
-                                            ));
+                                            state
+                                                .toasts
+                                                .error(format!("Failed to set vibrance: {}", e));
                                         }
                                     }
                                 });
@@ -288,7 +279,9 @@ fn apply_vibrance_to_all(state: &mut GuiState, percentage: u32) {
                     percentage,
                 );
             }
-            state.toasts.success(format!("Vibrance set to {}%", percentage));
+            state
+                .toasts
+                .success(format!("Vibrance set to {}%", percentage));
             return;
         }
     }
@@ -296,13 +289,14 @@ fn apply_vibrance_to_all(state: &mut GuiState, percentage: u32) {
     // Fall back to nvibrant
     if let Ok(displays) = vibrance::get_displays() {
         let vibrance_val = vibrance::percentage_to_vibrance(percentage);
-        let display_values: Vec<(usize, i32)> = (0..displays.len())
-            .map(|i| (i, vibrance_val))
-            .collect();
+        let display_values: Vec<(usize, i32)> =
+            (0..displays.len()).map(|i| (i, vibrance_val)).collect();
         if let Err(e) = vibrance::set_vibrance(&display_values) {
             state.toasts.error(format!("Failed to set vibrance: {}", e));
         } else {
-            state.toasts.success(format!("Vibrance set to {}%", percentage));
+            state
+                .toasts
+                .success(format!("Vibrance set to {}%", percentage));
         }
     }
 }

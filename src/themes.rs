@@ -185,8 +185,8 @@ impl Theme {
                 comment: Color::hex(0x565f89),
 
                 // Button accent (teal/mint - complements Tokyo Night's aesthetic)
-                button_accent: Color::hex(0x1abc9c),        // Teal - default
-                button_accent_hover: Color::hex(0x2dd4b7),  // Lighter teal - hovered
+                button_accent: Color::hex(0x1abc9c), // Teal - default
+                button_accent_hover: Color::hex(0x2dd4b7), // Lighter teal - hovered
                 button_accent_active: Color::hex(0x16a085), // Darker teal - active
 
                 // Graphs

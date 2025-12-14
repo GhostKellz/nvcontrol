@@ -14,9 +14,9 @@ use super::tabs::Tab;
 use super::toast::ToastManager;
 
 use std::collections::{HashMap, VecDeque};
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::mpsc::{Receiver, Sender};
 
 /// GPU statistics snapshot
 #[derive(Debug, Clone, Default)]
@@ -110,12 +110,17 @@ pub struct GuiState {
 
     // Shared atomic for background thread to read current GPU selection
     selected_gpu_atomic: Arc<AtomicU32>,
+    // Shutdown signal for background thread
+    shutdown_signal: Arc<AtomicBool>,
 
     // Async GPU stats channel
     gpu_stats_rx: Receiver<GpuStats>,
     #[allow(dead_code)]
     gpu_stats_tx: Sender<GpuStats>,
     pub last_stats_update: std::time::Instant,
+
+    // === UI Settings ===
+    pub ui_scale: f32,
 
     // === Configuration ===
     pub config: Config,
@@ -220,6 +225,13 @@ impl Default for GuiState {
     }
 }
 
+impl Drop for GuiState {
+    fn drop(&mut self) {
+        // Signal background thread to stop
+        self.shutdown_signal.store(true, Ordering::Relaxed);
+    }
+}
+
 impl GuiState {
     /// Create new GUI state with defaults
     pub fn new() -> Self {
@@ -227,8 +239,8 @@ impl GuiState {
         let app_state = AppState::load().ok();
 
         // Detect theme from config
-        let theme = ThemeVariant::from_config_key(&config.theme)
-            .unwrap_or(ThemeVariant::TokyoNightMoon);
+        let theme =
+            ThemeVariant::from_config_key(&config.theme).unwrap_or(ThemeVariant::TokyoNightMoon);
 
         // Detect GPUs
         let available_gpus = crate::multi_gpu::detect_gpus().unwrap_or_default();
@@ -259,10 +271,14 @@ impl GuiState {
         let selected_gpu_atomic = Arc::new(AtomicU32::new(0));
         let gpu_index_for_thread = Arc::clone(&selected_gpu_atomic);
 
+        // Shutdown signal for clean exit
+        let shutdown_signal = Arc::new(AtomicBool::new(false));
+        let shutdown_for_thread = Arc::clone(&shutdown_signal);
+
         // Spawn background thread for GPU monitoring
         let tx_clone = tx.clone();
         std::thread::spawn(move || {
-            loop {
+            while !shutdown_for_thread.load(Ordering::Relaxed) {
                 // Read the currently selected GPU index atomically
                 let gpu_index = gpu_index_for_thread.load(Ordering::Relaxed);
 
@@ -270,7 +286,9 @@ impl GuiState {
                     if let Ok(device) = nvml.device_by_index(gpu_index) {
                         let name = device.name().unwrap_or_else(|_| "Unknown GPU".to_string());
                         let temperature = device
-                            .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
+                            .temperature(
+                                nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu,
+                            )
                             .unwrap_or(0) as f32;
                         let power_draw = device
                             .power_usage()
@@ -307,14 +325,14 @@ impl GuiState {
                         let (architecture, compute_capability) = compute_cap
                             .map(|cc| {
                                 let arch = match (cc.major, cc.minor) {
-                                    (12, _) => "Blackwell",         // RTX 50 series (SM 12.0)
-                                    (10, _) => "Blackwell",         // Blackwell alternate
-                                    (8, 9) => "Ada Lovelace",       // RTX 40 series
-                                    (8, 6) | (8, 0) => "Ampere",    // RTX 30 series
-                                    (7, 5) => "Turing",             // RTX 20 series
-                                    (7, 0) => "Volta",              // Titan V, Tesla V100
-                                    (6, _) => "Pascal",             // GTX 10 series
-                                    (5, _) => "Maxwell",            // GTX 9 series
+                                    (12, _) => "Blackwell",      // RTX 50 series (SM 12.0)
+                                    (10, _) => "Blackwell",      // Blackwell alternate
+                                    (8, 9) => "Ada Lovelace",    // RTX 40 series
+                                    (8, 6) | (8, 0) => "Ampere", // RTX 30 series
+                                    (7, 5) => "Turing",          // RTX 20 series
+                                    (7, 0) => "Volta",           // Titan V, Tesla V100
+                                    (6, _) => "Pascal",          // GTX 10 series
+                                    (5, _) => "Maxwell",         // GTX 9 series
                                     _ => "Unknown",
                                 };
                                 (arch.to_string(), format!("SM {}.{}", cc.major, cc.minor))
@@ -380,9 +398,11 @@ impl GuiState {
             available_gpus,
             selected_gpu_index: 0,
             selected_gpu_atomic,
+            shutdown_signal,
             gpu_stats_rx: rx,
             gpu_stats_tx: tx,
             last_stats_update: std::time::Instant::now(),
+            ui_scale: 1.0,
             config,
             app_state,
             toasts: ToastManager::new(),
@@ -564,8 +584,7 @@ impl GuiState {
             fan_curve: vec![],
         };
 
-        crate::overclocking::apply_overclock_profile(&profile)
-            .map_err(|e| e.to_string())
+        crate::overclocking::apply_overclock_profile(&profile).map_err(|e| e.to_string())
     }
 
     /// Reset overclock to stock
@@ -595,13 +614,15 @@ impl GuiState {
             }
             FanMode::Curve => {
                 // Apply fan curve points - convert (u32, u32) to (u8, u8)
-                let points: Vec<(u8, u8)> = self.fan_curve
+                let points: Vec<(u8, u8)> = self
+                    .fan_curve
                     .to_nvcontrol_format()
                     .iter()
                     .map(|(t, s)| (*t as u8, *s as u8))
                     .collect();
                 if let Err(e) = crate::fan::set_fan_curve(0, &points) {
-                    self.toasts.error(format!("Failed to apply fan curve: {}", e));
+                    self.toasts
+                        .error(format!("Failed to apply fan curve: {}", e));
                 } else {
                     self.toasts.success("Custom fan curve applied");
                 }
@@ -617,6 +638,16 @@ impl GuiState {
                 self.toasts.error(format!("Failed to set fan speed: {}", e));
             }
         }
+    }
+
+    /// Shutdown background threads cleanly
+    pub fn shutdown(&self) {
+        self.shutdown_signal.store(true, Ordering::Relaxed);
+    }
+
+    /// Set UI scale (1.0 = normal, 1.5 = 150%, 2.0 = 200%)
+    pub fn set_ui_scale(&mut self, scale: f32) {
+        self.ui_scale = scale.clamp(0.75, 3.0);
     }
 
     /// Refresh VRR displays
@@ -703,7 +734,8 @@ impl GuiState {
                         .collect();
                 }
                 Err(e) => {
-                    self.toasts.error(format!("Failed to list containers: {}", e));
+                    self.toasts
+                        .error(format!("Failed to list containers: {}", e));
                 }
             }
         }

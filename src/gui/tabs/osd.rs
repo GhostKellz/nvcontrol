@@ -230,7 +230,11 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                     state.toasts.info("Standard preset applied");
                 }
 
-                if ui.button("Full").on_hover_text("All GPU and CPU metrics").clicked() {
+                if ui
+                    .button("Full")
+                    .on_hover_text("All GPU and CPU metrics")
+                    .clicked()
+                {
                     state.osd_metrics = vec![
                         "fps".to_string(),
                         "frametime".to_string(),
