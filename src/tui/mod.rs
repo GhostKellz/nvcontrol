@@ -867,7 +867,7 @@ impl TuiApp {
     }
 
     fn cycle_theme(&mut self) {
-        self.current_theme = crate::gui::theme::next_theme(self.current_theme);
+        self.current_theme = self.current_theme.next();
         self.theme = themes::ColorPalette::from_variant(self.current_theme);
         self.set_status_message(format!("Theme: {}", self.current_theme.name()));
     }

@@ -627,6 +627,19 @@ impl ThemeVariant {
             ThemeVariant::Cyberpunk,
         ]
     }
+
+    /// Cycle to the next theme variant
+    pub fn next(self) -> Self {
+        match self {
+            ThemeVariant::TokyoNightNight => ThemeVariant::TokyoNightStorm,
+            ThemeVariant::TokyoNightStorm => ThemeVariant::TokyoNightMoon,
+            ThemeVariant::TokyoNightMoon => ThemeVariant::Dracula,
+            ThemeVariant::Dracula => ThemeVariant::RogRed,
+            ThemeVariant::RogRed => ThemeVariant::MatrixGreen,
+            ThemeVariant::MatrixGreen => ThemeVariant::Cyberpunk,
+            ThemeVariant::Cyberpunk => ThemeVariant::TokyoNightNight,
+        }
+    }
 }
 
 impl ColorPalette {
