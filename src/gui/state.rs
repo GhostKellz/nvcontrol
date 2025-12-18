@@ -4,6 +4,7 @@
 //! shared state.rs and config.rs modules.
 
 use crate::config::Config;
+use crate::fan::FanInfo;
 use crate::gui_widgets::{FanCurve, MonitoringDashboard, VoltageCurve};
 use crate::multi_gpu::GpuInfo;
 use crate::overclocking::OverclockProfile;
@@ -217,6 +218,22 @@ pub struct GuiState {
 
     // === Gamescope ===
     pub gamescope_config: Option<crate::gamescope::GamescopeConfig>,
+
+    // === Cached Fan Data (to avoid per-frame queries) ===
+    pub cached_fans: Vec<FanInfo>,
+    pub fans_last_update: std::time::Instant,
+
+    // === Cached Display Data (to avoid subprocess spawns per frame) ===
+    pub cached_displays: Vec<crate::display::DisplayInfo>,
+    pub displays_last_update: std::time::Instant,
+    pub cached_icc_profiles: Vec<String>,
+    pub icc_profiles_last_update: std::time::Instant,
+
+    // === Cached Recording Data (to avoid NVML init and file I/O per frame) ===
+    pub cached_nvenc_caps: Option<crate::recording::NvencCapabilities>,
+    pub nvenc_caps_last_update: std::time::Instant,
+    pub cached_is_recording: bool,
+    pub recording_status_last_update: std::time::Instant,
 }
 
 impl Default for GuiState {
@@ -462,6 +479,26 @@ impl GuiState {
             latency_mode: "normal".to_string(),
             reflex_enabled: false,
             gamescope_config: None,
+            cached_fans: Vec::new(),
+            fans_last_update: std::time::Instant::now()
+                .checked_sub(std::time::Duration::from_secs(10))
+                .unwrap_or_else(std::time::Instant::now), // Force initial refresh
+            cached_displays: Vec::new(),
+            displays_last_update: std::time::Instant::now()
+                .checked_sub(std::time::Duration::from_secs(60))
+                .unwrap_or_else(std::time::Instant::now), // Force initial refresh
+            cached_icc_profiles: Vec::new(),
+            icc_profiles_last_update: std::time::Instant::now()
+                .checked_sub(std::time::Duration::from_secs(60))
+                .unwrap_or_else(std::time::Instant::now), // Force initial refresh
+            cached_nvenc_caps: None,
+            nvenc_caps_last_update: std::time::Instant::now()
+                .checked_sub(std::time::Duration::from_secs(60))
+                .unwrap_or_else(std::time::Instant::now), // Force initial refresh
+            cached_is_recording: false,
+            recording_status_last_update: std::time::Instant::now()
+                .checked_sub(std::time::Duration::from_secs(10))
+                .unwrap_or_else(std::time::Instant::now), // Force initial refresh
         }
     }
 
@@ -549,6 +586,76 @@ impl GuiState {
                 self.asus_power_last_update = std::time::Instant::now();
             }
         }
+    }
+
+    /// Refresh cached fan data (rate-limited to avoid blocking main thread)
+    pub fn refresh_fans(&mut self) {
+        // Only refresh every 1 second to avoid hammering NVML
+        if self.fans_last_update.elapsed() > std::time::Duration::from_secs(1) {
+            self.cached_fans = crate::fan::list_fans();
+            self.fans_last_update = std::time::Instant::now();
+        }
+    }
+
+    /// Get cached fan list (call refresh_fans() first if data may be stale)
+    pub fn get_fans(&self) -> &[FanInfo] {
+        &self.cached_fans
+    }
+
+    /// Refresh cached display data (rate-limited to avoid subprocess spawns)
+    pub fn refresh_displays(&mut self) {
+        // Only refresh every 5 seconds - displays rarely change
+        if self.displays_last_update.elapsed() > std::time::Duration::from_secs(5) {
+            self.cached_displays = crate::display::list_displays();
+            self.displays_last_update = std::time::Instant::now();
+        }
+    }
+
+    /// Get cached display list
+    pub fn get_displays(&self) -> &[crate::display::DisplayInfo] {
+        &self.cached_displays
+    }
+
+    /// Refresh cached ICC profiles (rate-limited to avoid filesystem scans)
+    pub fn refresh_icc_profiles(&mut self) {
+        // Only refresh every 30 seconds - ICC profiles rarely change
+        if self.icc_profiles_last_update.elapsed() > std::time::Duration::from_secs(30) {
+            self.cached_icc_profiles = crate::display::list_icc_profiles();
+            self.icc_profiles_last_update = std::time::Instant::now();
+        }
+    }
+
+    /// Get cached ICC profiles
+    pub fn get_icc_profiles(&self) -> &[String] {
+        &self.cached_icc_profiles
+    }
+
+    /// Refresh cached NVENC capabilities (rate-limited - NVML init is expensive)
+    pub fn refresh_nvenc_caps(&mut self) {
+        // Only refresh every 30 seconds - capabilities don't change
+        if self.nvenc_caps_last_update.elapsed() > std::time::Duration::from_secs(30) {
+            self.cached_nvenc_caps = crate::recording::get_nvenc_capabilities().ok();
+            self.nvenc_caps_last_update = std::time::Instant::now();
+        }
+    }
+
+    /// Get cached NVENC capabilities
+    pub fn get_nvenc_caps(&self) -> Option<&crate::recording::NvencCapabilities> {
+        self.cached_nvenc_caps.as_ref()
+    }
+
+    /// Refresh cached recording status (rate-limited - file I/O)
+    pub fn refresh_recording_status(&mut self) {
+        // Only refresh every 1 second
+        if self.recording_status_last_update.elapsed() > std::time::Duration::from_secs(1) {
+            self.cached_is_recording = crate::recording::is_recording();
+            self.recording_status_last_update = std::time::Instant::now();
+        }
+    }
+
+    /// Get cached recording status
+    pub fn is_recording(&self) -> bool {
+        self.cached_is_recording
     }
 
     /// Cycle to the next theme

@@ -8,7 +8,7 @@ use eframe::egui;
 use crate::gui::icons;
 use crate::gui::state::GuiState;
 use crate::gui::widgets::Card;
-use crate::recording::{self, EncoderType, OutputFormat, QualityPreset, RecordingSettings};
+use crate::recording::{self, EncoderType, OutputFormat, QualityPreset};
 
 /// Render the Recording tab
 pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
@@ -21,11 +21,12 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
     ui.add_space(4.0);
 
     // NVENC Capabilities Card
+    state.refresh_nvenc_caps();
     Card::new(&colors)
         .title("NVENC Capabilities")
         .icon(icons::GPU)
-        .show(ui, |ui| match recording::get_nvenc_capabilities() {
-            Ok(caps) => {
+        .show(ui, |ui| match state.get_nvenc_caps() {
+            Some(caps) => {
                 ui.horizontal(|ui| {
                     ui.label("GPU:");
                     ui.label(
@@ -94,10 +95,10 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                         ui.end_row();
                     });
             }
-            Err(e) => {
+            None => {
                 ui.colored_label(
                     colors.red.to_egui(),
-                    format!("Error detecting NVENC: {}", e),
+                    "NVENC capabilities not available - checking...",
                 );
             }
         });
@@ -153,11 +154,12 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
     ui.add_space(8.0);
 
     // Recording Controls Card
+    state.refresh_recording_status();
     Card::new(&colors)
         .title("Recording Controls")
         .icon(icons::RECORD)
         .show(ui, |ui| {
-            let is_recording = recording::is_recording();
+            let is_recording = state.is_recording();
 
             ui.horizontal(|ui| {
                 let record_btn = if is_recording {
@@ -327,6 +329,135 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                             .clicked()
                         {
                             state.recording_settings.encoder = EncoderType::NvencAv1;
+                        }
+                    });
+            });
+
+            // Quality Preset
+            ui.horizontal(|ui| {
+                ui.label("Quality:");
+                let preset_text = match state.recording_settings.quality_preset {
+                    QualityPreset::Lossless => "Lossless",
+                    QualityPreset::HighQuality => "High Quality",
+                    QualityPreset::Balanced => "Balanced",
+                    QualityPreset::Performance => "Performance",
+                    QualityPreset::Streaming => "Streaming",
+                };
+
+                egui::ComboBox::from_id_salt("rec_quality_preset")
+                    .selected_text(preset_text)
+                    .show_ui(ui, |ui| {
+                        if ui
+                            .selectable_label(
+                                matches!(
+                                    state.recording_settings.quality_preset,
+                                    QualityPreset::Lossless
+                                ),
+                                "Lossless (Best Quality)",
+                            )
+                            .clicked()
+                        {
+                            state.recording_settings.quality_preset = QualityPreset::Lossless;
+                        }
+                        if ui
+                            .selectable_label(
+                                matches!(
+                                    state.recording_settings.quality_preset,
+                                    QualityPreset::HighQuality
+                                ),
+                                "High Quality (Content Creation)",
+                            )
+                            .clicked()
+                        {
+                            state.recording_settings.quality_preset = QualityPreset::HighQuality;
+                        }
+                        if ui
+                            .selectable_label(
+                                matches!(
+                                    state.recording_settings.quality_preset,
+                                    QualityPreset::Balanced
+                                ),
+                                "Balanced (Good Quality/Size)",
+                            )
+                            .clicked()
+                        {
+                            state.recording_settings.quality_preset = QualityPreset::Balanced;
+                        }
+                        if ui
+                            .selectable_label(
+                                matches!(
+                                    state.recording_settings.quality_preset,
+                                    QualityPreset::Performance
+                                ),
+                                "Performance (Smaller Files)",
+                            )
+                            .clicked()
+                        {
+                            state.recording_settings.quality_preset = QualityPreset::Performance;
+                        }
+                        if ui
+                            .selectable_label(
+                                matches!(
+                                    state.recording_settings.quality_preset,
+                                    QualityPreset::Streaming
+                                ),
+                                "Streaming (Low Latency)",
+                            )
+                            .clicked()
+                        {
+                            state.recording_settings.quality_preset = QualityPreset::Streaming;
+                        }
+                    });
+            });
+
+            // Output Format
+            ui.horizontal(|ui| {
+                ui.label("Format:");
+                let format_text = match state.recording_settings.output_format {
+                    OutputFormat::Mp4 => "MP4",
+                    OutputFormat::Mkv => "MKV",
+                    OutputFormat::Mov => "MOV",
+                    OutputFormat::Avi => "AVI",
+                };
+
+                egui::ComboBox::from_id_salt("rec_output_format")
+                    .selected_text(format_text)
+                    .show_ui(ui, |ui| {
+                        if ui
+                            .selectable_label(
+                                matches!(state.recording_settings.output_format, OutputFormat::Mp4),
+                                "MP4 (Most Compatible)",
+                            )
+                            .clicked()
+                        {
+                            state.recording_settings.output_format = OutputFormat::Mp4;
+                        }
+                        if ui
+                            .selectable_label(
+                                matches!(state.recording_settings.output_format, OutputFormat::Mkv),
+                                "MKV (Best for Editing)",
+                            )
+                            .clicked()
+                        {
+                            state.recording_settings.output_format = OutputFormat::Mkv;
+                        }
+                        if ui
+                            .selectable_label(
+                                matches!(state.recording_settings.output_format, OutputFormat::Mov),
+                                "MOV (Apple/Final Cut)",
+                            )
+                            .clicked()
+                        {
+                            state.recording_settings.output_format = OutputFormat::Mov;
+                        }
+                        if ui
+                            .selectable_label(
+                                matches!(state.recording_settings.output_format, OutputFormat::Avi),
+                                "AVI (Legacy)",
+                            )
+                            .clicked()
+                        {
+                            state.recording_settings.output_format = OutputFormat::Avi;
                         }
                     });
             });

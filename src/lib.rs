@@ -66,6 +66,15 @@ pub enum NvControlError {
 
     #[error("Runtime error: {0}")]
     RuntimeError(String),
+
+    #[error("IO error: {0}")]
+    IoError(String),
+}
+
+impl From<std::io::Error> for NvControlError {
+    fn from(err: std::io::Error) -> Self {
+        NvControlError::IoError(err.to_string())
+    }
 }
 
 pub type NvResult<T> = Result<T, NvControlError>;
@@ -198,7 +207,6 @@ pub mod gaming_dashboard;
 pub mod gui_themes;
 pub mod gui_tuner;
 pub mod nvidia_profiler;
-pub mod tui_monitor;
 
 // Unified state management
 pub mod state;

@@ -13,6 +13,7 @@ pub mod osd;
 pub mod overclock;
 pub mod recording;
 pub mod settings;
+pub mod system;
 pub mod vibrance;
 pub mod vrr;
 
@@ -35,6 +36,7 @@ pub enum Tab {
     Gamescope,
     Recording,
     // System
+    System,
     Settings,
 }
 
@@ -74,6 +76,7 @@ impl Tab {
             (Tab::Gamescope, super::icons::ROCKET, "Gamescope"),
             (Tab::Recording, super::icons::RECORD, "Recording"),
             // System
+            (Tab::System, super::icons::SYSTEM, "System"),
             (Tab::Settings, super::icons::SETTINGS, "Settings"),
         ]
     }

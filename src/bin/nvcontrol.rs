@@ -1629,11 +1629,10 @@ impl eframe::App for NvControlApp {
                             // Update power status every 2 seconds
                             if self.asus_power_last_update.elapsed()
                                 > std::time::Duration::from_secs(2)
+                                && let Some(ref detector) = self.asus_power_detector
                             {
-                                if let Some(ref detector) = self.asus_power_detector {
-                                    self.asus_power_status = detector.read_power_rails().ok();
-                                    self.asus_power_last_update = std::time::Instant::now();
-                                }
+                                self.asus_power_status = detector.read_power_rails().ok();
+                                self.asus_power_last_update = std::time::Instant::now();
                             }
 
                             if let Some(ref status) = self.asus_power_status {

@@ -277,6 +277,15 @@ impl ErrorWithSolution for NvControlError {
                     )
                 )
             }
+            NvControlError::IoError(msg) => {
+                format!(
+                    "{} {}\n\n{}\n{}",
+                    style("❌ Error:").red().bold(),
+                    style("IO error").bold(),
+                    style("Details:").yellow(),
+                    msg
+                )
+            }
         }
     }
 }

@@ -72,6 +72,10 @@ enum Command {
         #[command(subcommand)]
         subcommand: Option<MonitorSubcommand>,
     },
+    /// 📺 TUI main menu
+    Tui,
+    /// 🖥️ GPU monitor (htop-style)
+    Nvtop,
     /// 🎯 Gaming optimization and latency
     Gaming {
         #[command(subcommand)]
@@ -1481,10 +1485,8 @@ fn main() {
                 }
             }
             GpuSubcommand::Stat => {
-                // Launch the new advanced TUI dashboard
-                println!("🚀 Launching nvcontrol TUI Dashboard...");
-                if let Err(e) = nvcontrol::tui::TuiApp::new().run() {
-                    eprintln!("❌ TUI error: {}", e);
+                if let Err(e) = nvcontrol::tui::launch_dashboard() {
+                    eprintln!("TUI error: {}", e);
                 }
             }
             GpuSubcommand::Capabilities => match overclocking::get_gpu_capabilities() {
@@ -3370,23 +3372,30 @@ fn main() {
                 monitoring::show_monitoring_status();
             }
             Some(MonitorSubcommand::Tui) => {
-                println!("📊 Launching TUI monitor...");
-                if let Err(e) = nvcontrol::tui::TuiApp::new().run() {
-                    eprintln!("❌ TUI error: {}", e);
+                if let Err(e) = nvcontrol::tui::launch_nvtop() {
+                    eprintln!("TUI error: {}", e);
                 }
             }
             Some(MonitorSubcommand::Export { output, duration }) => {
-                println!("📤 Exporting monitor data to {}...", output);
+                println!("Exporting monitor data to {}...", output);
                 println!("Monitoring for {} seconds...", duration);
             }
             None => {
-                // Default to TUI
-                println!("📊 Launching TUI monitor...");
-                if let Err(e) = nvcontrol::tui::TuiApp::new().run() {
-                    eprintln!("❌ TUI error: {}", e);
+                if let Err(e) = nvcontrol::tui::launch_nvtop() {
+                    eprintln!("TUI error: {}", e);
                 }
             }
         },
+        Command::Tui => {
+            if let Err(e) = nvcontrol::tui::launch_menu() {
+                eprintln!("TUI error: {}", e);
+            }
+        }
+        Command::Nvtop => {
+            if let Err(e) = nvcontrol::tui::launch_nvtop() {
+                eprintln!("TUI error: {}", e);
+            }
+        }
         Command::Gaming { subcommand } => match subcommand {
             GamingSubcommand::Enable => {
                 println!("🎮 Enabling gaming mode...");

@@ -7,7 +7,6 @@ use eframe::egui;
 use crate::gui::icons;
 use crate::gui::state::GuiState;
 use crate::gui::widgets::Card;
-use crate::vrr;
 
 /// Render the VRR tab
 pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {

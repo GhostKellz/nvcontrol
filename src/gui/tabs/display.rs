@@ -14,6 +14,10 @@ use crate::vibrance;
 pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
     let colors = state.theme_colors();
 
+    // Refresh cached data (rate-limited internally to avoid blocking)
+    state.refresh_displays();
+    state.refresh_icc_profiles();
+
     ui.heading(format!("{} Display & Color Management", icons::DISPLAY));
     ui.add_space(4.0);
 
@@ -78,7 +82,8 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
         .title("ICC Profile Management")
         .icon(icons::VIBRANCE)
         .show(ui, |ui| {
-            let icc_profiles = display::list_icc_profiles();
+            // Use cached ICC profiles to avoid filesystem scans every frame
+            let icc_profiles = state.get_icc_profiles();
             if icc_profiles.is_empty() {
                 ui.label(
                     egui::RichText::new("No ICC profiles found")
@@ -86,9 +91,9 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                         .italics(),
                 );
             } else {
-                // Update available profiles
-                if state.available_icc_profiles != icc_profiles {
-                    state.available_icc_profiles = icc_profiles.clone();
+                // Update available profiles if changed
+                if state.available_icc_profiles.as_slice() != icc_profiles {
+                    state.available_icc_profiles = icc_profiles.to_vec();
                 }
 
                 egui::ComboBox::from_label("ICC Profile")
@@ -143,7 +148,8 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
         .title("Display HDR Status")
         .icon(icons::HDR)
         .show(ui, |ui| {
-            let displays = display::list_displays();
+            // Use cached display list to avoid subprocess spawns every frame
+            let displays = state.get_displays();
             if displays.is_empty() {
                 ui.label(egui::RichText::new("No displays detected").weak().italics());
             } else {

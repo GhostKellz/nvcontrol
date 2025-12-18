@@ -341,7 +341,6 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
             if ui.button("🚀 Apply Custom Configuration").clicked() {
                 match gamescope::apply_gamescope_config(&config) {
                     Ok(()) => {
-                        state.gamescope_config = Some(config.clone());
                         state
                             .toasts
                             .success("Custom gamescope configuration applied");
@@ -350,7 +349,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                 }
             }
 
-            // Store updated config
+            // Store updated config (keeps UI state in sync with edits)
             state.gamescope_config = Some(config);
         });
 

@@ -1,8 +1,8 @@
 [package]
 name = "nvcontrol"
-version = "0.7.8"
+version = "0.8.0"
 edition = "2024"
-authors = ["CK Technology LLC"]
+authors = ["Christopher Kelley <ckelley@ghostkellz.sh>"]
 license = "MIT"
 description = "Modern NVIDIA Settings Manager for Linux + Wayland"
 homepage = "https://github.com/ghostkellz/nvcontrol"

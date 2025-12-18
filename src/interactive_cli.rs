@@ -114,9 +114,8 @@ Select option (1-8): "#,
         match self.get_choice(1, 3)? {
             1 => {
                 // Launch TUI
-                self.term.write_line("\n📊 Launching TUI monitor...").ok();
-                if let Err(e) = crate::tui::TuiApp::new().run() {
-                    self.term.write_line(&format!("❌ TUI error: {}", e)).ok();
+                if let Err(e) = crate::tui::launch_nvtop() {
+                    self.term.write_line(&format!("TUI error: {}", e)).ok();
                     self.wait_for_key()?;
                 }
             }

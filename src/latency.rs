@@ -278,16 +278,76 @@ fn reset_preemption_timeout() -> NvResult<bool> {
 // CPU Scheduler Functions
 
 fn get_cpu_scheduler() -> NvResult<String> {
+    // Check for BORE scheduler (CachyOS, XanMod, etc.)
+    if std::path::Path::new("/sys/kernel/sched/bore").exists() {
+        return Ok("BORE".to_string());
+    }
+
+    // Check for sched_ext (BPF-based schedulers like scx_rusty, scx_lavd)
+    if std::path::Path::new("/sys/kernel/sched_ext/state").exists() {
+        if let Ok(state) = fs::read_to_string("/sys/kernel/sched_ext/state") {
+            if state.trim() == "enabled" {
+                // Try to get the active sched_ext scheduler name
+                if let Ok(name) = fs::read_to_string("/sys/kernel/sched_ext/root/name") {
+                    return Ok(format!("sched_ext ({})", name.trim()));
+                }
+                return Ok("sched_ext".to_string());
+            }
+        }
+    }
+
+    // Check kernel version for EEVDF (default in 6.6+)
+    if let Ok(version) = fs::read_to_string("/proc/version") {
+        let version_lower = version.to_lowercase();
+
+        // Check for custom scheduler keywords in kernel string
+        if version_lower.contains("bore") {
+            return Ok("BORE".to_string());
+        }
+        if version_lower.contains("-tt") {
+            return Ok("Task Type (TT)".to_string());
+        }
+        if version_lower.contains("bmq") {
+            return Ok("BMQ".to_string());
+        }
+        if version_lower.contains("pds") {
+            return Ok("PDS".to_string());
+        }
+        if version_lower.contains("muqss") {
+            return Ok("MuQSS".to_string());
+        }
+
+        // Parse kernel version to determine default scheduler
+        // Format: "Linux version X.Y.Z..."
+        if let Some(ver_start) = version.find("Linux version ") {
+            let ver_str = &version[ver_start + 14..];
+            if let Some(space_pos) = ver_str.find(' ') {
+                let ver_num = &ver_str[..space_pos];
+                let parts: Vec<&str> = ver_num.split('.').collect();
+                if parts.len() >= 2 {
+                    if let (Ok(major), Ok(minor)) =
+                        (parts[0].parse::<u32>(), parts[1].parse::<u32>())
+                    {
+                        // EEVDF became default in kernel 6.6
+                        if major > 6 || (major == 6 && minor >= 6) {
+                            return Ok("EEVDF".to_string());
+                        } else {
+                            return Ok("CFS".to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Legacy fallback - try sched_features (needs debugfs)
     if let Ok(content) = fs::read_to_string("/sys/kernel/debug/sched_features") {
-        return Ok(content.trim().to_string());
+        if !content.trim().is_empty() {
+            return Ok("CFS (features detected)".to_string());
+        }
     }
 
-    // Fallback: check scheduler policy
-    if let Ok(content) = fs::read_to_string("/proc/sys/kernel/sched_policy") {
-        return Ok(content.trim().to_string());
-    }
-
-    Ok("unknown".to_string())
+    Ok("Unknown".to_string())
 }
 
 fn optimize_cpu_scheduler() -> NvResult<bool> {

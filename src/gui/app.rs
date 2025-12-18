@@ -196,7 +196,7 @@ impl NvControlApp {
             .state
             .driver_validation
             .as_ref()
-            .map_or(false, |d| d.passed)
+            .is_some_and(|d| d.passed)
         {
             header = header.add_status("Driver OK", StatusState::Ok);
         }
@@ -259,6 +259,7 @@ impl eframe::App for NvControlApp {
             Tab::Latency => super::tabs::latency::render(ui, &mut self.state, ctx),
             Tab::Gamescope => super::tabs::gamescope::render(ui, &mut self.state, ctx),
             Tab::Recording => super::tabs::recording::render(ui, &mut self.state, ctx),
+            Tab::System => super::tabs::system::render(ui, &mut self.state, ctx),
             Tab::Settings => super::tabs::settings::render(ui, &mut self.state, ctx),
         });
 

@@ -25,6 +25,7 @@ pub const RECORD: &str = egui_phosphor::regular::RECORD;
 pub const ROCKET: &str = egui_phosphor::regular::ROCKET;
 
 // System
+pub const SYSTEM: &str = DESKTOP_TOWER;
 pub const SHADER: &str = CUBE;
 pub const DRIVER: &str = WRENCH;
 pub const CONTAINER: &str = PACKAGE;

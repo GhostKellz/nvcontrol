@@ -16,6 +16,9 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, ctx: &egui::Context) {
     ui.heading(format!("{} Fan Control", icons::FAN_ICON));
     ui.add_space(4.0);
 
+    // Refresh cached fan data (rate-limited internally)
+    state.refresh_fans();
+
     // Two-column layout
     ui.columns(2, |columns| {
         // Left column: Current fan status
@@ -44,7 +47,8 @@ fn render_fan_status(
         .title("Current Fan Status")
         .icon(icons::FAN_ICON)
         .show(ui, |ui| {
-            let fans = fan::list_fans();
+            // Use cached fan data (clone to avoid borrow conflicts)
+            let fans: Vec<_> = state.get_fans().to_vec();
             if fans.is_empty() {
                 ui.label(
                     egui::RichText::new("No controllable fans detected")

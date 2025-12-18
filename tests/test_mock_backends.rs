@@ -706,15 +706,13 @@ fn test_gui_backend_context_with_multi_gpu() {
 }
 
 #[test]
-fn test_tui_app_with_mock_backend() {
-    use nvcontrol::nvml_backend::GuiBackendContext;
-    use nvcontrol::tui::TuiApp;
+fn test_tui_app_creation() {
+    use nvcontrol::tui::{TuiApp, ViewMode};
 
-    // Create TuiApp with mock backend
-    let ctx = GuiBackendContext::mock();
-    let app = TuiApp::with_context(ctx);
+    // Create TuiApp with view mode
+    let _app = TuiApp::with_view(ViewMode::Nvtop);
 
-    // The app should be created successfully with mock data
-    // This verifies the backend injection works
-    assert!(true, "TuiApp created successfully with mock backend");
+    // The app should be created successfully
+    // Note: Backend injection via with_context() is planned for future versions
+    assert!(true, "TuiApp created successfully");
 }
