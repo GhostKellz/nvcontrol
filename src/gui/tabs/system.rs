@@ -1,11 +1,14 @@
 //! System Information Tab
 //!
 //! Displays system information like neofetch - OS, kernel, CPU, GPU, DE, memory, etc.
+//! Also shows driver, GSP, and DKMS status.
 
 use eframe::egui;
 use std::fs;
 use std::process::Command;
 
+use crate::drivers;
+use crate::gsp_firmware::GspManager;
 use crate::gui::icons;
 use crate::gui::state::GuiState;
 use crate::gui::widgets::Card;
@@ -42,6 +45,81 @@ impl SystemInfo {
             memory_total: get_memory_total(),
             gpus: get_gpus(),
         }
+    }
+}
+
+/// Driver, GSP, and DKMS information
+#[derive(Default, Clone)]
+pub struct DriverInfo {
+    pub driver_version: String,
+    pub driver_type: String,
+    pub gsp_enabled: bool,
+    pub gsp_state: String,
+    pub gsp_arch: Option<String>,
+    pub dkms_registered: bool,
+    pub dkms_status: String,
+    pub kernels_count: usize,
+    pub kernels_with_nvidia: usize,
+}
+
+impl DriverInfo {
+    /// Gather driver information
+    pub fn gather() -> Self {
+        let mut info = Self::default();
+
+        // Get driver version from nvidia-smi
+        if let Ok(output) = Command::new("nvidia-smi")
+            .args(["--query-gpu=driver_version", "--format=csv,noheader"])
+            .output()
+        {
+            if output.status.success() {
+                info.driver_version = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            }
+        }
+
+        // Determine driver type
+        info.driver_type = if GspManager::is_nvidia_open() {
+            "nvidia-open".to_string()
+        } else {
+            "proprietary".to_string()
+        };
+
+        // Get GSP status
+        let gsp_mgr = GspManager::new();
+        let gsp_status = gsp_mgr.get_deep_status();
+        info.gsp_enabled = gsp_status.enabled;
+        info.gsp_state = gsp_status.state;
+        info.gsp_arch = gsp_status.gpu_arch;
+
+        // Get DKMS status
+        let dkms_info = drivers::get_dkms_setup_info();
+        info.dkms_registered = dkms_info.nvidia_registered;
+        info.dkms_status = if !dkms_info.dkms_installed {
+            "not installed".to_string()
+        } else if dkms_info.nvidia_registered {
+            "registered".to_string()
+        } else {
+            "not registered".to_string()
+        };
+
+        // Count kernels
+        if let Ok(entries) = std::fs::read_dir("/lib/modules") {
+            for entry in entries.flatten() {
+                info.kernels_count += 1;
+                let kernel = entry.file_name().to_string_lossy().to_string();
+                let paths = [
+                    format!("/lib/modules/{}/kernel/drivers/video/nvidia.ko.zst", kernel),
+                    format!("/lib/modules/{}/kernel/drivers/video/nvidia.ko", kernel),
+                    format!("/lib/modules/{}/extramodules/nvidia.ko.zst", kernel),
+                    format!("/lib/modules/{}/extramodules/nvidia.ko", kernel),
+                ];
+                if paths.iter().any(|p| std::path::Path::new(p).exists()) {
+                    info.kernels_with_nvidia += 1;
+                }
+            }
+        }
+
+        info
     }
 }
 
@@ -453,5 +531,113 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                     );
                     ui.end_row();
                 });
+        });
+
+    ui.add_space(8.0);
+
+    // Driver & GSP Card
+    let driver_info = DriverInfo::gather();
+
+    Card::new(&colors)
+        .title("NVIDIA Driver")
+        .icon(icons::GPU)
+        .show(ui, |ui| {
+            egui::Grid::new("driver_grid")
+                .num_columns(2)
+                .spacing([20.0, 6.0])
+                .show(ui, |ui| {
+                    // Driver version
+                    ui.label(
+                        egui::RichText::new("Driver:")
+                            .strong()
+                            .color(colors.comment.to_egui()),
+                    );
+                    ui.colored_label(
+                        colors.green.to_egui(),
+                        format!(
+                            "{} ({})",
+                            driver_info.driver_version, driver_info.driver_type
+                        ),
+                    );
+                    ui.end_row();
+
+                    // GSP Status (only for nvidia-open)
+                    if driver_info.driver_type == "nvidia-open" {
+                        ui.label(
+                            egui::RichText::new("GSP:")
+                                .strong()
+                                .color(colors.comment.to_egui()),
+                        );
+                        let gsp_text = if driver_info.gsp_enabled {
+                            format!("enabled ({})", driver_info.gsp_state)
+                        } else {
+                            "disabled".to_string()
+                        };
+                        let gsp_color =
+                            if driver_info.gsp_enabled && driver_info.gsp_state != "failed" {
+                                colors.green.to_egui()
+                            } else if driver_info.gsp_enabled {
+                                colors.red.to_egui()
+                            } else {
+                                colors.yellow.to_egui()
+                            };
+                        ui.colored_label(gsp_color, gsp_text);
+                        ui.end_row();
+
+                        // GPU Architecture
+                        if let Some(ref arch) = driver_info.gsp_arch {
+                            ui.label(
+                                egui::RichText::new("GPU Arch:")
+                                    .strong()
+                                    .color(colors.comment.to_egui()),
+                            );
+                            ui.colored_label(colors.cyan.to_egui(), arch);
+                            ui.end_row();
+                        }
+                    }
+
+                    // DKMS Status
+                    ui.label(
+                        egui::RichText::new("DKMS:")
+                            .strong()
+                            .color(colors.comment.to_egui()),
+                    );
+                    let dkms_color = if driver_info.dkms_registered {
+                        colors.green.to_egui()
+                    } else if driver_info.dkms_status == "not installed" {
+                        colors.comment.to_egui()
+                    } else {
+                        colors.yellow.to_egui()
+                    };
+                    ui.colored_label(dkms_color, &driver_info.dkms_status);
+                    ui.end_row();
+
+                    // Kernel coverage
+                    ui.label(
+                        egui::RichText::new("Kernels:")
+                            .strong()
+                            .color(colors.comment.to_egui()),
+                    );
+                    let kernels_text = format!(
+                        "{}/{} have nvidia",
+                        driver_info.kernels_with_nvidia, driver_info.kernels_count
+                    );
+                    let kernels_color =
+                        if driver_info.kernels_with_nvidia == driver_info.kernels_count {
+                            colors.green.to_egui()
+                        } else {
+                            colors.yellow.to_egui()
+                        };
+                    ui.colored_label(kernels_color, kernels_text);
+                    ui.end_row();
+                });
+
+            // Hint for CLI
+            ui.add_space(4.0);
+            ui.label(
+                egui::RichText::new("Run 'nvctl driver check' for detailed diagnostics")
+                    .small()
+                    .color(colors.comment.to_egui()),
+            );
         });
 }

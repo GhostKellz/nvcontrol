@@ -20,6 +20,8 @@ nvctl [OPTIONS] <COMMAND>
 | Command | Description |
 |---------|-------------|
 | `nvctl gpu info` | GPU information |
+| `nvctl driver info` | Driver status (version, kernel, GSP, DKMS) |
+| `nvctl driver check` | Driver health checks |
 | `nvctl tui` | Interactive TUI menu |
 | `nvctl nvtop` | Real-time GPU monitor |
 | `nvctl doctor` | System diagnostics |
@@ -383,42 +385,137 @@ nvctl passthrough hugepages # Setup hugepages
 
 ## Drivers & System
 
-### nvctl drivers
-Driver management.
+### nvctl driver
+Unified driver management, status, and kernel modules.
 
 ```bash
-nvctl drivers status        # Driver version, updates, DKMS
-nvctl drivers install <type>  # Install drivers
-nvctl drivers update        # Update to latest
-nvctl drivers rollback      # Rollback (Arch Linux)
-nvctl drivers generate-completions <shell>  # Shell completions
+# Status & Information
+nvctl driver info           # Comprehensive status (GPU, driver, kernel, GSP, DKMS)
+nvctl driver info --paste   # Compact output for Discord/forums
+nvctl driver check          # Health checks with warnings
+nvctl driver capabilities   # Driver feature requirements
+
+# Validation
+nvctl driver validate --driver <major>  # Validate system for driver version
+
+# Installation & Updates
+nvctl driver install <type> # Install driver (proprietary, open, open-beta)
+nvctl driver update         # Update to latest version
+nvctl driver rollback       # Rollback (Arch Linux only)
+
+# Kernel Logs
+nvctl driver logs --filter nvidia   # All nvidia kernel logs
+nvctl driver logs --filter gsp      # GSP-specific logs
+nvctl driver logs --filter xid      # Xid errors (GPU faults)
+nvctl driver logs --tail 50         # Last 50 lines
 ```
 
 **Install Types:** `proprietary`, `open`, `open-beta`
 
-### nvctl driver
-Driver capabilities and validation.
+#### nvctl driver dkms
+DKMS kernel module management for nvidia-open.
 
 ```bash
-nvctl driver info           # Driver capabilities
-nvctl driver validate --driver <major>  # Validate system for driver
+nvctl driver dkms status    # Detailed status for all kernels
+nvctl driver dkms setup     # Set up DKMS for nvidia-open
+nvctl driver dkms build     # Build for all kernels
+nvctl driver dkms build --kernel <ver>  # Build for specific kernel
+nvctl driver dkms logs      # Show build logs (summary)
+nvctl driver dkms logs -t 50  # Show last 50 lines of each log
+nvctl driver dkms logs -k <ver>  # Logs for specific kernel
+nvctl driver dkms unregister  # Remove nvidia from DKMS
+nvctl driver dkms hook      # Install pacman hook (with logging + notifications)
+nvctl driver dkms fix       # Attempt to fix DKMS issues
 ```
 
-**Example:**
-```bash
-nvctl driver validate --driver 590
+**Example Output - `nvctl driver dkms status`:**
+```
+NVIDIA DKMS Status
+══════════════════════════════════════════════════
+
+DKMS:           installed
+Driver:         590.48.01
+Registered:     yes
+Source:         /usr/src/nvidia-590.48.01
+
+Installed Kernels (4):
+  ✓ 6.18.1-zen1-2-zen [nvidia: dkms, headers: ✓]
+  ✓ 6.18.2-1-cachyos-lto [nvidia: dkms, headers: ✓] (running)
+  ✓ 6.18.2-273-tkg-linux-ghost [nvidia: dkms, headers: ✓]
+  ✗ 6.18.1-1-cachyos-lto [nvidia: MISSING, headers: ✗]
+
+Pacman Hook:    installed (auto-rebuild enabled)
 ```
 
-### nvctl gsp
-GSP Firmware Management (nvidia-open).
+#### nvctl driver gsp
+GSP firmware management (nvidia-open only).
 
 ```bash
-nvctl gsp status            # Firmware status
-nvctl gsp enable            # Enable GSP firmware
-nvctl gsp disable           # Disable (fallback mode)
-nvctl gsp diagnostics       # Run diagnostics
-nvctl gsp check-update      # Check for updates
-nvctl gsp update            # Update firmware
+nvctl driver gsp status       # GSP firmware status
+nvctl driver gsp enable       # Enable GSP firmware
+nvctl driver gsp disable      # Disable (fallback mode)
+nvctl driver gsp diagnostics  # Run GSP diagnostics
+nvctl driver gsp explain      # Learn about GSP (what/why/issues)
+nvctl driver gsp check-update # Check for updates
+nvctl driver gsp update       # Update GSP firmware
+```
+
+**Example Output - `nvctl driver gsp status`:**
+```
+NVIDIA GSP Firmware Status
+
+GSP Enabled:    Yes
+GSP State:      loaded
+Version:        590.48.01
+Firmware:       /lib/firmware/nvidia/gb202/gsp
+GPU Arch:       gb202
+```
+
+**Example Output - `nvctl driver info`:**
+```
+Driver Information
+══════════════════════════════════════════════════
+
+GPU:            NVIDIA GeForce RTX 5090 [00000000:01:00.0]
+Driver:         590.48.01 (nvidia-open)
+Module Type:    Open Kernel (Dual MIT/GPL)
+Built By:       chris@arch (Thu Dec 18 08:13:20 PM EST 2025)
+
+Kernel:         6.18.2-1-cachyos-lto (running)
+Module For:     6.18.2-1-cachyos-lto ✓
+
+GSP:            enabled (loaded)
+GSP Firmware:   590.48.01
+                /lib/firmware/nvidia/gb202/gsp
+GPU Arch:       gb202
+
+DKMS:           Not managed (manually installed)
+
+Modules Loaded: nvidia_drm nvidia_uvm nvidia_modeset nvidia
+```
+
+**Example Output - `nvctl driver check`:**
+```
+Driver Health Check
+══════════════════════════════════════════════════
+
+Passed:
+  ✓ Kernel version matches module
+  ✓ Kernel headers installed
+  ✓ All 4 installed kernels have nvidia modules
+  ✓ GSP firmware present for nvidia-open
+
+Warnings:
+  ⚠️  DKMS installed but nvidia not registered
+
+GSP Firmware:
+  ✓ nvidia-open driver: Using nvidia-open kernel module
+  ✓ GSP enabled: GSP firmware is enabled
+  ✓ GSP initialization: GSP firmware loaded
+  ✓ GSP firmware files: Found at /lib/firmware/nvidia/gb202/gsp
+
+──────────────────────────────────────────────────
+⚠️  1 warning(s), no errors
 ```
 
 ### nvctl arch
@@ -521,7 +618,8 @@ nvctl vibrance set 120
 # Health check
 nvctl doctor
 nvctl gpu info
-nvctl drivers status
+nvctl driver info
+nvctl driver check
 nvctl fan info
 
 # Stress test
@@ -589,9 +687,12 @@ mv nvctl.fish ~/.config/fish/completions/
 
 ## See Also
 
+- [DKMS Integration](DKMS.md)
+- [GSP Firmware](GSP.md)
 - [VRR/G-SYNC Control](VRR_GSYNC.md)
 - [HDR Control](HDR_CONTROL.md)
 - [Overclocking Guide](OVERCLOCKING.md)
+- [NVIDIA 590 Driver](NVIDIA_OPEN_590.md)
 - [Building from Source](BUILDING.md)
 
 ---

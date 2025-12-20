@@ -198,6 +198,27 @@ pub struct Config {
     pub osd_enabled: bool,
     #[serde(default)]
     pub osd_position: String,
+    #[serde(default)]
+    pub driver: DriverConfig,
+}
+
+/// Driver-related configuration for DKMS setup and builds
+#[derive(Serialize, Deserialize, Default, Clone)]
+pub struct DriverConfig {
+    /// Path to open-gpu-kernel-modules source (expands ~)
+    #[serde(default)]
+    pub source_path: String,
+    /// DKMS configuration
+    #[serde(default)]
+    pub dkms: DriverDkmsConfig,
+}
+
+/// DKMS-specific driver configuration
+#[derive(Serialize, Deserialize, Default, Clone)]
+pub struct DriverDkmsConfig {
+    /// Build for all installed kernels (default: false, just running kernel)
+    #[serde(default)]
+    pub build_all_kernels: bool,
 }
 
 impl Config {

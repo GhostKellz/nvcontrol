@@ -14,6 +14,7 @@ use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
+    text::{Line, Span},
     widgets::{
         Block, Borders, Cell, Clear, Gauge, Paragraph, Row, Scrollbar, ScrollbarOrientation,
         ScrollbarState, Sparkline, Table, TableState, Tabs,
@@ -2086,39 +2087,187 @@ impl TuiApp {
     }
 
     fn draw_drivers_tab(&self, f: &mut Frame, area: Rect) {
-        let mut lines = vec![];
+        use crate::drivers;
+        use crate::gsp_firmware::GspManager;
 
+        let accent = self.theme.teal.to_ratatui();
+        let green = self.theme.green.to_ratatui();
+        let yellow = self.theme.yellow.to_ratatui();
+        let red = self.theme.red.to_ratatui();
+        let fg = self.theme.fg.to_ratatui();
+        let comment = self.theme.comment.to_ratatui();
+
+        // Layout: Driver info, GSP, DKMS
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(8), // Driver info
+                Constraint::Length(7), // GSP status
+                Constraint::Min(6),    // DKMS status
+            ])
+            .split(area);
+
+        // Driver Info section
+        let mut driver_lines = vec![];
         if let Some(ref caps) = self.driver_capabilities {
-            lines.push(format!("Driver Version: {}", caps.version));
-            lines.push(format!("Major Version: {}", caps.major_version));
-            lines.push(format!(
-                "Beta Driver: {}",
-                if caps.is_beta { "Yes" } else { "No" }
+            let driver_type = if GspManager::is_nvidia_open() {
+                "nvidia-open"
+            } else {
+                "proprietary"
+            };
+            driver_lines.push(format!("Driver:     {} ({})", caps.version, driver_type));
+            driver_lines.push(format!(
+                "Major:      {}{}",
+                caps.major_version,
+                if caps.is_beta { " (beta)" } else { "" }
             ));
-            lines.push(format!(
-                "Vulkan Swapchain Perf: {}",
-                caps.has_vulkan_swapchain_perf
+            driver_lines.push(format!(
+                "Vulkan:     {}",
+                if caps.has_vulkan_swapchain_perf {
+                    "swapchain perf"
+                } else {
+                    "standard"
+                }
             ));
-            lines.push(format!("USB4 DP Support: {}", caps.has_usb4_dp_support));
-            lines.push(format!("PREEMPT_RT Support: {}", caps.supports_preempt_rt));
+            driver_lines.push(format!(
+                "USB4 DP:    {}",
+                if caps.has_usb4_dp_support {
+                    "supported"
+                } else {
+                    "no"
+                }
+            ));
+            driver_lines.push(format!(
+                "PREEMPT_RT: {}",
+                if caps.supports_preempt_rt {
+                    "supported"
+                } else {
+                    "no"
+                }
+            ));
         } else {
-            lines.push("Driver capabilities not available".to_string());
+            driver_lines.push("Driver info not available".to_string());
         }
 
-        lines.push(String::new());
+        let driver_para = Paragraph::new(driver_lines.join("\n"))
+            .block(
+                Block::default()
+                    .title(" Driver ")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(accent)),
+            )
+            .style(Style::default().fg(fg));
+        f.render_widget(driver_para, chunks[0]);
 
-        if let Some(ref validation) = self.driver_validation {
-            lines.push(format!("Validation Passed: {}", validation.passed));
-            lines.push(format!("Wayland OK: {:?}", validation.wayland_ok));
-            lines.push(format!("glibc OK: {:?}", validation.glibc_ok));
-            if !validation.warnings.is_empty() {
-                lines.push(format!("Warnings: {}", validation.warnings.len()));
+        // GSP Status section
+        let gsp_mgr = GspManager::new();
+        let gsp_status = gsp_mgr.get_deep_status();
+
+        let gsp_lines: Vec<Line> = if gsp_status.is_nvidia_open {
+            let gsp_state_color = match gsp_status.state.as_str() {
+                "active" | "loaded" => green,
+                "failed" => red,
+                _ => yellow,
+            };
+            let enabled_color = if gsp_status.enabled { green } else { yellow };
+
+            let mut lines = vec![
+                Line::from(vec![
+                    Span::styled("Enabled:  ", Style::default().fg(fg)),
+                    Span::styled(
+                        if gsp_status.enabled { "yes" } else { "no" },
+                        Style::default().fg(enabled_color),
+                    ),
+                ]),
+                Line::from(vec![
+                    Span::styled("State:    ", Style::default().fg(fg)),
+                    Span::styled(&gsp_status.state, Style::default().fg(gsp_state_color)),
+                ]),
+            ];
+            if let Some(ref arch) = gsp_status.gpu_arch {
+                lines.push(Line::from(vec![
+                    Span::styled("GPU Arch: ", Style::default().fg(fg)),
+                    Span::styled(arch.as_str(), Style::default().fg(accent)),
+                ]));
+            }
+            if gsp_status.error_count > 0 {
+                lines.push(Line::from(vec![
+                    Span::styled("Errors:   ", Style::default().fg(fg)),
+                    Span::styled(
+                        format!("{} (nvctl driver logs --gsp)", gsp_status.error_count),
+                        Style::default().fg(red),
+                    ),
+                ]));
+            }
+            lines
+        } else {
+            vec![Line::from(Span::styled(
+                "N/A (proprietary driver)",
+                Style::default().fg(comment),
+            ))]
+        };
+
+        let gsp_para = Paragraph::new(gsp_lines).block(
+            Block::default()
+                .title(" GSP Firmware ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(accent)),
+        );
+        f.render_widget(gsp_para, chunks[1]);
+
+        // DKMS Status section
+        let dkms_info = drivers::get_dkms_setup_info();
+
+        let mut dkms_lines = vec![];
+        if !dkms_info.dkms_installed {
+            dkms_lines.push("DKMS not installed".to_string());
+        } else {
+            dkms_lines.push(format!(
+                "Registered: {}",
+                if dkms_info.nvidia_registered {
+                    "yes"
+                } else {
+                    "no"
+                }
+            ));
+
+            // Count kernels with nvidia
+            let mut kernel_count = 0;
+            let mut nvidia_count = 0;
+            if let Ok(entries) = std::fs::read_dir("/lib/modules") {
+                for entry in entries.flatten() {
+                    kernel_count += 1;
+                    let kernel = entry.file_name().to_string_lossy().to_string();
+                    let paths = [
+                        format!("/lib/modules/{}/kernel/drivers/video/nvidia.ko.zst", kernel),
+                        format!("/lib/modules/{}/kernel/drivers/video/nvidia.ko", kernel),
+                        format!("/lib/modules/{}/extramodules/nvidia.ko.zst", kernel),
+                        format!("/lib/modules/{}/extramodules/nvidia.ko", kernel),
+                    ];
+                    if paths.iter().any(|p| std::path::Path::new(p).exists()) {
+                        nvidia_count += 1;
+                    }
+                }
+            }
+
+            let kernels_text = format!("{}/{} kernels have nvidia", nvidia_count, kernel_count);
+            dkms_lines.push(format!("Kernels:    {}", kernels_text));
+
+            if !dkms_info.nvidia_registered {
+                dkms_lines.push(String::new());
+                dkms_lines.push("Run: nvctl driver dkms setup".to_string());
             }
         }
 
-        let text = lines.join("\n");
-        let para = Paragraph::new(text);
-        f.render_widget(para, area);
+        let dkms_para = Paragraph::new(dkms_lines.join("\n"))
+            .block(
+                Block::default()
+                    .title(" DKMS ")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(accent)),
+            )
+            .style(Style::default().fg(fg));
+        f.render_widget(dkms_para, chunks[2]);
     }
 
     fn draw_settings_tab(&self, f: &mut Frame, area: Rect) {

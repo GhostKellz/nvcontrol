@@ -92,12 +92,13 @@ enum Command {
         #[command(subcommand)]
         subcommand: ContainerSubcommand,
     },
-    /// 🔧 System drivers and utilities
+    /// 🔧 Driver management (deprecated, use 'driver' instead)
+    #[command(hide = true)]
     Drivers {
         #[command(subcommand)]
         subcommand: DriversSubcommand,
     },
-    /// 🧠 Driver capabilities and validation
+    /// 🧠 Driver management, status, and kernel modules
     Driver {
         #[command(subcommand)]
         subcommand: DriverSubcommand,
@@ -158,7 +159,8 @@ enum Command {
         #[command(subcommand)]
         subcommand: ArchSubcommand,
     },
-    /// 🔧 GSP Firmware Management (nvidia-open)
+    /// 🔧 GSP Firmware Management (deprecated, use 'driver gsp' instead)
+    #[command(hide = true)]
     Gsp {
         #[command(subcommand)]
         subcommand: GspSubcommand,
@@ -875,14 +877,97 @@ enum DriversSubcommand {
 
 #[derive(Subcommand)]
 enum DriverSubcommand {
-    /// Show driver capabilities and requirements
-    Info,
+    /// Show comprehensive driver status (GPU, version, kernel, GSP, DKMS)
+    Info {
+        /// Output compact format for pasting (Discord-friendly)
+        #[arg(long)]
+        paste: bool,
+    },
+    /// Run driver health checks with opinionated warnings
+    Check,
+    /// Show driver capabilities and feature requirements
+    Capabilities,
     /// Validate system readiness for a target driver version
     Validate {
         /// Target driver major version (e.g., 590)
         #[arg(long)]
         driver: u32,
     },
+    /// Install a driver (proprietary, open, open-beta)
+    Install {
+        /// Driver type: proprietary, open, open-beta
+        driver_type: String,
+    },
+    /// Update driver to latest version
+    Update,
+    /// Rollback to previous driver version (Arch Linux only)
+    Rollback,
+    /// DKMS kernel module management
+    Dkms {
+        #[command(subcommand)]
+        subcommand: DriverDkmsSubcommand,
+    },
+    /// GSP firmware management (nvidia-open)
+    Gsp {
+        #[command(subcommand)]
+        subcommand: DriverGspSubcommand,
+    },
+    /// View NVIDIA driver kernel logs
+    Logs {
+        /// Filter: nvidia (all), gsp (GSP only), xid (errors only)
+        #[arg(long, default_value = "nvidia")]
+        filter: String,
+        /// Show only last N lines
+        #[arg(long)]
+        tail: Option<usize>,
+    },
+}
+
+#[derive(Subcommand)]
+enum DriverDkmsSubcommand {
+    /// Show detailed DKMS module status for all kernels
+    Status,
+    /// Set up DKMS for nvidia-open (register source, create config)
+    Setup,
+    /// Build nvidia modules for all kernels (or specific with --kernel)
+    Build {
+        /// Build for specific kernel only (e.g., 6.18.2-1-cachyos-lto)
+        #[arg(long, short)]
+        kernel: Option<String>,
+    },
+    /// Show DKMS build logs (errors, warnings)
+    Logs {
+        /// Show logs for specific kernel only
+        #[arg(long, short)]
+        kernel: Option<String>,
+        /// Show last N lines of each log (default: summary only)
+        #[arg(long, short)]
+        tail: Option<usize>,
+    },
+    /// Unregister nvidia from DKMS
+    Unregister,
+    /// Install pacman hooks for auto-rebuild on kernel updates (Arch)
+    Hook,
+    /// Attempt to fix common DKMS issues
+    Fix,
+}
+
+#[derive(Subcommand)]
+enum DriverGspSubcommand {
+    /// Show GSP firmware status
+    Status,
+    /// Enable GSP firmware
+    Enable,
+    /// Disable GSP firmware (fallback mode)
+    Disable,
+    /// Run GSP diagnostics
+    Diagnostics,
+    /// Explain what GSP is and common issues
+    Explain,
+    /// Check for firmware updates
+    CheckUpdate,
+    /// Update GSP firmware
+    Update,
 }
 
 #[derive(Subcommand)]
@@ -3007,6 +3092,7 @@ fn main() {
             }
         }
         Command::Gsp { subcommand } => {
+            eprintln!("⚠️  'nvctl gsp' is deprecated. Use 'nvctl driver gsp' instead.\n");
             use gsp_firmware::GspManager;
 
             let gsp = GspManager::new();
@@ -3135,50 +3221,67 @@ fn main() {
                 },
             }
         }
-        Command::Drivers { subcommand } => match subcommand {
-            DriversSubcommand::Status => match drivers::get_driver_status() {
-                Ok(status) => {
-                    println!("Driver Status:");
-                    println!(
-                        "  Current: {} ({})",
-                        status.current_version, status.driver_type
-                    );
-                    println!(
-                        "  Available: {}",
-                        status.available_version.unwrap_or("Unknown".to_string())
-                    );
-                    println!(
-                        "  Update Available: {}",
-                        if status.update_available { "Yes" } else { "No" }
-                    );
+        Command::Drivers { subcommand } => {
+            eprintln!("⚠️  'nvctl drivers' is deprecated. Use 'nvctl driver' instead.\n");
+            match subcommand {
+                DriversSubcommand::Status => match drivers::get_driver_status() {
+                    Ok(status) => {
+                        println!("Driver Status:");
+                        println!(
+                            "  Current: {} ({})",
+                            status.current_version, status.driver_type
+                        );
+                        println!(
+                            "  Available: {}",
+                            status.available_version.unwrap_or("Unknown".to_string())
+                        );
+                        println!(
+                            "  Update Available: {}",
+                            if status.update_available { "Yes" } else { "No" }
+                        );
+                    }
+                    Err(e) => eprintln!("Failed to get driver status: {e}"),
+                },
+                DriversSubcommand::Install { driver_type } => {
+                    match drivers::install_driver(&driver_type) {
+                        Ok(()) => println!("Driver installation initiated for: {driver_type}"),
+                        Err(e) => eprintln!("Failed to install driver: {e}"),
+                    }
                 }
-                Err(e) => eprintln!("Failed to get driver status: {e}"),
-            },
-            DriversSubcommand::Install { driver_type } => {
-                match drivers::install_driver(&driver_type) {
-                    Ok(()) => println!("Driver installation initiated for: {driver_type}"),
-                    Err(e) => eprintln!("Failed to install driver: {e}"),
+                DriversSubcommand::Update => match drivers::update_driver() {
+                    Ok(()) => println!("Driver update completed"),
+                    Err(e) => eprintln!("Failed to update driver: {e}"),
+                },
+                DriversSubcommand::Rollback => match drivers::rollback_driver() {
+                    Ok(()) => println!("Driver rollback completed"),
+                    Err(e) => eprintln!("Failed to rollback driver: {e}"),
+                },
+                DriversSubcommand::GenerateCompletions { shell } => {
+                    match drivers::generate_shell_completions(&shell) {
+                        Ok(()) => {} // Completions printed to stdout
+                        Err(e) => eprintln!("Failed to generate completions: {e}"),
+                    }
                 }
             }
-            DriversSubcommand::Update => match drivers::update_driver() {
-                Ok(()) => println!("Driver update completed"),
-                Err(e) => eprintln!("Failed to update driver: {e}"),
-            },
-            DriversSubcommand::Rollback => match drivers::rollback_driver() {
-                Ok(()) => println!("Driver rollback completed"),
-                Err(e) => eprintln!("Failed to rollback driver: {e}"),
-            },
-            DriversSubcommand::GenerateCompletions { shell } => {
-                match drivers::generate_shell_completions(&shell) {
-                    Ok(()) => {} // Completions printed to stdout
-                    Err(e) => eprintln!("Failed to generate completions: {e}"),
-                }
-            }
-        },
+        }
         Command::Driver { subcommand } => match subcommand {
-            DriverSubcommand::Info => {
-                if let Err(e) = drivers::print_driver_info() {
+            DriverSubcommand::Info { paste } => {
+                if paste {
+                    if let Err(e) = drivers::print_driver_logs_paste() {
+                        eprintln!("Failed to show driver info: {e}");
+                    }
+                } else if let Err(e) = drivers::print_driver_info_full() {
                     eprintln!("Failed to show driver info: {e}");
+                }
+            }
+            DriverSubcommand::Check => {
+                if let Err(e) = drivers::print_driver_check() {
+                    eprintln!("Failed to run driver checks: {e}");
+                }
+            }
+            DriverSubcommand::Capabilities => {
+                if let Err(e) = drivers::print_driver_info() {
+                    eprintln!("Failed to show driver capabilities: {e}");
                 }
             }
             DriverSubcommand::Validate { driver } => {
@@ -3186,6 +3289,115 @@ fn main() {
                     eprintln!("Please provide the driver major version, e.g. 590");
                 } else if let Err(e) = drivers::print_validation(driver) {
                     eprintln!("Failed to validate system: {e}");
+                }
+            }
+            DriverSubcommand::Install { driver_type } => {
+                match drivers::install_driver(&driver_type) {
+                    Ok(()) => println!("Driver installation initiated for: {driver_type}"),
+                    Err(e) => eprintln!("Failed to install driver: {e}"),
+                }
+            }
+            DriverSubcommand::Update => match drivers::update_driver() {
+                Ok(()) => println!("Driver update completed"),
+                Err(e) => eprintln!("Failed to update driver: {e}"),
+            },
+            DriverSubcommand::Rollback => match drivers::rollback_driver() {
+                Ok(()) => println!("Driver rollback completed"),
+                Err(e) => eprintln!("Failed to rollback driver: {e}"),
+            },
+            DriverSubcommand::Dkms { subcommand } => match subcommand {
+                DriverDkmsSubcommand::Status => {
+                    if let Err(e) = drivers::print_dkms_status_detailed() {
+                        eprintln!("Failed to show DKMS status: {e}");
+                    }
+                }
+                DriverDkmsSubcommand::Setup => {
+                    if let Err(e) = drivers::setup_dkms_nvidia_open() {
+                        eprintln!("DKMS setup incomplete: {e}");
+                    }
+                }
+                DriverDkmsSubcommand::Build { kernel } => {
+                    if let Err(e) = drivers::build_dkms_nvidia(kernel.as_deref()) {
+                        eprintln!("DKMS build failed: {e}");
+                    }
+                }
+                DriverDkmsSubcommand::Logs { kernel, tail } => {
+                    if let Err(e) = drivers::print_dkms_logs(kernel.as_deref(), tail) {
+                        eprintln!("Failed to show DKMS logs: {e}");
+                    }
+                }
+                DriverDkmsSubcommand::Unregister => {
+                    if let Err(e) = drivers::unregister_dkms_nvidia() {
+                        eprintln!("Failed to unregister: {e}");
+                    }
+                }
+                DriverDkmsSubcommand::Hook => {
+                    if let Err(e) = drivers::install_pacman_hooks() {
+                        eprintln!("Failed to install hook: {e}");
+                    }
+                }
+                DriverDkmsSubcommand::Fix => match drivers::fix_dkms_issues() {
+                    Ok(()) => println!("DKMS fix attempts completed"),
+                    Err(e) => eprintln!("Failed to fix DKMS issues: {e}"),
+                },
+            },
+            DriverSubcommand::Gsp { subcommand } => {
+                use gsp_firmware::GspManager;
+                let gsp = GspManager::new();
+
+                match subcommand {
+                    DriverGspSubcommand::Status => {
+                        if let Err(e) = gsp.print_status() {
+                            eprintln!("❌ Failed to print status: {e}");
+                        }
+                    }
+                    DriverGspSubcommand::Enable => {
+                        if let Err(e) = gsp.enable_gsp() {
+                            eprintln!("❌ Failed to enable GSP: {e}");
+                        }
+                    }
+                    DriverGspSubcommand::Disable => {
+                        if let Err(e) = gsp.disable_gsp() {
+                            eprintln!("❌ Failed to disable GSP: {e}");
+                        }
+                    }
+                    DriverGspSubcommand::Diagnostics => {
+                        if let Err(e) = gsp.run_diagnostics() {
+                            eprintln!("Failed to run diagnostics: {e}");
+                        }
+                    }
+                    DriverGspSubcommand::Explain => {
+                        gsp_firmware::GspManager::print_explain();
+                    }
+                    DriverGspSubcommand::CheckUpdate => match gsp.check_for_updates() {
+                        Ok(available) => {
+                            if available {
+                                println!("✅ Firmware update available!");
+                            } else {
+                                println!("ℹ️  Firmware is up to date");
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to check for updates: {e}"),
+                    },
+                    DriverGspSubcommand::Update => {
+                        if let Err(e) = gsp.update_firmware() {
+                            eprintln!("Failed to update firmware: {e}");
+                        }
+                    }
+                }
+            }
+            DriverSubcommand::Logs { filter, tail } => {
+                let log_filter = match filter.to_lowercase().as_str() {
+                    "nvidia" | "all" => drivers::LogFilter::Nvidia,
+                    "gsp" => drivers::LogFilter::Gsp,
+                    "xid" | "errors" => drivers::LogFilter::Xid,
+                    _ => {
+                        eprintln!("Unknown filter: {}. Use: nvidia, gsp, or xid", filter);
+                        return;
+                    }
+                };
+                if let Err(e) = drivers::print_driver_logs(log_filter, tail) {
+                    eprintln!("Failed to show logs: {e}");
                 }
             }
         },
