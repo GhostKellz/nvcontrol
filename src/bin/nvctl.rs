@@ -630,6 +630,35 @@ enum DlssSubcommand {
     Auto,
     /// Show performance metrics
     Metrics,
+    /// Run DLSS diagnostics (GPU, driver, Proton compatibility)
+    Doctor,
+    /// Scan game libraries for DLSS-enabled games
+    Games {
+        /// Only show games with outdated DLSS versions
+        #[arg(long)]
+        outdated: bool,
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show available DLSS versions
+    Versions,
+    /// Generate Proton launch options for a game
+    LaunchOpts {
+        /// Steam App ID or game name
+        game: String,
+        /// Show DLSS version indicator overlay
+        #[arg(long)]
+        indicator: bool,
+        /// Specific DLSS version to use
+        #[arg(long)]
+        version: Option<String>,
+    },
+    /// Show info about a specific game's DLSS installation
+    Info {
+        /// Steam App ID or game name
+        game: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -2657,6 +2686,203 @@ fn main() {
                         Err(e) => eprintln!("❌ Failed to get DLSS metrics: {}", e),
                     },
                     Err(e) => eprintln!("❌ Failed to initialize DLSS: {}", e),
+                },
+                DlssSubcommand::Doctor => {
+                    match dlss::DlssController::doctor() {
+                        Ok(result) => {
+                            let status_icon = match result.status {
+                                dlss::DoctorStatus::Healthy => "✅",
+                                dlss::DoctorStatus::Warning => "⚠️",
+                                dlss::DoctorStatus::Error => "❌",
+                            };
+                            println!("🩺 DLSS Doctor - {}\n", status_icon);
+
+                            // Print each check
+                            for check in [
+                                &result.gpu_check,
+                                &result.driver_check,
+                                &result.proton_check,
+                                &result.nvapi_check,
+                                &result.vkd3d_check,
+                            ] {
+                                let icon = match check.status {
+                                    dlss::DoctorStatus::Healthy => "✅",
+                                    dlss::DoctorStatus::Warning => "⚠️",
+                                    dlss::DoctorStatus::Error => "❌",
+                                };
+                                println!("{} {}: {}", icon, check.name, check.message);
+                                if let Some(ref details) = check.details {
+                                    println!("   └─ {}", details);
+                                }
+                            }
+
+                            if !result.recommendations.is_empty() {
+                                println!("\n💡 Recommendations:");
+                                for rec in &result.recommendations {
+                                    println!("   • {}", rec);
+                                }
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to run DLSS doctor: {}", e),
+                    }
+                }
+                DlssSubcommand::Games { outdated, json } => {
+                    match dlss::DlssController::scan_games() {
+                        Ok(games) => {
+                            let latest = dlss::DllVersion::new(310, 5, 0, 0);
+
+                            let filtered: Vec<_> = if outdated {
+                                games
+                                    .into_iter()
+                                    .filter(|g| {
+                                        g.dlls.iter().any(|d| {
+                                            d.parsed_version
+                                                .as_ref()
+                                                .map(|v| v < &latest)
+                                                .unwrap_or(true)
+                                        })
+                                    })
+                                    .collect()
+                            } else {
+                                games
+                            };
+
+                            if json {
+                                match serde_json::to_string_pretty(&filtered) {
+                                    Ok(j) => println!("{}", j),
+                                    Err(e) => eprintln!("❌ Failed to serialize: {}", e),
+                                }
+                            } else if filtered.is_empty() {
+                                println!("ℹ️  No DLSS-enabled games found");
+                            } else {
+                                println!("🎮 Found {} DLSS-enabled games:\n", filtered.len());
+                                for game in &filtered {
+                                    let launcher = game.launcher.display_name();
+                                    println!("📦 {} ({})", game.game_name, launcher);
+                                    if let Some(ref app_id) = game.app_id {
+                                        println!("   App ID: {}", app_id);
+                                    }
+                                    for dll in &game.dlls {
+                                        let version = dll.version.as_deref().unwrap_or("Unknown");
+                                        let transformer = if dll.is_transformer_model {
+                                            " [Transformer]"
+                                        } else {
+                                            ""
+                                        };
+                                        let needs_update = dll
+                                            .parsed_version
+                                            .as_ref()
+                                            .map(|v| if v < &latest { " ⬆️" } else { " ✓" })
+                                            .unwrap_or("");
+                                        println!(
+                                            "   {} v{}{}{}",
+                                            dll.dll_type.display_name(),
+                                            version,
+                                            transformer,
+                                            needs_update
+                                        );
+                                    }
+                                    println!();
+                                }
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to scan games: {}", e),
+                    }
+                }
+                DlssSubcommand::Versions => {
+                    let versions = dlss::DlssController::get_available_versions();
+                    println!("📦 Available DLSS Versions:\n");
+                    for ver in &versions {
+                        let latest = if ver.is_latest { " [LATEST]" } else { "" };
+                        let transformer = if ver.is_transformer {
+                            " [Transformer Model]"
+                        } else {
+                            ""
+                        };
+                        println!(
+                            "  {} v{}{}{}",
+                            if ver.is_latest { "🌟" } else { "  " },
+                            ver.version,
+                            latest,
+                            transformer
+                        );
+                        if let Some(ref date) = ver.release_date {
+                            println!("     Released: {}", date);
+                        }
+                    }
+                    println!("\n💡 Use PROTON_DLSS_UPGRADE=1 to auto-upgrade DLSS in Proton games");
+                    println!("   Or PROTON_DLSS_UPGRADE=310.5.0 for a specific version");
+                }
+                DlssSubcommand::LaunchOpts {
+                    game,
+                    indicator,
+                    version,
+                } => {
+                    let opts = if let Some(ref ver) = version {
+                        dlss::ProtonLaunchOptions::with_version(ver)
+                    } else if indicator {
+                        dlss::ProtonLaunchOptions::with_indicator()
+                    } else {
+                        dlss::ProtonLaunchOptions::default_upgrade()
+                    };
+
+                    println!("🚀 Steam Launch Options for '{}':\n", game);
+                    println!("   {}\n", opts.to_steam_launch_options());
+
+                    if indicator {
+                        println!("💡 DLSS version indicator will show in-game");
+                    }
+                    println!(
+                        "📋 Copy and paste into Steam > Right-click game > Properties > Launch Options"
+                    );
+                }
+                DlssSubcommand::Info { game } => match dlss::DlssController::scan_games() {
+                    Ok(games) => {
+                        let found = games.iter().find(|g| {
+                            g.game_name.to_lowercase().contains(&game.to_lowercase())
+                                || g.app_id.as_ref().map(|id| id == &game).unwrap_or(false)
+                        });
+
+                        match found {
+                            Some(g) => {
+                                println!("🎮 {}\n", g.game_name);
+                                println!("   Launcher: {}", g.launcher.display_name());
+                                println!("   Path: {}", g.install_path.display());
+                                if let Some(ref app_id) = g.app_id {
+                                    println!("   App ID: {}", app_id);
+                                }
+                                println!("   Proton: {}", if g.is_proton { "Yes" } else { "No" });
+                                println!("\n   DLSS DLLs:");
+                                for dll in &g.dlls {
+                                    let version = dll.version.as_deref().unwrap_or("Unknown");
+                                    let size_mb = dll.file_size / (1024 * 1024);
+                                    println!(
+                                        "   • {} v{} ({}MB)",
+                                        dll.dll_type.display_name(),
+                                        version,
+                                        size_mb
+                                    );
+                                    println!("     Path: {}", dll.path.display());
+                                    if dll.is_transformer_model {
+                                        println!("     Model: 2nd Gen Transformer ✓");
+                                    }
+                                    if dll.backup_path.is_some() {
+                                        println!("     Backup: Available");
+                                    }
+                                }
+
+                                if g.is_proton {
+                                    println!("\n💡 Recommended launch options:");
+                                    println!("   PROTON_DLSS_UPGRADE=1 %command%");
+                                }
+                            }
+                            None => {
+                                eprintln!("❌ Game '{}' not found", game);
+                                eprintln!("   Run 'nvctl dlss games' to see all DLSS games");
+                            }
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Failed to scan games: {}", e),
                 },
             }
         }

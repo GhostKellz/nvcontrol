@@ -255,6 +255,7 @@ impl eframe::App for NvControlApp {
             Tab::Hdr => super::tabs::hdr::render(ui, &mut self.state, ctx),
             Tab::Vrr => super::tabs::vrr::render(ui, &mut self.state, ctx),
             Tab::GameProfiles => super::tabs::game_profiles::render(ui, &mut self.state, ctx),
+            Tab::Dlss => super::tabs::dlss::render(ui, &mut self.state, ctx),
             Tab::Osd => super::tabs::osd::render(ui, &mut self.state, ctx),
             Tab::Latency => super::tabs::latency::render(ui, &mut self.state, ctx),
             Tab::Gamescope => super::tabs::gamescope::render(ui, &mut self.state, ctx),

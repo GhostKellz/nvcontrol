@@ -234,6 +234,9 @@ pub struct GuiState {
     pub nvenc_caps_last_update: std::time::Instant,
     pub cached_is_recording: bool,
     pub recording_status_last_update: std::time::Instant,
+
+    // === DLSS Tab State ===
+    pub dlss_state: crate::gui::tabs::dlss::DlssTabState,
 }
 
 impl Default for GuiState {
@@ -499,6 +502,9 @@ impl GuiState {
             recording_status_last_update: std::time::Instant::now()
                 .checked_sub(std::time::Duration::from_secs(10))
                 .unwrap_or_else(std::time::Instant::now), // Force initial refresh
+
+            // DLSS
+            dlss_state: Default::default(),
         }
     }
 

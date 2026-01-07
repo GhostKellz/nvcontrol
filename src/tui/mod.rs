@@ -7,6 +7,7 @@ pub use event::{Event, EventHandler};
 pub use terminal::Tui;
 
 use crate::config::TuiSessionState;
+use crate::dlss::{self, DlssController};
 use crate::nvml_backend::GuiBackendContext;
 use crate::{NvResult, gui_tuner, nvidia_profiler, themes};
 use crossterm::event::{KeyCode, KeyModifiers, MouseEvent, MouseEventKind};
@@ -66,6 +67,7 @@ pub enum Tab {
     Profiler,
     Osd,
     Drivers,
+    Dlss,
     Settings,
 }
 
@@ -85,6 +87,7 @@ impl Tab {
             "Profiler",
             "OSD",
             "Drivers",
+            "DLSS",
             "Settings",
         ]
     }
@@ -104,12 +107,13 @@ impl Tab {
             10 => Tab::Profiler,
             11 => Tab::Osd,
             12 => Tab::Drivers,
+            13 => Tab::Dlss,
             _ => Tab::Settings,
         }
     }
 
     fn count() -> usize {
-        14
+        15
     }
 }
 
@@ -313,6 +317,13 @@ pub struct TuiApp {
     sort_selected_column: usize,
     /// Show sparkline graphs (toggle with 'g')
     show_graphs: bool,
+    // === DLSS cache (to avoid blocking) ===
+    /// Cached DLSS controller
+    dlss_controller: Option<DlssController>,
+    /// Cached DLSS doctor result
+    dlss_doctor_result: Option<dlss::DlssDoctorResult>,
+    /// Last DLSS cache update
+    dlss_last_update: Instant,
 }
 
 impl TuiApp {
@@ -399,6 +410,12 @@ impl TuiApp {
             sort_column: SortColumn::VramDesc,
             sort_selected_column: 0,
             show_graphs: true,
+            // DLSS cache - initialized lazily on first access
+            dlss_controller: None,
+            dlss_doctor_result: None,
+            dlss_last_update: Instant::now()
+                .checked_sub(Duration::from_secs(120))
+                .unwrap_or_else(Instant::now), // Force initial refresh
         }
     }
 
@@ -915,6 +932,24 @@ impl TuiApp {
 
         // Refresh process list (rate-limited internally)
         self.refresh_processes();
+
+        // Refresh DLSS cache (rate-limited - every 60s)
+        self.refresh_dlss_cache();
+    }
+
+    /// Refresh DLSS cache (rate-limited to avoid blocking)
+    fn refresh_dlss_cache(&mut self) {
+        // Only refresh every 60 seconds
+        if self.dlss_last_update.elapsed().as_secs() < 60 {
+            return;
+        }
+        self.dlss_last_update = Instant::now();
+
+        // Refresh controller (GPU capabilities)
+        self.dlss_controller = DlssController::new().ok();
+
+        // Refresh doctor result
+        self.dlss_doctor_result = DlssController::doctor().ok();
     }
 
     fn save_session_state(&self) {
@@ -1486,6 +1521,7 @@ impl TuiApp {
             Tab::Profiler => self.draw_profiler_tab(f, inner),
             Tab::Osd => self.draw_osd_tab(f, inner),
             Tab::Drivers => self.draw_drivers_tab(f, inner),
+            Tab::Dlss => self.draw_dlss_tab(f, inner),
             Tab::Settings => self.draw_settings_tab(f, inner),
             _ => self.draw_generic_tab(f, inner, tab),
         }
@@ -2268,6 +2304,205 @@ impl TuiApp {
             )
             .style(Style::default().fg(fg));
         f.render_widget(dkms_para, chunks[2]);
+    }
+
+    fn draw_dlss_tab(&self, f: &mut Frame, area: Rect) {
+        use crate::dlss::DoctorStatus;
+
+        let accent = self.theme.teal.to_ratatui();
+        let green = self.theme.green.to_ratatui();
+        let yellow = self.theme.yellow.to_ratatui();
+        let red = self.theme.red.to_ratatui();
+        let fg = self.theme.fg.to_ratatui();
+        let cyan = self.theme.cyan.to_ratatui();
+
+        // Layout: Capabilities, Doctor, Tips
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(10), // GPU capabilities
+                Constraint::Length(10), // Doctor diagnostics
+                Constraint::Min(6),     // Proton tips
+            ])
+            .split(area);
+
+        // GPU DLSS Capabilities (use cached data)
+        let mut caps_lines: Vec<Line> = vec![];
+        if let Some(ref controller) = self.dlss_controller {
+            let gpu_model = controller.capabilities.gpu_model.clone();
+            let driver_version = controller.capabilities.driver_version.clone();
+            let supports_dlss = controller.capabilities.supports_dlss;
+            let supports_fg = controller.capabilities.supports_frame_generation;
+            let supports_rr = controller.capabilities.supports_ray_reconstruction;
+
+            caps_lines.push(Line::from(vec![
+                Span::raw("GPU:       "),
+                Span::styled(gpu_model, Style::default().fg(cyan)),
+            ]));
+            caps_lines.push(Line::from(vec![
+                Span::raw("Driver:    "),
+                Span::raw(driver_version),
+            ]));
+            caps_lines.push(Line::from(vec![
+                Span::raw("DLSS Ver:  "),
+                Span::styled(
+                    format!("{:?}", controller.version),
+                    Style::default().fg(accent),
+                ),
+            ]));
+            caps_lines.push(Line::raw(""));
+
+            let sr_color = if supports_dlss { green } else { red };
+            caps_lines.push(Line::from(vec![
+                Span::raw("Super Resolution:   "),
+                Span::styled(
+                    if supports_dlss { "Supported" } else { "No" },
+                    Style::default().fg(sr_color),
+                ),
+            ]));
+
+            let fg_color = if supports_fg { green } else { red };
+            caps_lines.push(Line::from(vec![
+                Span::raw("Frame Generation:   "),
+                Span::styled(
+                    if supports_fg {
+                        "Supported (RTX 40+)"
+                    } else {
+                        "No"
+                    },
+                    Style::default().fg(fg_color),
+                ),
+            ]));
+
+            let rr_color = if supports_rr { green } else { red };
+            caps_lines.push(Line::from(vec![
+                Span::raw("Ray Reconstruction: "),
+                Span::styled(
+                    if supports_rr {
+                        "Supported (DLSS 3.5)"
+                    } else {
+                        "No"
+                    },
+                    Style::default().fg(rr_color),
+                ),
+            ]));
+        } else {
+            caps_lines.push(Line::styled(
+                "Failed to detect DLSS capabilities",
+                Style::default().fg(red),
+            ));
+        }
+
+        let caps_para = Paragraph::new(caps_lines)
+            .block(
+                Block::default()
+                    .title(" GPU DLSS Capabilities ")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(accent)),
+            )
+            .style(Style::default().fg(fg));
+        f.render_widget(caps_para, chunks[0]);
+
+        // Doctor Diagnostics (use cached data)
+        let mut doctor_lines: Vec<Line> = vec![];
+        if let Some(ref result) = self.dlss_doctor_result {
+            let status_color = match result.status {
+                DoctorStatus::Healthy => green,
+                DoctorStatus::Warning => yellow,
+                DoctorStatus::Error => red,
+            };
+            doctor_lines.push(Line::from(vec![
+                Span::raw("Status: "),
+                Span::styled(
+                    match result.status {
+                        DoctorStatus::Healthy => "Healthy",
+                        DoctorStatus::Warning => "Warning",
+                        DoctorStatus::Error => "Error",
+                    },
+                    Style::default().fg(status_color),
+                ),
+            ]));
+            doctor_lines.push(Line::raw(""));
+
+            let checks = [
+                (
+                    result.gpu_check.status,
+                    result.gpu_check.name.clone(),
+                    result.gpu_check.message.clone(),
+                ),
+                (
+                    result.driver_check.status,
+                    result.driver_check.name.clone(),
+                    result.driver_check.message.clone(),
+                ),
+                (
+                    result.proton_check.status,
+                    result.proton_check.name.clone(),
+                    result.proton_check.message.clone(),
+                ),
+            ];
+            for (status, name, message) in checks {
+                let icon = match status {
+                    DoctorStatus::Healthy => "[OK]",
+                    DoctorStatus::Warning => "[!]",
+                    DoctorStatus::Error => "[X]",
+                };
+                let color = match status {
+                    DoctorStatus::Healthy => green,
+                    DoctorStatus::Warning => yellow,
+                    DoctorStatus::Error => red,
+                };
+                doctor_lines.push(Line::from(vec![
+                    Span::styled(format!("{} ", icon), Style::default().fg(color)),
+                    Span::raw(format!("{}: ", name)),
+                    Span::raw(message),
+                ]));
+            }
+        } else {
+            doctor_lines.push(Line::styled(
+                "Run 'nvctl dlss doctor' for diagnostics",
+                Style::default().fg(yellow),
+            ));
+        }
+
+        let doctor_para = Paragraph::new(doctor_lines)
+            .block(
+                Block::default()
+                    .title(" DLSS Doctor ")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(accent)),
+            )
+            .style(Style::default().fg(fg));
+        f.render_widget(doctor_para, chunks[1]);
+
+        // Proton Tips
+        let tips_lines = vec![
+            Line::styled(
+                "Proton Launch Options:",
+                Style::default().fg(cyan).add_modifier(Modifier::BOLD),
+            ),
+            Line::raw("  PROTON_DLSS_UPGRADE=1       Force latest DLSS"),
+            Line::raw("  PROTON_DLSS_INDICATOR=1     Show version overlay"),
+            Line::raw("  PROTON_DLSS_UPGRADE=310.5.0 Use specific version"),
+            Line::raw(""),
+            Line::styled(
+                "CLI Commands:",
+                Style::default().fg(cyan).add_modifier(Modifier::BOLD),
+            ),
+            Line::raw("  nvctl dlss doctor   Check compatibility"),
+            Line::raw("  nvctl dlss games    Find DLSS games"),
+            Line::raw("  nvctl dlss versions Show available versions"),
+        ];
+
+        let tips_para = Paragraph::new(tips_lines)
+            .block(
+                Block::default()
+                    .title(" Proton Tips ")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(accent)),
+            )
+            .style(Style::default().fg(fg));
+        f.render_widget(tips_para, chunks[2]);
     }
 
     fn draw_settings_tab(&self, f: &mut Frame, area: Rect) {

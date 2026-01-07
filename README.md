@@ -291,6 +291,8 @@ Copyright (c) 2025 CK Technology LLC
 
 - [nvibrant](https://github.com/Tremeschin/nvibrant) - Inspiration for NVKMS vibrance implementation
 - [nvidia-open-gpu-kernel-modules](https://github.com/NVIDIA/open-gpu-kernel-modules) - NVIDIA open source drivers
+- [Tokyo Night](https://github.com/tokyo-night/template) - Tokyo Night color scheme
+- [tokyonight.nvim](https://github.com/folke/tokyonight.nvim) - Tokyo Night theme inspiration
 - The Linux gaming community
 
 ---

@@ -23,6 +23,7 @@ pub const GAME: &str = GAME_CONTROLLER;
 pub const LATENCY: &str = TIMER;
 pub const RECORD: &str = egui_phosphor::regular::RECORD;
 pub const ROCKET: &str = egui_phosphor::regular::ROCKET;
+pub const DLSS: &str = SPARKLE;
 
 // System
 pub const SYSTEM: &str = DESKTOP_TOWER;

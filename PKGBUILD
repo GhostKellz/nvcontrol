@@ -1,10 +1,10 @@
-# Maintainer: Your Name <your.email@example.com>
+# Maintainer: Christopher Kelley <ckelley@ghostkellz.sh>
 pkgname=nvcontrol
-pkgver=0.3.0
+pkgver=0.8.2
 pkgrel=1
 pkgdesc="The Ultimate NVIDIA GPU Control Tool for Linux - Advanced overclocking, fan control, and gaming optimization"
 arch=('x86_64')
-url="https://github.com/yourusername/nvcontrol"
+url="https://github.com/ghostkellz/nvcontrol"
 license=('MIT')
 depends=(
     'nvidia-utils'
@@ -27,7 +27,7 @@ optdepends=(
 )
 provides=('nvcontrol')
 conflicts=('nvcontrol-git')
-source=("git+https://github.com/yourusername/$pkgname.git#tag=v$pkgver")
+source=("git+https://github.com/ghostkellz/$pkgname.git#tag=v$pkgver")
 sha256sums=('SKIP')
 
 build() {

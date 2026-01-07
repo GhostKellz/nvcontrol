@@ -3,6 +3,7 @@
 //! Each tab is a separate module for maintainability.
 
 pub mod display;
+pub mod dlss;
 pub mod fan;
 pub mod game_profiles;
 pub mod gamescope;
@@ -31,6 +32,7 @@ pub enum Tab {
     Vrr,
     // Gaming tabs
     GameProfiles,
+    Dlss,
     Osd,
     Latency,
     Gamescope,
@@ -71,6 +73,7 @@ impl Tab {
             (Tab::Vrr, super::icons::VRR, "VRR/G-Sync"),
             // Gaming
             (Tab::GameProfiles, super::icons::GAME, "Profiles"),
+            (Tab::Dlss, super::icons::DLSS, "DLSS"),
             (Tab::Osd, super::icons::BENCHMARK, "OSD"),
             (Tab::Latency, super::icons::LATENCY, "Latency"),
             (Tab::Gamescope, super::icons::ROCKET, "Gamescope"),
