@@ -274,7 +274,8 @@ pub fn list_kubernetes_gpu_resources() -> NvResult<Vec<KubernetesGpuResource>> {
                     .to_string();
 
                 // Check each container for GPU resources
-                if let Some(containers) = pod.pointer("/spec/containers").and_then(|c| c.as_array()) {
+                if let Some(containers) = pod.pointer("/spec/containers").and_then(|c| c.as_array())
+                {
                     for container in containers {
                         let container_name = container
                             .get("name")
@@ -317,7 +318,16 @@ pub fn list_kubernetes_gpu_resources() -> NvResult<Vec<KubernetesGpuResource>> {
 /// Check if NVIDIA device plugin is running in the cluster
 pub fn check_nvidia_device_plugin() -> NvResult<bool> {
     let output = Command::new("kubectl")
-        .args(["get", "pods", "-n", "kube-system", "-l", "name=nvidia-device-plugin-ds", "-o", "name"])
+        .args([
+            "get",
+            "pods",
+            "-n",
+            "kube-system",
+            "-l",
+            "name=nvidia-device-plugin-ds",
+            "-o",
+            "name",
+        ])
         .output()
         .map_err(|e| NvControlError::CommandFailed(format!("kubectl failed: {}", e)))?;
 

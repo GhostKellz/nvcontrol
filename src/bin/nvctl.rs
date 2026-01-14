@@ -3265,25 +3265,29 @@ fn main() {
                         eprintln!("❌ Failed to disable HDR: {}", e);
                     }
                 }
-                TopLevelHdrSubcommand::Config => {
-                    match HdrConfig::load() {
-                        Ok(config) => {
-                            println!("HDR Configuration");
-                            println!("{}", "═".repeat(50));
-                            println!();
-                            println!("Enabled:            {}", if config.enabled { "Yes" } else { "No" });
-                            println!("Peak Brightness:    {} nits", config.peak_brightness);
-                            println!("Min Brightness:     {} nits", config.min_brightness);
-                            println!("Max Content Light:  {} nits", config.max_content_light_level);
-                            println!("Tone Mapping:       {}", config.tone_mapping);
-                            println!("Color Space:        {}", config.color_space);
-                            println!("EOTF:               {}", config.eotf);
-                            println!();
-                            println!("Config location: ~/.config/nvcontrol/hdr_config.toml");
-                        }
-                        Err(e) => eprintln!("❌ Failed to load HDR config: {}", e),
+                TopLevelHdrSubcommand::Config => match HdrConfig::load() {
+                    Ok(config) => {
+                        println!("HDR Configuration");
+                        println!("{}", "═".repeat(50));
+                        println!();
+                        println!(
+                            "Enabled:            {}",
+                            if config.enabled { "Yes" } else { "No" }
+                        );
+                        println!("Peak Brightness:    {} nits", config.peak_brightness);
+                        println!("Min Brightness:     {} nits", config.min_brightness);
+                        println!(
+                            "Max Content Light:  {} nits",
+                            config.max_content_light_level
+                        );
+                        println!("Tone Mapping:       {}", config.tone_mapping);
+                        println!("Color Space:        {}", config.color_space);
+                        println!("EOTF:               {}", config.eotf);
+                        println!();
+                        println!("Config location: ~/.config/nvcontrol/hdr_config.toml");
                     }
-                }
+                    Err(e) => eprintln!("❌ Failed to load HDR config: {}", e),
+                },
                 TopLevelHdrSubcommand::SetBrightness { nits } => {
                     let nits = nits.clamp(400, 10000);
                     match HdrConfig::load() {
@@ -3348,10 +3352,30 @@ fn main() {
                             println!("Max Frame Average: {} nits (FALL)", caps.max_fall);
                             println!();
                             println!("Format Support:");
-                            println!("  HDR10:         {}", if caps.supports_hdr10 { "✓" } else { "✗" });
-                            println!("  HDR10+:        {}", if caps.supports_hdr10_plus { "✓" } else { "✗" });
-                            println!("  Dolby Vision:  {}", if caps.supports_dolby_vision { "✓" } else { "✗" });
-                            println!("  HLG:           {}", if caps.supports_hlg { "✓" } else { "✗" });
+                            println!(
+                                "  HDR10:         {}",
+                                if caps.supports_hdr10 { "✓" } else { "✗" }
+                            );
+                            println!(
+                                "  HDR10+:        {}",
+                                if caps.supports_hdr10_plus {
+                                    "✓"
+                                } else {
+                                    "✗"
+                                }
+                            );
+                            println!(
+                                "  Dolby Vision:  {}",
+                                if caps.supports_dolby_vision {
+                                    "✓"
+                                } else {
+                                    "✗"
+                                }
+                            );
+                            println!(
+                                "  HLG:           {}",
+                                if caps.supports_hlg { "✓" } else { "✗" }
+                            );
                             println!();
                             println!("Note: Capability detection is based on EDID data.");
                             println!("      Actual values may vary. For accurate data,");

@@ -571,8 +571,7 @@ fn detect_dkms_source_type(source_path: &str) -> DkmsSourceType {
         .args(["-Qo", source_path])
         .output()
         .is_ok_and(|o| {
-            o.status.success()
-                && String::from_utf8_lossy(&o.stdout).contains("nvidia-open-dkms")
+            o.status.success() && String::from_utf8_lossy(&o.stdout).contains("nvidia-open-dkms")
         });
 
     if is_packaged {
@@ -872,12 +871,9 @@ pub fn build_dkms_nvidia(kernel: Option<&str>, force: bool) -> NvResult<()> {
             let mut args = vec!["dkms", "install", "-m", "nvidia", "-v", version, "-k", k];
             args.extend(force_flag.iter().copied());
 
-            let status = Command::new("sudo")
-                .args(&args)
-                .status()
-                .map_err(|e| {
-                    NvControlError::CommandFailed(format!("dkms install failed: {}", e))
-                })?;
+            let status = Command::new("sudo").args(&args).status().map_err(|e| {
+                NvControlError::CommandFailed(format!("dkms install failed: {}", e))
+            })?;
 
             if status.success() {
                 println!("nvidia built and installed for {}", k);
@@ -2456,7 +2452,8 @@ pub fn print_driver_check() -> NvResult<()> {
                     if version_info.contains("Open Kernel Module") {
                         errors.push(format!(
                             "nvidia-open driver on {} GPU ({}). Use proprietary driver instead.",
-                            arch, gpu_name.trim()
+                            arch,
+                            gpu_name.trim()
                         ));
                     }
                 }
@@ -2479,7 +2476,8 @@ pub fn print_driver_check() -> NvResult<()> {
                     arch, gpu_name.trim(), driver_version
                 ));
                 warnings.push(
-                    "Future NVIDIA drivers will drop support for Maxwell and Pascal GPUs.".to_string()
+                    "Future NVIDIA drivers will drop support for Maxwell and Pascal GPUs."
+                        .to_string(),
                 );
             }
 
@@ -2920,9 +2918,8 @@ pub fn init_source_build(path: &str) -> NvResult<()> {
 /// Get version from source version.mk
 fn get_source_version(path: &str) -> NvResult<String> {
     let version_mk = format!("{}/version.mk", path);
-    let content = std::fs::read_to_string(&version_mk).map_err(|e| {
-        NvControlError::ConfigError(format!("Failed to read version.mk: {}", e))
-    })?;
+    let content = std::fs::read_to_string(&version_mk)
+        .map_err(|e| NvControlError::ConfigError(format!("Failed to read version.mk: {}", e)))?;
 
     for line in content.lines() {
         if line.starts_with("NVIDIA_VERSION") && line.contains('=') {
@@ -2982,7 +2979,9 @@ pub fn update_source(rebuild: bool) -> NvResult<()> {
     let info = get_dkms_setup_info();
 
     let source_path = info.source_path.ok_or_else(|| {
-        NvControlError::ConfigError("No source path found. Run: nvctl driver source init".to_string())
+        NvControlError::ConfigError(
+            "No source path found. Run: nvctl driver source init".to_string(),
+        )
     })?;
 
     // Verify it's a git source
@@ -3002,7 +3001,9 @@ pub fn update_source(rebuild: bool) -> NvResult<()> {
         .map_err(|e| NvControlError::CommandFailed(format!("git fetch failed: {}", e)))?;
 
     if !status.success() {
-        return Err(NvControlError::CommandFailed("git fetch failed".to_string()));
+        return Err(NvControlError::CommandFailed(
+            "git fetch failed".to_string(),
+        ));
     }
 
     // Get current and latest versions
@@ -3062,7 +3063,10 @@ pub fn update_source(rebuild: bool) -> NvResult<()> {
             if old_ver != &new_version {
                 println!("\nVersion changed, may need to re-register with DKMS:");
                 println!("  sudo dkms remove nvidia/{} --all", old_ver);
-                println!("  sudo ln -sf {} /usr/src/nvidia-{}", source_path, new_version);
+                println!(
+                    "  sudo ln -sf {} /usr/src/nvidia-{}",
+                    source_path, new_version
+                );
                 println!("  sudo dkms add nvidia/{}", new_version);
             }
         }
@@ -3183,14 +3187,7 @@ pub fn cleanup_old_kernels(keep: usize, execute: bool) -> NvResult<()> {
         // Remove from DKMS
         let status = Command::new("sudo")
             .args([
-                "dkms",
-                "remove",
-                "-m",
-                "nvidia",
-                "-v",
-                version,
-                "-k",
-                kernel,
+                "dkms", "remove", "-m", "nvidia", "-v", version, "-k", kernel,
             ])
             .output();
 
@@ -3216,7 +3213,11 @@ fn detect_gpu_architecture(gpu_name: &str) -> (String, bool) {
     let name = gpu_name.to_lowercase();
 
     // RTX 50 series - Blackwell
-    if name.contains("5090") || name.contains("5080") || name.contains("5070") || name.contains("5060") {
+    if name.contains("5090")
+        || name.contains("5080")
+        || name.contains("5070")
+        || name.contains("5060")
+    {
         return ("Blackwell".to_string(), false);
     }
 

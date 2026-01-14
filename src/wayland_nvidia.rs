@@ -472,9 +472,9 @@ pub fn check_explicit_sync_status() -> ExplicitSyncStatus {
                 status.driver_support = true;
             }
             if (555..560).contains(&major) {
-                status.recommendations.push(
-                    "Driver 560+ recommended for stable explicit sync".to_string()
-                );
+                status
+                    .recommendations
+                    .push("Driver 560+ recommended for stable explicit sync".to_string());
             }
         }
     }
@@ -500,7 +500,9 @@ pub fn check_explicit_sync_status() -> ExplicitSyncStatus {
             .filter_map(|v| v.split('-').next()?.parse().ok())
             .collect();
 
-        if major_minor.len() >= 2 && (major_minor[0] > 6 || (major_minor[0] == 6 && major_minor[1] >= 1)) {
+        if major_minor.len() >= 2
+            && (major_minor[0] > 6 || (major_minor[0] == 6 && major_minor[1] >= 1))
+        {
             status.kernel_support = true;
         }
     }
@@ -525,14 +527,22 @@ pub fn check_explicit_sync_status() -> ExplicitSyncStatus {
                         let version_str = String::from_utf8_lossy(&output.stdout);
                         if let Some(ver) = version_str.split_whitespace().last() {
                             status.compositor = format!("KDE Plasma {}", ver);
-                            let major: u32 = ver.split('.').next().and_then(|v| v.parse().ok()).unwrap_or(0);
-                            let minor: u32 = ver.split('.').nth(1).and_then(|v| v.parse().ok()).unwrap_or(0);
+                            let major: u32 = ver
+                                .split('.')
+                                .next()
+                                .and_then(|v| v.parse().ok())
+                                .unwrap_or(0);
+                            let minor: u32 = ver
+                                .split('.')
+                                .nth(1)
+                                .and_then(|v| v.parse().ok())
+                                .unwrap_or(0);
                             if major > 6 || (major == 6 && minor >= 1) {
                                 status.compositor_support = true;
                             } else if major == 6 {
-                                status.recommendations.push(
-                                    "KDE Plasma 6.1+ required for explicit sync".to_string()
-                                );
+                                status
+                                    .recommendations
+                                    .push("KDE Plasma 6.1+ required for explicit sync".to_string());
                             }
                         }
                     }
@@ -544,13 +554,17 @@ pub fn check_explicit_sync_status() -> ExplicitSyncStatus {
                         let version_str = String::from_utf8_lossy(&output.stdout);
                         if let Some(ver) = version_str.split_whitespace().last() {
                             status.compositor = format!("GNOME {}", ver);
-                            let major: u32 = ver.split('.').next().and_then(|v| v.parse().ok()).unwrap_or(0);
+                            let major: u32 = ver
+                                .split('.')
+                                .next()
+                                .and_then(|v| v.parse().ok())
+                                .unwrap_or(0);
                             if major >= 46 {
                                 status.compositor_support = true;
                             } else {
-                                status.recommendations.push(
-                                    "GNOME 46+ required for explicit sync".to_string()
-                                );
+                                status
+                                    .recommendations
+                                    .push("GNOME 46+ required for explicit sync".to_string());
                             }
                         }
                     }
@@ -560,15 +574,15 @@ pub fn check_explicit_sync_status() -> ExplicitSyncStatus {
                     // wlroots-based compositors with recent versions support explicit sync
                     // Sway 1.9+ and Hyprland 0.39+ have support
                     status.compositor_support = true; // Assume recent version
-                    status.recommendations.push(
-                        "Ensure wlroots 0.18+ for explicit sync support".to_string()
-                    );
+                    status
+                        .recommendations
+                        .push("Ensure wlroots 0.18+ for explicit sync support".to_string());
                 }
             }
         } else {
-            status.recommendations.push(
-                "Explicit sync only works on Wayland, not X11".to_string()
-            );
+            status
+                .recommendations
+                .push("Explicit sync only works on Wayland, not X11".to_string());
         }
     }
 
@@ -577,7 +591,10 @@ pub fn check_explicit_sync_status() -> ExplicitSyncStatus {
     if status.driver_support && status.kernel_support && status.compositor_support {
         // Check if linux-drm-syncobj-v1 protocol is available
         if let Ok(output) = Command::new("sh")
-            .args(["-c", "wl-info 2>/dev/null | grep -q drm-syncobj && echo yes"])
+            .args([
+                "-c",
+                "wl-info 2>/dev/null | grep -q drm-syncobj && echo yes",
+            ])
             .output()
         {
             if String::from_utf8_lossy(&output.stdout).contains("yes") {
@@ -591,7 +608,9 @@ pub fn check_explicit_sync_status() -> ExplicitSyncStatus {
             if let Ok(home) = std::env::var("HOME") {
                 let kwinrc = format!("{}/.config/kwinrc", home);
                 if let Ok(content) = fs::read_to_string(&kwinrc) {
-                    if content.contains("ExplicitSync=true") || !content.contains("ExplicitSync=false") {
+                    if content.contains("ExplicitSync=true")
+                        || !content.contains("ExplicitSync=false")
+                    {
                         // Default is enabled in Plasma 6.1+
                         if status.compositor_support {
                             status.active = true;
@@ -613,21 +632,21 @@ pub fn check_explicit_sync_status() -> ExplicitSyncStatus {
 
     // Add recommendations if not working
     if !status.driver_support {
-        status.recommendations.push(
-            "Update NVIDIA driver to 555+ for explicit sync support".to_string()
-        );
+        status
+            .recommendations
+            .push("Update NVIDIA driver to 555+ for explicit sync support".to_string());
     }
 
     if !status.compositor_support && status.compositor.is_empty() {
-        status.recommendations.push(
-            "Could not detect compositor - ensure Wayland session is active".to_string()
-        );
+        status
+            .recommendations
+            .push("Could not detect compositor - ensure Wayland session is active".to_string());
     }
 
     if !status.kernel_support {
-        status.recommendations.push(
-            "Ensure nvidia-drm modeset=1 is set in /etc/modprobe.d/".to_string()
-        );
+        status
+            .recommendations
+            .push("Ensure nvidia-drm modeset=1 is set in /etc/modprobe.d/".to_string());
     }
 
     status
@@ -643,25 +662,48 @@ pub fn print_explicit_sync_status() {
 
     // Driver
     let driver_icon = if status.driver_support { "✓" } else { "✗" };
-    println!("{} Driver: {} ({})",
+    println!(
+        "{} Driver: {} ({})",
         driver_icon,
         status.driver_version,
-        if status.driver_support { "supports explicit sync" } else { "needs 555+" }
+        if status.driver_support {
+            "supports explicit sync"
+        } else {
+            "needs 555+"
+        }
     );
 
     // Kernel
     let kernel_icon = if status.kernel_support { "✓" } else { "✗" };
-    println!("{} Kernel: {}",
+    println!(
+        "{} Kernel: {}",
         kernel_icon,
-        if status.kernel_support { "DRM syncobj supported" } else { "DRM syncobj not available" }
+        if status.kernel_support {
+            "DRM syncobj supported"
+        } else {
+            "DRM syncobj not available"
+        }
     );
 
     // Compositor
-    let compositor_icon = if status.compositor_support { "✓" } else { "✗" };
-    println!("{} Compositor: {} ({})",
+    let compositor_icon = if status.compositor_support {
+        "✓"
+    } else {
+        "✗"
+    };
+    println!(
+        "{} Compositor: {} ({})",
         compositor_icon,
-        if status.compositor.is_empty() { "Unknown" } else { &status.compositor },
-        if status.compositor_support { "supports explicit sync" } else { "check version" }
+        if status.compositor.is_empty() {
+            "Unknown"
+        } else {
+            &status.compositor
+        },
+        if status.compositor_support {
+            "supports explicit sync"
+        } else {
+            "check version"
+        }
     );
 
     println!();
@@ -693,16 +735,16 @@ pub fn enable_explicit_sync() -> NvResult<()> {
     let status = check_explicit_sync_status();
 
     if !status.driver_support {
-        return Err(NvControlError::ConfigError(
-            format!("Driver {} doesn't support explicit sync (need 555+)", status.driver_version)
-        ));
+        return Err(NvControlError::ConfigError(format!(
+            "Driver {} doesn't support explicit sync (need 555+)",
+            status.driver_version
+        )));
     }
 
     if status.compositor.contains("Plasma") {
         // Enable in KWin
-        let home = std::env::var("HOME").map_err(|_| {
-            NvControlError::ConfigError("HOME not set".to_string())
-        })?;
+        let home = std::env::var("HOME")
+            .map_err(|_| NvControlError::ConfigError("HOME not set".to_string()))?;
 
         let kwinrc = format!("{}/.config/kwinrc", home);
 
@@ -749,9 +791,8 @@ pub fn enable_explicit_sync() -> NvResult<()> {
             content.push_str("\n[Compositing]\nExplicitSync=true\n");
         }
 
-        fs::write(&kwinrc, content).map_err(|e| {
-            NvControlError::ConfigError(format!("Failed to write kwinrc: {}", e))
-        })?;
+        fs::write(&kwinrc, content)
+            .map_err(|e| NvControlError::ConfigError(format!("Failed to write kwinrc: {}", e)))?;
 
         println!("✓ Explicit sync enabled in KWin configuration");
         println!();
@@ -776,7 +817,7 @@ pub fn enable_explicit_sync() -> NvResult<()> {
 
         if !status.compositor_support {
             return Err(NvControlError::ConfigError(
-                "GNOME 46+ required for explicit sync".to_string()
+                "GNOME 46+ required for explicit sync".to_string(),
             ));
         }
 
@@ -787,8 +828,9 @@ pub fn enable_explicit_sync() -> NvResult<()> {
 
         Ok(())
     } else {
-        Err(NvControlError::ConfigError(
-            format!("Unknown compositor: {}. Manual configuration required.", status.compositor)
-        ))
+        Err(NvControlError::ConfigError(format!(
+            "Unknown compositor: {}. Manual configuration required.",
+            status.compositor
+        )))
     }
 }

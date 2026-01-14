@@ -1747,7 +1747,7 @@ pub fn get_dlss_status() -> NvResult<String> {
         ├─ DLSS Version: {}\n\
         ├─ Driver: {}\n",
         controller.capabilities.gpu_model,
-        controller.version,  // Uses Display trait now
+        controller.version, // Uses Display trait now
         controller.capabilities.driver_version
     );
 

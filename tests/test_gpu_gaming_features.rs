@@ -8,9 +8,7 @@ use nvcontrol::{
         ColorDepth, DisplayConfig, DisplayConfigManager, ReflexIntegration, VrrConfig,
         VrrProfileManager,
     },
-    advanced_multi_gpu::{
-        GpuProfile, LoadBalancer, MultiGpuCoordinator, PerGpuProfileManager,
-    },
+    advanced_multi_gpu::{GpuProfile, LoadBalancer, MultiGpuCoordinator, PerGpuProfileManager},
     advanced_power::{
         BatteryBoost, DynamicPowerManager, PowerMode, PowerProfile, PowerProfileManager,
     },
@@ -19,9 +17,7 @@ use nvcontrol::{
     // Gaming integration
     gaming_integration::{GameModeIntegration, LaunchOptimizer, SteamScanner},
     intelligent_fan::{AdvancedFanCurve, FanOptimizer},
-    performance_monitoring::{
-        FpsCounter, FrameTimeStats, LatencyMonitor, RegressionDetector,
-    },
+    performance_monitoring::{FpsCounter, FrameTimeStats, LatencyMonitor, RegressionDetector},
     upscaling_tech::{
         DlssQuality, FsrQuality, ResolutionScaler, UpscalingConfig, UpscalingRecommender,
         UpscalingTech,
@@ -513,7 +509,8 @@ fn test_full_gaming_session_simulation() {
     println!("2. Overclock profile set");
 
     // 3. Configure upscaling
-    let _upscaling_config = UpscalingConfig::new_dlss("Cyberpunk".to_string(), DlssQuality::Quality);
+    let _upscaling_config =
+        UpscalingConfig::new_dlss("Cyberpunk".to_string(), DlssQuality::Quality);
     println!("3. DLSS Quality mode configured");
 
     // 4. Enable VRR
