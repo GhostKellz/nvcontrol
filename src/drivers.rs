@@ -506,6 +506,36 @@ pub fn fix_dkms_issues() -> NvResult<()> {
 
 // ==================== DKMS Setup & Management ====================
 
+/// How the NVIDIA DKMS source was installed/configured
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DkmsSourceType {
+    /// Installed via package manager (nvidia-open-dkms)
+    Packaged,
+    /// Git clone (has .git directory)
+    Git { remote_url: Option<String> },
+    /// Manual copy to /usr/src (no package, no git)
+    Manual,
+    /// No source found
+    NotFound,
+}
+
+impl std::fmt::Display for DkmsSourceType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Packaged => write!(f, "packaged (nvidia-open-dkms)"),
+            Self::Git { remote_url } => {
+                if let Some(url) = remote_url {
+                    write!(f, "git ({})", url)
+                } else {
+                    write!(f, "git")
+                }
+            }
+            Self::Manual => write!(f, "manual"),
+            Self::NotFound => write!(f, "not found"),
+        }
+    }
+}
+
 /// Information about DKMS setup status
 #[derive(Debug)]
 pub struct DkmsSetupInfo {
@@ -513,8 +543,48 @@ pub struct DkmsSetupInfo {
     pub nvidia_registered: bool,
     pub nvidia_version: Option<String>,
     pub source_path: Option<String>,
+    pub source_type: DkmsSourceType,
     pub kernels_built: Vec<String>,
     pub kernels_missing: Vec<String>,
+}
+
+/// Detect how the DKMS source was installed
+fn detect_dkms_source_type(source_path: &str) -> DkmsSourceType {
+    let path = std::path::Path::new(source_path);
+
+    // Check if it's a git repository
+    let git_dir = path.join(".git");
+    if git_dir.exists() {
+        // Try to get remote URL
+        let remote_url = Command::new("git")
+            .args(["-C", source_path, "remote", "get-url", "origin"])
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
+
+        return DkmsSourceType::Git { remote_url };
+    }
+
+    // Check if it's from a package (nvidia-open-dkms)
+    let is_packaged = Command::new("pacman")
+        .args(["-Qo", source_path])
+        .output()
+        .is_ok_and(|o| {
+            o.status.success()
+                && String::from_utf8_lossy(&o.stdout).contains("nvidia-open-dkms")
+        });
+
+    if is_packaged {
+        return DkmsSourceType::Packaged;
+    }
+
+    // If source exists but not git and not packaged, it's manual
+    if path.exists() {
+        DkmsSourceType::Manual
+    } else {
+        DkmsSourceType::NotFound
+    }
 }
 
 /// Get detailed DKMS setup information
@@ -524,6 +594,7 @@ pub fn get_dkms_setup_info() -> DkmsSetupInfo {
         nvidia_registered: false,
         nvidia_version: None,
         source_path: None,
+        source_type: DkmsSourceType::NotFound,
         kernels_built: Vec::new(),
         kernels_missing: Vec::new(),
     };
@@ -569,16 +640,38 @@ pub fn get_dkms_setup_info() -> DkmsSetupInfo {
         }
     }
 
-    // Check for nvidia source in /usr/src
-    if let Ok(entries) = std::fs::read_dir("/usr/src") {
-        for entry in entries.flatten() {
-            let name = entry.file_name();
-            let name_str = name.to_string_lossy();
-            if name_str.starts_with("nvidia-") || name_str.starts_with("nvidia-open-") {
-                info.source_path = Some(entry.path().display().to_string());
-                break;
-            }
+    // Check for nvidia source - first try DKMS registered source, then /usr/src
+    let source_path = if let Some(ref ver) = info.nvidia_version {
+        let dkms_source = format!("/var/lib/dkms/nvidia/{}/source", ver);
+        if std::path::Path::new(&dkms_source).exists() {
+            // Follow symlink to get actual source path
+            std::fs::read_link(&dkms_source)
+                .ok()
+                .map(|p| p.display().to_string())
+        } else {
+            None
         }
+    } else {
+        None
+    };
+
+    // Fallback to scanning /usr/src if DKMS source not found
+    let source_path = source_path.or_else(|| {
+        std::fs::read_dir("/usr/src").ok().and_then(|entries| {
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let name_str = name.to_string_lossy();
+                if name_str.starts_with("nvidia-") || name_str.starts_with("nvidia-open-") {
+                    return Some(entry.path().display().to_string());
+                }
+            }
+            None
+        })
+    });
+
+    if let Some(ref path) = source_path {
+        info.source_path = Some(path.clone());
+        info.source_type = detect_dkms_source_type(path);
     }
 
     // Find kernels that are missing nvidia modules
@@ -592,6 +685,8 @@ pub fn get_dkms_setup_info() -> DkmsSetupInfo {
                     format!("/lib/modules/{}/kernel/drivers/video/nvidia.ko", kernel),
                     format!("/lib/modules/{}/extramodules/nvidia.ko.zst", kernel),
                     format!("/lib/modules/{}/extramodules/nvidia.ko", kernel),
+                    format!("/lib/modules/{}/updates/dkms/nvidia.ko.zst", kernel),
+                    format!("/lib/modules/{}/updates/dkms/nvidia.ko", kernel),
                 ];
                 let has_module = module_paths
                     .iter()
@@ -744,7 +839,7 @@ CLEAN="make clean""#,
 }
 
 /// Build nvidia modules for all or specific kernels
-pub fn build_dkms_nvidia(kernel: Option<&str>) -> NvResult<()> {
+pub fn build_dkms_nvidia(kernel: Option<&str>, force: bool) -> NvResult<()> {
     let info = get_dkms_setup_info();
 
     if !info.dkms_installed {
@@ -764,11 +859,21 @@ pub fn build_dkms_nvidia(kernel: Option<&str>) -> NvResult<()> {
         .as_ref()
         .ok_or_else(|| NvControlError::ConfigError("Cannot detect nvidia version".to_string()))?;
 
+    let force_flag = if force { vec!["--force"] } else { vec![] };
+
     match kernel {
         Some(k) => {
-            println!("Building nvidia {} for kernel {}...", version, k);
+            println!(
+                "Building nvidia {} for kernel {}{}...",
+                version,
+                k,
+                if force { " (force)" } else { "" }
+            );
+            let mut args = vec!["dkms", "install", "-m", "nvidia", "-v", version, "-k", k];
+            args.extend(force_flag.iter().copied());
+
             let status = Command::new("sudo")
-                .args(["dkms", "install", "-m", "nvidia", "-v", version, "-k", k])
+                .args(&args)
                 .status()
                 .map_err(|e| {
                     NvControlError::CommandFailed(format!("dkms install failed: {}", e))
@@ -784,7 +889,11 @@ pub fn build_dkms_nvidia(kernel: Option<&str>) -> NvResult<()> {
             }
         }
         None => {
-            println!("Building nvidia {} for all kernels...\n", version);
+            println!(
+                "Building nvidia {} for all kernels{}...\n",
+                version,
+                if force { " (force)" } else { "" }
+            );
 
             // Get all installed kernels
             let mut kernels = Vec::new();
@@ -810,21 +919,26 @@ pub fn build_dkms_nvidia(kernel: Option<&str>) -> NvResult<()> {
 
             for kernel in &kernels {
                 print!("  Building for {}... ", kernel);
-                let status = Command::new("sudo")
-                    .args([
-                        "dkms", "install", "-m", "nvidia", "-v", version, "-k", kernel,
-                    ])
-                    .output();
+                let mut args = vec![
+                    "dkms", "install", "-m", "nvidia", "-v", version, "-k", kernel,
+                ];
+                args.extend(force_flag.iter().copied());
+
+                let status = Command::new("sudo").args(&args).output();
 
                 match status {
                     Ok(output) if output.status.success() => println!("done"),
                     Ok(output) => {
-                        println!("failed");
                         let stderr = String::from_utf8_lossy(&output.stderr);
-                        if stderr.contains("already installed") {
-                            println!("    (already installed)");
-                        } else if !stderr.is_empty() {
-                            println!("    {}", stderr.lines().next().unwrap_or(""));
+                        let stdout = String::from_utf8_lossy(&output.stdout);
+                        let combined = format!("{}{}", stdout, stderr);
+                        if combined.contains("already installed") {
+                            println!("already installed (use --force to rebuild)");
+                        } else {
+                            println!("failed");
+                            if !stderr.is_empty() {
+                                println!("    {}", stderr.lines().next().unwrap_or(""));
+                            }
                         }
                     }
                     Err(e) => println!("error: {}", e),
@@ -1095,27 +1209,31 @@ mkdir -p "$LOG_DIR"
 echo "=== NVIDIA DKMS Build $(date) ===" | tee "$LOG_FILE"
 echo "Kernels to build for:" | tee -a "$LOG_FILE"
 
-# Run dkms autoinstall with full output captured
-if /usr/bin/dkms autoinstall 2>&1 | tee -a "$LOG_FILE"; then
+# Run dkms autoinstall with PIPESTATUS to capture actual exit code
+/usr/bin/dkms autoinstall 2>&1 | tee -a "$LOG_FILE"
+DKMS_EXIT=${PIPESTATUS[0]}
+
+ln -sf "$LOG_FILE" "$LATEST_LOG"
+
+# Exit code 0 = success, 6 = already installed (not an error)
+if [ $DKMS_EXIT -eq 0 ]; then
     echo "" | tee -a "$LOG_FILE"
     echo "Build completed successfully" | tee -a "$LOG_FILE"
-    ln -sf "$LOG_FILE" "$LATEST_LOG"
-
-    # Desktop notification on success (if available)
     if command -v notify-send &>/dev/null && [ -n "$DISPLAY" -o -n "$WAYLAND_DISPLAY" ]; then
         notify-send -u low "NVIDIA DKMS" "Modules rebuilt successfully"
     fi
-else
-    EXIT_CODE=$?
+elif [ $DKMS_EXIT -eq 6 ]; then
     echo "" | tee -a "$LOG_FILE"
-    echo "Build FAILED with exit code $EXIT_CODE" | tee -a "$LOG_FILE"
-    ln -sf "$LOG_FILE" "$LATEST_LOG"
-
-    # Desktop notification on failure
+    echo "Modules already installed (use --force to rebuild)" | tee -a "$LOG_FILE"
+    if command -v notify-send &>/dev/null && [ -n "$DISPLAY" -o -n "$WAYLAND_DISPLAY" ]; then
+        notify-send -u low "NVIDIA DKMS" "Modules already up to date"
+    fi
+else
+    echo "" | tee -a "$LOG_FILE"
+    echo "Build FAILED with exit code $DKMS_EXIT" | tee -a "$LOG_FILE"
     if command -v notify-send &>/dev/null && [ -n "$DISPLAY" -o -n "$WAYLAND_DISPLAY" ]; then
         notify-send -u critical "NVIDIA DKMS FAILED" "Check: nvctl driver dkms logs"
     fi
-
     echo ""
     echo "╔════════════════════════════════════════════════════════════╗"
     echo "║  NVIDIA DKMS build failed! Check logs:                     ║"
@@ -1217,11 +1335,12 @@ pub fn print_dkms_status_detailed() -> NvResult<()> {
         if info.nvidia_registered { "yes" } else { "no" }
     );
 
-    // Source path
+    // Source path and type
     if let Some(ref path) = info.source_path {
         println!("Source:         {}", path);
+        println!("Source Type:    {}", info.source_type);
     } else if !info.nvidia_registered {
-        println!("Source:         not found in /usr/src");
+        println!("Source:         not found");
     }
 
     println!();
@@ -1252,6 +1371,8 @@ pub fn print_dkms_status_detailed() -> NvResult<()> {
                 format!("/lib/modules/{}/kernel/drivers/video/nvidia.ko", kernel),
                 format!("/lib/modules/{}/extramodules/nvidia.ko.zst", kernel),
                 format!("/lib/modules/{}/extramodules/nvidia.ko", kernel),
+                format!("/lib/modules/{}/updates/dkms/nvidia.ko.zst", kernel),
+                format!("/lib/modules/{}/updates/dkms/nvidia.ko", kernel),
             ];
             paths.iter().any(|p| std::path::Path::new(p).exists())
         };
@@ -2308,29 +2429,73 @@ pub fn print_driver_check() -> NvResult<()> {
         }
     }
 
-    // 6. Check if nvidia-open is used on unsupported GPU (pre-Turing)
+    // 6. Check for legacy GPU compatibility issues
     if let Ok(output) = Command::new("nvidia-smi")
-        .args(["--query-gpu=name", "--format=csv,noheader"])
+        .args(["--query-gpu=name,driver_version", "--format=csv,noheader"])
         .output()
     {
         if output.status.success() {
-            let gpu_name = String::from_utf8_lossy(&output.stdout).to_lowercase();
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            let parts: Vec<&str> = output_str.trim().split(", ").collect();
+            let gpu_name = parts.first().unwrap_or(&"Unknown").to_lowercase();
+            let driver_version = parts.get(1).unwrap_or(&"0").to_string();
 
-            // Check for pre-Turing GPUs (Maxwell, Pascal, Volta)
-            let pre_turing = [
-                "gtx 9", "gtx 10", "titan x", "titan xp", "quadro p", "quadro m",
-            ];
-            let is_pre_turing = pre_turing.iter().any(|&name| gpu_name.contains(name));
+            // Parse driver major version
+            let driver_major: u32 = driver_version
+                .split('.')
+                .next()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0);
 
-            if is_pre_turing {
+            // Detect GPU architecture
+            let (arch, is_legacy) = detect_gpu_architecture(&gpu_name);
+
+            // Check for nvidia-open on pre-Turing GPUs (hard error)
+            if is_legacy {
                 if let Ok(version_info) = fs::read_to_string("/proc/driver/nvidia/version") {
                     if version_info.contains("Open Kernel Module") {
                         errors.push(format!(
-                            "nvidia-open driver on pre-Turing GPU ({}). Use proprietary driver instead.",
-                            gpu_name.trim()
+                            "nvidia-open driver on {} GPU ({}). Use proprietary driver instead.",
+                            arch, gpu_name.trim()
                         ));
                     }
                 }
+            }
+
+            // Check for Pascal/Maxwell deprecation in 590+ (warning)
+            let is_maxwell = gpu_name.contains("gtx 9")
+                || gpu_name.contains("titan x")
+                || gpu_name.contains("quadro m");
+            let is_pascal = gpu_name.contains("gtx 10")
+                || gpu_name.contains("titan xp")
+                || gpu_name.contains("quadro p")
+                || gpu_name.contains("p100")
+                || gpu_name.contains("p40")
+                || gpu_name.contains("p6000");
+
+            if (is_maxwell || is_pascal) && driver_major >= 590 {
+                warnings.push(format!(
+                    "{} GPU ({}) is deprecated in driver {}. Consider nvidia-470xx-dkms for Maxwell or nvidia-535xx-dkms for Pascal from AUR.",
+                    arch, gpu_name.trim(), driver_version
+                ));
+                warnings.push(
+                    "Future NVIDIA drivers will drop support for Maxwell and Pascal GPUs.".to_string()
+                );
+            }
+
+            // Check for Kepler/Fermi (very old GPUs)
+            let is_kepler_or_older = gpu_name.contains("gtx 6")
+                || gpu_name.contains("gtx 7")
+                || gpu_name.contains("gtx 5")
+                || gpu_name.contains("geforce 6")
+                || gpu_name.contains("geforce 7")
+                || gpu_name.contains("quadro k");
+
+            if is_kepler_or_older {
+                errors.push(format!(
+                    "Kepler/older GPU ({}) is not supported by current drivers. Use nvidia-390xx-dkms from AUR.",
+                    gpu_name.trim()
+                ));
             }
         }
     }
@@ -2572,6 +2737,599 @@ pub fn print_driver_logs_paste() -> NvResult<()> {
     Ok(())
 }
 
+// ==================== Source Build Management ====================
+
+/// Print source build status
+pub fn print_source_status() -> NvResult<()> {
+    let info = get_dkms_setup_info();
+
+    println!("NVIDIA Source Build Status");
+    println!("{}", "═".repeat(50));
+    println!();
+
+    if let Some(ref path) = info.source_path {
+        println!("Source Path:    {}", path);
+        println!("Source Type:    {}", info.source_type);
+
+        // For git sources, show more info
+        if let DkmsSourceType::Git { ref remote_url } = info.source_type {
+            if let Some(url) = remote_url {
+                println!("Remote URL:     {}", url);
+            }
+
+            // Show current branch/tag
+            if let Ok(output) = Command::new("git")
+                .args(["-C", path, "describe", "--tags", "--always"])
+                .output()
+            {
+                if output.status.success() {
+                    let tag = String::from_utf8_lossy(&output.stdout);
+                    println!("Current Tag:    {}", tag.trim());
+                }
+            }
+
+            // Show if there are updates available
+            let _ = Command::new("git")
+                .args(["-C", path, "fetch", "--tags", "--quiet"])
+                .status();
+
+            if let Ok(output) = Command::new("git")
+                .args(["-C", path, "tag", "--sort=-v:refname"])
+                .output()
+            {
+                if output.status.success() {
+                    let tags = String::from_utf8_lossy(&output.stdout);
+                    if let Some(latest) = tags.lines().next() {
+                        println!("Latest Tag:     {}", latest);
+                    }
+                }
+            }
+        }
+
+        println!();
+
+        // Show registered version
+        if let Some(ref ver) = info.nvidia_version {
+            println!("Driver Version: {}", ver);
+        }
+
+        println!(
+            "DKMS Registered: {}",
+            if info.nvidia_registered { "yes" } else { "no" }
+        );
+    } else {
+        println!("No source found.");
+        println!();
+        println!("To set up from source:");
+        println!("  1. Clone: git clone https://github.com/NVIDIA/open-gpu-kernel-modules.git");
+        println!("  2. Init:  nvctl driver source init ~/open-gpu-kernel-modules");
+    }
+
+    Ok(())
+}
+
+/// Initialize source build from a git clone
+pub fn init_source_build(path: &str) -> NvResult<()> {
+    // Expand ~ to home directory
+    let expanded_path = if path.starts_with('~') {
+        if let Some(home) = dirs::home_dir() {
+            path.replacen('~', &home.display().to_string(), 1)
+        } else {
+            path.to_string()
+        }
+    } else {
+        path.to_string()
+    };
+
+    let source_path = std::path::Path::new(&expanded_path);
+
+    println!("Initializing NVIDIA source build from: {}", expanded_path);
+    println!();
+
+    // Verify path exists and is a git repo
+    if !source_path.exists() {
+        return Err(NvControlError::ConfigError(format!(
+            "Path does not exist: {}",
+            expanded_path
+        )));
+    }
+
+    let git_dir = source_path.join(".git");
+    if !git_dir.exists() {
+        return Err(NvControlError::ConfigError(format!(
+            "Not a git repository: {}",
+            expanded_path
+        )));
+    }
+
+    // Verify it's the nvidia repo
+    let kernel_open = source_path.join("kernel-open");
+    if !kernel_open.exists() {
+        return Err(NvControlError::ConfigError(
+            "Not an nvidia open-gpu-kernel-modules clone (missing kernel-open/)".to_string(),
+        ));
+    }
+
+    // Get version from version.mk
+    let version = get_source_version(&expanded_path)?;
+    println!("Detected version: {}", version);
+
+    // Check for dkms.conf
+    let dkms_conf = source_path.join("dkms.conf");
+    if !dkms_conf.exists() {
+        println!("\nNo dkms.conf found. Creating one...");
+        create_dkms_conf(&expanded_path, &version)?;
+        println!("Created dkms.conf");
+    }
+
+    // Create symlink in /usr/src
+    let usr_src_link = format!("/usr/src/nvidia-{}", version);
+    println!();
+
+    if std::path::Path::new(&usr_src_link).exists() {
+        println!("Symlink already exists: {}", usr_src_link);
+        // Check if it points to the right place
+        if let Ok(target) = std::fs::read_link(&usr_src_link) {
+            if target.display().to_string() != expanded_path {
+                println!("  Warning: Points to different path: {}", target.display());
+                println!("  Run with sudo to update if needed");
+            }
+        }
+    } else {
+        println!("Creating symlink: {} -> {}", usr_src_link, expanded_path);
+        if unsafe { libc::geteuid() == 0 } {
+            std::os::unix::fs::symlink(&expanded_path, &usr_src_link).map_err(|e| {
+                NvControlError::ConfigError(format!("Failed to create symlink: {}", e))
+            })?;
+        } else {
+            println!("  Run as root:");
+            println!("  sudo ln -sf {} {}", expanded_path, usr_src_link);
+        }
+    }
+
+    // Register with DKMS
+    println!();
+    let info = get_dkms_setup_info();
+    if info.nvidia_registered {
+        println!("Already registered with DKMS");
+    } else {
+        println!("Registering with DKMS...");
+        if unsafe { libc::geteuid() == 0 } {
+            let status = Command::new("dkms")
+                .args(["add", "nvidia", &version])
+                .status();
+            match status {
+                Ok(s) if s.success() => println!("Registered nvidia/{} with DKMS", version),
+                Ok(_) => println!("Registration may have failed - check with: dkms status"),
+                Err(e) => println!("Failed to register: {}", e),
+            }
+        } else {
+            println!("  Run as root:");
+            println!("  sudo dkms add nvidia/{}", version);
+        }
+    }
+
+    println!();
+    println!("Setup complete! Next steps:");
+    println!("  Build modules: nvctl driver source sync");
+    println!("  Update source: nvctl driver source update");
+
+    Ok(())
+}
+
+/// Get version from source version.mk
+fn get_source_version(path: &str) -> NvResult<String> {
+    let version_mk = format!("{}/version.mk", path);
+    let content = std::fs::read_to_string(&version_mk).map_err(|e| {
+        NvControlError::ConfigError(format!("Failed to read version.mk: {}", e))
+    })?;
+
+    for line in content.lines() {
+        if line.starts_with("NVIDIA_VERSION") && line.contains('=') {
+            if let Some(ver) = line.split('=').nth(1) {
+                return Ok(ver.trim().to_string());
+            }
+        }
+    }
+
+    Err(NvControlError::ConfigError(
+        "Could not parse version from version.mk".to_string(),
+    ))
+}
+
+/// Create a dkms.conf for the source
+fn create_dkms_conf(path: &str, version: &str) -> NvResult<()> {
+    let dkms_conf = format!(
+        r#"PACKAGE_NAME="nvidia"
+PACKAGE_VERSION="{version}"
+
+# LLVM/Clang detection for CachyOS/TKG kernels
+MAKE="'make' -j$(nproc) KERNEL_UNAME=${{kernelver}} $(grep -q CONFIG_CC_IS_CLANG=y ${{kernel_source_dir}}/.config 2>/dev/null && echo 'LLVM=1 CC=clang LD=ld.lld') NV_KERNEL_SOURCES=${{kernel_source_dir}} NV_KERNEL_OUTPUT=${{kernel_source_dir}} modules"
+
+BUILT_MODULE_NAME[0]="nvidia"
+BUILT_MODULE_LOCATION[0]="kernel-open"
+DEST_MODULE_LOCATION[0]="/kernel/drivers/video"
+
+BUILT_MODULE_NAME[1]="nvidia-modeset"
+BUILT_MODULE_LOCATION[1]="kernel-open"
+DEST_MODULE_LOCATION[1]="/kernel/drivers/video"
+
+BUILT_MODULE_NAME[2]="nvidia-drm"
+BUILT_MODULE_LOCATION[2]="kernel-open"
+DEST_MODULE_LOCATION[2]="/kernel/drivers/video"
+
+BUILT_MODULE_NAME[3]="nvidia-uvm"
+BUILT_MODULE_LOCATION[3]="kernel-open"
+DEST_MODULE_LOCATION[3]="/kernel/drivers/video"
+
+BUILT_MODULE_NAME[4]="nvidia-peermem"
+BUILT_MODULE_LOCATION[4]="kernel-open"
+DEST_MODULE_LOCATION[4]="/kernel/drivers/video"
+
+AUTOINSTALL="yes"
+"#
+    );
+
+    let conf_path = format!("{}/dkms.conf", path);
+    std::fs::write(&conf_path, dkms_conf)
+        .map_err(|e| NvControlError::ConfigError(format!("Failed to write dkms.conf: {}", e)))?;
+
+    Ok(())
+}
+
+/// Update source from git and optionally rebuild
+pub fn update_source(rebuild: bool) -> NvResult<()> {
+    let info = get_dkms_setup_info();
+
+    let source_path = info.source_path.ok_or_else(|| {
+        NvControlError::ConfigError("No source path found. Run: nvctl driver source init".to_string())
+    })?;
+
+    // Verify it's a git source
+    if !matches!(info.source_type, DkmsSourceType::Git { .. }) {
+        return Err(NvControlError::ConfigError(
+            "Source is not a git repository. Cannot update.".to_string(),
+        ));
+    }
+
+    println!("Updating NVIDIA source from git...\n");
+
+    // Fetch latest
+    println!("Fetching latest tags...");
+    let status = Command::new("git")
+        .args(["-C", &source_path, "fetch", "--tags"])
+        .status()
+        .map_err(|e| NvControlError::CommandFailed(format!("git fetch failed: {}", e)))?;
+
+    if !status.success() {
+        return Err(NvControlError::CommandFailed("git fetch failed".to_string()));
+    }
+
+    // Get current and latest versions
+    let current = Command::new("git")
+        .args(["-C", &source_path, "describe", "--tags", "--always"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_else(|_| "unknown".to_string());
+
+    let latest = Command::new("git")
+        .args(["-C", &source_path, "tag", "--sort=-v:refname"])
+        .output()
+        .ok()
+        .and_then(|o| {
+            if o.status.success() {
+                String::from_utf8_lossy(&o.stdout)
+                    .lines()
+                    .next()
+                    .map(|s| s.to_string())
+            } else {
+                None
+            }
+        });
+
+    println!("Current: {}", current);
+    if let Some(ref latest_tag) = latest {
+        println!("Latest:  {}", latest_tag);
+
+        if &current == latest_tag {
+            println!("\nAlready at latest version.");
+            if rebuild {
+                println!();
+                return sync_source_build(None, false);
+            }
+            return Ok(());
+        }
+
+        // Checkout latest tag
+        println!("\nChecking out {}...", latest_tag);
+        let status = Command::new("git")
+            .args(["-C", &source_path, "checkout", latest_tag])
+            .status()
+            .map_err(|e| NvControlError::CommandFailed(format!("git checkout failed: {}", e)))?;
+
+        if !status.success() {
+            return Err(NvControlError::CommandFailed(
+                "git checkout failed".to_string(),
+            ));
+        }
+
+        // Update dkms.conf version if needed
+        let new_version = get_source_version(&source_path)?;
+        println!("New version: {}", new_version);
+
+        // Check if DKMS needs re-registration
+        if let Some(ref old_ver) = info.nvidia_version {
+            if old_ver != &new_version {
+                println!("\nVersion changed, may need to re-register with DKMS:");
+                println!("  sudo dkms remove nvidia/{} --all", old_ver);
+                println!("  sudo ln -sf {} /usr/src/nvidia-{}", source_path, new_version);
+                println!("  sudo dkms add nvidia/{}", new_version);
+            }
+        }
+    } else {
+        println!("Could not determine latest tag");
+    }
+
+    if rebuild {
+        println!();
+        sync_source_build(None, false)?;
+    } else {
+        println!("\nSource updated. Build with: nvctl driver source sync");
+    }
+
+    Ok(())
+}
+
+/// Sync: rebuild modules from current source
+pub fn sync_source_build(kernel: Option<&str>, force: bool) -> NvResult<()> {
+    println!("Syncing NVIDIA modules from source...\n");
+    build_dkms_nvidia(kernel, force)
+}
+
+// ==================== Kernel Cleanup ====================
+
+/// Clean up old kernel modules
+pub fn cleanup_old_kernels(keep: usize, execute: bool) -> NvResult<()> {
+    println!(
+        "NVIDIA DKMS Kernel Cleanup{}",
+        if execute { "" } else { " (dry run)" }
+    );
+    println!("{}", "═".repeat(50));
+    println!();
+
+    // Get running kernel
+    let running_kernel = Command::new("uname")
+        .arg("-r")
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_else(|_| String::new());
+
+    println!("Running kernel: {}", running_kernel);
+    println!("Keeping: {} most recent kernels (plus running)\n", keep);
+
+    // Get all installed kernels sorted by modification time (newest first)
+    let mut kernels: Vec<(String, std::time::SystemTime)> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir("/lib/modules") {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if let Ok(meta) = entry.metadata() {
+                if let Ok(modified) = meta.modified() {
+                    kernels.push((name, modified));
+                }
+            }
+        }
+    }
+
+    // Sort by modification time, newest first
+    kernels.sort_by(|a, b| b.1.cmp(&a.1));
+
+    let kernel_names: Vec<&str> = kernels.iter().map(|(n, _)| n.as_str()).collect();
+
+    // Determine which to keep
+    let mut to_keep: Vec<&str> = Vec::new();
+    let mut to_remove: Vec<&str> = Vec::new();
+
+    // Always keep running kernel
+    to_keep.push(&running_kernel);
+
+    // Keep N most recent (excluding running if already counted)
+    let mut kept = 0;
+    for name in &kernel_names {
+        if *name == running_kernel {
+            continue;
+        }
+        if kept < keep {
+            to_keep.push(name);
+            kept += 1;
+        } else {
+            to_remove.push(name);
+        }
+    }
+
+    println!("Keeping ({}):", to_keep.len());
+    for k in &to_keep {
+        let suffix = if *k == running_kernel {
+            " (running)"
+        } else {
+            ""
+        };
+        println!("  ✓ {}{}", k, suffix);
+    }
+
+    if to_remove.is_empty() {
+        println!("\nNo kernels to remove.");
+        return Ok(());
+    }
+
+    println!("\nTo remove ({}):", to_remove.len());
+    for k in &to_remove {
+        println!("  ✗ {}", k);
+    }
+
+    if !execute {
+        println!("\nDry run - no changes made.");
+        println!("Run with --execute to actually remove.");
+        return Ok(());
+    }
+
+    // Get nvidia version for DKMS removal
+    let info = get_dkms_setup_info();
+    let version = info.nvidia_version.as_deref().unwrap_or("unknown");
+
+    println!("\nRemoving...");
+    for kernel in &to_remove {
+        print!("  Removing nvidia from {}... ", kernel);
+
+        // Remove from DKMS
+        let status = Command::new("sudo")
+            .args([
+                "dkms",
+                "remove",
+                "-m",
+                "nvidia",
+                "-v",
+                version,
+                "-k",
+                kernel,
+            ])
+            .output();
+
+        match status {
+            Ok(output) if output.status.success() => println!("done"),
+            Ok(_) => println!("skipped (not in DKMS)"),
+            Err(e) => println!("error: {}", e),
+        }
+    }
+
+    println!("\nCleanup complete.");
+    println!("Note: Kernel packages themselves were not removed.");
+    println!("      Use your package manager to remove unused kernels.");
+
+    Ok(())
+}
+
+// ==================== GPU Architecture Detection ====================
+
+/// Detect GPU architecture from name, returns (architecture_name, is_legacy)
+/// Legacy GPUs are pre-Turing (Maxwell, Pascal, Volta)
+fn detect_gpu_architecture(gpu_name: &str) -> (String, bool) {
+    let name = gpu_name.to_lowercase();
+
+    // RTX 50 series - Blackwell
+    if name.contains("5090") || name.contains("5080") || name.contains("5070") || name.contains("5060") {
+        return ("Blackwell".to_string(), false);
+    }
+
+    // RTX 40 series - Ada Lovelace
+    if name.contains("4090")
+        || name.contains("4080")
+        || name.contains("4070")
+        || name.contains("4060")
+        || name.contains("l40")
+        || name.contains("rtx 4000")
+        || name.contains("rtx 5000")
+        || name.contains("rtx 6000")
+    {
+        return ("Ada Lovelace".to_string(), false);
+    }
+
+    // RTX 30 series - Ampere
+    if name.contains("3090")
+        || name.contains("3080")
+        || name.contains("3070")
+        || name.contains("3060")
+        || name.contains("a100")
+        || name.contains("a40")
+        || name.contains("a30")
+        || name.contains("a10")
+    {
+        return ("Ampere".to_string(), false);
+    }
+
+    // RTX 20 series and GTX 16 series - Turing (last supported by nvidia-open)
+    if name.contains("2080")
+        || name.contains("2070")
+        || name.contains("2060")
+        || name.contains("1660")
+        || name.contains("1650")
+        || name.contains("t4")
+        || name.contains("quadro rtx")
+    {
+        return ("Turing".to_string(), false);
+    }
+
+    // Volta - Legacy
+    if name.contains("v100") || name.contains("titan v") {
+        return ("Volta".to_string(), true);
+    }
+
+    // GTX 10 series - Pascal (Legacy, deprecated in 590+)
+    if name.contains("gtx 10")
+        || name.contains("1080")
+        || name.contains("1070")
+        || name.contains("1060")
+        || name.contains("1050")
+        || name.contains("titan xp")
+        || name.contains("quadro p")
+        || name.contains("p100")
+        || name.contains("p40")
+        || name.contains("p6000")
+        || name.contains("p5000")
+    {
+        return ("Pascal".to_string(), true);
+    }
+
+    // GTX 9 series - Maxwell (Legacy, deprecated in 590+)
+    if name.contains("gtx 9")
+        || name.contains("980")
+        || name.contains("970")
+        || name.contains("960")
+        || name.contains("950")
+        || name.contains("titan x")
+        || name.contains("quadro m")
+    {
+        // Be careful not to match "Titan Xp" (Pascal)
+        if !name.contains("xp") {
+            return ("Maxwell".to_string(), true);
+        }
+    }
+
+    // Kepler and older - not supported
+    if name.contains("gtx 7")
+        || name.contains("gtx 6")
+        || name.contains("gtx 5")
+        || name.contains("780")
+        || name.contains("770")
+        || name.contains("760")
+        || name.contains("750")
+        || name.contains("680")
+        || name.contains("670")
+        || name.contains("660")
+        || name.contains("650")
+        || name.contains("quadro k")
+        || name.contains("k80")
+        || name.contains("k40")
+    {
+        return ("Kepler".to_string(), true);
+    }
+
+    // Fermi and older
+    if name.contains("gtx 4")
+        || name.contains("gtx 5")
+        || name.contains("geforce 4")
+        || name.contains("geforce 5")
+        || name.contains("geforce 6")
+        || name.contains("geforce 7")
+        || name.contains("quadro 4")
+        || name.contains("quadro 5")
+        || name.contains("quadro 6")
+    {
+        return ("Fermi or older".to_string(), true);
+    }
+
+    ("Unknown".to_string(), false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2740,5 +3498,55 @@ mod tests {
             // Should contain a dot (e.g., "2.38")
             assert!(v.contains('.'));
         }
+    }
+
+    #[test]
+    fn test_detect_gpu_architecture() {
+        // Modern GPUs - should not be legacy
+        let (arch, legacy) = detect_gpu_architecture("NVIDIA GeForce RTX 5090");
+        assert_eq!(arch, "Blackwell");
+        assert!(!legacy);
+
+        let (arch, legacy) = detect_gpu_architecture("NVIDIA GeForce RTX 4090");
+        assert_eq!(arch, "Ada Lovelace");
+        assert!(!legacy);
+
+        let (arch, legacy) = detect_gpu_architecture("NVIDIA GeForce RTX 3080");
+        assert_eq!(arch, "Ampere");
+        assert!(!legacy);
+
+        let (arch, legacy) = detect_gpu_architecture("NVIDIA GeForce RTX 2070 Super");
+        assert_eq!(arch, "Turing");
+        assert!(!legacy);
+
+        let (arch, legacy) = detect_gpu_architecture("NVIDIA GeForce GTX 1660 Ti");
+        assert_eq!(arch, "Turing");
+        assert!(!legacy);
+
+        // Legacy GPUs - should be marked as legacy
+        let (arch, legacy) = detect_gpu_architecture("NVIDIA GeForce GTX 1080 Ti");
+        assert_eq!(arch, "Pascal");
+        assert!(legacy);
+
+        let (arch, legacy) = detect_gpu_architecture("NVIDIA GeForce GTX 980 Ti");
+        assert_eq!(arch, "Maxwell");
+        assert!(legacy);
+
+        let (arch, legacy) = detect_gpu_architecture("NVIDIA TITAN Xp");
+        assert_eq!(arch, "Pascal");
+        assert!(legacy);
+
+        let (arch, legacy) = detect_gpu_architecture("NVIDIA Tesla V100");
+        assert_eq!(arch, "Volta");
+        assert!(legacy);
+
+        // Datacenter GPUs
+        let (arch, legacy) = detect_gpu_architecture("NVIDIA A100-SXM4-80GB");
+        assert_eq!(arch, "Ampere");
+        assert!(!legacy);
+
+        let (arch, legacy) = detect_gpu_architecture("NVIDIA L40S");
+        assert_eq!(arch, "Ada Lovelace");
+        assert!(!legacy);
     }
 }

@@ -16,7 +16,32 @@ nvctl driver dkms build
 
 # Install auto-rebuild hook for Arch
 nvctl driver dkms hook
+
+# Clean up old kernel modules
+nvctl driver dkms cleanup
 ```
+
+## Building from Source
+
+For power users building nvidia-open from the git repository:
+
+```bash
+# Clone the repo
+git clone https://github.com/NVIDIA/open-gpu-kernel-modules.git ~/open-gpu-kernel-modules
+cd ~/open-gpu-kernel-modules
+git checkout 590.48.01
+
+# Initialize (creates dkms.conf, symlink, registers with DKMS)
+sudo nvctl driver source init ~/open-gpu-kernel-modules
+
+# Build modules for all kernels
+nvctl driver source sync
+
+# Update to latest version
+nvctl driver source update
+```
+
+See [Source Build Commands](#source-build-commands) for details.
 
 ## Commands
 
@@ -32,6 +57,7 @@ DKMS:           installed
 Driver:         590.48.01
 Registered:     yes
 Source:         /usr/src/nvidia-590.48.01
+Source Type:    git (https://github.com/NVIDIA/open-gpu-kernel-modules.git)
 
 Installed Kernels (4):
   ✓ 6.18.1-zen1-2-zen [nvidia: dkms, headers: ✓]
@@ -42,11 +68,16 @@ Installed Kernels (4):
 Pacman Hook:    installed (auto-rebuild enabled)
 ```
 
-Legend:
+**Legend:**
 - `nvidia: dkms` - Module built by DKMS
 - `nvidia: manual` - Module installed manually (not DKMS-managed)
 - `nvidia: MISSING` - No nvidia module for this kernel
 - `headers: ✓/✗` - Whether kernel headers are installed (required for DKMS builds)
+
+**Source Types:**
+- `packaged (nvidia-open-dkms)` - Installed via pacman
+- `git (url)` - From git clone (shows remote URL)
+- `manual` - Manually copied to /usr/src
 
 ### `nvctl driver dkms setup`
 
@@ -95,7 +126,13 @@ nvctl driver dkms build
 
 # Build for specific kernel
 nvctl driver dkms build --kernel 6.18.2-1-cachyos-lto
+
+# Force rebuild even if already installed
+nvctl driver dkms build --force
+nvctl driver dkms build -f --kernel 6.18.2-1-cachyos-lto
 ```
+
+**Note:** Without `--force`, DKMS will skip kernels where nvidia is already installed. This is normal - use `--force` when you need to rebuild (e.g., after source changes).
 
 ### `nvctl driver dkms unregister`
 
@@ -172,6 +209,117 @@ Attempts to fix common DKMS issues:
 - Runs `dkms autoinstall`
 - Removes and re-adds nvidia modules
 - Rebuilds for current kernel
+
+### `nvctl driver dkms cleanup`
+
+Remove nvidia modules from old kernels to free disk space:
+
+```bash
+# Dry run - shows what would be removed
+nvctl driver dkms cleanup
+
+# Keep 3 most recent kernels (plus running)
+nvctl driver dkms cleanup --keep 3
+
+# Actually remove (requires --execute)
+nvctl driver dkms cleanup --execute
+nvctl driver dkms cleanup --keep 2 --execute
+```
+
+**Example Output:**
+```
+NVIDIA DKMS Kernel Cleanup (dry run)
+══════════════════════════════════════════════════
+
+Running kernel: 6.18.4-273-tkg-linux-ghost
+Keeping: 2 most recent kernels (plus running)
+
+Keeping (3):
+  ✓ 6.18.4-273-tkg-linux-ghost (running)
+  ✓ 6.18.5-zen1-1-zen
+  ✓ 6.18.4-zen1-1-zen
+
+To remove (3):
+  ✗ 6.18.4-1-cachyos-lto
+  ✗ 6.18.3-1-cachyos-lto
+  ✗ 6.18.2-1-cachyos-lto
+
+Dry run - no changes made.
+Run with --execute to actually remove.
+```
+
+**Note:** This only removes nvidia modules from DKMS, not the kernel packages themselves. Use your package manager to remove unused kernels.
+
+## Source Build Commands
+
+For building nvidia-open directly from the git repository instead of using packaged nvidia-open-dkms.
+
+### `nvctl driver source status`
+
+Show source build status:
+
+```bash
+nvctl driver source status
+```
+
+**Example Output:**
+```
+NVIDIA Source Build Status
+══════════════════════════════════════════════════
+
+Source Path:    /usr/src/nvidia-590.48.01
+Source Type:    git (https://github.com/NVIDIA/open-gpu-kernel-modules.git)
+Remote URL:     https://github.com/NVIDIA/open-gpu-kernel-modules.git
+Current Tag:    590.48.01
+Latest Tag:     590.48.01
+
+Driver Version: 590.48.01
+DKMS Registered: yes
+```
+
+### `nvctl driver source init`
+
+Initialize DKMS from a git clone:
+
+```bash
+nvctl driver source init ~/open-gpu-kernel-modules
+```
+
+This will:
+1. Verify it's a valid nvidia open-gpu-kernel-modules clone
+2. Detect version from `version.mk`
+3. Create `dkms.conf` if missing (with LLVM/Clang detection for CachyOS/TKG)
+4. Create symlink in `/usr/src/nvidia-<version>`
+5. Register with DKMS
+
+### `nvctl driver source update`
+
+Fetch and checkout the latest tag from git, then rebuild:
+
+```bash
+# Update and rebuild
+nvctl driver source update
+
+# Update without rebuilding
+nvctl driver source update --no-build
+```
+
+**Note:** If the version changes, you may need to re-register with DKMS manually.
+
+### `nvctl driver source sync`
+
+Rebuild modules from current source without updating:
+
+```bash
+# Rebuild for all kernels
+nvctl driver source sync
+
+# Rebuild specific kernel
+nvctl driver source sync --kernel 6.18.4-273-tkg-linux-ghost
+
+# Force rebuild
+nvctl driver source sync --force
+```
 
 ## Problem: Kernel Updates Breaking nvidia
 

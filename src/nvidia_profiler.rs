@@ -352,7 +352,7 @@ mod tests {
 
         // Simulate some data
         for _ in 0..10 {
-            if let Ok(_) = profiler.sample() {
+            if profiler.sample().is_ok() {
                 std::thread::sleep(Duration::from_millis(10));
             }
         }

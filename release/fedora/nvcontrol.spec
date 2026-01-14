@@ -1,7 +1,7 @@
 %global crate nvcontrol
 
 Name:           nvcontrol
-Version:        0.7.6
+Version:        0.8.3
 Release:        1%{?dist}
 Summary:        Modern NVIDIA Settings Manager for Linux + Wayland
 
@@ -117,6 +117,14 @@ cargo test --release --lib -- --skip hardware --skip nvml || true
 %{_userunitdir}/nvcontrol-monitor.service
 
 %changelog
+* Mon Jan 13 2026 CK Technology LLC <info@cktechx.com> - 0.8.3-1
+- Legacy GPU detection with deprecation warnings for Maxwell/Pascal on driver 590+
+- Explicit Sync commands (nvctl wayland explicit-sync status/enable)
+- Top-level HDR command with status, enable, disable, config, set-brightness, tools, capabilities
+- DLSS 4.5 support with Multi-Frame Generation (up to 4x) for RTX 50 series
+- Kubernetes GPU detection with proper JSON parsing and cluster capacity reporting
+- Documentation updates with explicit sync guide and legacy GPU migration info
+
 * Thu Dec 04 2025 CK Technology LLC <info@cktechx.com> - 0.7.6-1
 - Backend abstraction layer + BackendStatus indicators
 - Cached metrics, TUI session persistence, deterministic backend tests

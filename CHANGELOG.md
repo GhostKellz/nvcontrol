@@ -7,6 +7,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-01-13
+
+### Added
+- **Legacy GPU Detection** (`nvctl driver check`):
+  - `detect_gpu_architecture()` for Maxwell/Pascal/Turing/Ampere/Ada/Blackwell detection
+  - Deprecation warnings for Maxwell/Pascal GPUs on driver 590+
+  - Recommends AUR legacy driver packages (nvidia-470xx, nvidia-535xx, nvidia-390xx)
+  - Unit tests for architecture detection
+
+- **Explicit Sync Commands** (`nvctl wayland explicit-sync`):
+  - `status` - Comprehensive check of driver/kernel/compositor support
+  - `enable` - Enables explicit sync in KDE/GNOME/Hyprland
+  - Detects compositor versions (Plasma 6.1+, GNOME 46+, Hyprland 0.39+)
+  - Shows active status when all components support explicit sync
+
+- **Top-level HDR Command** (`nvctl hdr`):
+  - `status`, `enable`, `disable` - HDR control across all displays
+  - `config` - Show HDR configuration (peak brightness, tone mapping, color space)
+  - `set-brightness <nits>` - Set peak brightness (400-10000 nits)
+  - `tools` - References renodx, PumboAutoHDR, VK_hdr_layer for game HDR
+  - `capabilities` - Display HDR capabilities from EDID
+
+- **DLSS 4.5 Support**:
+  - Added `Dlss4_5` version enum for enhanced Multi-Frame Generation
+  - DLSS 4.5 detected when driver 590+ on RTX 50 series (Blackwell)
+  - Status shows Multi-Frame Generation (up to 4x) and Enhanced Frame Pacing
+  - Optical Flow Accelerator generation displayed (Gen 4 for RTX 50)
+
+- **Kubernetes GPU Detection** (container.rs):
+  - Proper JSON parsing for K8s pod GPU resources (`nvidia.com/gpu`)
+  - `check_nvidia_device_plugin()` - Checks if NVIDIA device plugin is running
+  - `get_cluster_gpu_capacity()` - GPU capacity per node in cluster
+
+### Changed
+- DLSS version detection now correctly identifies DLSS 4 for RTX 50 series
+- `DlssVersion` enum now implements `Display` trait for user-friendly output
+- Documentation updated with explicit sync guide and legacy GPU migration info
+
+### Fixed
+- DLSS status was showing "Dlss3_5" on RTX 50 series instead of "DLSS 4"
+
+## [0.8.2] - 2026-01-12
+
+### Added
+- **DLSS Management**: Full DLSS DLL management for Proton gaming
+  - Scan Steam/Lutris/Heroic games for DLSS DLLs
+  - Read actual DLL versions from PE headers
+  - Upgrade game DLLs with backup/restore
+  - Generate Proton launch options (PROTON_DLSS_UPGRADE)
+- GUI cleanup and improvements
+
+## [0.8.1] - 2026-01-11
+
+### Added
+- **GSP Firmware Management**: GSP firmware status and troubleshooting
+- **DKMS Automation**: Enhanced DKMS workflow for nvidia-open
+  - Source type detection (Packaged/Git/Manual)
+  - `nvctl driver source` commands (status/init/update/sync)
+  - `nvctl driver dkms cleanup` for old kernel modules
+  - Fixed PIPESTATUS handling in DKMS wrapper script
+
 ## [0.7.6] - 2025-12-04
 
 ### Added

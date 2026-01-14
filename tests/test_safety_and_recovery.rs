@@ -169,7 +169,7 @@ fn test_power_limit_validation_warning() {
 
 #[test]
 fn test_safe_gpu_controller_creation() {
-    let controller = SafeGpuController::new(0);
+    let _controller = SafeGpuController::new(0);
 
     // Should not panic on creation
     println!("✓ SafeGpuController created successfully");
@@ -200,7 +200,7 @@ fn test_safe_gpu_info_retrieval() {
 
 #[test]
 fn test_architecture_detection_blackwell() {
-    let controller = SafeGpuController::new(0);
+    let _controller = SafeGpuController::new(0);
 
     // Test detection from compute capability
     let arch =
@@ -286,7 +286,5 @@ fn test_graceful_degradation() {
             fallback.available_methods()
         );
     }
-
-    // Should not panic even without GPU
-    assert!(true);
+    // Test passes if we reach here without panicking
 }

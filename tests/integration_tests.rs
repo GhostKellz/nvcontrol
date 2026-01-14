@@ -3,7 +3,7 @@ use std::process::Command;
 #[test]
 fn test_nvctl_help() {
     let output = Command::new("cargo")
-        .args(&["run", "--bin", "nvctl", "--", "--help"])
+        .args(["run", "--bin", "nvctl", "--", "--help"])
         .output()
         .expect("Failed to execute nvctl");
 
@@ -15,7 +15,7 @@ fn test_nvctl_help() {
 #[test]
 fn test_nvctl_gpu_info() {
     let output = Command::new("cargo")
-        .args(&["run", "--bin", "nvctl", "--", "gpu", "info"])
+        .args(["run", "--bin", "nvctl", "--", "gpu", "info"])
         .output()
         .expect("Failed to execute nvctl gpu info");
 
@@ -26,7 +26,7 @@ fn test_nvctl_gpu_info() {
 #[test]
 fn test_nvctl_display_ls() {
     let output = Command::new("cargo")
-        .args(&["run", "--bin", "nvctl", "--", "display", "ls"])
+        .args(["run", "--bin", "nvctl", "--", "display", "ls"])
         .output()
         .expect("Failed to execute nvctl display ls");
 
@@ -38,7 +38,7 @@ fn test_nvctl_display_ls() {
 #[test]
 fn test_nvctl_fan_info() {
     let output = Command::new("cargo")
-        .args(&["run", "--bin", "nvctl", "--", "fan", "info"])
+        .args(["run", "--bin", "nvctl", "--", "fan", "info"])
         .output()
         .expect("Failed to execute nvctl fan info");
 
@@ -50,7 +50,7 @@ fn test_nvctl_fan_info() {
 #[test]
 fn test_nvctl_driver_info() {
     let output = Command::new("cargo")
-        .args(&["run", "--bin", "nvctl", "--", "driver", "info"])
+        .args(["run", "--bin", "nvctl", "--", "driver", "info"])
         .output()
         .expect("Failed to execute nvctl driver info");
 
@@ -62,7 +62,7 @@ fn test_nvctl_driver_info() {
 #[test]
 fn test_nvctl_driver_validate() {
     let output = Command::new("cargo")
-        .args(&[
+        .args([
             "run", "--bin", "nvctl", "--", "driver", "validate", "--driver", "590",
         ])
         .output()

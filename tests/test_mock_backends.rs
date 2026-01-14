@@ -638,7 +638,7 @@ fn test_mock_display_vrr_mode_values() {
             .get("vrrPolicy")
             .and_then(|v| v.as_i64())
             .unwrap();
-        assert!(vrr_policy >= 0 && vrr_policy <= 2);
+        assert!((0..=2).contains(&vrr_policy));
     }
 }
 
@@ -712,7 +712,6 @@ fn test_tui_app_creation() {
     // Create TuiApp with view mode
     let _app = TuiApp::with_view(ViewMode::Nvtop);
 
-    // The app should be created successfully
+    // Test passes if TuiApp is created successfully without panicking
     // Note: Backend injection via with_context() is planned for future versions
-    assert!(true, "TuiApp created successfully");
 }

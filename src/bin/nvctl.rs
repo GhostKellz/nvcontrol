@@ -4,7 +4,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use nvcontrol::{
     arch_integration, asus_power_detector, display, drivers, fan, gamescope,
     gpu::{self, OutputFormat},
-    gsp_firmware, kde_optimizer, latency, monitoring, multimonitor, overclocking, power,
+    gsp_firmware, hdr, kde_optimizer, latency, monitoring, multimonitor, overclocking, power,
     power_profiles_daemon, recording, upscaling, vrr, wayland_nvidia,
 };
 use std::time::Duration;
@@ -148,6 +148,11 @@ enum Command {
     Kde {
         #[command(subcommand)]
         subcommand: KdeSubcommand,
+    },
+    /// 🌈 HDR Control and Configuration
+    Hdr {
+        #[command(subcommand)]
+        subcommand: TopLevelHdrSubcommand,
     },
     /// ⚡ Power Profile Management (AC/Battery, Activities)
     PowerProfile {
@@ -741,6 +746,19 @@ enum WaylandSubcommand {
         /// Target driver: open, dkms
         driver: String,
     },
+    /// Explicit sync management (reduces tearing on NVIDIA Wayland)
+    ExplicitSync {
+        #[command(subcommand)]
+        subcommand: ExplicitSyncSubcommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum ExplicitSyncSubcommand {
+    /// Show explicit sync support status
+    Status,
+    /// Enable explicit sync in compositor
+    Enable,
 }
 
 #[derive(Subcommand)]
@@ -765,6 +783,27 @@ enum KdeSubcommand {
     },
     /// Restart KWin compositor
     Restart,
+}
+
+#[derive(Subcommand)]
+enum TopLevelHdrSubcommand {
+    /// Show HDR status across all displays
+    Status,
+    /// Enable HDR on all capable displays (use 'nvctl display hdr enable <id>' for specific display)
+    Enable,
+    /// Disable HDR on all displays (use 'nvctl display hdr disable <id>' for specific display)
+    Disable,
+    /// Show HDR configuration
+    Config,
+    /// Set peak brightness (nits)
+    SetBrightness {
+        /// Peak luminance in nits (400-10000)
+        nits: u32,
+    },
+    /// Show HDR tools and recommendations for games
+    Tools,
+    /// Show display HDR capabilities (EDID info)
+    Capabilities,
 }
 
 #[derive(Subcommand)]
@@ -950,6 +989,11 @@ enum DriverSubcommand {
         #[arg(long)]
         tail: Option<usize>,
     },
+    /// Build nvidia-open from source (git clone workflow)
+    Source {
+        #[command(subcommand)]
+        subcommand: DriverSourceSubcommand,
+    },
 }
 
 #[derive(Subcommand)]
@@ -963,6 +1007,9 @@ enum DriverDkmsSubcommand {
         /// Build for specific kernel only (e.g., 6.18.2-1-cachyos-lto)
         #[arg(long, short)]
         kernel: Option<String>,
+        /// Force rebuild even if already installed
+        #[arg(long, short)]
+        force: bool,
     },
     /// Show DKMS build logs (errors, warnings)
     Logs {
@@ -979,6 +1026,41 @@ enum DriverDkmsSubcommand {
     Hook,
     /// Attempt to fix common DKMS issues
     Fix,
+    /// Remove old kernel modules (keeps running kernel + N most recent)
+    Cleanup {
+        /// Number of kernels to keep besides running kernel (default: 2)
+        #[arg(long, short, default_value = "2")]
+        keep: usize,
+        /// Actually remove (default is dry-run)
+        #[arg(long)]
+        execute: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum DriverSourceSubcommand {
+    /// Show source build status and info
+    Status,
+    /// Initialize from a git clone of open-gpu-kernel-modules
+    Init {
+        /// Path to the git clone (e.g., ~/open-gpu-kernel-modules)
+        path: String,
+    },
+    /// Update source: fetch latest tag, checkout, and rebuild
+    Update {
+        /// Skip rebuild after updating source
+        #[arg(long)]
+        no_build: bool,
+    },
+    /// Sync: rebuild modules from current source without updating
+    Sync {
+        /// Build for specific kernel only
+        #[arg(long, short)]
+        kernel: Option<String>,
+        /// Force rebuild even if already installed
+        #[arg(long, short)]
+        force: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -3104,6 +3186,16 @@ fn main() {
                     }
                     Err(e) => eprintln!("❌ Failed to initialize: {}", e),
                 },
+                WaylandSubcommand::ExplicitSync { subcommand } => match subcommand {
+                    ExplicitSyncSubcommand::Status => {
+                        wayland_nvidia::print_explicit_sync_status();
+                    }
+                    ExplicitSyncSubcommand::Enable => {
+                        if let Err(e) = wayland_nvidia::enable_explicit_sync() {
+                            eprintln!("❌ Failed to enable explicit sync: {}", e);
+                        }
+                    }
+                },
             }
         }
         Command::Kde { subcommand } => {
@@ -3150,6 +3242,122 @@ fn main() {
                     let optimizer = KdeOptimizer::new();
                     if let Err(e) = optimizer.restart_compositor() {
                         eprintln!("❌ Failed to restart compositor: {}", e);
+                    }
+                }
+            }
+        }
+        Command::Hdr { subcommand } => {
+            use hdr::{HdrConfig, get_hdr_capabilities};
+
+            match subcommand {
+                TopLevelHdrSubcommand::Status => {
+                    if let Err(e) = hdr::get_hdr_status_cli() {
+                        eprintln!("❌ Failed to get HDR status: {}", e);
+                    }
+                }
+                TopLevelHdrSubcommand::Enable => {
+                    if let Err(e) = hdr::enable_hdr_cli() {
+                        eprintln!("❌ Failed to enable HDR: {}", e);
+                    }
+                }
+                TopLevelHdrSubcommand::Disable => {
+                    if let Err(e) = hdr::disable_hdr_cli() {
+                        eprintln!("❌ Failed to disable HDR: {}", e);
+                    }
+                }
+                TopLevelHdrSubcommand::Config => {
+                    match HdrConfig::load() {
+                        Ok(config) => {
+                            println!("HDR Configuration");
+                            println!("{}", "═".repeat(50));
+                            println!();
+                            println!("Enabled:            {}", if config.enabled { "Yes" } else { "No" });
+                            println!("Peak Brightness:    {} nits", config.peak_brightness);
+                            println!("Min Brightness:     {} nits", config.min_brightness);
+                            println!("Max Content Light:  {} nits", config.max_content_light_level);
+                            println!("Tone Mapping:       {}", config.tone_mapping);
+                            println!("Color Space:        {}", config.color_space);
+                            println!("EOTF:               {}", config.eotf);
+                            println!();
+                            println!("Config location: ~/.config/nvcontrol/hdr_config.toml");
+                        }
+                        Err(e) => eprintln!("❌ Failed to load HDR config: {}", e),
+                    }
+                }
+                TopLevelHdrSubcommand::SetBrightness { nits } => {
+                    let nits = nits.clamp(400, 10000);
+                    match HdrConfig::load() {
+                        Ok(mut config) => {
+                            config.peak_brightness = nits;
+                            config.enabled = true;
+                            if let Err(e) = config.save() {
+                                eprintln!("❌ Failed to save config: {}", e);
+                                return;
+                            }
+                            println!("✓ Peak brightness set to {} nits", nits);
+                            println!();
+                            println!("Note: Brightness settings are compositor-specific.");
+                            println!("      KDE: System Settings → Display → HDR");
+                            println!("      GNOME: Settings → Displays → HDR Settings");
+                        }
+                        Err(e) => eprintln!("❌ Failed to load config: {}", e),
+                    }
+                }
+                TopLevelHdrSubcommand::Tools => {
+                    println!("HDR Tools and Recommendations");
+                    println!("{}", "═".repeat(50));
+                    println!();
+                    println!("SYSTEM-WIDE HDR:");
+                    println!("  Your compositor handles HDR for the desktop.");
+                    println!("  • KDE Plasma 6+: System Settings → Display → HDR");
+                    println!("  • GNOME 46+: Settings → Displays → HDR per monitor");
+                    println!("  • Hyprland: monitor=...,hdr in hyprland.conf");
+                    println!();
+                    println!("GAME-SPECIFIC HDR TOOLS:");
+                    println!();
+                    println!("  RenoD :: HDR Shader Replacement (via reshade/vkBasalt)");
+                    println!("    https://github.com/clshortfuse/renodx");
+                    println!("    Fixes broken HDR implementations in games.");
+                    println!("    Supports: RE4R, FF7 Rebirth, Elden Ring, many more.");
+                    println!();
+                    println!("  PumboAutoHDR :: SDR to HDR Conversion");
+                    println!("    ReShade shader for adding HDR to SDR games.");
+                    println!("    Use with vkBasalt or ReShade on Proton.");
+                    println!();
+                    println!("  VK_hdr_layer :: Vulkan HDR Layer");
+                    println!("    https://github.com/Zamundaaa/VK_hdr_layer");
+                    println!("    Enables HDR for Vulkan/DXVK games that don't");
+                    println!("    properly support HDR on Linux.");
+                    println!();
+                    println!("PROTON/WINE HDR:");
+                    println!("  DXVK 2.4+ and Proton 9+ have improved HDR support.");
+                    println!("  Set: DXVK_HDR=1 for games with native HDR.");
+                    println!();
+                    println!("GAMESCOPE (Steam Deck / Gaming Mode):");
+                    println!("  gamescope --hdr-enabled --hdr-itm-enable");
+                    println!("  Best HDR gaming experience on Linux.");
+                }
+                TopLevelHdrSubcommand::Capabilities => {
+                    println!("Display HDR Capabilities");
+                    println!("{}", "═".repeat(50));
+                    println!();
+                    match get_hdr_capabilities() {
+                        Ok(caps) => {
+                            println!("Max Luminance:     {} nits", caps.max_luminance);
+                            println!("Min Luminance:     {} nits", caps.min_luminance);
+                            println!("Max Frame Average: {} nits (FALL)", caps.max_fall);
+                            println!();
+                            println!("Format Support:");
+                            println!("  HDR10:         {}", if caps.supports_hdr10 { "✓" } else { "✗" });
+                            println!("  HDR10+:        {}", if caps.supports_hdr10_plus { "✓" } else { "✗" });
+                            println!("  Dolby Vision:  {}", if caps.supports_dolby_vision { "✓" } else { "✗" });
+                            println!("  HLG:           {}", if caps.supports_hlg { "✓" } else { "✗" });
+                            println!();
+                            println!("Note: Capability detection is based on EDID data.");
+                            println!("      Actual values may vary. For accurate data,");
+                            println!("      check: cat /sys/class/drm/card*/*/edid | edid-decode");
+                        }
+                        Err(e) => eprintln!("❌ Failed to get capabilities: {}", e),
                     }
                 }
             }
@@ -3542,8 +3750,8 @@ fn main() {
                         eprintln!("DKMS setup incomplete: {e}");
                     }
                 }
-                DriverDkmsSubcommand::Build { kernel } => {
-                    if let Err(e) = drivers::build_dkms_nvidia(kernel.as_deref()) {
+                DriverDkmsSubcommand::Build { kernel, force } => {
+                    if let Err(e) = drivers::build_dkms_nvidia(kernel.as_deref(), force) {
                         eprintln!("DKMS build failed: {e}");
                     }
                 }
@@ -3566,6 +3774,33 @@ fn main() {
                     Ok(()) => println!("DKMS fix attempts completed"),
                     Err(e) => eprintln!("Failed to fix DKMS issues: {e}"),
                 },
+                DriverDkmsSubcommand::Cleanup { keep, execute } => {
+                    if let Err(e) = drivers::cleanup_old_kernels(keep, execute) {
+                        eprintln!("Cleanup failed: {e}");
+                    }
+                }
+            },
+            DriverSubcommand::Source { subcommand } => match subcommand {
+                DriverSourceSubcommand::Status => {
+                    if let Err(e) = drivers::print_source_status() {
+                        eprintln!("Failed to show source status: {e}");
+                    }
+                }
+                DriverSourceSubcommand::Init { path } => {
+                    if let Err(e) = drivers::init_source_build(&path) {
+                        eprintln!("Source init failed: {e}");
+                    }
+                }
+                DriverSourceSubcommand::Update { no_build } => {
+                    if let Err(e) = drivers::update_source(!no_build) {
+                        eprintln!("Source update failed: {e}");
+                    }
+                }
+                DriverSourceSubcommand::Sync { kernel, force } => {
+                    if let Err(e) = drivers::sync_source_build(kernel.as_deref(), force) {
+                        eprintln!("Source sync failed: {e}");
+                    }
+                }
             },
             DriverSubcommand::Gsp { subcommand } => {
                 use gsp_firmware::GspManager;
@@ -5333,6 +5568,7 @@ fn main() {
                     println!(
                         "   DLSS Support: {} ✅",
                         match controller.version {
+                            dlss::DlssVersion::Dlss4_5 => "DLSS 4.5 (Enhanced MFG)",
                             dlss::DlssVersion::Dlss4 => "DLSS 4 (Multi-Frame Gen)",
                             dlss::DlssVersion::Dlss3_5 => "DLSS 3.5",
                             dlss::DlssVersion::Dlss3 => "DLSS 3",

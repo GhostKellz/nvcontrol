@@ -32,6 +32,20 @@ pub enum DlssVersion {
     Dlss3,   // Frame Generation + Super Resolution (RTX 40 series)
     Dlss3_5, // Ray Reconstruction + Frame Generation + Super Resolution
     Dlss4,   // Multi-Frame Generation (up to 4x) + All DLSS 3.5 features (RTX 50 series)
+    Dlss4_5, // Enhanced MFG with improved frame pacing (RTX 50 series, driver 590+)
+}
+
+impl fmt::Display for DlssVersion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DlssVersion::None => write!(f, "None"),
+            DlssVersion::Dlss2 => write!(f, "DLSS 2 (Super Resolution)"),
+            DlssVersion::Dlss3 => write!(f, "DLSS 3 (Frame Generation)"),
+            DlssVersion::Dlss3_5 => write!(f, "DLSS 3.5 (Ray Reconstruction)"),
+            DlssVersion::Dlss4 => write!(f, "DLSS 4 (Multi-Frame Generation)"),
+            DlssVersion::Dlss4_5 => write!(f, "DLSS 4.5 (Enhanced MFG)"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -562,7 +576,22 @@ impl DlssController {
             return DlssVersion::None;
         }
 
-        if caps.supports_ray_reconstruction {
+        // RTX 50 series (Blackwell) with Multi-Frame Generation
+        if caps.supports_multi_frame_generation {
+            // DLSS 4.5 requires driver 590+ for enhanced frame pacing
+            let driver_major: u32 = caps
+                .driver_version
+                .split('.')
+                .next()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0);
+
+            if driver_major >= 590 {
+                DlssVersion::Dlss4_5
+            } else {
+                DlssVersion::Dlss4
+            }
+        } else if caps.supports_ray_reconstruction {
             DlssVersion::Dlss3_5
         } else if caps.supports_frame_generation {
             DlssVersion::Dlss3
@@ -1715,19 +1744,17 @@ pub fn get_dlss_status() -> NvResult<String> {
     let mut status = format!(
         "🎮 DLSS Status\n\
         ├─ GPU: {}\n\
-        ├─ DLSS Version: {:?}\n\
+        ├─ DLSS Version: {}\n\
         ├─ Driver: {}\n",
         controller.capabilities.gpu_model,
-        controller.version,
+        controller.version,  // Uses Display trait now
         controller.capabilities.driver_version
     );
 
     status.push_str(&format!(
         "├─ Capabilities:\n\
         │  ├─ Super Resolution: {}\n\
-        │  ├─ Frame Generation: {}\n\
-        │  ├─ Ray Reconstruction: {}\n\
-        │  └─ NVIDIA Reflex: {}\n",
+        │  ├─ Frame Generation: {}\n",
         if controller.capabilities.supports_dlss {
             "✅"
         } else {
@@ -1737,7 +1764,20 @@ pub fn get_dlss_status() -> NvResult<String> {
             "✅ (RTX 40+)"
         } else {
             "❌"
-        },
+        }
+    ));
+
+    // Add Multi-Frame Generation for RTX 50 series
+    if controller.capabilities.supports_multi_frame_generation {
+        status.push_str(&format!(
+            "│  ├─ Multi-Frame Generation: ✅ (up to {}x, RTX 50)\n",
+            controller.capabilities.max_frame_multiplier
+        ));
+    }
+
+    status.push_str(&format!(
+        "│  ├─ Ray Reconstruction: {}\n\
+        │  └─ NVIDIA Reflex: {}\n",
         if controller.capabilities.supports_ray_reconstruction {
             "✅ (DLSS 3.5)"
         } else {
@@ -1754,14 +1794,22 @@ pub fn get_dlss_status() -> NvResult<String> {
         status.push_str(&format!(
             "├─ Hardware:\n\
             │  ├─ Tensor Cores: {}\n\
-            │  └─ Optical Flow Accelerator: {}\n",
+            │  ├─ Optical Flow Accelerator: {} (Gen {})\n",
             controller.capabilities.tensor_cores,
             if controller.capabilities.optical_flow_accelerator {
                 "✅"
             } else {
                 "❌"
-            }
+            },
+            controller.capabilities.optical_flow_accelerator_version
         ));
+
+        // Frame pacing info for DLSS 4.5
+        if controller.version == DlssVersion::Dlss4_5 {
+            status.push_str("│  └─ Enhanced Frame Pacing: ✅\n");
+        } else {
+            status.push_str("│  └─ Frame Pacing: ✅\n");
+        }
     }
 
     status.push_str(&format!(

@@ -1,3 +1,14 @@
+nvcontrol (0.8.3-1) unstable; urgency=medium
+
+  * Legacy GPU detection with deprecation warnings for Maxwell/Pascal on 590+
+  * Explicit Sync commands (nvctl wayland explicit-sync status/enable)
+  * Top-level HDR command (status, enable, disable, config, set-brightness)
+  * DLSS 4.5 support with Multi-Frame Generation for RTX 50 series
+  * Kubernetes GPU detection with cluster capacity reporting
+  * Documentation updates with explicit sync guide
+
+ -- CK Technology LLC <info@cktechx.com>  Mon, 13 Jan 2026 12:00:00 +0000
+
 nvcontrol (0.7.6-1) unstable; urgency=medium
 
   * Backend abstraction layer for NVML/display with mock support

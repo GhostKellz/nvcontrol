@@ -9,18 +9,18 @@ use nvcontrol::{
         VrrProfileManager,
     },
     advanced_multi_gpu::{
-        GpuProfile, LoadBalancer, MultiGpuCoordinator, PerGpuProfileManager, ThermalBalancer,
+        GpuProfile, LoadBalancer, MultiGpuCoordinator, PerGpuProfileManager,
     },
     advanced_power::{
         BatteryBoost, DynamicPowerManager, PowerMode, PowerProfile, PowerProfileManager,
     },
     // Advanced GPU control
-    enhanced_overclock::{OverclockProfile, OverclockProfileManager, StabilityTester},
+    enhanced_overclock::{OverclockProfile, OverclockProfileManager},
     // Gaming integration
-    gaming_integration::{GameModeIntegration, LaunchOptimizer, LutrisScanner, SteamScanner},
-    intelligent_fan::{AdvancedFanCurve, FanOptimizer, MultiFanController},
+    gaming_integration::{GameModeIntegration, LaunchOptimizer, SteamScanner},
+    intelligent_fan::{AdvancedFanCurve, FanOptimizer},
     performance_monitoring::{
-        FpsCounter, FrameTimeStats, LatencyMonitor, PerformanceOverlay, RegressionDetector,
+        FpsCounter, FrameTimeStats, LatencyMonitor, RegressionDetector,
     },
     upscaling_tech::{
         DlssQuality, FsrQuality, ResolutionScaler, UpscalingConfig, UpscalingRecommender,
@@ -229,7 +229,7 @@ fn test_per_gpu_profile_manager() {
 
 #[test]
 fn test_steam_scanner() {
-    let scanner = SteamScanner::new();
+    let _scanner = SteamScanner::new();
     // steam_root is private, just verify scanner was created
     println!("✓ Steam scanner test passed");
 }
@@ -494,7 +494,7 @@ fn test_full_gaming_session_simulation() {
     println!("\n=== Simulating Full Gaming Session ===\n");
 
     // 1. Detect game
-    let steam = SteamScanner::new();
+    let _steam = SteamScanner::new();
     println!("1. Steam scanner initialized");
 
     // 2. Apply overclock profile
@@ -513,7 +513,7 @@ fn test_full_gaming_session_simulation() {
     println!("2. Overclock profile set");
 
     // 3. Configure upscaling
-    let upscaling_config = UpscalingConfig::new_dlss("Cyberpunk".to_string(), DlssQuality::Quality);
+    let _upscaling_config = UpscalingConfig::new_dlss("Cyberpunk".to_string(), DlssQuality::Quality);
     println!("3. DLSS Quality mode configured");
 
     // 4. Enable VRR

@@ -241,29 +241,133 @@ pub fn list_kubernetes_gpu_resources() -> NvResult<Vec<KubernetesGpuResource>> {
 
     // Check if kubectl is available
     let output = Command::new("kubectl")
-        .args(&["get", "pods", "--all-namespaces", "-o", "json"])
+        .args(["get", "pods", "--all-namespaces", "-o", "json"])
         .output()
         .map_err(|e| NvControlError::CommandFailed(format!("kubectl failed: {}", e)))?;
 
+    if !output.status.success() {
+        return Ok(resources); // kubectl not configured or no access
+    }
+
     let pods_json = String::from_utf8_lossy(&output.stdout);
 
-    // Parse JSON to find GPU resources (simplified)
-    // In production, would use proper JSON parsing
-    if pods_json.contains("nvidia.com/gpu") {
-        // Extract GPU resource information
-        // This is a simplified placeholder
-        resources.push(KubernetesGpuResource {
-            namespace: "default".to_string(),
-            pod_name: "gpu-pod".to_string(),
-            container_name: "gpu-container".to_string(),
-            gpu_request: Some("1".to_string()),
-            gpu_limit: Some("1".to_string()),
-            node_name: "gpu-node".to_string(),
-            gpu_utilization: 75.0,
-        });
+    // Parse JSON using serde_json
+    if let Ok(pods_data) = serde_json::from_str::<serde_json::Value>(&pods_json) {
+        if let Some(items) = pods_data.get("items").and_then(|i| i.as_array()) {
+            for pod in items {
+                let namespace = pod
+                    .pointer("/metadata/namespace")
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("default")
+                    .to_string();
+
+                let pod_name = pod
+                    .pointer("/metadata/name")
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("unknown")
+                    .to_string();
+
+                let node_name = pod
+                    .pointer("/spec/nodeName")
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("unknown")
+                    .to_string();
+
+                // Check each container for GPU resources
+                if let Some(containers) = pod.pointer("/spec/containers").and_then(|c| c.as_array()) {
+                    for container in containers {
+                        let container_name = container
+                            .get("name")
+                            .and_then(|n| n.as_str())
+                            .unwrap_or("unknown")
+                            .to_string();
+
+                        // Check for nvidia.com/gpu in resources
+                        let gpu_request = container
+                            .pointer("/resources/requests/nvidia.com~1gpu")
+                            .and_then(|g| g.as_str())
+                            .map(|s| s.to_string());
+
+                        let gpu_limit = container
+                            .pointer("/resources/limits/nvidia.com~1gpu")
+                            .and_then(|g| g.as_str())
+                            .map(|s| s.to_string());
+
+                        // Only add containers that request GPUs
+                        if gpu_request.is_some() || gpu_limit.is_some() {
+                            resources.push(KubernetesGpuResource {
+                                namespace: namespace.clone(),
+                                pod_name: pod_name.clone(),
+                                container_name,
+                                gpu_request,
+                                gpu_limit,
+                                node_name: node_name.clone(),
+                                gpu_utilization: 0.0, // Would need nvidia-smi in pod to get actual utilization
+                            });
+                        }
+                    }
+                }
+            }
+        }
     }
 
     Ok(resources)
+}
+
+/// Check if NVIDIA device plugin is running in the cluster
+pub fn check_nvidia_device_plugin() -> NvResult<bool> {
+    let output = Command::new("kubectl")
+        .args(["get", "pods", "-n", "kube-system", "-l", "name=nvidia-device-plugin-ds", "-o", "name"])
+        .output()
+        .map_err(|e| NvControlError::CommandFailed(format!("kubectl failed: {}", e)))?;
+
+    if !output.status.success() {
+        return Ok(false);
+    }
+
+    let result = String::from_utf8_lossy(&output.stdout);
+    Ok(!result.trim().is_empty())
+}
+
+/// Get GPU node capacity information
+pub fn get_cluster_gpu_capacity() -> NvResult<HashMap<String, u32>> {
+    let mut capacity = HashMap::new();
+
+    let output = Command::new("kubectl")
+        .args(["get", "nodes", "-o", "json"])
+        .output()
+        .map_err(|e| NvControlError::CommandFailed(format!("kubectl failed: {}", e)))?;
+
+    if !output.status.success() {
+        return Ok(capacity);
+    }
+
+    let nodes_json = String::from_utf8_lossy(&output.stdout);
+
+    if let Ok(nodes_data) = serde_json::from_str::<serde_json::Value>(&nodes_json) {
+        if let Some(items) = nodes_data.get("items").and_then(|i| i.as_array()) {
+            for node in items {
+                let node_name = node
+                    .pointer("/metadata/name")
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("unknown")
+                    .to_string();
+
+                // Check allocatable GPU resources
+                if let Some(gpu_count) = node
+                    .pointer("/status/allocatable/nvidia.com~1gpu")
+                    .and_then(|g| g.as_str())
+                    .and_then(|s| s.parse::<u32>().ok())
+                {
+                    if gpu_count > 0 {
+                        capacity.insert(node_name, gpu_count);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(capacity)
 }
 
 /// Monitor container GPU usage

@@ -21,7 +21,10 @@ nvctl [OPTIONS] <COMMAND>
 |---------|-------------|
 | `nvctl gpu info` | GPU information |
 | `nvctl driver info` | Driver status (version, kernel, GSP, DKMS) |
-| `nvctl driver check` | Driver health checks |
+| `nvctl driver check` | Driver health checks + legacy GPU warnings |
+| `nvctl dlss status` | DLSS capabilities (2/3/3.5/4/4.5) |
+| `nvctl hdr status` | HDR status across displays |
+| `nvctl wayland explicit-sync status` | Explicit sync support |
 | `nvctl tui` | Interactive TUI menu |
 | `nvctl nvtop` | Real-time GPU monitor |
 | `nvctl doctor` | System diagnostics |
@@ -420,12 +423,16 @@ nvctl driver dkms status    # Detailed status for all kernels
 nvctl driver dkms setup     # Set up DKMS for nvidia-open
 nvctl driver dkms build     # Build for all kernels
 nvctl driver dkms build --kernel <ver>  # Build for specific kernel
+nvctl driver dkms build --force  # Force rebuild even if installed
 nvctl driver dkms logs      # Show build logs (summary)
 nvctl driver dkms logs -t 50  # Show last 50 lines of each log
 nvctl driver dkms logs -k <ver>  # Logs for specific kernel
 nvctl driver dkms unregister  # Remove nvidia from DKMS
 nvctl driver dkms hook      # Install pacman hook (with logging + notifications)
 nvctl driver dkms fix       # Attempt to fix DKMS issues
+nvctl driver dkms cleanup   # Remove old kernel modules (dry run)
+nvctl driver dkms cleanup --keep 3  # Keep 3 most recent kernels
+nvctl driver dkms cleanup --execute  # Actually remove old modules
 ```
 
 **Example Output - `nvctl driver dkms status`:**
@@ -437,6 +444,7 @@ DKMS:           installed
 Driver:         590.48.01
 Registered:     yes
 Source:         /usr/src/nvidia-590.48.01
+Source Type:    git (https://github.com/NVIDIA/open-gpu-kernel-modules.git)
 
 Installed Kernels (4):
   ✓ 6.18.1-zen1-2-zen [nvidia: dkms, headers: ✓]
@@ -445,6 +453,66 @@ Installed Kernels (4):
   ✗ 6.18.1-1-cachyos-lto [nvidia: MISSING, headers: ✗]
 
 Pacman Hook:    installed (auto-rebuild enabled)
+```
+
+**Source Types:**
+- `packaged (nvidia-open-dkms)` - Installed via package manager
+- `git (url)` - From git clone of open-gpu-kernel-modules
+- `manual` - Manually copied to /usr/src
+
+#### nvctl driver source
+Build nvidia-open from source (git clone workflow).
+
+```bash
+nvctl driver source status  # Show source build status and git info
+nvctl driver source init <path>  # Initialize from git clone
+nvctl driver source update  # Git fetch + checkout latest tag + rebuild
+nvctl driver source update --no-build  # Update without rebuilding
+nvctl driver source sync    # Rebuild from current source
+nvctl driver source sync --force  # Force rebuild
+nvctl driver source sync --kernel <ver>  # Build specific kernel only
+```
+
+#### Legacy GPU Support
+Driver 590+ deprecates Maxwell and Pascal GPUs. `nvctl driver check` will warn you.
+
+**Affected GPUs:**
+- **Maxwell (GTX 9xx)**: Deprecated, use `nvidia-470xx-dkms` from AUR
+- **Pascal (GTX 10xx)**: Deprecated, use `nvidia-535xx-dkms` from AUR
+- **Kepler (GTX 6xx/7xx)**: Unsupported, use `nvidia-390xx-dkms` from AUR
+
+**RTX 50 Series (Blackwell):** Requires nvidia-open driver (no proprietary option).
+
+**Example - Setting up from source:**
+```bash
+# Clone the repo
+git clone https://github.com/NVIDIA/open-gpu-kernel-modules.git
+cd open-gpu-kernel-modules
+git checkout 590.48.01
+
+# Initialize (creates dkms.conf, symlink, registers with DKMS)
+nvctl driver source init ~/open-gpu-kernel-modules
+
+# Build modules
+nvctl driver source sync
+
+# Later, update to new version
+nvctl driver source update
+```
+
+**Example Output - `nvctl driver source status`:**
+```
+NVIDIA Source Build Status
+══════════════════════════════════════════════════
+
+Source Path:    /usr/src/nvidia-590.48.01
+Source Type:    git (https://github.com/NVIDIA/open-gpu-kernel-modules.git)
+Remote URL:     https://github.com/NVIDIA/open-gpu-kernel-modules.git
+Current Tag:    590.48.01
+Latest Tag:     590.48.01
+
+Driver Version: 590.48.01
+DKMS Registered: yes
 ```
 
 #### nvctl driver gsp
@@ -529,8 +597,39 @@ nvctl arch                  # Pacman hooks, DKMS management
 Wayland NVIDIA optimization.
 
 ```bash
-nvctl wayland               # Wayland-specific optimizations
+nvctl wayland status        # Wayland NVIDIA configuration status
+nvctl wayland optimize      # Apply optimal Wayland configuration
+nvctl wayland export-env    # Generate environment variables script
+nvctl wayland switch-driver # Switch between nvidia-open and nvidia-dkms
 ```
+
+#### Explicit Sync
+Explicit sync eliminates tearing on NVIDIA Wayland.
+
+```bash
+nvctl wayland explicit-sync status   # Check explicit sync support
+nvctl wayland explicit-sync enable   # Enable in compositor
+```
+
+**Requirements:**
+- Driver 555+ (560+ recommended)
+- Kernel 6.1+ with DRM syncobj support
+- Compositor with explicit sync: KDE Plasma 6.1+, GNOME 46+, Hyprland 0.39+
+
+### nvctl hdr
+HDR control and configuration.
+
+```bash
+nvctl hdr status            # HDR status across displays
+nvctl hdr enable            # Enable HDR on all displays
+nvctl hdr disable           # Disable HDR on all displays
+nvctl hdr config            # Show HDR configuration
+nvctl hdr set-brightness    # Set peak brightness (nits)
+nvctl hdr tools             # HDR tools and game recommendations
+nvctl hdr capabilities      # Display HDR capabilities (EDID)
+```
+
+**Per-display control:** Use `nvctl display hdr enable <id>` for specific displays.
 
 ### nvctl kde
 KDE Plasma compositor optimization.
