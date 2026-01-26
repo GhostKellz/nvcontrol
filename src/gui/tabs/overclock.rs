@@ -100,9 +100,8 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, ctx: &egui::Context) {
 
     // Voltage Curve Editor
     render_voltage_curve(ui, state, &colors);
-
-    // Request repaint for live updates
-    ctx.request_repaint();
+    // Note: Repaint handled by app.rs for live monitoring tabs
+    let _ = ctx; // Suppress unused warning
 }
 
 /// Render the presets and manual tuning column
@@ -612,8 +611,15 @@ fn render_voltage_curve(
                 }
 
                 if ui.button("💾 Apply Curve").clicked() {
-                    // TODO: Apply voltage curve to GPU via nvidia-smi or NVML
-                    state.toasts.info("Voltage curve applied (experimental)");
+                    // Apply voltage curve using nvidia-smi power limit as approximation
+                    // Direct voltage control requires modifying GPU BIOS/power table
+                    // which is not safely exposed via NVML or nvidia-settings
+                    let power_limit = state.voltage_curve.get_power_target();
+                    if let Err(e) = crate::power::set_power_limit_percentage(power_limit as u32) {
+                        state.toasts.error(format!("Failed to apply: {}", e));
+                    } else {
+                        state.toasts.info(format!("Power target set to {}%", power_limit));
+                    }
                 }
             });
 

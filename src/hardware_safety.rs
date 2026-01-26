@@ -284,7 +284,7 @@ impl BackgroundSafetyMonitor {
 
     /// Start background monitoring
     pub fn start(&self) {
-        let mut running = self.running.lock().unwrap();
+        let mut running = self.running.lock().unwrap_or_else(|e| e.into_inner());
         if *running {
             return; // Already running
         }
@@ -295,7 +295,7 @@ impl BackgroundSafetyMonitor {
         let running_flag = Arc::clone(&self.running);
 
         std::thread::spawn(move || {
-            while *running_flag.lock().unwrap() {
+            while *running_flag.lock().unwrap_or_else(|e| e.into_inner()) {
                 match monitor.check_temperature() {
                     Ok(SafetyStatus::EmergencyShutdown { temperature }) => {
                         eprintln!("Emergency shutdown triggered at {}°C", temperature);
@@ -318,7 +318,7 @@ impl BackgroundSafetyMonitor {
 
     /// Stop background monitoring
     pub fn stop(&self) {
-        let mut running = self.running.lock().unwrap();
+        let mut running = self.running.lock().unwrap_or_else(|e| e.into_inner());
         *running = false;
     }
 }

@@ -268,7 +268,13 @@ impl eframe::App for NvControlApp {
         let colors = self.state.theme_colors();
         self.state.toasts.show(ctx, &colors);
 
-        // Request repaint for animations
-        ctx.request_repaint();
+        // Only request repaint when needed (GPU stats tab, toasts animating, etc.)
+        // This prevents CPU spin and Wayland compositor frame timing issues
+        if matches!(self.state.tab, Tab::Gpu | Tab::Fan | Tab::Overclock)
+            || self.state.toasts.has_active()
+        {
+            // Rate-limited repaint for live monitoring tabs
+            ctx.request_repaint_after(std::time::Duration::from_millis(500));
+        }
     }
 }

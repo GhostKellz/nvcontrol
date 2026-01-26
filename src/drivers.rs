@@ -1253,7 +1253,7 @@ fi
     println!("────────────────────────────────────────");
 
     // Check if running as root
-    if unsafe { libc::geteuid() != 0 } {
+    if !nix::unistd::geteuid().is_root() {
         println!("\nTo install, run as root:");
         println!("  sudo mkdir -p {}", hook_dir);
         println!("  sudo tee {} << 'EOF'\n{}EOF", hook_path, hook_content);
@@ -2875,7 +2875,7 @@ pub fn init_source_build(path: &str) -> NvResult<()> {
         }
     } else {
         println!("Creating symlink: {} -> {}", usr_src_link, expanded_path);
-        if unsafe { libc::geteuid() == 0 } {
+        if nix::unistd::geteuid().is_root() {
             std::os::unix::fs::symlink(&expanded_path, &usr_src_link).map_err(|e| {
                 NvControlError::ConfigError(format!("Failed to create symlink: {}", e))
             })?;
@@ -2892,7 +2892,7 @@ pub fn init_source_build(path: &str) -> NvResult<()> {
         println!("Already registered with DKMS");
     } else {
         println!("Registering with DKMS...");
-        if unsafe { libc::geteuid() == 0 } {
+        if nix::unistd::geteuid().is_root() {
             let status = Command::new("dkms")
                 .args(["add", "nvidia", &version])
                 .status();

@@ -358,7 +358,7 @@ impl WaylandNvidiaManager {
     }
 
     fn is_root(&self) -> bool {
-        unsafe { libc::geteuid() == 0 }
+        nix::unistd::geteuid().is_root()
     }
 
     /// Print current status

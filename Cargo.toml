@@ -1,6 +1,6 @@
 [package]
 name = "nvcontrol"
-version = "0.8.3"
+version = "0.8.4"
 edition = "2024"
 authors = ["Christopher Kelley <ckelley@ghostkellz.sh>"]
 license = "MIT"
@@ -50,13 +50,15 @@ notify-rust = "4.11"
 num_cpus = "1.16"
 sys-info = "0.9"
 serde_json = "1.0"
+serde_yaml = "0.9"
 dirs = "5.0"
 console = "0.15"
 indicatif = "0.17"
 
 # Pure Rust vibrance and container support
 libc = "0.2"
-nix = { version = "0.29", features = ["ioctl"] }
+nix = { version = "0.29", features = ["ioctl", "user"] }
+bytemuck = { version = "1.21", features = ["derive", "min_const_generics"] }
 tokio = { version = "1.0", features = ["full"] }
 
 [features]

@@ -762,9 +762,88 @@ impl Default for HdrCapabilities {
 }
 
 pub fn get_hdr_capabilities() -> NvResult<HdrCapabilities> {
-    // TODO: Query actual display capabilities via EDID/DisplayID
-    // For now, return safe defaults
+    // Try to query actual display capabilities via EDID from sysfs
+    // EDID HDR data is in extension blocks (CEA-861) containing HDR static metadata
+    let display_paths = [
+        "/sys/class/drm/card0-DP-1/edid",
+        "/sys/class/drm/card0-DP-2/edid",
+        "/sys/class/drm/card0-HDMI-A-1/edid",
+        "/sys/class/drm/card1-DP-1/edid",
+    ];
+
+    for path in &display_paths {
+        if let Ok(edid_data) = std::fs::read(path) {
+            if let Some(caps) = parse_edid_hdr_capabilities(&edid_data) {
+                return Ok(caps);
+            }
+        }
+    }
+
+    // Fall back to safe defaults if EDID parsing fails
     Ok(HdrCapabilities::default())
+}
+
+/// Parse EDID data for HDR capabilities
+fn parse_edid_hdr_capabilities(edid: &[u8]) -> Option<HdrCapabilities> {
+    // EDID must be at least 128 bytes for base block
+    if edid.len() < 128 {
+        return None;
+    }
+
+    // Check EDID header (bytes 0-7 should be 00 FF FF FF FF FF FF 00)
+    if edid[0..8] != [0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00] {
+        return None;
+    }
+
+    // Extension blocks start at byte 128
+    let num_extensions = edid.get(126).copied().unwrap_or(0) as usize;
+    if num_extensions == 0 || edid.len() < 128 + 128 * num_extensions {
+        return Some(HdrCapabilities::default()); // No extensions, no HDR
+    }
+
+    // Look for CEA-861 extension (tag 0x02) with HDR metadata
+    for ext_idx in 0..num_extensions {
+        let ext_start = 128 + ext_idx * 128;
+        let ext_block = &edid[ext_start..ext_start + 128];
+
+        // CEA-861 extension has tag 0x02
+        if ext_block[0] == 0x02 {
+            // Parse CEA data blocks for HDR Static Metadata (tag 0x07, extended tag 0x06)
+            let dtd_start = ext_block.get(2).copied().unwrap_or(4) as usize;
+            let mut offset = 4;
+
+            while offset < dtd_start && offset < 127 {
+                let header = ext_block[offset];
+                let tag = (header >> 5) & 0x07;
+                let length = (header & 0x1F) as usize;
+
+                if tag == 0x07 && length > 0 {
+                    // Extended tag
+                    let ext_tag = ext_block.get(offset + 1).copied().unwrap_or(0);
+                    if ext_tag == 0x06 && length >= 3 {
+                        // HDR Static Metadata Data Block
+                        let eotf_byte = ext_block.get(offset + 2).copied().unwrap_or(0);
+                        let supports_hdr10 = (eotf_byte & 0x04) != 0; // SMPTE ST 2084
+                        let supports_hlg = (eotf_byte & 0x08) != 0; // HLG
+
+                        return Some(HdrCapabilities {
+                            supports_hdr10,
+                            supports_hdr10_plus: false, // Requires separate detection
+                            max_luminance: 1000,        // Default, would need metadata byte parsing
+                            min_luminance: 0.1,
+                            max_fall: 400, // Typical FALL value
+                            supports_dolby_vision: false,
+                            supports_hlg,
+                        });
+                    }
+                }
+
+                offset += 1 + length;
+            }
+        }
+    }
+
+    Some(HdrCapabilities::default())
 }
 
 impl std::fmt::Display for ToneMappingMode {

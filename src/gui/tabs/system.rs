@@ -341,8 +341,12 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
     ui.heading(format!("{} System Information", icons::SYSTEM));
     ui.add_space(4.0);
 
-    // Gather info (could cache this with a timer)
-    let info = SystemInfo::gather();
+    // Use cached system info (rate-limited to avoid subprocess spawns every frame)
+    state.refresh_system_info();
+    let info = match state.get_system_info() {
+        Some(info) => info.clone(),
+        None => SystemInfo::default(), // Fallback while loading
+    };
 
     // System Overview Card
     Card::new(&colors)
@@ -535,8 +539,11 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
 
     ui.add_space(8.0);
 
-    // Driver & GSP Card
-    let driver_info = DriverInfo::gather();
+    // Driver & GSP Card (use cached data)
+    let driver_info = match state.get_driver_info() {
+        Some(info) => info.clone(),
+        None => DriverInfo::default(), // Fallback while loading
+    };
 
     Card::new(&colors)
         .title("NVIDIA Driver")

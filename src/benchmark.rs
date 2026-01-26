@@ -72,8 +72,10 @@ impl BenchmarkSuite {
         println!("   Driver: {}", driver_version);
 
         // Get current OC settings if available
-        let gpu_offset = None; // TODO: Get from overclocking module
-        let memory_offset = None;
+        let (gpu_offset, memory_offset) = match crate::overclocking::get_current_offsets(0) {
+            Ok((gpu, mem)) => (Some(gpu), Some(mem)),
+            Err(_) => (None, None),
+        };
 
         // Run tests
         println!("\n📊 Running compute test...");

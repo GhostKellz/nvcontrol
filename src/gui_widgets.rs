@@ -241,6 +241,23 @@ impl VoltageCurve {
 
         self.points.last().unwrap().y
     }
+
+    /// Calculate approximate power target based on voltage curve
+    /// Returns power limit percentage (typically 50-150)
+    pub fn get_power_target(&self) -> u8 {
+        if self.points.is_empty() {
+            return 100;
+        }
+
+        // Get the max voltage from the curve
+        let max_voltage = self.points.iter().map(|p| p.y).fold(0.0_f64, f64::max);
+        let default_max_voltage = 1050.0; // Default max voltage in mV
+
+        // Scale power limit based on voltage delta
+        // Lower voltage = lower power target
+        let ratio = max_voltage / default_max_voltage;
+        (ratio * 100.0).clamp(50.0, 150.0) as u8
+    }
 }
 
 /// Multi-metric dashboard data

@@ -163,13 +163,36 @@ fn get_throttle_reason_from_metrics(
     }
 }
 
+/// Guard to ensure terminal state is restored even on panic
+struct TerminalGuard;
+
+impl Drop for TerminalGuard {
+    fn drop(&mut self) {
+        let _ = disable_raw_mode();
+        let _ = execute!(std::io::stdout(), LeaveAlternateScreen);
+    }
+}
+
 pub fn monitor_gpu_stat(backend: &SharedNvmlBackend) {
-    // Setup terminal
-    enable_raw_mode().unwrap();
+    if let Err(e) = monitor_gpu_stat_inner(backend) {
+        eprintln!("Monitor error: {}", e);
+    }
+}
+
+fn monitor_gpu_stat_inner(backend: &SharedNvmlBackend) -> NvResult<()> {
+    // Setup terminal with proper error handling
+    enable_raw_mode()
+        .map_err(|e| NvControlError::RuntimeError(format!("Failed to enable raw mode: {}", e)))?;
+    let _guard = TerminalGuard; // Ensures cleanup on exit or panic
+
     let mut stdout = std::io::stdout();
-    execute!(stdout, EnterAlternateScreen).unwrap();
+    execute!(stdout, EnterAlternateScreen).map_err(|e| {
+        NvControlError::RuntimeError(format!("Failed to enter alternate screen: {}", e))
+    })?;
+
     let term_backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(term_backend).unwrap();
+    let mut terminal = Terminal::new(term_backend)
+        .map_err(|e| NvControlError::RuntimeError(format!("Failed to create terminal: {}", e)))?;
 
     let mut last_update = Instant::now();
     let mut gpu_rows: Vec<Vec<String>> = Vec::new();
@@ -178,13 +201,17 @@ pub fn monitor_gpu_stat(backend: &SharedNvmlBackend) {
     let spinner = ["|", "/", "-", "\\"];
 
     loop {
-        // Poll for keypress
-        if event::poll(Duration::from_millis(200)).unwrap() {
-            if let Event::Key(key) = event::read().unwrap() {
-                if key.code == KeyCode::Char('q') {
-                    break;
+        // Poll for keypress - break on error rather than panic
+        match event::poll(Duration::from_millis(200)) {
+            Ok(true) => {
+                if let Ok(Event::Key(key)) = event::read() {
+                    if key.code == KeyCode::Char('q') {
+                        break;
+                    }
                 }
             }
+            Ok(false) => {}
+            Err(_) => break, // Exit gracefully on poll error
         }
 
         // Refresh stats every second
@@ -205,8 +232,8 @@ pub fn monitor_gpu_stat(backend: &SharedNvmlBackend) {
             spinner_idx = (spinner_idx + 1) % spinner.len();
         }
 
-        // Draw UI
-        terminal
+        // Draw UI - break on error rather than panic
+        if terminal
             .draw(|f| {
                 let area = f.area();
                 let block = Block::default()
@@ -238,13 +265,16 @@ pub fn monitor_gpu_stat(backend: &SharedNvmlBackend) {
                 };
                 f.render_widget(footer_paragraph, footer_rect);
             })
-            .unwrap();
+            .is_err()
+        {
+            break;
+        }
     }
 
-    // Restore terminal
-    disable_raw_mode().unwrap();
-    execute!(terminal.backend_mut(), LeaveAlternateScreen).unwrap();
-    terminal.show_cursor().unwrap();
+    // Show cursor before guard cleanup
+    let _ = terminal.show_cursor();
+    Ok(())
+    // TerminalGuard drops here, restoring terminal state
 }
 
 /// Build a row of GPU stats for the monitor table

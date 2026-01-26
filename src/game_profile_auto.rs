@@ -66,7 +66,7 @@ impl GameProfileAutoApplier {
             return Ok(());
         }
 
-        let mut running = self.running.lock().unwrap();
+        let mut running = self.running.lock().unwrap_or_else(|e| e.into_inner());
         if *running {
             return Err(NvControlError::RuntimeError("Already running".into()));
         }
@@ -87,7 +87,7 @@ impl GameProfileAutoApplier {
             loop {
                 // Check if we should stop
                 {
-                    let running = running_flag.lock().unwrap();
+                    let running = running_flag.lock().unwrap_or_else(|e| e.into_inner());
                     if !*running {
                         break;
                     }
@@ -95,7 +95,7 @@ impl GameProfileAutoApplier {
 
                 // Scan for running games
                 let detected_games = {
-                    let mut det = detector.lock().unwrap();
+                    let mut det = detector.lock().unwrap_or_else(|e| e.into_inner());
                     det.scan_running_games()
                 };
 
@@ -159,7 +159,7 @@ impl GameProfileAutoApplier {
                                 applied_at: std::time::Instant::now(),
                             };
 
-                            *active_profile.lock().unwrap() = Some(state);
+                            *active_profile.lock().unwrap_or_else(|e| e.into_inner()) = Some(state);
                         } else {
                             println!("   ⚠️  No profile configured for {}", game.name);
                         }
@@ -183,7 +183,7 @@ impl GameProfileAutoApplier {
                         }
 
                         last_detected_game = None;
-                        *active_profile.lock().unwrap() = None;
+                        *active_profile.lock().unwrap_or_else(|e| e.into_inner()) = None;
                     }
                 }
 
@@ -198,18 +198,21 @@ impl GameProfileAutoApplier {
 
     /// Stop monitoring
     pub fn stop(&self) {
-        let mut running = self.running.lock().unwrap();
+        let mut running = self.running.lock().unwrap_or_else(|e| e.into_inner());
         *running = false;
     }
 
     /// Get currently active profile
     pub fn get_active_profile(&self) -> Option<ProfileState> {
-        self.active_profile.lock().unwrap().clone()
+        self.active_profile
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Check if running
     pub fn is_running(&self) -> bool {
-        *self.running.lock().unwrap()
+        *self.running.lock().unwrap_or_else(|e| e.into_inner())
     }
 }
 

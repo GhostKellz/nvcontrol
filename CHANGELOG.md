@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-01-26
+
+### Added
+- **GPU Selection Persistence**: `nvctl gpu select` now saves selection to config
+- **Lutris Game Scanner**: Parses `~/.config/lutris/games/*.yml` for game detection
+- **Heroic Game Scanner**: Parses `~/.config/heroic/sideload_apps/library.json`
+- **EDID HDR Parsing**: Display HDR capability detection from EDID data
+- **NVLink Detection**: Multi-GPU NVLink status via nvidia-smi
+- **Primary GPU Detection**: DRM sysfs-based primary GPU identification
+- **Overclock Offset Getter**: `get_current_offsets()` for reading current OC state
+- **Voltage Curve Power Target**: Automatic power limit calculation for undervolting
+
+### Changed
+- Replaced 7 unsafe `libc::geteuid()` calls with safe `nix::unistd::geteuid().is_root()`
+- Replaced 6 unsafe `std::mem::zeroed()` calls with `bytemuck::Zeroable::zeroed()`
+- Improved NVKMS ioctl error handling with `nix::errno::Errno::result()`
+- Refactored TUI GPU monitor with proper error handling and cleanup guard
+- Mutex operations now use poison recovery (`unwrap_or_else(|e| e.into_inner())`)
+
+### Fixed
+- Potential panics from unwrap calls in production code paths
+- Terminal state now properly restored on TUI monitor exit or panic
+- Game profile auto-apply no longer panics on poisoned mutex
+- **GUI Performance on Wayland/KDE**: Eliminated frame timing issues
+  - Replaced unconditional `request_repaint()` with rate-limited repaints (500ms)
+  - Moved System tab subprocess calls (nvidia-smi, uname, lspci) to 30s cached refresh
+  - Removed duplicate repaint calls from GPU, Fan, and Overclock tabs
+  - Added `has_active()` method to ToastManager for conditional repaints
+  - Prevents KDE Plasma compositor frame timeout and desktop lockups
+
 ## [0.8.3] - 2026-01-13
 
 ### Added

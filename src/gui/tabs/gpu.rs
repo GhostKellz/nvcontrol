@@ -431,7 +431,6 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, ctx: &egui::Context) {
                 }
             });
     }
-
-    // Request repaint for live updates
-    ctx.request_repaint();
+    // Note: Repaint handled by app.rs for live monitoring tabs
+    let _ = ctx; // Suppress unused warning
 }

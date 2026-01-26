@@ -2,6 +2,7 @@
 // Based on NVIDIA Open GPU Kernel Modules 580+
 // SPDX-License-Identifier: MIT
 
+use bytemuck::{Pod, Zeroable};
 use std::os::raw::c_ulong;
 
 // ===== Basic Types from nvtypes.h =====
@@ -181,7 +182,7 @@ pub struct NvKmsGetDpyAttributeRequest {
 }
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Zeroable, Pod)]
 pub struct NvKmsGetDpyAttributeReply {
     pub value: NvS64,
 }
@@ -202,14 +203,14 @@ pub union NvKmsAttributeValidValuesUnion {
 }
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Zeroable, Pod)]
 pub struct NvKmsAttributeRange {
     pub min: NvS64,
     pub max: NvS64,
 }
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Zeroable, Pod)]
 pub struct NvKmsAttributeBits {
     pub ints: NvU32,
 }
@@ -253,7 +254,7 @@ pub struct NvKmsQueryDispRequest {
 // QueryDispReply: 164 bytes total
 // numConnectors at offset 16, connectorHandles at offset 20
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Zeroable, Pod)]
 pub struct NvKmsQueryDispReply {
     pub valid_dpys: NVDpyIdList,  // offset 0
     pub boot_dpys: NVDpyIdList,   // offset 4
@@ -341,7 +342,7 @@ pub struct NvKmsQueryConnectorStaticDataParams {
 // - Total Params: 37160 bytes
 
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Zeroable, Pod)]
 pub struct NvKmsQueryDpyDynamicDataRequest {
     pub device_handle: NvKmsDeviceHandle,
     pub disp_handle: NvKmsDispHandle,
@@ -353,7 +354,7 @@ pub struct NvKmsQueryDpyDynamicDataRequest {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Zeroable, Pod)]
 pub struct NvKmsQueryDpyDynamicDataReply {
     // Fields before 'connected' (offset 132)
     pub _pre_connected: [u8; 132],
@@ -363,7 +364,7 @@ pub struct NvKmsQueryDpyDynamicDataReply {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Zeroable, Pod)]
 pub struct NvKmsQueryDpyDynamicDataParams {
     pub request: NvKmsQueryDpyDynamicDataRequest,
     pub reply: NvKmsQueryDpyDynamicDataReply,
@@ -471,19 +472,35 @@ pub fn create_ioctl_params<T>(cmd: NvKmsIoctlCommand, params: &T) -> NvKmsIoctlP
 }
 
 /// Perform NVKMS ioctl
+///
+/// # Safety
+/// - `fd` must be a valid file descriptor for /dev/nvidia-modeset
+/// - `params` must be the correct parameter type for `cmd`
+/// - The caller must ensure params fields are properly initialized for the command
 pub unsafe fn nvkms_ioctl<T>(
     fd: std::os::unix::io::RawFd,
     cmd: NvKmsIoctlCommand,
     params: &mut T,
-) -> Result<i32, std::io::Error> {
+) -> Result<i32, nix::Error> {
     let ioctl_params = create_ioctl_params(cmd, params);
 
-    // SAFETY: Caller ensures fd is valid and params matches the ioctl command
+    // SAFETY: Caller guarantees fd is valid and params matches the ioctl command.
+    // NVKMS uses indirect parameter passing: ioctl_params contains a pointer to params.
     let result = unsafe { libc::ioctl(fd, NVKMS_IOCTL_IOWR as c_ulong, &ioctl_params as *const _) };
 
-    if result == -1 {
-        Err(std::io::Error::last_os_error())
-    } else {
-        Ok(result)
-    }
+    nix::errno::Errno::result(result)
 }
+
+// SAFETY: All these types are valid when zero-initialized:
+// - Enums have discriminant 0 as a valid variant (Success, Dp, Unknown, Range)
+// - Unions: all-zero bytes is valid for both range (two i64s) and bits (one u32)
+// - All fields are primitive integers, bools, or arrays of such
+// - #[repr(C)] structs with all-zero bytes are valid FFI types
+unsafe impl Zeroable for NvKmsAllocDeviceStatus {}
+unsafe impl Zeroable for NvKmsConnectorType {}
+unsafe impl Zeroable for NvKmsConnectorSignalFormat {}
+unsafe impl Zeroable for NvKmsAttributeType {}
+unsafe impl Zeroable for NvKmsAttributeValidValuesUnion {}
+unsafe impl Zeroable for NvKmsAttributeValidValuesCommonReply {}
+unsafe impl Zeroable for NvKmsAllocDeviceReply {}
+unsafe impl Zeroable for NvKmsQueryConnectorStaticDataReply {}

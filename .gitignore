@@ -4,11 +4,17 @@ Cargo.lock
 archive/
 target/
 
+# makepkg build artifacts
+nvcontrol/
+src/
+pkg/
+*.pkg.tar.*
+
 # Added by cargo
 #
 # already existing elements were commented out
 
 #/target
 CLAUDE.md
-TODO.md 
+TODO.md
 archive/

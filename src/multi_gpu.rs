@@ -191,8 +191,56 @@ pub fn has_multiple_gpus() -> bool {
 
 /// Get primary GPU index (usually the one connected to display)
 pub fn get_primary_gpu() -> u32 {
-    // For now, assume GPU 0 is primary
-    // TODO: Detect which GPU is connected to the active display
+    // Try to detect which GPU is connected to the active display
+    // Method 1: Check DRM connector status via sysfs
+    for card in 0..4 {
+        let drm_path = format!("/sys/class/drm/card{}", card);
+        if !std::path::Path::new(&drm_path).exists() {
+            continue;
+        }
+
+        // Check for active connectors (DP, HDMI, etc.)
+        let connectors = ["DP-1", "DP-2", "HDMI-A-1", "HDMI-A-2", "eDP-1"];
+        for connector in connectors {
+            let status_path = format!("{}-{}/status", drm_path, connector);
+            if let Ok(status) = std::fs::read_to_string(&status_path) {
+                if status.trim() == "connected" {
+                    // This card has an active display
+                    // Check if it's NVIDIA by looking at device vendor
+                    let vendor_path = format!("{}/device/vendor", drm_path);
+                    if let Ok(vendor) = std::fs::read_to_string(&vendor_path) {
+                        if vendor.trim() == "0x10de" {
+                            // NVIDIA vendor ID
+                            return card;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Method 2: Use DISPLAY environment and xrandr (X11 only)
+    if std::env::var("DISPLAY").is_ok() {
+        if let Ok(output) = std::process::Command::new("xrandr")
+            .args(["--listproviders"])
+            .output()
+        {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            // Parse xrandr output for NVIDIA provider
+            for line in stdout.lines() {
+                if line.contains("NVIDIA") {
+                    // Extract GPU index if available
+                    if let Some(idx_str) = line.split_whitespace().find(|s| s.starts_with("GPU-")) {
+                        if let Ok(idx) = idx_str.trim_start_matches("GPU-").parse::<u32>() {
+                            return idx;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Default to GPU 0
     0
 }
 

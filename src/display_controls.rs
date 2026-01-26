@@ -2,6 +2,7 @@
 // Native implementation using NVKMS ioctls
 use crate::nvkms_bindings::*;
 use crate::{NvControlError, NvResult};
+use bytemuck::Zeroable;
 use serde::{Deserialize, Serialize};
 use std::fs::OpenOptions;
 use std::os::unix::io::AsRawFd;
@@ -259,9 +260,10 @@ impl DisplayControls {
                 dpy_id: self.dpy_id,
                 attribute,
             },
-            reply: unsafe { std::mem::zeroed() },
+            reply: Zeroable::zeroed(),
         };
 
+        // SAFETY: fd is valid (opened in new()), params matches GetDpyAttribute command
         unsafe {
             nvkms_ioctl(self.fd, NvKmsIoctlCommand::GetDpyAttribute, &mut params).map_err(|e| {
                 NvControlError::DisplayDetectionFailed(format!(
@@ -306,9 +308,10 @@ impl DisplayControls {
                 dpy_id: self.dpy_id,
                 attribute,
             },
-            reply: unsafe { std::mem::zeroed() },
+            reply: Zeroable::zeroed(),
         };
 
+        // SAFETY: fd is valid, params matches GetDpyAttributeValidValues command
         unsafe {
             nvkms_ioctl(
                 self.fd,
@@ -321,14 +324,15 @@ impl DisplayControls {
                     e
                 ))
             })?;
+        }
 
-            if params.reply.attr_type == NvKmsAttributeType::Range {
-                Ok((params.reply.u.range.min, params.reply.u.range.max))
-            } else {
-                Err(NvControlError::DisplayDetectionFailed(
-                    "Attribute is not a range type".to_string(),
-                ))
-            }
+        if params.reply.attr_type == NvKmsAttributeType::Range {
+            // SAFETY: We verified attr_type is Range, so accessing range field is valid
+            Ok(unsafe { (params.reply.u.range.min, params.reply.u.range.max) })
+        } else {
+            Err(NvControlError::DisplayDetectionFailed(
+                "Attribute is not a range type".to_string(),
+            ))
         }
     }
 }
@@ -336,9 +340,10 @@ impl DisplayControls {
 // ===== CLI Functions =====
 
 pub fn set_image_sharpening_cli(_device_id: u32, display_id: u32, value: i64) -> NvResult<()> {
-    // TODO: Get device/disp handles from vibrance controller
-    // For now, use placeholder values
-    let controls = DisplayControls::new(0, 0, display_id)?;
+    // Get device/disp handles from vibrance controller (shared NVKMS initialization)
+    let vibrance_ctrl = crate::vibrance_native::NativeVibranceController::new()?;
+    let (device_handle, disp_handle) = vibrance_ctrl.get_handles();
+    let controls = DisplayControls::new(device_handle, disp_handle, display_id)?;
     controls.set_image_sharpening(value)?;
     println!(
         "✅ Set image sharpening to {} for display {}",
@@ -351,7 +356,9 @@ pub fn get_image_sharpening_info_cli(
     _device_id: u32,
     display_id: u32,
 ) -> NvResult<ImageSharpeningInfo> {
-    let controls = DisplayControls::new(0, 0, display_id)?;
+    let vibrance_ctrl = crate::vibrance_native::NativeVibranceController::new()?;
+    let (device_handle, disp_handle) = vibrance_ctrl.get_handles();
+    let controls = DisplayControls::new(device_handle, disp_handle, display_id)?;
     controls.get_image_sharpening_info()
 }
 

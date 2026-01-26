@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 use console::{Key, Term, style};
 use indicatif::{ProgressBar, ProgressStyle};
 use nvcontrol::{
-    arch_integration, asus_power_detector, display, drivers, fan, gamescope,
+    arch_integration, asus_power_detector, config, display, drivers, fan, gamescope,
     gpu::{self, OutputFormat},
     gsp_firmware, hdr, kde_optimizer, latency, monitoring, multimonitor, overclocking, power,
     power_profiles_daemon, recording, upscaling, vrr, wayland_nvidia,
@@ -1787,9 +1787,9 @@ fn main() {
                 Err(e) => eprintln!("❌ Failed to detect GPUs: {}", e),
             },
             GpuSubcommand::Select { index } => {
+                config::TuiSessionState::set_selected_gpu(index as usize);
                 println!("🎯 Selected GPU {} for subsequent commands", index);
-                println!("⚠️  Note: GPU selection is not yet persistent across commands");
-                // TODO: Store selected GPU in config file
+                println!("✅ Selection saved to config");
             }
         },
         Command::Display { subcommand } => match subcommand {
@@ -2715,13 +2715,16 @@ fn main() {
                 DlssSubcommand::Auto => match dlss::DlssController::new() {
                     Ok(mut controller) => match controller.auto_apply_game_profile() {
                         Ok(Some(game_id)) => {
-                            let profile = controller.game_profiles.get(&game_id).unwrap();
-                            println!("✅ Auto-applied DLSS profile for: {}", profile.game_name);
-                            println!("   Mode: {:?}", profile.recommended_settings.mode);
-                            println!(
-                                "   Quality: {:?}",
-                                profile.recommended_settings.quality_preset
-                            );
+                            if let Some(profile) = controller.game_profiles.get(&game_id) {
+                                println!("✅ Auto-applied DLSS profile for: {}", profile.game_name);
+                                println!("   Mode: {:?}", profile.recommended_settings.mode);
+                                println!(
+                                    "   Quality: {:?}",
+                                    profile.recommended_settings.quality_preset
+                                );
+                            } else {
+                                println!("✅ Auto-applied DLSS settings for game: {}", game_id);
+                            }
                         }
                         Ok(None) => {
                             println!("ℹ️  No supported games currently running");

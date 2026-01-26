@@ -400,7 +400,7 @@ Exec = /usr/bin/sh -c 'echo "⚠️  Kernel upgrade detected. NVIDIA drivers may
     }
 
     fn is_root(&self) -> bool {
-        unsafe { libc::geteuid() == 0 }
+        nix::unistd::geteuid().is_root()
     }
 
     /// Print comprehensive system status

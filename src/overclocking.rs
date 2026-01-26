@@ -86,6 +86,48 @@ pub fn get_gpu_capabilities() -> NvResult<GpuCapabilities> {
     })
 }
 
+/// Get current GPU and memory clock offsets for a given GPU index
+pub fn get_current_offsets(gpu_index: u32) -> NvResult<(i32, i32)> {
+    // Try nvidia-settings first (X11)
+    if std::env::var("DISPLAY").is_ok() {
+        let gpu_cmd = format!(
+            "nvidia-settings -q '[gpu:{}]/GPUGraphicsClockOffset[3]' -t",
+            gpu_index
+        );
+        let mem_cmd = format!(
+            "nvidia-settings -q '[gpu:{}]/GPUMemoryTransferRateOffset[3]' -t",
+            gpu_index
+        );
+
+        let gpu_output = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(&gpu_cmd)
+            .output();
+
+        let mem_output = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(&mem_cmd)
+            .output();
+
+        let gpu_offset = gpu_output
+            .ok()
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .and_then(|s| s.trim().parse::<i32>().ok())
+            .unwrap_or(0);
+
+        let mem_offset = mem_output
+            .ok()
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .and_then(|s| s.trim().parse::<i32>().ok())
+            .unwrap_or(0);
+
+        return Ok((gpu_offset, mem_offset));
+    }
+
+    // Default to 0 offsets if nvidia-settings not available
+    Ok((0, 0))
+}
+
 pub fn apply_overclock_profile(profile: &OverclockProfile) -> NvResult<()> {
     println!("Applying overclock profile: {}", profile.name);
 

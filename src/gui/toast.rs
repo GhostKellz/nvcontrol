@@ -301,6 +301,11 @@ impl ToastManager {
         self.toasts.is_empty()
     }
 
+    /// Check if there are any active (non-expired) toasts
+    pub fn has_active(&self) -> bool {
+        self.toasts.iter().any(|t| !t.is_expired())
+    }
+
     /// Clear all toasts
     pub fn clear(&mut self) {
         self.toasts.clear();

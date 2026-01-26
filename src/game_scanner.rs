@@ -162,12 +162,54 @@ impl GameLibraryScanner {
         Ok(games)
     }
 
-    fn parse_lutris_game(&self, _path: &Path) -> NvResult<ScannedGame> {
-        // For now, return a placeholder
-        // TODO: Implement YAML parsing for Lutris configs
-        Err(NvControlError::UnsupportedFeature(
-            "Lutris parsing not yet implemented".into(),
-        ))
+    fn parse_lutris_game(&self, path: &Path) -> NvResult<ScannedGame> {
+        let content = fs::read_to_string(path).map_err(|e| {
+            NvControlError::ConfigError(format!("Failed to read Lutris config: {}", e))
+        })?;
+
+        let config: serde_yaml::Value = serde_yaml::from_str(&content).map_err(|e| {
+            NvControlError::ConfigError(format!("Failed to parse Lutris YAML: {}", e))
+        })?;
+
+        // Extract game name (required)
+        let name = config
+            .get("name")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                NvControlError::ConfigError("Lutris config missing 'name' field".into())
+            })?
+            .to_string();
+
+        // Extract slug for identifier
+        let slug = config
+            .get("slug")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        // Extract executable path from game.exe
+        let executable = config
+            .get("game")
+            .and_then(|g| g.get("exe"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| slug.clone());
+
+        // Extract install directory
+        let install_path = config
+            .get("game")
+            .and_then(|g| g.get("prefix").or_else(|| g.get("working_dir")))
+            .and_then(|v| v.as_str())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| self.lutris_games_path.join(&slug));
+
+        Ok(ScannedGame {
+            name,
+            executable,
+            launcher: GameLauncher::Lutris,
+            install_path,
+            app_id: if slug.is_empty() { None } else { Some(slug) },
+        })
     }
 
     /// Scan Heroic Games Launcher
@@ -198,11 +240,65 @@ impl GameLibraryScanner {
 
     fn parse_heroic_library(
         &self,
-        _path: &Path,
-        _launcher: GameLauncher,
+        path: &Path,
+        launcher: GameLauncher,
     ) -> NvResult<Vec<ScannedGame>> {
-        // TODO: Implement JSON parsing for Heroic configs
-        Ok(Vec::new())
+        let content = fs::read_to_string(path).map_err(|e| {
+            NvControlError::ConfigError(format!("Failed to read Heroic config: {}", e))
+        })?;
+
+        let json: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
+            NvControlError::ConfigError(format!("Failed to parse Heroic JSON: {}", e))
+        })?;
+
+        let mut games = Vec::new();
+
+        // Handle both array format (GOG) and object format (Epic/Legendary)
+        let game_list: Vec<&serde_json::Value> = if let Some(arr) = json.as_array() {
+            arr.iter().collect()
+        } else if let Some(obj) = json.as_object() {
+            // Legendary installed.json uses app_name as keys
+            obj.values().collect()
+        } else {
+            return Ok(games);
+        };
+
+        for game in game_list {
+            // Try different field names used by GOG vs Epic
+            let name = game
+                .get("title")
+                .or_else(|| game.get("app_name"))
+                .or_else(|| game.get("name"))
+                .and_then(|v| v.as_str());
+
+            let install_path = game
+                .get("install_path")
+                .or_else(|| game.get("install_folder"))
+                .and_then(|v| v.as_str());
+
+            let app_id = game
+                .get("app_name")
+                .or_else(|| game.get("appName"))
+                .or_else(|| game.get("id"))
+                .and_then(|v| v.as_str());
+
+            if let (Some(name), Some(install_path)) = (name, install_path) {
+                let path = PathBuf::from(install_path);
+                let executable = self
+                    .find_game_executable(&path, name)
+                    .unwrap_or_else(|_| name.to_lowercase().replace(' ', "_"));
+
+                games.push(ScannedGame {
+                    name: name.to_string(),
+                    executable,
+                    launcher: launcher.clone(),
+                    install_path: path,
+                    app_id: app_id.map(|s| s.to_string()),
+                });
+            }
+        }
+
+        Ok(games)
     }
 
     /// Try to find the main executable for a game

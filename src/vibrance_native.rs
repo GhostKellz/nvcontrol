@@ -1,5 +1,6 @@
 use crate::nvkms_bindings::*;
 use crate::{NvControlError, NvResult};
+use bytemuck::Zeroable;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
@@ -55,6 +56,11 @@ impl NativeVibranceController {
             disp_handle,
             modeset_fd,
         })
+    }
+
+    /// Get device and display handles for use with other NVKMS operations
+    pub fn get_handles(&self) -> (u32, u32) {
+        (self.device_handle, self.disp_handle)
     }
 
     /// Get NVIDIA driver version from /sys/module/nvidia/version
@@ -151,9 +157,10 @@ impl NativeVibranceController {
                 enable_console_hotplug_handling: 0,           // NV_FALSE
                 registry_keys,
             },
-            reply: unsafe { std::mem::zeroed() },
+            reply: Zeroable::zeroed(),
         };
 
+        // SAFETY: fd is valid (opened above), alloc_params matches AllocDevice command
         unsafe {
             nvkms_ioctl(fd, NvKmsIoctlCommand::AllocDevice, &mut alloc_params).map_err(|e| {
                 NvControlError::VibranceControlFailed(format!("AllocDevice ioctl failed: {}", e))
@@ -185,9 +192,10 @@ impl NativeVibranceController {
                 device_handle,
                 disp_handle,
             },
-            reply: unsafe { std::mem::zeroed() },
+            reply: Zeroable::zeroed(),
         };
 
+        // SAFETY: fd is valid, query_disp_params matches QueryDisp command
         unsafe {
             nvkms_ioctl(fd, NvKmsIoctlCommand::QueryDisp, &mut query_disp_params).map_err(|e| {
                 NvControlError::VibranceControlFailed(format!("QueryDisp failed: {}", e))
@@ -208,9 +216,10 @@ impl NativeVibranceController {
                     disp_handle,
                     connector_handle,
                 },
-                reply: unsafe { std::mem::zeroed() },
+                reply: Zeroable::zeroed(),
             };
 
+            // SAFETY: fd is valid, static_params matches QueryConnectorStaticData command
             if unsafe {
                 nvkms_ioctl(
                     fd,
@@ -238,12 +247,12 @@ impl NativeVibranceController {
             };
 
             // Query dpy dynamic data to check if connected
-            // Use zeroed() for the whole struct since it has padding fields
-            let mut dynamic_params: NvKmsQueryDpyDynamicDataParams = unsafe { std::mem::zeroed() };
+            let mut dynamic_params: NvKmsQueryDpyDynamicDataParams = Zeroable::zeroed();
             dynamic_params.request.device_handle = device_handle;
             dynamic_params.request.disp_handle = disp_handle;
             dynamic_params.request.dpy_id = dpy_id;
 
+            // SAFETY: fd is valid, dynamic_params matches QueryDpyDynamicData command
             let connected = if unsafe {
                 nvkms_ioctl(
                     fd,

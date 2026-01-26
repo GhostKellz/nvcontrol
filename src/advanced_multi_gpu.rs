@@ -125,31 +125,15 @@ impl MultiGpuCoordinator {
             .device_by_index(gpu1)
             .map_err(|e| NvControlError::GpuQueryFailed(format!("Failed to get device: {}", e)))?;
 
-        // Try to detect NVLink (commented out due to nvml_wrapper API limitations)
-        // Alternative: use nvidia-smi nvlink --status
-        for _link_id in 0..6 {
-            // NVLink detection requires methods not available in current nvml_wrapper
-            // TODO: Parse nvidia-smi nvlink --status output instead
-            if false {
-                if false {
-                    // Check if this link connects to gpu2
-                    if let Some(_remote_info) = None::<u32> {
-                        let device2 = nvml.device_by_index(gpu2).ok();
-                        if let Some(_d2) = device2 {
-                            if let Ok(_pci2) = _d2.pci_info() {
-                                if false {
-                                    // Placeholder for bus comparison
-                                    return Ok(Some(GpuLink {
-                                        gpu1,
-                                        gpu2,
-                                        link_type: LinkType::NVLink,
-                                        bandwidth_gbps: 25.0, // NVLink 2.0 bandwidth per link
-                                    }));
-                                }
-                            }
-                        }
-                    }
-                }
+        // Try to detect NVLink using nvidia-smi
+        if let Ok(nvlink_status) = detect_nvlink_via_smi(gpu1, gpu2) {
+            if nvlink_status {
+                return Ok(Some(GpuLink {
+                    gpu1,
+                    gpu2,
+                    link_type: LinkType::NVLink,
+                    bandwidth_gbps: 25.0, // NVLink 2.0 bandwidth per link
+                }));
             }
         }
 
@@ -474,6 +458,30 @@ impl ThermalBalancer {
 
         Ok(())
     }
+}
+
+/// Detect NVLink connection between two GPUs using nvidia-smi
+fn detect_nvlink_via_smi(gpu1: u32, gpu2: u32) -> NvResult<bool> {
+    let output = std::process::Command::new("nvidia-smi")
+        .args(["nvlink", "--status", "-i", &gpu1.to_string()])
+        .output()
+        .map_err(|e| NvControlError::CommandFailed(format!("nvidia-smi failed: {}", e)))?;
+
+    if !output.status.success() {
+        return Ok(false); // NVLink may not be supported
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Look for active NVLink connections in the output
+    // Format: "GPU 0 <-> GPU 1: Link N, ..."
+    for line in stdout.lines() {
+        if line.contains(&format!("GPU {}", gpu2)) && line.contains("Link") {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
 }
 
 #[cfg(test)]

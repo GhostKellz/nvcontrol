@@ -237,6 +237,11 @@ pub struct GuiState {
 
     // === DLSS Tab State ===
     pub dlss_state: crate::gui::tabs::dlss::DlssTabState,
+
+    // === Cached System Info (to avoid subprocess spawns per frame) ===
+    pub cached_system_info: Option<crate::gui::tabs::system::SystemInfo>,
+    pub cached_driver_info: Option<crate::gui::tabs::system::DriverInfo>,
+    pub system_info_last_update: std::time::Instant,
 }
 
 impl Default for GuiState {
@@ -505,6 +510,13 @@ impl GuiState {
 
             // DLSS
             dlss_state: Default::default(),
+
+            // System info - start stale to force initial refresh
+            cached_system_info: None,
+            cached_driver_info: None,
+            system_info_last_update: std::time::Instant::now()
+                .checked_sub(std::time::Duration::from_secs(120))
+                .unwrap_or_else(std::time::Instant::now),
         }
     }
 
@@ -662,6 +674,26 @@ impl GuiState {
     /// Get cached recording status
     pub fn is_recording(&self) -> bool {
         self.cached_is_recording
+    }
+
+    /// Refresh cached system info (rate-limited - involves subprocess calls)
+    pub fn refresh_system_info(&mut self) {
+        // Only refresh every 30 seconds - system info rarely changes
+        if self.system_info_last_update.elapsed() > std::time::Duration::from_secs(30) {
+            self.cached_system_info = Some(crate::gui::tabs::system::SystemInfo::gather());
+            self.cached_driver_info = Some(crate::gui::tabs::system::DriverInfo::gather());
+            self.system_info_last_update = std::time::Instant::now();
+        }
+    }
+
+    /// Get cached system info
+    pub fn get_system_info(&self) -> Option<&crate::gui::tabs::system::SystemInfo> {
+        self.cached_system_info.as_ref()
+    }
+
+    /// Get cached driver info
+    pub fn get_driver_info(&self) -> Option<&crate::gui::tabs::system::DriverInfo> {
+        self.cached_driver_info.as_ref()
     }
 
     /// Cycle to the next theme

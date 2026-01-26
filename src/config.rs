@@ -185,6 +185,18 @@ impl TuiSessionState {
     pub fn was_migrated(&self) -> bool {
         self.version == 0
     }
+
+    /// Get the currently selected GPU index.
+    pub fn get_selected_gpu() -> usize {
+        Self::load().selected_gpu
+    }
+
+    /// Set the selected GPU index and persist to disk.
+    pub fn set_selected_gpu(index: usize) {
+        let mut state = Self::load();
+        state.selected_gpu = index;
+        state.save();
+    }
 }
 
 #[derive(Serialize, Deserialize, Default)]
