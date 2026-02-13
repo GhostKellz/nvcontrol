@@ -5,9 +5,8 @@
 
 use crate::config::Config;
 use crate::fan::FanInfo;
-use crate::gui_widgets::{FanCurve, MonitoringDashboard, VoltageCurve};
+use crate::gui_widgets::{FanCurve, MonitoringDashboard};
 use crate::multi_gpu::GpuInfo;
-use crate::overclocking::OverclockProfile;
 use crate::state::AppState;
 use crate::themes::ThemeVariant;
 
@@ -47,35 +46,6 @@ pub struct ContainerInfo {
     pub image: String,
     pub status: String,
     pub gpu_usage: String,
-}
-
-/// Overclock preset
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum OcPreset {
-    Stock,       // 0/0/100%
-    MildOc,      // +75/+500/105%
-    Performance, // +150/+1000/110%
-    Extreme,     // +200/+1500/115%
-}
-
-impl OcPreset {
-    pub fn name(&self) -> &'static str {
-        match self {
-            OcPreset::Stock => "Stock",
-            OcPreset::MildOc => "Mild OC",
-            OcPreset::Performance => "Performance",
-            OcPreset::Extreme => "Extreme",
-        }
-    }
-
-    pub fn values(&self) -> (i32, i32, u32) {
-        match self {
-            OcPreset::Stock => (0, 0, 100),
-            OcPreset::MildOc => (75, 500, 105),
-            OcPreset::Performance => (150, 1000, 110),
-            OcPreset::Extreme => (200, 1500, 115),
-        }
-    }
 }
 
 /// Fan control mode
@@ -130,28 +100,11 @@ pub struct GuiState {
     // === Toast Notifications ===
     pub toasts: ToastManager,
 
-    // === Overclock Settings ===
-    pub overclock_profile: OverclockProfile,
-    pub oc_preset: OcPreset,
-    pub gpu_offset: i32,          // -200 to +200 MHz
-    pub memory_offset: i32,       // -1000 to +1000 MHz
-    pub power_limit_percent: u32, // 50 to 115%
-
-    // === Auto-Overclock Wizard ===
-    pub auto_oc_running: bool,
-    pub auto_oc_target: String,
-    pub auto_oc_safety: String,
-    pub auto_oc_max_temp: f32,
-    pub auto_oc_max_power: u32,
-
     // === Fan Control ===
     pub fan_curve: FanCurve,
     pub fan_mode: FanMode,
     pub fan_speeds: HashMap<usize, u8>,
     pub manual_fan_speed: u32,
-
-    // === Voltage Curve ===
-    pub voltage_curve: VoltageCurve,
 
     // === Power Curves ===
     pub power_config: crate::power_curves::PowerManagementConfig,
@@ -210,6 +163,7 @@ pub struct GuiState {
     // === ASUS Power Monitor+ ===
     pub asus_power_detector: Option<crate::asus_power_detector::AsusPowerDetector>,
     pub asus_power_status: Option<crate::asus_power_detector::PowerConnectorStatus>,
+    pub asus_power_history: crate::asus_power_detector::PowerHistory,
     pub asus_power_last_update: std::time::Instant,
 
     // === Latency Settings ===
@@ -431,21 +385,10 @@ impl GuiState {
             config,
             app_state,
             toasts: ToastManager::new(),
-            overclock_profile: OverclockProfile::default(),
-            oc_preset: OcPreset::Stock,
-            gpu_offset: 0,
-            memory_offset: 0,
-            power_limit_percent: 100,
-            auto_oc_running: false,
-            auto_oc_target: "balanced".to_string(),
-            auto_oc_safety: "conservative".to_string(),
-            auto_oc_max_temp: 85.0,
-            auto_oc_max_power: 100,
             fan_curve: FanCurve::default(),
             fan_mode: FanMode::Auto,
             fan_speeds: HashMap::new(),
             manual_fan_speed: 50,
-            voltage_curve: VoltageCurve::default(),
             power_config,
             vibrance_levels,
             selected_icc_profile_idx: 0,
@@ -483,6 +426,7 @@ impl GuiState {
             driver_capabilities: crate::drivers::DriverCapabilities::detect().ok(),
             asus_power_detector,
             asus_power_status: None,
+            asus_power_history: crate::asus_power_detector::PowerHistory::new(),
             asus_power_last_update: std::time::Instant::now(),
             latency_mode: "normal".to_string(),
             reflex_enabled: false,
@@ -596,11 +540,15 @@ impl GuiState {
         }
     }
 
-    /// Update ASUS Power Monitor+ status
+    /// Update ASUS Power Monitor+ status and record to history
     pub fn refresh_asus_power(&mut self) {
         if self.asus_power_last_update.elapsed() > std::time::Duration::from_secs(2) {
             if let Some(ref detector) = self.asus_power_detector {
-                self.asus_power_status = detector.read_power_rails().ok();
+                if let Ok(status) = detector.read_power_rails() {
+                    // Record to history for trend analysis
+                    self.asus_power_history.record(&status);
+                    self.asus_power_status = Some(status);
+                }
                 self.asus_power_last_update = std::time::Instant::now();
             }
         }
@@ -706,40 +654,6 @@ impl GuiState {
     /// Get theme icon
     pub fn theme_icon(&self) -> &'static str {
         super::theme::theme_icon(self.current_theme)
-    }
-
-    /// Apply overclock preset
-    pub fn apply_oc_preset(&mut self, preset: OcPreset) {
-        self.oc_preset = preset;
-        let (gpu, mem, power) = preset.values();
-        self.gpu_offset = gpu;
-        self.memory_offset = mem;
-        self.power_limit_percent = power;
-    }
-
-    /// Apply current overclock settings
-    pub fn apply_overclock(&self) -> Result<(), String> {
-        let profile = OverclockProfile {
-            name: "GUI Custom".to_string(),
-            gpu_clock_offset: self.gpu_offset,
-            memory_clock_offset: self.memory_offset,
-            power_limit: self.power_limit_percent as u8,
-            voltage_offset: 0,
-            temp_limit: 90,
-            fan_curve: vec![],
-        };
-
-        crate::overclocking::apply_overclock_profile(&profile).map_err(|e| e.to_string())
-    }
-
-    /// Reset overclock to stock
-    pub fn reset_overclock(&mut self) {
-        self.apply_oc_preset(OcPreset::Stock);
-        if let Err(e) = self.apply_overclock() {
-            self.toasts.error(format!("Failed to reset OC: {}", e));
-        } else {
-            self.toasts.success("Overclock reset to stock");
-        }
     }
 
     /// Set fan mode

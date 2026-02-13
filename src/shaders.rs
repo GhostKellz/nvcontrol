@@ -393,11 +393,11 @@ pub fn optimize_shader_compilation() -> NvResult<()> {
     println!("Optimizing shader compilation settings...");
 
     // Set NVIDIA-specific environment variables for better shader compilation
-    unsafe {
-        std::env::set_var("__GL_SHADER_DISK_CACHE", "1");
-        std::env::set_var("__GL_SHADER_DISK_CACHE_PATH", "/tmp/nvidia-shader-cache");
-        std::env::set_var("__GL_SHADER_DISK_CACHE_SIZE", "1073741824"); // 1GB
-    }
+    crate::safe_env::set_vars([
+        ("__GL_SHADER_DISK_CACHE", "1"),
+        ("__GL_SHADER_DISK_CACHE_PATH", "/tmp/nvidia-shader-cache"),
+        ("__GL_SHADER_DISK_CACHE_SIZE", "1073741824"), // 1GB
+    ]);
 
     // Create shader cache directory with proper permissions
     let cache_dir = PathBuf::from("/tmp/nvidia-shader-cache");

@@ -252,25 +252,20 @@ impl GamingOptimizations {
         }
 
         // Set NVIDIA shader cache environment variables
-        // SAFETY: Setting environment variables for shader caching
-        unsafe {
-            std::env::set_var(
-                "__GL_SHADER_DISK_CACHE",
-                if self.shader_cache_settings.enabled {
-                    "1"
-                } else {
-                    "0"
-                },
-            );
-            std::env::set_var(
-                "__GL_SHADER_DISK_CACHE_PATH",
-                &self.shader_cache_settings.cache_path,
-            );
-            std::env::set_var(
-                "__GL_SHADER_DISK_CACHE_SIZE",
-                &format!("{}", self.shader_cache_settings.max_size_mb * 1024 * 1024),
-            );
-        }
+        let cache_enabled = if self.shader_cache_settings.enabled {
+            "1"
+        } else {
+            "0"
+        };
+        crate::safe_env::set_var("__GL_SHADER_DISK_CACHE", cache_enabled);
+        crate::safe_env::set_var(
+            "__GL_SHADER_DISK_CACHE_PATH",
+            &self.shader_cache_settings.cache_path,
+        );
+        crate::safe_env::set_var(
+            "__GL_SHADER_DISK_CACHE_SIZE",
+            format!("{}", self.shader_cache_settings.max_size_mb * 1024 * 1024),
+        );
 
         Ok(())
     }

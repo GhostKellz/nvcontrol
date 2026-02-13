@@ -85,27 +85,24 @@ impl NvControlApp {
                     self.state.tab = Tab::Gpu;
                 }
                 if i.key_pressed(egui::Key::Num2) {
-                    self.state.tab = Tab::Overclock;
-                }
-                if i.key_pressed(egui::Key::Num3) {
                     self.state.tab = Tab::Fan;
                 }
-                if i.key_pressed(egui::Key::Num4) {
+                if i.key_pressed(egui::Key::Num3) {
                     self.state.tab = Tab::Display;
                 }
-                if i.key_pressed(egui::Key::Num5) {
+                if i.key_pressed(egui::Key::Num4) {
                     self.state.tab = Tab::Vibrance;
                 }
-                if i.key_pressed(egui::Key::Num6) {
+                if i.key_pressed(egui::Key::Num5) {
                     self.state.tab = Tab::Hdr;
                 }
-                if i.key_pressed(egui::Key::Num7) {
+                if i.key_pressed(egui::Key::Num6) {
                     self.state.tab = Tab::GameProfiles;
                 }
-                if i.key_pressed(egui::Key::Num8) {
+                if i.key_pressed(egui::Key::Num7) {
                     self.state.tab = Tab::Osd;
                 }
-                if i.key_pressed(egui::Key::Num9) {
+                if i.key_pressed(egui::Key::Num8) {
                     self.state.tab = Tab::Settings;
                 }
             }
@@ -248,7 +245,6 @@ impl eframe::App for NvControlApp {
         // Render main content
         egui::CentralPanel::default().show(ctx, |ui| match self.state.tab {
             Tab::Gpu => super::tabs::gpu::render(ui, &mut self.state, ctx),
-            Tab::Overclock => super::tabs::overclock::render(ui, &mut self.state, ctx),
             Tab::Fan => super::tabs::fan::render(ui, &mut self.state, ctx),
             Tab::Display => super::tabs::display::render(ui, &mut self.state, ctx),
             Tab::Vibrance => super::tabs::vibrance::render(ui, &mut self.state, ctx),
@@ -270,9 +266,7 @@ impl eframe::App for NvControlApp {
 
         // Only request repaint when needed (GPU stats tab, toasts animating, etc.)
         // This prevents CPU spin and Wayland compositor frame timing issues
-        if matches!(self.state.tab, Tab::Gpu | Tab::Fan | Tab::Overclock)
-            || self.state.toasts.has_active()
-        {
+        if matches!(self.state.tab, Tab::Gpu | Tab::Fan) || self.state.toasts.has_active() {
             // Rate-limited repaint for live monitoring tabs
             ctx.request_repaint_after(std::time::Duration::from_millis(500));
         }

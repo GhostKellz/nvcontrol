@@ -12,6 +12,9 @@ nvcontrol provides safe, validated GPU overclocking with:
 - **Automated wizard** - Safe auto-tuning
 - **Stress testing** - Stability validation
 
+> **Note:** Overclocking is available via **CLI** (`nvctl overclock`) and **TUI** (`nvctl gpu stat`).
+> The GUI application does not include an overclock tab because overclocking requires X11 display server access, which is not available on Wayland. For Wayland users, use the CLI commands documented below.
+
 ## Quick Start
 
 ```bash

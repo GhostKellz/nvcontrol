@@ -86,6 +86,7 @@ pub fn add(left: u64, right: u64) -> u64 {
 pub mod benchmark;
 pub mod config;
 pub mod display;
+
 pub mod display_controls;
 pub mod display_info;
 pub mod fan;
@@ -98,6 +99,8 @@ pub mod notifications;
 pub mod nvkms_bindings;
 pub mod osd;
 pub mod profiles;
+/// Safe environment variable wrappers (replaces scattered unsafe blocks)
+pub mod safe_env;
 pub mod setup;
 pub mod tray;
 pub mod vibrance;

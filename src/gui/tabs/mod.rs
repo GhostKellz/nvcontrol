@@ -11,7 +11,8 @@ pub mod gpu;
 pub mod hdr;
 pub mod latency;
 pub mod osd;
-pub mod overclock;
+// Note: overclock tab removed from GUI (v0.8.5) - OC is CLI-only on Wayland
+// pub mod overclock;
 pub mod recording;
 pub mod settings;
 pub mod system;
@@ -23,7 +24,6 @@ pub mod vrr;
 pub enum Tab {
     // Core GPU tabs
     Gpu,
-    Overclock,
     Fan,
     // Display tabs
     Display,
@@ -47,14 +47,13 @@ impl Tab {
     pub fn shortcut(&self) -> Option<u8> {
         match self {
             Tab::Gpu => Some(1),
-            Tab::Overclock => Some(2),
-            Tab::Fan => Some(3),
-            Tab::Display => Some(4),
-            Tab::Vibrance => Some(5),
-            Tab::Hdr => Some(6),
-            Tab::GameProfiles => Some(7),
-            Tab::Osd => Some(8),
-            Tab::Settings => Some(9),
+            Tab::Fan => Some(2),
+            Tab::Display => Some(3),
+            Tab::Vibrance => Some(4),
+            Tab::Hdr => Some(5),
+            Tab::GameProfiles => Some(6),
+            Tab::Osd => Some(7),
+            Tab::Settings => Some(8),
             _ => None,
         }
     }
@@ -64,7 +63,6 @@ impl Tab {
         vec![
             // Core GPU
             (Tab::Gpu, super::icons::GPU, "GPU Status"),
-            (Tab::Overclock, super::icons::OVERCLOCK, "Overclock"),
             (Tab::Fan, super::icons::FAN_ICON, "Fan Control"),
             // Display
             (Tab::Display, super::icons::DISPLAY, "Display"),

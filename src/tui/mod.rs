@@ -324,6 +324,15 @@ pub struct TuiApp {
     dlss_doctor_result: Option<dlss::DlssDoctorResult>,
     /// Last DLSS cache update
     dlss_last_update: Instant,
+    // === ASUS Power Monitor+ ===
+    /// ASUS Power Detector (for ROG Astral/Matrix cards)
+    asus_power_detector: Option<crate::asus_power_detector::AsusPowerDetector>,
+    /// Cached ASUS power status
+    asus_power_status: Option<crate::asus_power_detector::PowerConnectorStatus>,
+    /// ASUS power history for trend analysis
+    asus_power_history: crate::asus_power_detector::PowerHistory,
+    /// Last ASUS power update time
+    asus_power_last_update: Instant,
 }
 
 impl TuiApp {
@@ -416,6 +425,11 @@ impl TuiApp {
             dlss_last_update: Instant::now()
                 .checked_sub(Duration::from_secs(120))
                 .unwrap_or_else(Instant::now), // Force initial refresh
+            // ASUS Power Monitor+ - initialized in ensure_initialized
+            asus_power_detector: None,
+            asus_power_status: None,
+            asus_power_history: crate::asus_power_detector::PowerHistory::new(),
+            asus_power_last_update: Instant::now(),
         }
     }
 
@@ -458,6 +472,17 @@ impl TuiApp {
         self.driver_validation = crate::state::DriverValidationState::load();
         self.driver_capabilities = crate::drivers::get_driver_capabilities().ok();
         self.osd_enabled = crate::osd::OsdManager::check_mangohud_installed();
+
+        // Initialize ASUS Power Monitor+ if applicable
+        self.asus_power_detector = {
+            let gpus = crate::asus_power_detector::detect_asus_gpus();
+            gpus.into_iter()
+                .find(|(_, model)| model.supports_power_detector())
+                .and_then(|(pci_id, _)| {
+                    crate::asus_power_detector::AsusPowerDetector::new(&pci_id).ok()
+                })
+                .filter(|d| d.is_supported())
+        };
 
         self.backend_ctx = Some(backend_ctx);
     }
@@ -935,6 +960,24 @@ impl TuiApp {
 
         // Refresh DLSS cache (rate-limited - every 60s)
         self.refresh_dlss_cache();
+
+        // Refresh ASUS Power Monitor+ (rate-limited - every 2s)
+        self.refresh_asus_power();
+    }
+
+    /// Refresh ASUS Power Monitor+ status (rate-limited)
+    fn refresh_asus_power(&mut self) {
+        if self.asus_power_last_update.elapsed().as_secs() < 2 {
+            return;
+        }
+        self.asus_power_last_update = Instant::now();
+
+        if let Some(ref detector) = self.asus_power_detector {
+            if let Ok(status) = detector.read_power_rails() {
+                self.asus_power_history.record(&status);
+                self.asus_power_status = Some(status);
+            }
+        }
     }
 
     /// Refresh DLSS cache (rate-limited to avoid blocking)
@@ -1791,17 +1834,35 @@ impl TuiApp {
         let green = self.theme.green.to_ratatui();
         let yellow = self.theme.yellow.to_ratatui();
         let orange = self.theme.orange.to_ratatui();
+        let red = self.theme.red.to_ratatui();
         let fg = self.theme.fg.to_ratatui();
+        let fg_dark = self.theme.fg_dark.to_ratatui();
         let bg_dark = self.theme.bg_dark.to_ratatui();
+        let cyan = self.theme.teal.to_ratatui();
 
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(3), // Power draw gauge
-                Constraint::Length(5), // Power info
-                Constraint::Min(5),    // History graph
-            ])
-            .split(area);
+        // Check if we have ASUS Power Monitor+ data
+        let has_asus_power = self.asus_power_detector.is_some() && self.asus_power_status.is_some();
+
+        let chunks = if has_asus_power {
+            Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(3),  // Power draw gauge
+                    Constraint::Length(5),  // Power info
+                    Constraint::Length(10), // ASUS Power Monitor+
+                    Constraint::Min(3),     // History graph
+                ])
+                .split(area)
+        } else {
+            Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(3), // Power draw gauge
+                    Constraint::Length(5), // Power info
+                    Constraint::Min(5),    // History graph
+                ])
+                .split(area)
+        };
 
         if let Some(history) = self.metrics_history.get(self.selected_gpu) {
             if let Some(m) = history.back() {
@@ -1838,7 +1899,124 @@ impl TuiApp {
                     .style(Style::default().fg(fg));
                 f.render_widget(info_para, chunks[1]);
 
+                // ASUS Power Monitor+ section (if available)
+                if has_asus_power {
+                    if let Some(ref status) = self.asus_power_status {
+                        let health_color = match status.health {
+                            crate::asus_power_detector::PowerHealth::Good => green,
+                            crate::asus_power_detector::PowerHealth::Warning => yellow,
+                            crate::asus_power_detector::PowerHealth::Critical => red,
+                            crate::asus_power_detector::PowerHealth::Unknown => fg_dark,
+                        };
+
+                        let trend = self.asus_power_history.trend();
+                        let trend_str = match trend {
+                            crate::asus_power_detector::PowerTrend::Rising => "↑ Rising",
+                            crate::asus_power_detector::PowerTrend::Falling => "↓ Falling",
+                            crate::asus_power_detector::PowerTrend::Stable => "→ Stable",
+                            crate::asus_power_detector::PowerTrend::Unknown => "? Unknown",
+                        };
+
+                        // Build rail info lines
+                        let mut lines: Vec<Line> = Vec::new();
+
+                        // Header with health and total power
+                        let health_label = status.health.label();
+                        let total_power_str = status
+                            .total_power_w
+                            .map(|p| format!("{:.1}W", p))
+                            .unwrap_or_else(|| "N/A".to_string());
+
+                        lines.push(Line::from(vec![
+                            Span::styled("  Health: ", Style::default().fg(fg_dark)),
+                            Span::styled(
+                                format!("[{}]", health_label),
+                                Style::default()
+                                    .fg(health_color)
+                                    .add_modifier(Modifier::BOLD),
+                            ),
+                            Span::styled("  Total: ", Style::default().fg(fg_dark)),
+                            Span::styled(total_power_str, Style::default().fg(cyan)),
+                            Span::styled("  Trend: ", Style::default().fg(fg_dark)),
+                            Span::styled(trend_str, Style::default().fg(fg)),
+                        ]));
+
+                        // Stats line
+                        if !self.asus_power_history.is_empty() {
+                            let avg = self
+                                .asus_power_history
+                                .average_power()
+                                .map(|p| format!("{:.1}W", p))
+                                .unwrap_or_default();
+                            let peak = self
+                                .asus_power_history
+                                .peak_power()
+                                .map(|p| format!("{:.1}W", p))
+                                .unwrap_or_default();
+
+                            lines.push(Line::from(vec![
+                                Span::styled("  Avg: ", Style::default().fg(fg_dark)),
+                                Span::styled(avg, Style::default().fg(cyan)),
+                                Span::styled("  Peak: ", Style::default().fg(fg_dark)),
+                                Span::styled(peak, Style::default().fg(orange)),
+                                Span::styled(
+                                    format!("  ({} samples)", self.asus_power_history.len()),
+                                    Style::default().fg(fg_dark),
+                                ),
+                            ]));
+                        }
+
+                        // Rail readings (compact format)
+                        let rail_line: Vec<Span> = status
+                            .rails
+                            .iter()
+                            .enumerate()
+                            .flat_map(|(i, rail)| {
+                                let current_str = rail
+                                    .current_ma
+                                    .map(|c| format!("{:.2}A", c as f32 / 1000.0))
+                                    .unwrap_or_else(|| "-".to_string());
+                                let rail_color = if rail.warning { yellow } else { green };
+                                let sep = if i < status.rails.len() - 1 {
+                                    " │ "
+                                } else {
+                                    ""
+                                };
+                                vec![
+                                    Span::styled(
+                                        format!("R{}: ", rail.rail_id),
+                                        Style::default().fg(fg_dark),
+                                    ),
+                                    Span::styled(current_str, Style::default().fg(rail_color)),
+                                    Span::styled(sep, Style::default().fg(fg_dark)),
+                                ]
+                            })
+                            .collect();
+                        lines.push(Line::from(vec![Span::styled("  ", Style::default())]));
+                        lines.push(Line::from(
+                            std::iter::once(Span::styled("  ", Style::default()))
+                                .chain(rail_line)
+                                .collect::<Vec<_>>(),
+                        ));
+
+                        // Model info
+                        lines.push(Line::from(vec![Span::styled(
+                            format!("  {} (I2C bus {})", status.model, status.i2c_bus),
+                            Style::default().fg(fg_dark),
+                        )]));
+
+                        let asus_para = Paragraph::new(lines).block(
+                            Block::default()
+                                .title(" ASUS Power Monitor+ ")
+                                .borders(Borders::ALL)
+                                .border_style(Style::default().fg(health_color)),
+                        );
+                        f.render_widget(asus_para, chunks[2]);
+                    }
+                }
+
                 // Power history sparkline (toggle with 'g')
+                let history_chunk = if has_asus_power { chunks[3] } else { chunks[2] };
                 if self.show_graphs {
                     let power_history: Vec<u64> =
                         history.iter().map(|m| m.power_draw as u64).collect();
@@ -1851,7 +2029,7 @@ impl TuiApp {
                         )
                         .data(&power_history)
                         .style(Style::default().fg(power_color));
-                    f.render_widget(sparkline, chunks[2]);
+                    f.render_widget(sparkline, history_chunk);
                 }
             }
         } else {
@@ -2041,23 +2219,110 @@ impl TuiApp {
     }
 
     fn draw_oc_tab(&self, f: &mut Frame, area: Rect) {
+        let accent = self.theme.teal.to_ratatui();
+        let yellow = self.theme.yellow.to_ratatui();
+        let fg = self.theme.fg.to_ratatui();
+        let fg_dark = self.theme.fg_dark.to_ratatui();
+
+        // Check if running on Wayland
+        let is_wayland = std::env::var("WAYLAND_DISPLAY").is_ok()
+            || std::env::var("XDG_SESSION_TYPE")
+                .map(|s| s == "wayland")
+                .unwrap_or(false);
+
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(if is_wayland { 4 } else { 0 }), // Wayland warning
+                Constraint::Min(8),                                 // OC controls
+            ])
+            .split(area);
+
+        // Wayland warning banner
+        if is_wayland {
+            let warning = Paragraph::new(vec![
+                Line::from(vec![
+                    Span::styled("⚠ ", Style::default().fg(yellow)),
+                    Span::styled(
+                        "Overclocking requires X11 display server",
+                        Style::default().fg(yellow).add_modifier(Modifier::BOLD),
+                    ),
+                ]),
+                Line::from(Span::styled(
+                    "  Use CLI: nvctl overclock apply --gpu-offset 100 --memory-offset 500",
+                    Style::default().fg(fg_dark),
+                )),
+            ])
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(yellow)),
+            );
+            f.render_widget(warning, chunks[0]);
+        }
+
+        let oc_area = if is_wayland { chunks[1] } else { area };
+
         let mode_str = if self.oc_control_mode {
             "ACTIVE"
         } else {
             "INACTIVE"
         };
-        let lines = [
-            format!("Overclock Mode: {}", mode_str),
-            format!("Preset: {:?}", self.oc_preset),
-            String::new(),
-            format!("GPU Clock Offset:    {:+} MHz", self.gpu_offset),
-            format!("Memory Clock Offset: {:+} MHz", self.memory_offset),
-            format!("Power Limit:         {}%", self.power_limit_percent),
+
+        let lines = vec![
+            Line::from(vec![
+                Span::styled("Overclock Mode: ", Style::default().fg(fg_dark)),
+                Span::styled(
+                    mode_str,
+                    Style::default()
+                        .fg(if self.oc_control_mode {
+                            self.theme.green.to_ratatui()
+                        } else {
+                            fg_dark
+                        })
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("Preset: ", Style::default().fg(fg_dark)),
+                Span::styled(format!("{:?}", self.oc_preset), Style::default().fg(accent)),
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("GPU Clock Offset:    ", Style::default().fg(fg_dark)),
+                Span::styled(
+                    format!("{:+} MHz", self.gpu_offset),
+                    Style::default().fg(fg),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("Memory Clock Offset: ", Style::default().fg(fg_dark)),
+                Span::styled(
+                    format!("{:+} MHz", self.memory_offset),
+                    Style::default().fg(fg),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("Power Limit:         ", Style::default().fg(fg_dark)),
+                Span::styled(
+                    format!("{}%", self.power_limit_percent),
+                    Style::default().fg(fg),
+                ),
+            ]),
+            Line::from(""),
+            Line::from(Span::styled(
+                "Press 'o' to toggle OC mode, 1-4 for presets",
+                Style::default().fg(fg_dark),
+            )),
         ];
 
-        let text = lines.join("\n");
-        let para = Paragraph::new(text);
-        f.render_widget(para, area);
+        let para = Paragraph::new(lines).block(
+            Block::default()
+                .title(" Overclock Settings ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(accent)),
+        );
+        f.render_widget(para, oc_area);
     }
 
     fn draw_tuner_tab(&self, f: &mut Frame, area: Rect) {

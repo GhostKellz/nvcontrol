@@ -666,67 +666,63 @@ impl DlssController {
 
     /// Set DLSS environment variables
     fn set_dlss_env_vars(&self, settings: &DlssSettings) -> NvResult<()> {
-        use std::env;
+        // DLSS enablement
+        crate::safe_env::set_var(
+            "NVIDIA_DLSS_ENABLE",
+            if settings.enabled { "1" } else { "0" },
+        );
 
-        unsafe {
-            // DLSS enablement
-            env::set_var(
-                "NVIDIA_DLSS_ENABLE",
-                if settings.enabled { "1" } else { "0" },
-            );
+        // Quality preset
+        crate::safe_env::set_var(
+            "NVIDIA_DLSS_PRESET",
+            match settings.quality_preset {
+                DlssQuality::UltraPerformance => "0",
+                DlssQuality::Performance => "1",
+                DlssQuality::Balanced => "2",
+                DlssQuality::Quality => "3",
+                DlssQuality::UltraQuality => "4",
+                DlssQuality::DLAA => "5",
+                DlssQuality::Auto => "auto",
+            },
+        );
 
-            // Quality preset
-            env::set_var(
-                "NVIDIA_DLSS_PRESET",
-                match settings.quality_preset {
-                    DlssQuality::UltraPerformance => "0",
-                    DlssQuality::Performance => "1",
-                    DlssQuality::Balanced => "2",
-                    DlssQuality::Quality => "3",
-                    DlssQuality::UltraQuality => "4",
-                    DlssQuality::DLAA => "5",
-                    DlssQuality::Auto => "auto",
+        // Frame Generation
+        if self.capabilities.supports_frame_generation {
+            crate::safe_env::set_var(
+                "NVIDIA_DLSS3_FG_ENABLE",
+                if settings.frame_generation.enabled {
+                    "1"
+                } else {
+                    "0"
                 },
             );
 
-            // Frame Generation
-            if self.capabilities.supports_frame_generation {
-                env::set_var(
-                    "NVIDIA_DLSS3_FG_ENABLE",
-                    if settings.frame_generation.enabled {
-                        "1"
-                    } else {
-                        "0"
-                    },
-                );
-
-                env::set_var(
-                    "NVIDIA_DLSS3_FG_MODE",
-                    match settings.frame_generation.mode {
-                        FrameGenerationMode::Off => "0",
-                        FrameGenerationMode::Standard => "1",
-                        FrameGenerationMode::Boost => "2",
-                        FrameGenerationMode::MultiFrameGen => "3",
-                    },
-                );
-            }
-
-            // NVIDIA Reflex
-            env::set_var(
-                "NVIDIA_REFLEX_MODE",
-                match settings.reflex_mode {
-                    ReflexMode::Off => "0",
-                    ReflexMode::On => "1",
-                    ReflexMode::OnPlusBoost => "2",
+            crate::safe_env::set_var(
+                "NVIDIA_DLSS3_FG_MODE",
+                match settings.frame_generation.mode {
+                    FrameGenerationMode::Off => "0",
+                    FrameGenerationMode::Standard => "1",
+                    FrameGenerationMode::Boost => "2",
+                    FrameGenerationMode::MultiFrameGen => "3",
                 },
-            );
-
-            // Sharpening
-            env::set_var(
-                "NVIDIA_DLSS_SHARPNESS",
-                (settings.sharpening * 100.0).round().to_string(),
             );
         }
+
+        // NVIDIA Reflex
+        crate::safe_env::set_var(
+            "NVIDIA_REFLEX_MODE",
+            match settings.reflex_mode {
+                ReflexMode::Off => "0",
+                ReflexMode::On => "1",
+                ReflexMode::OnPlusBoost => "2",
+            },
+        );
+
+        // Sharpening
+        crate::safe_env::set_var(
+            "NVIDIA_DLSS_SHARPNESS",
+            (settings.sharpening * 100.0).round().to_string(),
+        );
 
         Ok(())
     }

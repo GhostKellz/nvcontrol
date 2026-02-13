@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.5] - 2026-02-12
+
+### Added
+- **Safe Environment Module** (`safe_env.rs`): Centralized unsafe env var operations with safety docs
+- **ASUS Power Monitor+ Expansion**: Enhanced power monitoring for ROG Astral/Matrix cards
+  - Power history tracking with trend analysis (Rising/Stable/Falling)
+  - Statistics: Average, Peak, Min power with sample counts
+  - Warning count tracking for power rail issues
+  - GUI: Two-column layout with rails and statistics in GPU tab
+  - TUI: Full Power Monitor+ section in Power tab with live updates
+- **GPU Tab Sparklines**: Mini graphs for temperature, power, and utilization in Live Statistics
+
+### Changed
+- **GUI Overclock Tab Removed**: Overclocking requires X11; GUI is Wayland-native
+  - CLI overclock commands (`nvctl overclock`) remain fully functional
+  - TUI overclock tab retained with X11 requirement notice
+- Keyboard shortcuts renumbered: 1=GPU, 2=Fan, 3=Display, 4=Vibrance, 5=HDR, 6=Profiles, 7=OSD, 8=Settings
+- Sidebar now shows 14 tabs (down from 15)
+
+### Removed
+- `OcPreset` enum and overclock state fields from GUI
+- `apply_oc_preset()`, `apply_overclock()`, `reset_overclock()` methods from GuiState
+- `VoltageCurve` widget import (unused after OC removal)
+- `src/gui/tabs/overclock.rs` file deleted
+
+### Fixed
+- Dead code cleanup: Removed unused overclock-related imports and state
+
+### Security
+- Reduced unsafe blocks from 31 to 15 (env vars now use `safe_env` module)
+- Remaining unsafe is legitimate kernel interface code (NVKMS ioctl)
+- Added `docs/SAFETY_IMPROVEMENTS_ROADMAP.md` for future safety improvements
+
 ## [0.8.4] - 2026-01-26
 
 ### Added

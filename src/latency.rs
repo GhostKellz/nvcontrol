@@ -194,12 +194,10 @@ fn enable_gpu_scheduling() -> NvResult<bool> {
     }
 
     // Method 3: Set environment variables for applications
-    unsafe {
-        std::env::set_var("__GL_THREADED_OPTIMIZATIONS", "1");
-    }
-    unsafe {
-        std::env::set_var("__GL_SYNC_TO_VBLANK", "0");
-    }
+    crate::safe_env::set_vars([
+        ("__GL_THREADED_OPTIMIZATIONS", "1"),
+        ("__GL_SYNC_TO_VBLANK", "0"),
+    ]);
 
     Ok(false) // Partial success - env vars set but no hardware changes
 }
@@ -493,10 +491,10 @@ fn enable_nvidia_reflex() -> NvResult<bool> {
 
 fn apply_nvidia_latency_optimizations() -> NvResult<bool> {
     // Apply NVIDIA-specific optimizations
-    unsafe {
-        std::env::set_var("__GL_SYNC_TO_VBLANK", "0");
-        std::env::set_var("__GL_ALLOW_UNOFFICIAL_PROTOCOL", "1");
-    }
+    crate::safe_env::set_vars([
+        ("__GL_SYNC_TO_VBLANK", "0"),
+        ("__GL_ALLOW_UNOFFICIAL_PROTOCOL", "1"),
+    ]);
     Ok(true)
 }
 

@@ -647,9 +647,7 @@ pub fn apply_gamescope_config(config: &GamescopeConfig) -> NvResult<()> {
     // Also apply environment variables immediately if requested
     if config.nvidia_optimizations {
         for (key, value) in &config.environment_variables {
-            unsafe {
-                std::env::set_var(key, value);
-            }
+            crate::safe_env::set_var(key, value);
         }
     }
 

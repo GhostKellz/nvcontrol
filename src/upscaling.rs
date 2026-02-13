@@ -299,27 +299,18 @@ fn modify_dlss_config(content: &str, settings: &UpscalingSettings) -> String {
 fn apply_dlss_via_env_vars(_game_path: &str, settings: &UpscalingSettings) -> NvResult<()> {
     // Set environment variables that some games respect
     if settings.enabled {
-        unsafe {
-            std::env::set_var("NVIDIA_DLSS_ENABLE", "1");
-        }
-        unsafe {
-            std::env::set_var(
-                "NVIDIA_DLSS_QUALITY",
-                match settings.quality {
-                    UpscalingQuality::Performance => "0",
-                    UpscalingQuality::Balanced => "1",
-                    UpscalingQuality::Quality => "2",
-                    UpscalingQuality::UltraQuality => "3",
-                },
-            );
-        }
+        let quality = match settings.quality {
+            UpscalingQuality::Performance => "0",
+            UpscalingQuality::Balanced => "1",
+            UpscalingQuality::Quality => "2",
+            UpscalingQuality::UltraQuality => "3",
+        };
+        crate::safe_env::set_vars([
+            ("NVIDIA_DLSS_ENABLE", "1"),
+            ("NVIDIA_DLSS_QUALITY", quality),
+        ]);
     } else {
-        unsafe {
-            std::env::remove_var("NVIDIA_DLSS_ENABLE");
-        }
-        unsafe {
-            std::env::remove_var("NVIDIA_DLSS_QUALITY");
-        }
+        crate::safe_env::remove_vars(["NVIDIA_DLSS_ENABLE", "NVIDIA_DLSS_QUALITY"]);
     }
 
     Ok(())
@@ -337,25 +328,13 @@ fn apply_fsr(game_path: &str, settings: &UpscalingSettings) -> NvResult<()> {
             UpscalingQuality::UltraQuality => "1",
         };
 
-        unsafe {
-            std::env::set_var("WINE_FSR_ENABLE", "1");
-        }
-        unsafe {
-            std::env::set_var("RADV_FSR", "1");
-        }
-        unsafe {
-            std::env::set_var("FSR_UPSCALING_RATIO", fsr_quality);
-        }
+        crate::safe_env::set_vars([
+            ("WINE_FSR_ENABLE", "1"),
+            ("RADV_FSR", "1"),
+            ("FSR_UPSCALING_RATIO", fsr_quality),
+        ]);
     } else {
-        unsafe {
-            std::env::remove_var("WINE_FSR_ENABLE");
-        }
-        unsafe {
-            std::env::remove_var("RADV_FSR");
-        }
-        unsafe {
-            std::env::remove_var("FSR_UPSCALING_RATIO");
-        }
+        crate::safe_env::remove_vars(["WINE_FSR_ENABLE", "RADV_FSR", "FSR_UPSCALING_RATIO"]);
     }
 
     // Method 2: Game-specific configuration
@@ -437,14 +416,10 @@ fn modify_fsr_config(content: &str, settings: &UpscalingSettings) -> String {
 fn apply_xess(_game_path: &str, settings: &UpscalingSettings) -> NvResult<()> {
     // Intel XeSS configuration
     if settings.enabled {
-        unsafe {
-            std::env::set_var("INTEL_XESS_ENABLE", "1");
-        }
+        crate::safe_env::set_var("INTEL_XESS_ENABLE", "1");
         println!("Intel XeSS enabled (Quality: {:?})", settings.quality);
     } else {
-        unsafe {
-            std::env::remove_var("INTEL_XESS_ENABLE");
-        }
+        crate::safe_env::remove_var("INTEL_XESS_ENABLE");
         println!("Intel XeSS disabled");
     }
 
@@ -453,20 +428,14 @@ fn apply_xess(_game_path: &str, settings: &UpscalingSettings) -> NvResult<()> {
 
 fn disable_upscaling(_game_path: &str) -> NvResult<()> {
     // Remove all upscaling environment variables
-    let env_vars = [
+    crate::safe_env::remove_vars([
         "NVIDIA_DLSS_ENABLE",
         "NVIDIA_DLSS_QUALITY",
         "WINE_FSR_ENABLE",
         "RADV_FSR",
         "FSR_UPSCALING_RATIO",
         "INTEL_XESS_ENABLE",
-    ];
-
-    for var in env_vars {
-        unsafe {
-            std::env::remove_var(var);
-        }
-    }
+    ]);
 
     println!("All upscaling technologies disabled");
     Ok(())
