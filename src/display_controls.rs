@@ -96,44 +96,32 @@ impl DisplayControls {
     }
 
     // ===== Image Sharpening =====
+    // NOTE: ImageSharpening was removed from NVKMS in driver 595+
+    // These functions now return "not available" for compatibility
 
     pub fn get_image_sharpening_info(&self) -> NvResult<ImageSharpeningInfo> {
-        // Check if image sharpening is available
-        let available =
-            self.get_display_attribute_i64(NvKmsDpyAttribute::ImageSharpeningAvailable)?;
-
-        let default_value = if available != 0 {
-            self.get_display_attribute_i64(NvKmsDpyAttribute::ImageSharpeningDefault)?
-        } else {
-            0
-        };
-
-        let current_value = if available != 0 {
-            self.get_display_attribute_i64(NvKmsDpyAttribute::ImageSharpening)?
-        } else {
-            0
-        };
-
-        // Get valid range
-        let range = self
-            .get_attribute_range(NvKmsDpyAttribute::ImageSharpening)
-            .unwrap_or((0, 100));
-
+        // ImageSharpening attributes were removed in driver 595
+        // Return not available for compatibility
         Ok(ImageSharpeningInfo {
-            available: available != 0,
-            default_value,
-            current_value,
-            range,
+            available: false,
+            default_value: 0,
+            current_value: 0,
+            range: (0, 0),
         })
     }
 
-    pub fn set_image_sharpening(&self, value: i64) -> NvResult<()> {
-        self.set_display_attribute_i64(NvKmsDpyAttribute::ImageSharpening, value)
+    pub fn set_image_sharpening(&self, _value: i64) -> NvResult<()> {
+        // ImageSharpening was removed in driver 595
+        Err(NvControlError::VibranceControlFailed(
+            "Image sharpening is not available on driver 595+".to_string(),
+        ))
     }
 
     pub fn reset_image_sharpening(&self) -> NvResult<()> {
-        let info = self.get_image_sharpening_info()?;
-        self.set_image_sharpening(info.default_value)
+        // ImageSharpening was removed in driver 595
+        Err(NvControlError::VibranceControlFailed(
+            "Image sharpening is not available on driver 595+".to_string(),
+        ))
     }
 
     // ===== Color Range =====
@@ -300,6 +288,7 @@ impl DisplayControls {
         Ok(())
     }
 
+    #[allow(dead_code)] // May be useful for future display attributes
     fn get_attribute_range(&self, attribute: NvKmsDpyAttribute) -> NvResult<(i64, i64)> {
         let mut params = NvKmsGetDpyAttributeValidValuesParams {
             request: NvKmsGetDpyAttributeValidValuesRequest {

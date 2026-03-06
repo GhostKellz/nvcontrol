@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.6] - 2026-03-06
+
+### Added
+- **NVIDIA Driver 595 Compatibility**: Full support for driver 595.45.04 (open-source kernel modules)
+  - Updated NVKMS struct sizes to match driver ABI changes
+  - Digital vibrance working on driver 595+
+  - Documentation: `595_DRIVER_VIBRANCE.md` details all struct/enum changes
+
+### Changed
+- **Dependencies Updated**: 79 crates updated to latest compatible versions
+  - clap 4.5.60, tokio 1.50.0, chrono 0.4.44, libc 0.2.182, bitflags 2.11.0
+  - All futures-* crates to 0.3.32, wayland-* crates updated
+  - zbus 5.14.0, zerocopy 0.8.40, and many others
+- **NvKmsAllocDeviceRequest**: Removed deprecated `sli_mosaic` and `try_infer_sli_mosaic_from_existing_device` fields (driver 595+)
+- **NvKmsDpyAttribute Enum**: Removed `ImageSharpening`, `ImageSharpeningAvailable`, `ImageSharpeningDefault` (no longer supported)
+- **NvKmsAllocDeviceStatus Enum**: `BadDeviceId` → `BadRequest`, `AlreadyAllocated` → `FatalError`, added `NoHardwareAvailable`, `CoreChannelAllocFailed`
+
+### Fixed
+- **EPERM on vibrance ioctl**: Corrected struct sizes causing driver param validation failures
+  - `NvKmsAllocDeviceReply`: 888 bytes (was 1248)
+  - `NvKmsAllocDeviceParams`: 1512 bytes (was 1868)
+  - `NvKmsQueryDpyDynamicDataReply`: 35096 bytes (was 35088)
+  - Added `align(8)` to `NvKmsAllocDeviceReply` for proper NvU64 field alignment
+
+### Deprecated
+- **Image Sharpening**: `get_image_sharpening_info()` now returns `available: false`, `set_image_sharpening()` returns error (removed from NVKMS in driver 595)
+
 ## [0.8.5] - 2026-02-12
 
 ### Added
@@ -326,6 +353,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 0.8.6 | 2026-03-06 | NVIDIA driver 595 compatibility, dependency updates |
+| 0.8.5 | 2026-02-12 | Safe env module, GUI overclock removal, ASUS power expansion |
+| 0.8.4 | 2026-01-26 | GPU selection persistence, game scanners, EDID HDR, NVLink |
+| 0.8.3 | 2026-01-13 | Legacy GPU detection, explicit sync, HDR control, DLSS 4.5 |
+| 0.8.2 | 2026-01-12 | DLSS DLL management for Proton gaming |
+| 0.8.1 | 2026-01-11 | GSP firmware management, DKMS automation |
 | 0.7.6 | 2025-12-04 | Backend abstraction, TUI session persistence, testability |
 | 0.7.5 | 2025-12-03 | Clippy cleanup, code quality polish |
 | 0.7.4 | 2025-12-02 | Multi-runner CI/CD, CLI + GUI builds |

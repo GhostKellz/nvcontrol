@@ -85,7 +85,8 @@ pub enum NvKmsIoctlCommand {
     GetDispAttributeValidValues = 27,
 }
 
-// ===== Display Attributes from nvkms-api.h =====
+// ===== Display Attributes from nvkms-api.h (595.45+) =====
+// Note: ImageSharpening attributes were removed in driver 595
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum NvKmsDpyAttribute {
@@ -100,16 +101,18 @@ pub enum NvKmsDpyAttribute {
     CurrentDitheringMode = 8,
     CurrentDitheringDepth = 9,
     DigitalVibrance = 10,
-    ImageSharpening = 11,
-    ImageSharpeningAvailable = 12,
-    ImageSharpeningDefault = 13,
-    RequestedColorSpace = 14,
-    CurrentColorSpace = 15,
-    RequestedColorRange = 16,
-    CurrentColorRange = 17,
-    CurrentColorBpc = 18,
-    DigitalSignal = 19,
-    DigitalLinkType = 20,
+    // ImageSharpening attributes removed in 595
+    RequestedColorSpace = 11,
+    CurrentColorSpace = 12,
+    RequestedColorRange = 13,
+    CurrentColorRange = 14,
+    CurrentColorBpc = 15,
+    DigitalSignal = 16,
+    DigitalLinkType = 17,
+    DisplayportLinkRate = 18,
+    DisplayportLinkRate10Mhz = 19,
+    DisplayportForceEnableFec = 20,
+    FramelockDisplayConfig = 21,
 }
 
 // ===== Attribute Type =====
@@ -336,10 +339,10 @@ pub struct NvKmsQueryConnectorStaticDataParams {
 }
 
 // ===== Query Dpy Dynamic Data =====
-// Exact sizes from driver 580.105.08:
+// Sizes verified from driver 595.45.04 headers:
 // - Request: 2072 bytes (has EDID buffer and many flags)
-// - Reply: 35088 bytes (connected at offset 132)
-// - Total Params: 37160 bytes
+// - Reply: 35096 bytes (connected at offset 132)
+// - Total Params: 37168 bytes
 
 #[repr(C)]
 #[derive(Copy, Clone, Zeroable, Pod)]
@@ -359,8 +362,8 @@ pub struct NvKmsQueryDpyDynamicDataReply {
     // Fields before 'connected' (offset 132)
     pub _pre_connected: [u8; 132],
     pub connected: NvBool,
-    // Rest of the struct
-    pub _post_connected: [u8; 35088 - 132 - 1],
+    // Rest of the struct (35096 - 132 - 1 = 34963 bytes)
+    pub _post_connected: [u8; 35096 - 132 - 1],
 }
 
 #[repr(C)]
@@ -396,30 +399,34 @@ pub struct RegistryKey {
     pub value: NvU32,
 }
 
+// AllocDeviceRequest: 620 bytes (driver 595.45+)
+// Note: sli_mosaic fields were removed in driver 595
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct NvKmsAllocDeviceRequest {
     pub version_string: [u8; NVKMS_NVIDIA_DRIVER_VERSION_STRING_LENGTH],
     pub device_id: NvKmsDeviceId,
-    pub sli_mosaic: NvBool,
-    pub try_infer_sli_mosaic_from_existing_device: NvBool,
     pub no3d: NvBool,
     pub enable_console_hotplug_handling: NvBool,
+    pub _padding: [u8; 2], // Alignment padding
     pub registry_keys: [RegistryKey; NVKMS_MAX_DEVICE_REGISTRY_KEYS],
 }
 
+// AllocDeviceStatus enum values changed in driver 595
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum NvKmsAllocDeviceStatus {
     Success = 0,
     VersionMismatch = 1,
-    BadDeviceId = 2,
-    AlreadyAllocated = 3,
-    Unspecified = 4,
+    BadRequest = 2,
+    FatalError = 3,
+    NoHardwareAvailable = 4,
+    CoreChannelAllocFailed = 5,
 }
 
-// AllocDeviceReply: 888 bytes total, 8-byte alignment (due to NvKmsLayerCapabilities)
+// AllocDeviceReply: 888 bytes total (verified from driver 595.45.04 headers)
 // Key fields: status (offset 0), deviceHandle (offset 4), numDisps (offset 16), dispHandles (offset 20)
+// NOTE: align(8) required because Reply contains NvU64 fields (vtFbBaseAddress, vtFbSize)
 #[repr(C, align(8))]
 #[derive(Copy, Clone)]
 pub struct NvKmsAllocDeviceReply {
@@ -430,7 +437,7 @@ pub struct NvKmsAllocDeviceReply {
     pub num_disps: NvU32,                 // offset 16
     pub disp_handles: [NvKmsDispHandle; NVKMS_MAX_SUBDEVICES], // offset 20
     // Remaining fields (caps, layer info, etc.)
-    pub _padding: [u8; 888 - 20 - (NVKMS_MAX_SUBDEVICES * 4)], // 888 - 20 - 32 = 836
+    pub _padding: [u8; 888 - 20 - (NVKMS_MAX_SUBDEVICES * 4)], // 888 - 52 = 836
 }
 
 #[repr(C)]

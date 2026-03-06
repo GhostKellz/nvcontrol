@@ -143,7 +143,7 @@ impl NativeVibranceController {
             .and_then(|s| s.parse().ok())
             .unwrap_or(0);
 
-        // Allocate NVKMS device
+        // Allocate NVKMS device (driver 595.45+ struct layout)
         let mut alloc_params = NvKmsAllocDeviceParams {
             request: NvKmsAllocDeviceRequest {
                 version_string,
@@ -151,10 +151,9 @@ impl NativeVibranceController {
                     rm_device_id: gpu_index,
                     mig_device: MIGDeviceId { value: 0 },
                 },
-                sli_mosaic: 0,                                // NV_FALSE
-                try_infer_sli_mosaic_from_existing_device: 0, // NV_FALSE
-                no3d: 1,                                      // NV_TRUE (like nvibrant)
-                enable_console_hotplug_handling: 0,           // NV_FALSE
+                no3d: 1,                            // NV_TRUE (like nvibrant)
+                enable_console_hotplug_handling: 0, // NV_FALSE
+                _padding: [0; 2],
                 registry_keys,
             },
             reply: Zeroable::zeroed(),
@@ -173,8 +172,10 @@ impl NativeVibranceController {
                 NvKmsAllocDeviceStatus::VersionMismatch => {
                     "Driver version mismatch - try rebooting"
                 }
-                NvKmsAllocDeviceStatus::BadDeviceId => "Bad device ID",
-                NvKmsAllocDeviceStatus::AlreadyAllocated => "Device already allocated",
+                NvKmsAllocDeviceStatus::BadRequest => "Bad request",
+                NvKmsAllocDeviceStatus::FatalError => "Fatal error",
+                NvKmsAllocDeviceStatus::NoHardwareAvailable => "No hardware available",
+                NvKmsAllocDeviceStatus::CoreChannelAllocFailed => "Core channel alloc failed",
                 _ => "Unknown error",
             };
             return Err(NvControlError::VibranceControlFailed(format!(
