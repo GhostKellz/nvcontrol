@@ -5,13 +5,13 @@
 
   **Modern NVIDIA Settings Manager for Linux + Wayland**
 
-  [![Rust](https://img.shields.io/badge/Rust-1.91+-orange.svg)](https://www.rust-lang.org)
-  [![NVIDIA](https://img.shields.io/badge/NVIDIA-Driver%20595+-green.svg)](https://github.com/NVIDIA/open-gpu-kernel-modules)
-  [![Wayland](https://img.shields.io/badge/Wayland-Native-brightgreen.svg)](https://wayland.freedesktop.org/)
-  [![TUI](https://img.shields.io/badge/TUI-ratatui-orange.svg)](https://github.com/ratatui/ratatui)
-  [![GUI](https://img.shields.io/badge/GUI-egui-blue.svg)](https://github.com/emilk/egui)
-  [![ASUS](https://img.shields.io/badge/ASUS-Power%20Detector+-red.svg)](docs/POWER_DETECTION.md)
-  [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+  [![Rust](https://img.shields.io/badge/Rust-1.91+-orange.svg?style=for-the-badge)](https://www.rust-lang.org)
+  [![NVIDIA](https://img.shields.io/badge/NVIDIA-Driver%20595+-green.svg?style=for-the-badge)](https://github.com/NVIDIA/open-gpu-kernel-modules)
+  [![Wayland](https://img.shields.io/badge/Wayland-Native-brightgreen.svg?style=for-the-badge)](https://wayland.freedesktop.org/)
+  [![TUI](https://img.shields.io/badge/TUI-ratatui-orange.svg?style=for-the-badge)](https://github.com/ratatui/ratatui)
+  [![GUI](https://img.shields.io/badge/GUI-egui-blue.svg?style=for-the-badge)](https://github.com/emilk/egui)
+  [![ASUS](https://img.shields.io/badge/ASUS-Power%20Detector+-red.svg?style=for-the-badge)](docs/POWER_DETECTION.md)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 
   *The missing NVIDIA Control Panel for Linux*
 </div>
