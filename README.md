@@ -5,12 +5,13 @@
 
   **Modern NVIDIA Settings Manager for Linux + Wayland**
 
-  [![Rust](https://img.shields.io/badge/rust-1.91+-orange.svg)](https://www.rust-lang.org)
-  [![NVIDIA](https://img.shields.io/badge/NVIDIA-Open%20Drivers%20590+-76B900.svg)](https://github.com/NVIDIA/open-gpu-kernel-modules)
+  [![Rust](https://img.shields.io/badge/Rust-1.91+-orange.svg)](https://www.rust-lang.org)
+  [![NVIDIA](https://img.shields.io/badge/NVIDIA-Driver%20595+-green.svg)](https://github.com/NVIDIA/open-gpu-kernel-modules)
   [![Wayland](https://img.shields.io/badge/Wayland-Native-brightgreen.svg)](https://wayland.freedesktop.org/)
-  [![ratatui](https://img.shields.io/badge/ratatui-TUI-FFA500.svg)](https://github.com/ratatui/ratatui)
-  [![egui](https://img.shields.io/badge/egui-GUI-6495ED.svg)](https://github.com/emilk/egui)
-  [![Astral Power Monitor+](https://img.shields.io/badge/Astral%20Power%20Monitor+-RTX%205090-FF0000.svg)](docs/POWER_DETECTION.md)
+  [![TUI](https://img.shields.io/badge/TUI-ratatui-orange.svg)](https://github.com/ratatui/ratatui)
+  [![GUI](https://img.shields.io/badge/GUI-egui-blue.svg)](https://github.com/emilk/egui)
+  [![ASUS](https://img.shields.io/badge/ASUS-Power%20Detector+-red.svg)](docs/POWER_DETECTION.md)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
   *The missing NVIDIA Control Panel for Linux*
 </div>
