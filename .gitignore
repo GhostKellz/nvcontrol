@@ -6,7 +6,6 @@ target/
 
 # makepkg build artifacts
 nvcontrol/
-src/
 pkg/
 *.pkg.tar.*
 
