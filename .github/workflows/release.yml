@@ -20,28 +20,26 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Bootstrap Rust PATH
-        run: echo "/home/ckelley/.cargo/bin" >> "$GITHUB_PATH"
-
       - name: Verify Environment
         run: |
           set -euo pipefail
+          export PATH="/home/ckelley/.cargo/bin:$PATH"
           echo "=== CLI Release Build ==="
           echo "Tag: ${{ github.ref_name }}"
           rustc --version
           cargo --version
           nvidia-smi --query-gpu=name --format=csv,noheader
 
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: nvcontrol-cli
-
       - name: Build Release (CLI only)
-        run: cargo build --bin nvctl --release --no-default-features
+        run: |
+          set -euo pipefail
+          export PATH="/home/ckelley/.cargo/bin:$PATH"
+          cargo build --bin nvctl --release --no-default-features
 
       - name: Run Tests
         run: |
+          set -euo pipefail
+          export PATH="/home/ckelley/.cargo/bin:$PATH"
           cargo test --lib --no-default-features
           NVCTL=$(find target -path "*/release/nvctl" -type f -executable | head -1)
           $NVCTL --version
@@ -81,28 +79,27 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Bootstrap Rust PATH
-        run: echo "/home/ckelley/.cargo/bin" >> "$GITHUB_PATH"
-
       - name: Verify Environment
         run: |
           set -euo pipefail
+          export PATH="/home/ckelley/.cargo/bin:$PATH"
           echo "=== GUI Release Build ==="
           echo "Tag: ${{ github.ref_name }}"
           rustc --version
           cargo --version
           nvidia-smi --query-gpu=name --format=csv,noheader || echo "No GPU (headless build)"
 
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: nvcontrol-gui
-
       - name: Build Release (Full GUI)
-        run: cargo build --release --features gui --no-default-features
+        run: |
+          set -euo pipefail
+          export PATH="/home/ckelley/.cargo/bin:$PATH"
+          cargo build --release --features gui --no-default-features
 
       - name: Run Tests
-        run: cargo test --lib --no-default-features
+        run: |
+          set -euo pipefail
+          export PATH="/home/ckelley/.cargo/bin:$PATH"
+          cargo test --lib --no-default-features
 
       - name: Create GUI Archive
         run: |

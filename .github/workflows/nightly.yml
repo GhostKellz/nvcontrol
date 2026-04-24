@@ -16,32 +16,31 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Bootstrap Rust PATH
-        run: echo "/home/ckelley/.cargo/bin" >> "$GITHUB_PATH"
-
       - name: Verify Environment
         run: |
           set -euo pipefail
+          export PATH="/home/ckelley/.cargo/bin:$PATH"
           echo "=== Nightly Build $(date -u +%Y-%m-%d) ==="
           rustc --version
           cargo --version
           nvidia-smi --query-gpu=name,driver_version --format=csv,noheader
 
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: nvcontrol-nightly
-
       - name: Full build
         run: |
+          set -euo pipefail
+          export PATH="/home/ckelley/.cargo/bin:$PATH"
           cargo build --release --no-default-features
 
       - name: Full test sweep
         run: |
+          set -euo pipefail
+          export PATH="/home/ckelley/.cargo/bin:$PATH"
           cargo test --lib --no-default-features
 
       - name: Clippy strict
         run: |
+          set -euo pipefail
+          export PATH="/home/ckelley/.cargo/bin:$PATH"
           cargo clippy --bin nvctl --lib --no-default-features -- \
             -W clippy::all \
             -W clippy::pedantic \
@@ -55,6 +54,8 @@ jobs:
 
       - name: Format check
         run: |
+          set -euo pipefail
+          export PATH="/home/ckelley/.cargo/bin:$PATH"
           cargo fmt --check
 
       - name: GPU stress test
@@ -93,6 +94,8 @@ jobs:
 
       - name: Nightly Summary
         run: |
+          set -euo pipefail
+          export PATH="/home/ckelley/.cargo/bin:$PATH"
           echo "### Nightly Build $(date -u +%Y-%m-%d) ✅" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY

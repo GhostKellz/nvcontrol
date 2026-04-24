@@ -17,12 +17,10 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Bootstrap Rust PATH
-        run: echo "/home/ckelley/.cargo/bin" >> "$GITHUB_PATH"
-
       - name: Verify Environment
         run: |
           set -euo pipefail
+          export PATH="/home/ckelley/.cargo/bin:$PATH"
           echo "=== Rust Toolchain ==="
           rustc --version
           cargo --version
@@ -30,24 +28,30 @@ jobs:
           echo "=== NVIDIA GPU ==="
           nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader
 
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: nvcontrol-ci
-
       - name: Build CLI
-        run: cargo build --bin nvctl --release --no-default-features
+        run: |
+          set -euo pipefail
+          export PATH="/home/ckelley/.cargo/bin:$PATH"
+          cargo build --bin nvctl --release --no-default-features
 
       - name: Clippy (zero warnings policy)
         run: |
+          set -euo pipefail
+          export PATH="/home/ckelley/.cargo/bin:$PATH"
           cargo clippy --bin nvctl --lib --no-default-features -- \
             -D warnings
 
       - name: Format Check
-        run: cargo fmt --check || echo "::warning::Format issues found"
+        run: |
+          set -euo pipefail
+          export PATH="/home/ckelley/.cargo/bin:$PATH"
+          cargo fmt --check || echo "::warning::Format issues found"
 
       - name: Unit Tests
-        run: cargo test --lib --no-default-features
+        run: |
+          set -euo pipefail
+          export PATH="/home/ckelley/.cargo/bin:$PATH"
+          cargo test --lib --no-default-features
 
       - name: GPU Smoke Test
         run: |
@@ -108,6 +112,8 @@ jobs:
 
       - name: Build Summary
         run: |
+          set -euo pipefail
+          export PATH="/home/ckelley/.cargo/bin:$PATH"
           echo "### Build Complete ✅" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
