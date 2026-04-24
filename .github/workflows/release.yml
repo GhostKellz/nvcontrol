@@ -20,6 +20,9 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Bootstrap Rust PATH
+        run: echo "/home/ckelley/.cargo/bin" >> "$GITHUB_PATH"
+
       - name: Verify Environment
         run: |
           set -euo pipefail
@@ -77,6 +80,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Bootstrap Rust PATH
+        run: echo "/home/ckelley/.cargo/bin" >> "$GITHUB_PATH"
 
       - name: Verify Environment
         run: |
