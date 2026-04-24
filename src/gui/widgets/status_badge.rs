@@ -66,10 +66,10 @@ impl<'a> StatusBadge<'a> {
             ),
         };
 
-        let frame = egui::Frame::none()
+        let frame = egui::Frame::new()
             .fill(bg_color)
-            .rounding(4.0)
-            .inner_margin(egui::Margin::symmetric(6.0, 2.0));
+            .corner_radius(4.0)
+            .inner_margin(egui::Margin::symmetric(6, 2));
 
         frame
             .show(ui, |ui| {

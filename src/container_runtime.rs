@@ -72,6 +72,20 @@ pub struct ContainerLaunchConfig {
     pub remove_on_exit: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuntimeCheck {
+    pub name: String,
+    pub ok: bool,
+    pub details: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuntimeDoctorReport {
+    pub severity: String,
+    pub checks: Vec<RuntimeCheck>,
+    pub smoke_test_command: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct VolumeMount {
     pub source: String,
@@ -891,6 +905,193 @@ compute-mode = "default"
         }
 
         Ok(())
+    }
+
+    pub fn runtime_doctor(&self, runtime_name: Option<&str>) -> NvResult<RuntimeDoctorReport> {
+        let mut checks = Vec::new();
+        let runtime_filter = runtime_name.map(|value| value.to_lowercase());
+
+        checks.push(Self::command_check(
+            "nvidia-smi",
+            "nvidia-smi",
+            &["--query-gpu=name", "--format=csv,noheader"],
+        ));
+        checks.push(Self::command_check(
+            "nvidia-container-toolkit",
+            "nvidia-container-toolkit",
+            &["--version"],
+        ));
+        checks.push(Self::command_check(
+            "nvidia-ctk",
+            "nvidia-ctk",
+            &["--version"],
+        ));
+        checks.push(RuntimeCheck {
+            name: "/dev/nvidiactl".to_string(),
+            ok: Path::new("/dev/nvidiactl").exists(),
+            details: if Path::new("/dev/nvidiactl").exists() {
+                "device node present".to_string()
+            } else {
+                "missing /dev/nvidiactl".to_string()
+            },
+        });
+
+        for runtime in [
+            ("docker", "docker", vec!["--version"]),
+            ("podman", "podman", vec!["--version"]),
+            ("containerd", "containerd", vec!["--version"]),
+        ] {
+            if runtime_filter
+                .as_deref()
+                .is_some_and(|filter| filter != runtime.0)
+            {
+                continue;
+            }
+
+            checks.push(Self::command_check(runtime.0, runtime.1, &runtime.2));
+        }
+
+        let cdi_path = Path::new("/etc/cdi/nvidia.yaml");
+        checks.push(RuntimeCheck {
+            name: "cdi spec".to_string(),
+            ok: cdi_path.exists(),
+            details: if cdi_path.exists() {
+                format!("present at {}", cdi_path.display())
+            } else {
+                "missing /etc/cdi/nvidia.yaml".to_string()
+            },
+        });
+
+        let severity = if checks
+            .iter()
+            .any(|check| !check.ok && check.name == "nvidia-smi")
+        {
+            "broken"
+        } else if checks.iter().any(|check| !check.ok) {
+            "warning"
+        } else {
+            "healthy"
+        }
+        .to_string();
+
+        Ok(RuntimeDoctorReport {
+            severity,
+            checks,
+            smoke_test_command: Some(
+                self.smoke_test_command(runtime_filter.as_deref().unwrap_or("docker")),
+            ),
+        })
+    }
+
+    pub fn print_runtime_doctor(&self, runtime_name: Option<&str>) -> NvResult<()> {
+        let report = self.runtime_doctor(runtime_name)?;
+        println!("NVIDIA Container Runtime Doctor");
+        println!("{}", "═".repeat(50));
+        println!();
+        println!("Severity: {}", report.severity);
+        println!();
+        for check in report.checks {
+            println!(
+                "  {} {}: {}",
+                if check.ok { "✓" } else { "✗" },
+                check.name,
+                check.details
+            );
+        }
+        if let Some(command) = report.smoke_test_command {
+            println!();
+            println!("Smoke Test:");
+            println!("  {}", command);
+        }
+        Ok(())
+    }
+
+    pub fn smoke_test_command(&self, runtime_name: &str) -> String {
+        match runtime_name {
+            "podman" => {
+                "podman run --rm --device nvidia.com/gpu=all ubuntu nvidia-smi".to_string()
+            }
+            "containerd" => "ctr run --rm --gpus 0 docker.io/nvidia/cuda:12.4.1-base-ubuntu22.04 nvcontrol-smoke nvidia-smi".to_string(),
+            _ => "docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi".to_string(),
+        }
+    }
+
+    pub fn run_smoke_test(&self, runtime_name: &str) -> NvResult<()> {
+        let (binary, args): (&str, Vec<&str>) = match runtime_name {
+            "podman" => (
+                "podman",
+                vec![
+                    "run",
+                    "--rm",
+                    "--device",
+                    "nvidia.com/gpu=all",
+                    "ubuntu",
+                    "nvidia-smi",
+                ],
+            ),
+            "containerd" => (
+                "ctr",
+                vec![
+                    "run",
+                    "--rm",
+                    "docker.io/nvidia/cuda:12.4.1-base-ubuntu22.04",
+                    "nvcontrol-smoke",
+                    "nvidia-smi",
+                ],
+            ),
+            _ => (
+                "docker",
+                vec![
+                    "run",
+                    "--rm",
+                    "--gpus",
+                    "all",
+                    "nvidia/cuda:12.4.1-base-ubuntu22.04",
+                    "nvidia-smi",
+                ],
+            ),
+        };
+
+        let output = Command::new(binary).args(&args).output().map_err(|e| {
+            NvControlError::CommandFailed(format!("{} smoke test failed: {}", runtime_name, e))
+        })?;
+
+        if output.status.success() {
+            println!("✅ {} GPU smoke test passed", runtime_name);
+            println!("{}", String::from_utf8_lossy(&output.stdout).trim());
+            Ok(())
+        } else {
+            Err(NvControlError::CommandFailed(format!(
+                "{} smoke test failed: {}",
+                runtime_name,
+                String::from_utf8_lossy(&output.stderr).trim()
+            )))
+        }
+    }
+
+    fn command_check(name: &str, binary: &str, args: &[&str]) -> RuntimeCheck {
+        match Command::new(binary).args(args).output() {
+            Ok(output) if output.status.success() => RuntimeCheck {
+                name: name.to_string(),
+                ok: true,
+                details: String::from_utf8_lossy(&output.stdout)
+                    .lines()
+                    .next()
+                    .unwrap_or("ok")
+                    .trim()
+                    .to_string(),
+            },
+            Ok(output) => RuntimeCheck {
+                name: name.to_string(),
+                ok: false,
+                details: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+            },
+            Err(err) => RuntimeCheck {
+                name: name.to_string(),
+                ok: false,
+                details: err.to_string(),
+            },
+        }
     }
 }
 

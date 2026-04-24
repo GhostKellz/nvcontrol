@@ -6,7 +6,16 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-BINARY="$PROJECT_DIR/target/x86_64-unknown-linux-gnu/release/nvcontrol"
+
+resolve_nvcontrol_path() {
+    if [[ -f "$PROJECT_DIR/target/x86_64-unknown-linux-gnu/release/nvcontrol" ]]; then
+        printf '%s' "$PROJECT_DIR/target/x86_64-unknown-linux-gnu/release/nvcontrol"
+    else
+        printf '%s' "$PROJECT_DIR/target/release/nvcontrol"
+    fi
+}
+
+BINARY="$(resolve_nvcontrol_path)"
 
 echo "╔══════════════════════════════════════════════════════════╗"
 echo "║           nvcontrol GUI Test Script                      ║"
@@ -19,7 +28,7 @@ if [[ ! -f "$BINARY" ]]; then
     echo "   Building with GUI feature..."
     cd "$PROJECT_DIR"
     cargo build --release --features gui
-    BINARY="$PROJECT_DIR/target/x86_64-unknown-linux-gnu/release/nvcontrol"
+    BINARY="$(resolve_nvcontrol_path)"
 fi
 
 # Check display

@@ -1,11 +1,13 @@
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
+use clap_complete::{Generator, Shell, generate};
 use console::{Key, Term, style};
 use indicatif::{ProgressBar, ProgressStyle};
 use nvcontrol::{
-    arch_integration, asus_power_detector, config, display, drivers, fan, gamescope,
+    arch_integration, asus_power_detector, companion, config, display, drivers, fan, gamescope,
     gpu::{self, OutputFormat},
-    gsp_firmware, hdr, kde_optimizer, latency, monitoring, multimonitor, overclocking, power,
-    power_profiles_daemon, recording, upscaling, vrr, wayland_nvidia,
+    gsp_firmware, hdr, kde_optimizer, latency, monitoring, multimonitor,
+    notifications::NotificationManager,
+    overclocking, power, power_profiles_daemon, recording, upscaling, vrr, wayland_nvidia,
 };
 use std::time::Duration;
 
@@ -13,9 +15,9 @@ use std::time::Duration;
 #[command(
     name = "nvctl",
     version,
-    about = "🎮 NVIDIA Control CLI - Advanced GPU Management",
-    long_about = "Advanced command-line interface for comprehensive NVIDIA GPU control and monitoring.\n\nFeatures: GPU monitoring, overclocking, fan control, VRR, recording, containers, and more.",
-    after_help = "Examples:\n  nvctl gpu info --json           # GPU info in JSON format\n  nvctl fan curve apply gaming     # Apply gaming fan curve\n  nvctl monitor --watch            # Live monitoring\n  nvctl container list             # List GPU containers\n\nFor detailed help: nvctl <command> --help"
+    about = "Advanced NVIDIA GPU control and diagnostics",
+    long_about = "Advanced command-line interface for NVIDIA GPU control, diagnostics, monitoring, tuning, containers, and display workflows.",
+    after_help = "Examples:\n  nvctl gpu info --format json                          # GPU info in JSON format\n  nvctl driver diagnose-release                         # Driver/kernel/GSP alignment\n  nvctl driver support-bundle --tarball --redact-paths # Shareable support artifact\n  nvctl doctor --support                                # One-shot diagnostics + support bundle\n\nFor detailed help: nvctl <command> --help"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -34,6 +36,21 @@ struct Cli {
     no_color: bool,
 }
 
+fn generate_shell_completion<G: Generator>(generator: G) {
+    let mut command = Cli::command();
+    generate(generator, &mut command, "nvctl", &mut std::io::stdout());
+}
+
+fn print_shell_completions(shell: &str) -> Result<(), String> {
+    match shell.to_lowercase().as_str() {
+        "bash" => generate_shell_completion(Shell::Bash),
+        "zsh" => generate_shell_completion(Shell::Zsh),
+        "fish" => generate_shell_completion(Shell::Fish),
+        _ => return Err(format!("Unsupported shell: {shell}. Use: bash, zsh, fish")),
+    }
+    Ok(())
+}
+
 #[derive(Subcommand)]
 enum Command {
     /// 🎮 GPU information and control
@@ -46,7 +63,7 @@ enum Command {
         #[command(subcommand)]
         subcommand: DisplaySubcommand,
     },
-    /// 🌈 Digital Vibrance (0-200%)
+    /// 🌈 Digital vibrance control (0-200%)
     #[command(alias = "vibe")]
     Vibrance {
         /// Vibrance percentage (0-200%, where 100% is default)
@@ -72,7 +89,7 @@ enum Command {
         #[command(subcommand)]
         subcommand: Option<MonitorSubcommand>,
     },
-    /// 📺 TUI main menu
+    /// 📺 Terminal user interface
     Tui,
     /// 🖥️ GPU monitor (htop-style)
     Nvtop,
@@ -86,17 +103,11 @@ enum Command {
         #[command(subcommand)]
         subcommand: RecordingSubcommand,
     },
-    /// 🐳 Container and virtualization
+    /// 🐳 Container and virtualization workflows
     #[command(alias = "ct")]
     Container {
         #[command(subcommand)]
         subcommand: ContainerSubcommand,
-    },
-    /// 🔧 Driver management (deprecated, use 'driver' instead)
-    #[command(hide = true)]
-    Drivers {
-        #[command(subcommand)]
-        subcommand: DriversSubcommand,
     },
     /// 🧠 Driver management, status, and kernel modules
     Driver {
@@ -118,12 +129,12 @@ enum Command {
         #[command(subcommand)]
         subcommand: ConfigSubcommand,
     },
-    /// 📈 AI Upscaling and enhancement
+    /// 📈 AI upscaling and enhancement
     Upscaling {
         #[command(subcommand)]
         subcommand: UpscalingSubcommand,
     },
-    /// 🚀 DLSS 3 Frame Generation
+    /// 🚀 DLSS and related features
     Dlss {
         #[command(subcommand)]
         subcommand: DlssSubcommand,
@@ -133,54 +144,48 @@ enum Command {
         #[command(subcommand)]
         subcommand: ShadersSubcommand,
     },
-    /// 🔌 GPU Passthrough (VFIO/Containers/VMs)
+    /// 🔌 GPU passthrough (VFIO/containers/VMs)
     #[command(alias = "pt")]
     Passthrough {
         #[command(subcommand)]
         subcommand: PassthroughSubcommand,
     },
-    /// 🌊 Wayland NVIDIA Optimization
+    /// 🌊 Wayland NVIDIA optimization
     Wayland {
         #[command(subcommand)]
         subcommand: WaylandSubcommand,
     },
-    /// 🎨 KDE Plasma Compositor Optimization
+    /// 🎨 KDE Plasma compositor optimization
     Kde {
         #[command(subcommand)]
         subcommand: KdeSubcommand,
     },
-    /// 🌈 HDR Control and Configuration
+    /// 🌈 HDR control and configuration
     Hdr {
         #[command(subcommand)]
         subcommand: TopLevelHdrSubcommand,
     },
-    /// ⚡ Power Profile Management (AC/Battery, Activities)
+    /// ⚡ Power profile management (AC/battery, activities)
     PowerProfile {
         #[command(subcommand)]
         subcommand: PowerProfileSubcommand,
     },
-    /// 🐧 Arch Linux Integration (Pacman hooks, DKMS)
+    /// 🐧 Arch Linux integration (pacman hooks, DKMS)
     Arch {
         #[command(subcommand)]
         subcommand: ArchSubcommand,
     },
-    /// 🔧 GSP Firmware Management (deprecated, use 'driver gsp' instead)
-    #[command(hide = true)]
-    Gsp {
-        #[command(subcommand)]
-        subcommand: GspSubcommand,
-    },
-    /// 🖥️ Multi-Monitor Management
+    /// 🖥️ Multi-monitor management
     Monitors {
         #[command(subcommand)]
         subcommand: MultiMonitorSubcommand,
     },
-    /// 📊 On-Screen Display (OSD) for gaming
+    /// 📊 On-screen display for gaming
     Osd {
         #[command(subcommand)]
         subcommand: OsdSubcommand,
     },
-    /// 🎛️  Interactive Menu Mode
+    /// 🎛️ Interactive menu mode
     #[command(alias = "menu")]
     Interactive,
     /// 💻 System information and platform detection
@@ -189,14 +194,46 @@ enum Command {
         subcommand: SystemSubcommand,
     },
     /// 🔍 Run system diagnostics
-    Doctor,
+    Doctor {
+        /// Run support-focused diagnostics and write a support bundle
+        #[arg(long)]
+        support: bool,
+        /// Output structured doctor summary
+        #[arg(long, value_enum)]
+        format: Option<OutputFormat>,
+        /// Output path for doctor support bundles
+        #[arg(
+            long,
+            default_value_t = drivers::default_support_bundle_path("doctor-support.tar.gz")
+        )]
+        output: String,
+    },
+    /// 🧩 Generate shell completions
+    Completion {
+        /// Shell type: bash, zsh, fish
+        #[arg(value_parser = ["bash", "zsh", "fish"])]
+        shell: String,
+    },
     /// 📋 Show detailed version information
     Version,
-    /// 🎯 ASUS ROG GPU Features (Power Detector+, Aura, etc.)
+    /// 🎯 ASUS ROG GPU features (Power Detector+, Aura, etc.)
     Asus {
         #[command(subcommand)]
         subcommand: AsusSubcommand,
     },
+    /// 🔔 Lightweight desktop companion actions
+    Companion {
+        #[command(subcommand)]
+        subcommand: CompanionSubcommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum CompanionSubcommand {
+    /// Send a desktop notification test
+    NotifyTest,
+    /// Open the project documentation in the default desktop handler
+    OpenDocs,
 }
 
 #[derive(Subcommand)]
@@ -427,9 +464,10 @@ enum SharpeningSubcommand {
     /// Set image sharpening (0-100, default varies by display)
     Set {
         /// Display ID (0, 1, etc.)
-        #[arg(short, long, default_value = "0")]
+        #[arg(short = 'd', long, default_value = "0")]
         display_id: u32,
         /// Sharpening value (0-100)
+        #[arg(long)]
         value: i64,
     },
     /// Reset image sharpening to default
@@ -778,7 +816,7 @@ enum KdeSubcommand {
         /// Display connector (e.g., DP-1)
         display: String,
         /// Enable or disable
-        #[arg(long)]
+        #[arg(long = "enabled", value_parser = clap::value_parser!(bool))]
         enabled: bool,
     },
     /// Restart KWin compositor
@@ -867,25 +905,23 @@ enum ArchSubcommand {
 }
 
 #[derive(Subcommand)]
-enum GspSubcommand {
-    /// Show GSP firmware status
-    Status,
-    /// Enable GSP firmware
-    Enable,
-    /// Disable GSP firmware (fallback mode)
-    Disable,
-    /// Run GSP diagnostics
-    Diagnostics,
-    /// Check for firmware updates
-    CheckUpdate,
-    /// Update GSP firmware
-    Update,
-}
-
-#[derive(Subcommand)]
 enum MultiMonitorSubcommand {
     /// Show current display configuration
     Status,
+    /// List built-in monitor presets
+    Presets,
+    /// Suggest built-in monitor presets for the current setup
+    Suggest,
+    /// Preview a built-in monitor preset without applying it
+    Preview {
+        /// Preset key (for example: dual_oled_ips)
+        preset: String,
+    },
+    /// Apply a built-in monitor preset immediately
+    ApplyPreset {
+        /// Preset key (for example: dual_oled_ips)
+        preset: String,
+    },
     /// Save current layout with a name
     Save {
         /// Layout name
@@ -903,7 +939,7 @@ enum MultiMonitorSubcommand {
         /// Display connector (e.g., DP-1)
         connector: String,
         /// Enable or disable
-        #[arg(long)]
+        #[arg(long = "enabled", value_parser = clap::value_parser!(bool))]
         enabled: bool,
     },
     /// Launch Gamescope on specific display
@@ -911,13 +947,13 @@ enum MultiMonitorSubcommand {
         /// Display connector
         connector: String,
         /// Width
-        #[arg(short, long)]
+        #[arg(short = 'w', long)]
         width: u32,
         /// Height
-        #[arg(short, long)]
+        #[arg(short = 'H', long)]
         height: u32,
         /// Refresh rate
-        #[arg(short, long)]
+        #[arg(short = 'r', long)]
         refresh: u32,
         /// Command to run
         command: String,
@@ -926,21 +962,6 @@ enum MultiMonitorSubcommand {
     Auto,
     /// Create example layouts
     CreateExamples,
-}
-
-#[derive(Subcommand)]
-enum DriversSubcommand {
-    Status,
-    Install {
-        /// Driver type: proprietary, open, open-beta
-        driver_type: String,
-    },
-    Update,
-    Rollback,
-    GenerateCompletions {
-        /// Shell type: bash, zsh, fish
-        shell: String,
-    },
 }
 
 #[derive(Subcommand)]
@@ -960,6 +981,36 @@ enum DriverSubcommand {
         /// Target driver major version (e.g., 590)
         #[arg(long)]
         driver: u32,
+    },
+    /// Diagnose kernel/userspace/GSP release alignment and firmware layout
+    DiagnoseRelease {
+        /// Output structured release diagnostics
+        #[arg(long, value_enum)]
+        format: Option<OutputFormat>,
+    },
+    /// Write a support bundle with driver, GSP, DKMS, and log diagnostics
+    SupportBundle {
+        /// Output path for the support bundle report
+        #[arg(
+            long,
+            default_value_t = drivers::default_support_bundle_path("support.txt")
+        )]
+        output: String,
+        /// Package the support bundle and metadata into a tar.gz archive
+        #[arg(long)]
+        tarball: bool,
+        /// Gzip the support bundle output
+        #[arg(long)]
+        gzip: bool,
+        /// Redact local firmware paths in the support bundle
+        #[arg(long)]
+        redact_paths: bool,
+        /// Redact PCI and device identifiers in the support bundle
+        #[arg(long)]
+        redact_ids: bool,
+        /// Number of log lines to include per log section
+        #[arg(long, default_value_t = 40)]
+        log_tail: usize,
     },
     /// Install a driver (proprietary, open, open-beta)
     Install {
@@ -1000,6 +1051,8 @@ enum DriverSubcommand {
 enum DriverDkmsSubcommand {
     /// Show detailed DKMS module status for all kernels
     Status,
+    /// Diagnose DKMS/header/source issues before rebuilding
+    Doctor,
     /// Set up DKMS for nvidia-open (register source, create config)
     Setup,
     /// Build nvidia modules for all kernels (or specific with --kernel)
@@ -1041,6 +1094,8 @@ enum DriverDkmsSubcommand {
 enum DriverSourceSubcommand {
     /// Show source build status and info
     Status,
+    /// Diagnose source tree state, git pinning, and reproducibility info
+    Doctor,
     /// Initialize from a git clone of open-gpu-kernel-modules
     Init {
         /// Path to the git clone (e.g., ~/open-gpu-kernel-modules)
@@ -1112,7 +1167,7 @@ enum PowerSubcommand {
     /// Power persistence settings
     Persistence {
         /// Enable persistence mode
-        #[arg(short, long)]
+        #[arg(long = "enabled", value_parser = clap::value_parser!(bool))]
         enabled: bool,
     },
     /// Monitor power usage
@@ -1213,10 +1268,10 @@ enum VibranceAction {
     /// Set vibrance for a display
     Set {
         /// Vibrance value (-1024 to 1023)
-        #[arg(short, long)]
+        #[arg(long)]
         value: i32,
         /// Display ID (0-based, all if not specified)
-        #[arg(short, long)]
+        #[arg(short = 'd', long)]
         display: Option<usize>,
     },
     /// Apply vibrance profile
@@ -1304,6 +1359,33 @@ enum ConfigSubcommand {
         #[arg(long)]
         skip_validation: bool,
     },
+    /// Capture the current live state into a saved profile bundle
+    Capture {
+        /// Saved profile bundle name
+        #[arg(short, long)]
+        name: String,
+    },
+    /// Preview a profile bundle from disk
+    Preview {
+        /// Input file path/name, or `live`
+        #[arg(short, long)]
+        input: String,
+    },
+    /// Diff two profile bundles
+    Diff {
+        /// Current/base profile path, saved profile name, or `live`
+        #[arg(long)]
+        current: String,
+        /// Target profile path, saved profile name, or `live`
+        #[arg(long)]
+        target: String,
+    },
+    /// Apply a saved bundle or live snapshot-compatible bundle
+    Apply {
+        /// Input file path, saved profile name, or `live`
+        #[arg(short, long)]
+        input: String,
+    },
     /// List available profiles
     Profiles,
 }
@@ -1373,6 +1455,17 @@ enum GameAutoAction {
     Stop,
     /// Show service status
     Status,
+    /// Install a user systemd service for auto-profile startup
+    InstallService,
+    /// Uninstall the user systemd service
+    UninstallService,
+    /// Enable and start the user systemd service
+    EnableService,
+    /// Disable and stop the user systemd service
+    DisableService,
+    /// Internal foreground daemon mode
+    #[command(hide = true)]
+    Daemon,
     /// Enable automatic profile application on boot
     Enable,
     /// Disable automatic profile application on boot
@@ -1407,6 +1500,51 @@ enum LaunchAction {
     Show {
         /// Profile name
         profile: String,
+    },
+    /// Create a new game profile
+    Create {
+        /// Profile name
+        profile: String,
+        /// Executable or command to launch
+        executable: String,
+    },
+    /// Delete a game profile
+    Delete {
+        /// Profile name
+        profile: String,
+    },
+    /// Add a pre-launch or post-exit hook
+    HookAdd {
+        /// Profile name
+        profile: String,
+        /// Hook phase: pre or post
+        phase: String,
+        /// Command to run
+        command: String,
+        /// Hook command arguments
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    /// List hooks for a game profile
+    HookList {
+        /// Profile name
+        profile: String,
+    },
+    /// Remove a hook from a profile by phase and index
+    HookRemove {
+        /// Profile name
+        profile: String,
+        /// Hook phase: pre or post
+        phase: String,
+        /// Hook index from `hook-list`
+        index: usize,
+    },
+    /// Set a named gamescope preset on a profile
+    SetGamescopePreset {
+        /// Profile name
+        profile: String,
+        /// Preset name
+        preset: String,
     },
     /// Create example game profiles
     Examples,
@@ -1508,7 +1646,7 @@ enum ContainerSubcommand {
     /// Launch container with GPU support
     Launch {
         /// Container image
-        #[arg(short, long)]
+        #[arg(short = 'm', long)]
         image: String,
         /// Container name
         #[arg(short, long)]
@@ -1517,7 +1655,7 @@ enum ContainerSubcommand {
         #[arg(short, long, default_value = "all")]
         gpu: String,
         /// Interactive mode
-        #[arg(short, long)]
+        #[arg(short = 'i', long)]
         interactive: bool,
         /// Remove container on exit
         #[arg(long)]
@@ -1578,6 +1716,12 @@ enum ContainerProfileAction {
 enum RuntimeAction {
     /// Show runtime information
     Info,
+    /// Diagnose NVIDIA container runtime health
+    Doctor {
+        /// Runtime type to focus on (docker, podman, containerd)
+        #[arg(short, long)]
+        runtime: Option<String>,
+    },
     /// Setup container runtime
     Setup {
         /// Runtime type (docker, podman, nix)
@@ -1585,7 +1729,11 @@ enum RuntimeAction {
         runtime: String,
     },
     /// Test GPU passthrough
-    Test,
+    Test {
+        /// Runtime type to test (docker, podman, containerd)
+        #[arg(short, long, default_value = "docker")]
+        runtime: String,
+    },
     /// Configure NVIDIA Container Runtime
     Configure,
 }
@@ -1636,7 +1784,7 @@ enum AsusAuraAction {
     /// Enable/disable temperature-reactive RGB (color changes with GPU temp)
     TempReactive {
         /// Enable (true) or disable (false)
-        #[arg(value_parser = clap::value_parser!(bool))]
+        #[arg(long = "enabled", value_parser = clap::value_parser!(bool))]
         enabled: bool,
     },
     /// Restore saved Aura configuration from config file
@@ -1732,6 +1880,9 @@ fn main() {
                 Ok(gpus) => match format {
                     OutputFormat::Json => {
                         println!("{}", serde_json::to_string_pretty(&gpus).unwrap());
+                    }
+                    OutputFormat::Yaml => {
+                        println!("{}", serde_yaml::to_string(&gpus).unwrap());
                     }
                     OutputFormat::Table => {
                         println!(
@@ -3552,50 +3703,6 @@ fn main() {
                 }
             }
         }
-        Command::Gsp { subcommand } => {
-            eprintln!("⚠️  'nvctl gsp' is deprecated. Use 'nvctl driver gsp' instead.\n");
-            use gsp_firmware::GspManager;
-
-            let gsp = GspManager::new();
-
-            match subcommand {
-                GspSubcommand::Status => {
-                    if let Err(e) = gsp.print_status() {
-                        eprintln!("❌ Failed to print status: {}", e);
-                    }
-                }
-                GspSubcommand::Enable => {
-                    if let Err(e) = gsp.enable_gsp() {
-                        eprintln!("❌ Failed to enable GSP: {}", e);
-                    }
-                }
-                GspSubcommand::Disable => {
-                    if let Err(e) = gsp.disable_gsp() {
-                        eprintln!("❌ Failed to disable GSP: {}", e);
-                    }
-                }
-                GspSubcommand::Diagnostics => {
-                    if let Err(e) = gsp.run_diagnostics() {
-                        eprintln!("❌ Failed to run diagnostics: {}", e);
-                    }
-                }
-                GspSubcommand::CheckUpdate => match gsp.check_for_updates() {
-                    Ok(available) => {
-                        if available {
-                            println!("✅ Firmware update available!");
-                        } else {
-                            println!("ℹ️  No updates available");
-                        }
-                    }
-                    Err(e) => eprintln!("❌ Failed to check updates: {}", e),
-                },
-                GspSubcommand::Update => {
-                    if let Err(e) = gsp.update_firmware() {
-                        eprintln!("❌ Failed to update firmware: {}", e);
-                    }
-                }
-            }
-        }
         Command::Monitors { subcommand } => {
             use multimonitor::MultiMonitorManager;
 
@@ -3608,6 +3715,87 @@ fn main() {
                     }
                     Err(e) => eprintln!("❌ Failed to initialize: {}", e),
                 },
+                MultiMonitorSubcommand::Presets => match MultiMonitorManager::new() {
+                    Ok(manager) => {
+                        let presets = manager.list_builtin_presets();
+                        if presets.is_empty() {
+                            println!("No built-in monitor presets available");
+                        } else {
+                            println!("🖥️ Built-in monitor presets:");
+                            for preset in presets {
+                                println!(
+                                    "   • {} ({} display{})",
+                                    preset.name,
+                                    preset.displays.len(),
+                                    if preset.displays.len() == 1 { "" } else { "s" }
+                                );
+                            }
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                },
+                MultiMonitorSubcommand::Suggest => match MultiMonitorManager::new() {
+                    Ok(manager) => match manager.suggest_builtin_presets() {
+                        Ok(suggestions) if suggestions.is_empty() => {
+                            println!("No built-in preset suggestions for the current setup");
+                        }
+                        Ok(suggestions) => {
+                            println!("💡 Suggested built-in monitor presets:");
+                            for suggestion in suggestions {
+                                println!("   • {}", suggestion.preset_key);
+                                println!("     reason: {}", suggestion.reason);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to suggest presets: {}", e),
+                    },
+                    Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                },
+                MultiMonitorSubcommand::Preview { preset } => match MultiMonitorManager::new() {
+                    Ok(manager) => match manager.preview_builtin_preset(&preset) {
+                        Ok(layout) => {
+                            println!("📝 Built-in preset preview: {}", layout.name);
+                            for (index, display) in layout.displays.iter().enumerate() {
+                                println!("\n   Display {}:", index + 1);
+                                println!("      Connector: {}", display.connector);
+                                println!(
+                                    "      Resolution: {}x{}@{}Hz",
+                                    display.resolution.0,
+                                    display.resolution.1,
+                                    display.refresh_rate
+                                );
+                                println!(
+                                    "      Position: {}, {}",
+                                    display.position.0, display.position.1
+                                );
+                                println!(
+                                    "      VRR: {}",
+                                    if display.vrr_enabled {
+                                        "automatic"
+                                    } else {
+                                        "off"
+                                    }
+                                );
+                                if let Some(profile) = &display.color_profile {
+                                    println!("      Color Profile: {}", profile);
+                                }
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to preview preset: {}", e),
+                    },
+                    Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                },
+                MultiMonitorSubcommand::ApplyPreset { preset } => {
+                    match MultiMonitorManager::new() {
+                        Ok(mut manager) => {
+                            if let Err(e) = manager.apply_builtin_preset(&preset) {
+                                eprintln!("❌ Failed to apply preset: {}", e);
+                            } else {
+                                println!("✅ Applied built-in monitor preset: {}", preset);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize: {}", e),
+                    }
+                }
                 MultiMonitorSubcommand::Save { name } => match MultiMonitorManager::new() {
                     Ok(mut manager) => {
                         if let Err(e) = manager.save_layout(&name) {
@@ -3682,49 +3870,6 @@ fn main() {
                 },
             }
         }
-        Command::Drivers { subcommand } => {
-            eprintln!("⚠️  'nvctl drivers' is deprecated. Use 'nvctl driver' instead.\n");
-            match subcommand {
-                DriversSubcommand::Status => match drivers::get_driver_status() {
-                    Ok(status) => {
-                        println!("Driver Status:");
-                        println!(
-                            "  Current: {} ({})",
-                            status.current_version, status.driver_type
-                        );
-                        println!(
-                            "  Available: {}",
-                            status.available_version.unwrap_or("Unknown".to_string())
-                        );
-                        println!(
-                            "  Update Available: {}",
-                            if status.update_available { "Yes" } else { "No" }
-                        );
-                    }
-                    Err(e) => eprintln!("Failed to get driver status: {e}"),
-                },
-                DriversSubcommand::Install { driver_type } => {
-                    match drivers::install_driver(&driver_type) {
-                        Ok(()) => println!("Driver installation initiated for: {driver_type}"),
-                        Err(e) => eprintln!("Failed to install driver: {e}"),
-                    }
-                }
-                DriversSubcommand::Update => match drivers::update_driver() {
-                    Ok(()) => println!("Driver update completed"),
-                    Err(e) => eprintln!("Failed to update driver: {e}"),
-                },
-                DriversSubcommand::Rollback => match drivers::rollback_driver() {
-                    Ok(()) => println!("Driver rollback completed"),
-                    Err(e) => eprintln!("Failed to rollback driver: {e}"),
-                },
-                DriversSubcommand::GenerateCompletions { shell } => {
-                    match drivers::generate_shell_completions(&shell) {
-                        Ok(()) => {} // Completions printed to stdout
-                        Err(e) => eprintln!("Failed to generate completions: {e}"),
-                    }
-                }
-            }
-        }
         Command::Driver { subcommand } => match subcommand {
             DriverSubcommand::Info { paste } => {
                 if paste {
@@ -3738,6 +3883,10 @@ fn main() {
             DriverSubcommand::Check => {
                 if let Err(e) = drivers::print_driver_check() {
                     eprintln!("Failed to run driver checks: {e}");
+                } else if drivers::summarize_driver_check().severity
+                    == drivers::DiagnosticSeverity::Broken
+                {
+                    std::process::exit(1);
                 }
             }
             DriverSubcommand::Capabilities => {
@@ -3750,6 +3899,59 @@ fn main() {
                     eprintln!("Please provide the driver major version, e.g. 590");
                 } else if let Err(e) = drivers::print_validation(driver) {
                     eprintln!("Failed to validate system: {e}");
+                }
+            }
+            DriverSubcommand::DiagnoseRelease { format } => {
+                if matches!(format, Some(OutputFormat::Json) | Some(OutputFormat::Yaml)) {
+                    let diagnostics = drivers::collect_release_diagnostics();
+                    match format {
+                        Some(OutputFormat::Json) => {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&diagnostics).unwrap_or_default()
+                            );
+                        }
+                        Some(OutputFormat::Yaml) => {
+                            println!(
+                                "{}",
+                                serde_yaml::to_string(&diagnostics).unwrap_or_default()
+                            );
+                        }
+                        _ => {}
+                    }
+                } else if let Err(e) = drivers::print_release_diagnostics() {
+                    eprintln!("Failed to diagnose release alignment: {e}");
+                } else if drivers::summarize_release_diagnostics(
+                    &drivers::collect_release_diagnostics(),
+                )
+                .severity
+                    == drivers::DiagnosticSeverity::Broken
+                {
+                    std::process::exit(1);
+                }
+            }
+            DriverSubcommand::SupportBundle {
+                output,
+                tarball,
+                gzip,
+                redact_paths,
+                redact_ids,
+                log_tail,
+            } => {
+                if let Err(e) = drivers::write_support_bundle_with_options(
+                    &output,
+                    tarball,
+                    gzip,
+                    redact_paths,
+                    redact_ids,
+                    log_tail,
+                ) {
+                    eprintln!("Failed to write support bundle: {e}");
+                } else {
+                    println!("Wrote support bundle to {}", output);
+                    if let Ok(mut notifier) = NotificationManager::new() {
+                        let _ = notifier.notify_support_bundle_created(&output);
+                    }
                 }
             }
             DriverSubcommand::Install { driver_type } => {
@@ -3770,6 +3972,11 @@ fn main() {
                 DriverDkmsSubcommand::Status => {
                     if let Err(e) = drivers::print_dkms_status_detailed() {
                         eprintln!("Failed to show DKMS status: {e}");
+                    }
+                }
+                DriverDkmsSubcommand::Doctor => {
+                    if let Err(e) = drivers::print_dkms_doctor() {
+                        eprintln!("Failed to run DKMS doctor: {e}");
                     }
                 }
                 DriverDkmsSubcommand::Setup => {
@@ -3811,6 +4018,11 @@ fn main() {
                 DriverSourceSubcommand::Status => {
                     if let Err(e) = drivers::print_source_status() {
                         eprintln!("Failed to show source status: {e}");
+                    }
+                }
+                DriverSourceSubcommand::Doctor => {
+                    if let Err(e) = drivers::print_source_doctor() {
+                        eprintln!("Failed to run source doctor: {e}");
                     }
                 }
                 DriverSourceSubcommand::Init { path } => {
@@ -3886,6 +4098,18 @@ fn main() {
                 };
                 if let Err(e) = drivers::print_driver_logs(log_filter, tail) {
                     eprintln!("Failed to show logs: {e}");
+                }
+            }
+        },
+        Command::Companion { subcommand } => match subcommand {
+            CompanionSubcommand::NotifyTest => {
+                if let Err(e) = companion::send_test_notification() {
+                    eprintln!("Failed to send test notification: {e}");
+                }
+            }
+            CompanionSubcommand::OpenDocs => {
+                if let Err(e) = companion::open_docs() {
+                    eprintln!("Failed to open docs: {e}");
                 }
             }
         },
@@ -4298,13 +4522,195 @@ fn main() {
                                     println!("   Power Profile: {}", power);
                                 }
 
+                                if let Some(vibrance) = game_profile.vibrance {
+                                    println!("   Vibrance: {}%", vibrance);
+                                }
+
+                                if let Some(limit) = game_profile.fps_limit {
+                                    println!("   FPS Limit: {}", limit);
+                                }
+
+                                if let Some(preset) = &game_profile.gamescope_preset {
+                                    println!("   Gamescope Preset: {}", preset);
+                                }
+
+                                println!("   Priority: {:?}", game_profile.priority);
+
                                 if let Some(affinity) = &game_profile.cpu_affinity {
                                     println!("   CPU Affinity: {:?}", affinity);
+                                }
+
+                                if !game_profile.pre_launch_hooks.is_empty() {
+                                    println!("   Pre-Launch Hooks:");
+                                    for hook in &game_profile.pre_launch_hooks {
+                                        println!(
+                                            "      {} {:?} (ignore_failure={})",
+                                            hook.command, hook.args, hook.ignore_failure
+                                        );
+                                    }
+                                }
+
+                                if !game_profile.post_exit_hooks.is_empty() {
+                                    println!("   Post-Exit Hooks:");
+                                    for hook in &game_profile.post_exit_hooks {
+                                        println!(
+                                            "      {} {:?} (ignore_failure={})",
+                                            hook.command, hook.args, hook.ignore_failure
+                                        );
+                                    }
                                 }
                             }
                             Err(e) => eprintln!("❌ Failed to load profile '{}': {}", profile, e),
                         },
                         Err(e) => eprintln!("❌ Failed to show profile: {}", e),
+                    }
+                }
+                LaunchAction::Create {
+                    profile,
+                    executable,
+                } => {
+                    use nvcontrol::game_launcher::GameLauncher;
+
+                    match GameLauncher::new() {
+                        Ok(launcher) => {
+                            let profile_data = nvcontrol::game_launcher::GameProfile::new(
+                                profile.clone(),
+                                executable,
+                            );
+                            match launcher.save_profile(&profile_data) {
+                                Ok(()) => println!("✅ Created game profile '{}'", profile),
+                                Err(e) => eprintln!("❌ Failed to create profile: {}", e),
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize launcher: {}", e),
+                    }
+                }
+                LaunchAction::Delete { profile } => {
+                    use nvcontrol::game_launcher::GameLauncher;
+
+                    match GameLauncher::new() {
+                        Ok(launcher) => match launcher.delete_profile(&profile) {
+                            Ok(()) => println!("✅ Deleted game profile '{}'", profile),
+                            Err(e) => eprintln!("❌ Failed to delete profile: {}", e),
+                        },
+                        Err(e) => eprintln!("❌ Failed to initialize launcher: {}", e),
+                    }
+                }
+                LaunchAction::HookAdd {
+                    profile,
+                    phase,
+                    command,
+                    args,
+                } => {
+                    use nvcontrol::game_launcher::{GameLauncher, LaunchHook};
+
+                    match GameLauncher::new() {
+                        Ok(launcher) => match launcher.load_profile(&profile) {
+                            Ok(mut game_profile) => {
+                                let hook = LaunchHook {
+                                    command,
+                                    args,
+                                    ignore_failure: phase.eq_ignore_ascii_case("post"),
+                                };
+                                if phase.eq_ignore_ascii_case("pre") {
+                                    game_profile.pre_launch_hooks.push(hook);
+                                } else if phase.eq_ignore_ascii_case("post") {
+                                    game_profile.post_exit_hooks.push(hook);
+                                } else {
+                                    eprintln!("❌ Invalid phase '{}'. Use 'pre' or 'post'", phase);
+                                    return;
+                                }
+                                match launcher.save_profile(&game_profile) {
+                                    Ok(()) => println!("✅ Added {} hook to '{}'", phase, profile),
+                                    Err(e) => eprintln!("❌ Failed to save profile: {}", e),
+                                }
+                            }
+                            Err(e) => eprintln!("❌ Failed to load profile '{}': {}", profile, e),
+                        },
+                        Err(e) => eprintln!("❌ Failed to initialize launcher: {}", e),
+                    }
+                }
+                LaunchAction::HookList { profile } => {
+                    use nvcontrol::game_launcher::GameLauncher;
+
+                    match GameLauncher::new() {
+                        Ok(launcher) => match launcher.load_profile(&profile) {
+                            Ok(game_profile) => {
+                                println!("🎣 Hooks for '{}':", profile);
+                                println!("  Pre-launch:");
+                                for hook in &game_profile.pre_launch_hooks {
+                                    println!("    - {} {:?}", hook.command, hook.args);
+                                }
+                                println!("  Post-exit:");
+                                for hook in &game_profile.post_exit_hooks {
+                                    println!("    - {} {:?}", hook.command, hook.args);
+                                }
+                            }
+                            Err(e) => eprintln!("❌ Failed to load profile '{}': {}", profile, e),
+                        },
+                        Err(e) => eprintln!("❌ Failed to initialize launcher: {}", e),
+                    }
+                }
+                LaunchAction::HookRemove {
+                    profile,
+                    phase,
+                    index,
+                } => {
+                    use nvcontrol::game_launcher::GameLauncher;
+
+                    match GameLauncher::new() {
+                        Ok(launcher) => match launcher.load_profile(&profile) {
+                            Ok(mut game_profile) => {
+                                let hooks = if phase.eq_ignore_ascii_case("pre") {
+                                    &mut game_profile.pre_launch_hooks
+                                } else if phase.eq_ignore_ascii_case("post") {
+                                    &mut game_profile.post_exit_hooks
+                                } else {
+                                    eprintln!("❌ Invalid phase '{}'. Use 'pre' or 'post'", phase);
+                                    return;
+                                };
+
+                                if index >= hooks.len() {
+                                    eprintln!(
+                                        "❌ Hook index {} out of range for {} hooks",
+                                        index, phase
+                                    );
+                                    return;
+                                }
+
+                                hooks.remove(index);
+                                match launcher.save_profile(&game_profile) {
+                                    Ok(()) => println!(
+                                        "✅ Removed {} hook {} from '{}'",
+                                        phase, index, profile
+                                    ),
+                                    Err(e) => eprintln!("❌ Failed to save profile: {}", e),
+                                }
+                            }
+                            Err(e) => eprintln!("❌ Failed to load profile '{}': {}", profile, e),
+                        },
+                        Err(e) => eprintln!("❌ Failed to initialize launcher: {}", e),
+                    }
+                }
+                LaunchAction::SetGamescopePreset { profile, preset } => {
+                    use nvcontrol::game_launcher::GameLauncher;
+
+                    match GameLauncher::new() {
+                        Ok(launcher) => match launcher.load_profile(&profile) {
+                            Ok(mut game_profile) => {
+                                game_profile.gamescope_preset = Some(preset.clone());
+                                game_profile.use_gamescope = true;
+                                match launcher.save_profile(&game_profile) {
+                                    Ok(()) => println!(
+                                        "✅ Set gamescope preset '{}' on '{}'",
+                                        preset, profile
+                                    ),
+                                    Err(e) => eprintln!("❌ Failed to save profile: {}", e),
+                                }
+                            }
+                            Err(e) => eprintln!("❌ Failed to load profile '{}': {}", profile, e),
+                        },
+                        Err(e) => eprintln!("❌ Failed to initialize launcher: {}", e),
                     }
                 }
                 LaunchAction::Examples => {
@@ -4330,16 +4736,29 @@ fn main() {
                 }
             },
             GamingSubcommand::Auto { action } => {
-                use nvcontrol::game_profile_auto::{load_config, save_config};
+                use nvcontrol::game_profile_auto::{
+                    AutoServiceState, auto_service_status_summary, disable_systemd_user_service,
+                    enable_systemd_user_service, install_systemd_user_service, load_config,
+                    load_service_state, save_config, save_service_state, start_auto_service,
+                    stop_auto_service, sync_launcher_profiles_into_detector, systemd_service_path,
+                    systemd_service_status, uninstall_systemd_user_service,
+                };
 
                 match action {
                     GameAutoAction::Start => {
-                        println!("⚠️  Auto-profile service start not yet implemented");
-                        println!("    This will be a background daemon in future releases");
+                        match sync_launcher_profiles_into_detector() {
+                            Ok(count) => println!("🔄 Synced {} launcher profile(s)", count),
+                            Err(e) => eprintln!("⚠️  Failed to sync launcher profiles: {}", e),
+                        }
+                        match start_auto_service() {
+                            Ok(()) => println!("✅ Auto-profile service started"),
+                            Err(e) => eprintln!("❌ Failed to start auto-profile service: {}", e),
+                        }
                     }
-                    GameAutoAction::Stop => {
-                        println!("⚠️  Auto-profile service stop not yet implemented");
-                    }
+                    GameAutoAction::Stop => match stop_auto_service() {
+                        Ok(()) => println!("✅ Auto-profile service stopped"),
+                        Err(e) => eprintln!("❌ Failed to stop auto-profile service: {}", e),
+                    },
                     GameAutoAction::Status => match load_config() {
                         Ok(config) => {
                             println!("🎮 Game Profile Auto-Application Status:\n");
@@ -4353,15 +4772,80 @@ fn main() {
                                 "Restore on Exit: {}",
                                 if config.restore_on_exit { "Yes" } else { "No" }
                             );
+                            if let Ok(service_state) = load_service_state() {
+                                println!(
+                                    "Running: {}",
+                                    if service_state.running {
+                                        "Yes ✅"
+                                    } else {
+                                        "No ❌"
+                                    }
+                                );
+                                if let Some(pid) = service_state.pid {
+                                    println!("PID: {}", pid);
+                                }
+                                println!(
+                                    "Last Profile: {}",
+                                    service_state
+                                        .last_profile_name
+                                        .unwrap_or_else(|| "none".to_string())
+                                );
+                            }
+                            if let Ok(summary) = auto_service_status_summary() {
+                                println!("Summary: {}", summary);
+                            }
+                            if let Ok(systemd_status) = systemd_service_status() {
+                                println!("Service Manager: {}", systemd_status);
+                            }
                         }
                         Err(e) => eprintln!("❌ Failed to load config: {}", e),
                     },
+                    GameAutoAction::InstallService => match install_systemd_user_service() {
+                        Ok(path) => {
+                            println!("✅ Installed systemd user service at {}", path.display());
+                            if let Ok(service_path) = systemd_service_path() {
+                                println!(
+                                    "Enable it with: systemctl --user enable --now {}",
+                                    service_path
+                                        .file_name()
+                                        .unwrap_or_default()
+                                        .to_string_lossy()
+                                );
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to install systemd service: {}", e),
+                    },
+                    GameAutoAction::UninstallService => match uninstall_systemd_user_service() {
+                        Ok(()) => println!("✅ Removed systemd user service"),
+                        Err(e) => eprintln!("❌ Failed to uninstall systemd service: {}", e),
+                    },
+                    GameAutoAction::EnableService => match enable_systemd_user_service() {
+                        Ok(()) => println!("✅ Enabled and started systemd user service"),
+                        Err(e) => eprintln!("❌ Failed to enable systemd service: {}", e),
+                    },
+                    GameAutoAction::DisableService => match disable_systemd_user_service() {
+                        Ok(()) => println!("✅ Disabled and stopped systemd user service"),
+                        Err(e) => eprintln!("❌ Failed to disable systemd service: {}", e),
+                    },
+                    GameAutoAction::Daemon => {
+                        use nvcontrol::game_profile_auto::run_auto_service_foreground;
+
+                        if let Err(e) = run_auto_service_foreground() {
+                            eprintln!("❌ Auto-profile daemon failed: {}", e);
+                        }
+                    }
                     GameAutoAction::Enable => match load_config() {
                         Ok(mut config) => {
                             config.enabled = true;
                             if let Err(e) = save_config(&config) {
                                 eprintln!("❌ Failed to save: {}", e);
                             } else {
+                                let _ = save_service_state(&AutoServiceState {
+                                    enabled: true,
+                                    running: false,
+                                    pid: None,
+                                    last_profile_name: None,
+                                });
                                 println!("✅ Auto-profile application enabled");
                             }
                         }
@@ -4373,6 +4857,12 @@ fn main() {
                             if let Err(e) = save_config(&config) {
                                 eprintln!("❌ Failed to save: {}", e);
                             } else {
+                                let _ = save_service_state(&AutoServiceState {
+                                    enabled: false,
+                                    running: false,
+                                    pid: None,
+                                    last_profile_name: None,
+                                });
                                 println!("✅ Auto-profile application disabled");
                             }
                         }
@@ -5023,6 +5513,18 @@ fn main() {
                         Err(e) => eprintln!("❌ Failed to get runtime info: {}", e),
                     }
                 }
+                RuntimeAction::Doctor { runtime } => {
+                    use nvcontrol::container_runtime::NvContainerRuntime;
+
+                    match NvContainerRuntime::new() {
+                        Ok(rt) => {
+                            if let Err(e) = rt.print_runtime_doctor(runtime.as_deref()) {
+                                eprintln!("❌ Runtime doctor failed: {}", e);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize runtime: {}", e),
+                    }
+                }
                 RuntimeAction::Setup { runtime } => {
                     use nvcontrol::container_runtime::NvContainerRuntime;
 
@@ -5034,15 +5536,17 @@ fn main() {
                         Err(e) => eprintln!("❌ Failed to initialize runtime: {}", e),
                     }
                 }
-                RuntimeAction::Test => {
-                    use nvcontrol::container::is_nvidia_runtime_available;
+                RuntimeAction::Test { runtime } => {
+                    use nvcontrol::container_runtime::NvContainerRuntime;
 
-                    println!("🧪 Testing GPU passthrough...");
-                    if is_nvidia_runtime_available() {
-                        println!("✅ NVIDIA Container Runtime available");
-                    } else {
-                        println!("❌ NVIDIA Container Runtime not found");
-                        println!("💡 Install nvidia-container-toolkit or nvidia-docker2");
+                    println!("🧪 Testing GPU passthrough for {}...", runtime);
+                    match NvContainerRuntime::new() {
+                        Ok(rt) => {
+                            if let Err(e) = rt.run_smoke_test(&runtime) {
+                                eprintln!("❌ Runtime smoke test failed: {}", e);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to initialize runtime: {}", e),
                     }
                 }
                 RuntimeAction::Configure => {
@@ -5093,14 +5597,33 @@ fn main() {
                 }
             }
             ConfigSubcommand::Export { profile, output } => {
-                println!("📤 Exporting profile '{}' to '{}'", profile, output);
-                println!("⚠️  Profile export not yet fully implemented");
+                use nvcontrol::profile_manager::ProfileManager;
+
+                match ProfileManager::new() {
+                    Ok(manager) => match manager.load_profile_by_name(&profile) {
+                        Ok(bundle) => {
+                            let path = std::path::Path::new(&output);
+                            match manager.export_profile_to_path(&bundle, path) {
+                                Ok(()) => println!(
+                                    "✅ Exported profile '{}' to '{}'",
+                                    profile,
+                                    path.display()
+                                ),
+                                Err(e) => eprintln!("❌ Failed to export profile: {}", e),
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to load profile '{}': {}", profile, e),
+                    },
+                    Err(e) => eprintln!("❌ Failed to initialize profile manager: {}", e),
+                }
             }
             ConfigSubcommand::Import {
                 input,
                 name,
                 skip_validation,
             } => {
+                use nvcontrol::profile_manager::ProfileManager;
+
                 let profile_name = name.unwrap_or_else(|| {
                     std::path::Path::new(&input)
                         .file_stem()
@@ -5108,18 +5631,128 @@ fn main() {
                         .unwrap_or("imported")
                         .to_string()
                 });
-                println!(
-                    "📥 Importing profile from '{}' as '{}'",
-                    input, profile_name
-                );
-                if skip_validation {
-                    println!("⚠️  Skipping validation checks");
+
+                match ProfileManager::new() {
+                    Ok(manager) => match manager.import_profile(std::path::Path::new(&input)) {
+                        Ok(bundle) => {
+                            println!(
+                                "📥 Importing profile from '{}' as '{}'",
+                                input, profile_name
+                            );
+                            if skip_validation {
+                                println!(
+                                    "⚠️  Validation bypass requested; no extra checks applied"
+                                );
+                            }
+                            match manager.save_imported_profile(&bundle, Some(&profile_name)) {
+                                Ok(path) => println!("✅ Imported profile to '{}'", path.display()),
+                                Err(e) => eprintln!("❌ Failed to save imported profile: {}", e),
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to import profile: {}", e),
+                    },
+                    Err(e) => eprintln!("❌ Failed to initialize profile manager: {}", e),
                 }
-                println!("⚠️  Profile import not yet fully implemented");
+            }
+            ConfigSubcommand::Capture { name } => {
+                use nvcontrol::profile_manager::ProfileManager;
+
+                match ProfileManager::new() {
+                    Ok(manager) => match ProfileManager::capture_live_bundle(&name) {
+                        Ok(bundle) => match manager.export_profile(&bundle, Some(&name)) {
+                            Ok(path) => {
+                                println!("✅ Captured current live state into '{}'", path.display())
+                            }
+                            Err(e) => eprintln!("❌ Failed to save captured profile: {}", e),
+                        },
+                        Err(e) => eprintln!("❌ Failed to capture live state: {}", e),
+                    },
+                    Err(e) => eprintln!("❌ Failed to initialize profile manager: {}", e),
+                }
+            }
+            ConfigSubcommand::Preview { input } => {
+                use nvcontrol::profile_manager::ProfileManager;
+
+                match ProfileManager::new() {
+                    Ok(manager) => match manager.resolve_bundle_reference(&input) {
+                        Ok(bundle) => {
+                            println!("📝 Profile bundle preview\n");
+                            println!("{}", ProfileManager::summarize_bundle(&bundle));
+                        }
+                        Err(e) => eprintln!("❌ Failed to preview profile: {}", e),
+                    },
+                    Err(e) => eprintln!("❌ Failed to initialize profile manager: {}", e),
+                }
+            }
+            ConfigSubcommand::Diff { current, target } => {
+                use nvcontrol::profile_manager::ProfileManager;
+
+                match ProfileManager::new() {
+                    Ok(manager) => {
+                        let current_bundle = manager.resolve_bundle_reference(&current);
+                        let target_bundle = manager.resolve_bundle_reference(&target);
+
+                        match (current_bundle, target_bundle) {
+                            (Ok(current_bundle), Ok(target_bundle)) => {
+                                let changes =
+                                    ProfileManager::diff_bundles(&current_bundle, &target_bundle);
+                                if changes.is_empty() {
+                                    println!("No profile bundle differences found");
+                                } else {
+                                    println!("📊 Profile bundle diff\n");
+                                    for change in changes {
+                                        println!("- {}", change);
+                                    }
+                                }
+                            }
+                            (Err(e), _) => eprintln!("❌ Failed to load current profile: {}", e),
+                            (_, Err(e)) => eprintln!("❌ Failed to load target profile: {}", e),
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Failed to initialize profile manager: {}", e),
+                }
+            }
+            ConfigSubcommand::Apply { input } => {
+                use nvcontrol::profile_manager::ProfileManager;
+
+                match ProfileManager::new() {
+                    Ok(manager) => match manager.resolve_bundle_reference(&input) {
+                        Ok(bundle) => match ProfileManager::apply_bundle(&bundle) {
+                            Ok(applied) if applied.is_empty() => {
+                                println!("No compatible bundle settings to apply")
+                            }
+                            Ok(applied) => {
+                                println!("✅ Applied profile bundle '{}':", bundle.name);
+                                for item in applied {
+                                    println!("- {}", item);
+                                }
+                            }
+                            Err(e) => eprintln!("❌ Failed to apply bundle: {}", e),
+                        },
+                        Err(e) => eprintln!("❌ Failed to resolve profile bundle: {}", e),
+                    },
+                    Err(e) => eprintln!("❌ Failed to initialize profile manager: {}", e),
+                }
             }
             ConfigSubcommand::Profiles => {
-                println!("📋 Available GPU profiles:");
-                println!("⚠️  Profile listing not yet fully implemented");
+                use nvcontrol::profile_manager::ProfileManager;
+
+                match ProfileManager::new() {
+                    Ok(manager) => match manager.list_profiles() {
+                        Ok(profiles) if profiles.is_empty() => {
+                            println!("📋 No saved profiles found")
+                        }
+                        Ok(profiles) => {
+                            println!("📋 Saved profile bundles:");
+                            for profile in profiles {
+                                println!("   • {}", profile.name);
+                                println!("     {}", profile.description);
+                            }
+                        }
+                        Err(e) => eprintln!("❌ Failed to list profiles: {}", e),
+                    },
+                    Err(e) => eprintln!("❌ Failed to initialize profile manager: {}", e),
+                }
             }
         },
         Command::Osd { subcommand } => {
@@ -5549,9 +6182,54 @@ fn main() {
                 }
             }
         }
-        Command::Doctor => {
+        Command::Doctor {
+            support,
+            format,
+            output,
+        } => {
             println!("{}", nvcontrol::error_messages::run_diagnostics());
+            if support {
+                let release = drivers::collect_release_diagnostics();
+                let summary = drivers::summarize_release_diagnostics(&release);
+                if matches!(format, Some(OutputFormat::Json) | Some(OutputFormat::Yaml)) {
+                    match format {
+                        Some(OutputFormat::Json) => {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&summary).unwrap_or_default()
+                            );
+                        }
+                        Some(OutputFormat::Yaml) => {
+                            println!("{}", serde_yaml::to_string(&summary).unwrap_or_default());
+                        }
+                        _ => {}
+                    }
+                }
+                if let Err(e) = drivers::print_release_diagnostics() {
+                    eprintln!("Failed to print release diagnostics: {e}");
+                }
+                if let Err(e) = drivers::print_driver_check() {
+                    eprintln!("Failed to run driver health checks: {e}");
+                }
+                if let Err(e) =
+                    drivers::write_support_bundle_with_options(&output, true, false, true, true, 80)
+                {
+                    eprintln!("Failed to write doctor support bundle: {e}");
+                } else {
+                    println!("Wrote doctor support bundle to {}", output);
+                    if let Ok(mut notifier) = NotificationManager::new() {
+                        let _ = notifier.notify_support_bundle_created(&output);
+                    }
+                }
+                if summary.severity == drivers::DiagnosticSeverity::Broken {
+                    std::process::exit(1);
+                }
+            }
         }
+        Command::Completion { shell } => match print_shell_completions(&shell) {
+            Ok(()) => {}
+            Err(e) => eprintln!("Failed to generate completions: {e}"),
+        },
         Command::Version => {
             println!("🚀 nvcontrol v{}", env!("CARGO_PKG_VERSION"));
             println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -5631,6 +6309,8 @@ fn main() {
                         println!("   🎮 {} @ {}", model.name(), pci_id);
                         if model.supports_power_detector() {
                             println!("      └─ Power Detector+ supported");
+                        } else {
+                            println!("      └─ {}", model.capability_note());
                         }
                     }
                 }
@@ -5659,6 +6339,7 @@ fn main() {
                         if !detector.is_supported() {
                             eprintln!("❌ Power Detector+ not supported on this card");
                             eprintln!("   Model: {}", detector.model().name());
+                            eprintln!("   {}", detector.support_status_message());
                             return;
                         }
 
@@ -5741,6 +6422,8 @@ fn main() {
                     if model.supports_power_detector() {
                         println!("\n  Power Detector+: ✅ Supported");
                         println!("  Run 'nvctl asus power' for 12V rail monitoring");
+                    } else {
+                        println!("\n  Power Detector+: {}", model.capability_note());
                     }
                     println!();
                 }
@@ -5906,6 +6589,9 @@ fn print_formatted_output<T: serde::Serialize>(
     match format {
         Some(OutputFormat::Json) => {
             println!("{}", serde_json::to_string_pretty(data).unwrap_or_default());
+        }
+        Some(OutputFormat::Yaml) => {
+            println!("{}", serde_yaml::to_string(data).unwrap_or_default());
         }
         Some(OutputFormat::Human) => {
             // Human-readable output with optional colors

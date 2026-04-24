@@ -1,7 +1,13 @@
+use crate::arch_integration::ArchIntegration;
+use crate::container_runtime::NvContainerRuntime;
+use crate::gsp_firmware::GspManager;
 use crate::{NvControlError, NvResult};
+use flate2::{Compression, write::GzEncoder};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::process::Command;
+use std::{fmt::Write as _, fs};
+use tar::Builder;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DriverStatus {
@@ -19,6 +25,159 @@ pub enum DriverType {
     Open,
     OpenBeta,
     Nouveau,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GpuReleaseDiagnostic {
+    pub gpu_name: String,
+    pub pci_bus_id: Option<String>,
+    pub pci_device_id: Option<String>,
+    pub chip_code: Option<String>,
+    pub architecture: String,
+    pub legacy: bool,
+    pub open_driver_capable: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReleaseDiagnostics {
+    pub running_kernel: String,
+    pub module_kernel: String,
+    pub kernel_match: bool,
+    pub boot_cmdline: Option<String>,
+    pub initramfs_tool: Option<String>,
+    pub boot_entries: Vec<String>,
+    pub installed_kernels: Vec<String>,
+    pub initramfs_images: Vec<String>,
+    pub initramfs_findings: Vec<String>,
+    pub userspace_driver_version: Option<String>,
+    pub kernel_module_version: Option<String>,
+    pub firmware_layout: Option<String>,
+    pub firmware_path: Option<String>,
+    pub firmware_file: Option<String>,
+    pub release_alignment: Option<String>,
+    pub expected_firmware_paths: Vec<String>,
+    pub ownership: Vec<OwnershipDiagnostic>,
+    pub gpu_diagnostics: Vec<GpuReleaseDiagnostic>,
+    pub arch_packages: Vec<PackageDiagnostic>,
+    pub package_findings: Vec<String>,
+    pub package_inventory: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PackageDiagnostic {
+    pub package: String,
+    pub installed_version: Option<String>,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OwnershipDiagnostic {
+    pub path: String,
+    pub owner: Option<String>,
+    pub package_check: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SupportBundleMetadata {
+    pub bundle_path: String,
+    pub tarball: bool,
+    pub gzip: bool,
+    pub redact_paths: bool,
+    pub redact_ids: bool,
+    pub log_tail: usize,
+    pub release_diagnostics: ReleaseDiagnostics,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DkmsDoctorReport {
+    pub severity: DiagnosticSeverity,
+    pub findings: Vec<String>,
+    pub fixes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SourceBuildState {
+    pub source_path: Option<String>,
+    pub source_type: String,
+    pub current_tag: Option<String>,
+    pub latest_tag: Option<String>,
+    pub git_commit: Option<String>,
+    pub git_dirty: Option<bool>,
+    pub symlink_target: Option<String>,
+    pub tracked_version: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum DiagnosticSeverity {
+    Healthy,
+    Warning,
+    Broken,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiagnosticSummary {
+    pub severity: DiagnosticSeverity,
+    pub messages: Vec<String>,
+}
+
+pub fn severity_label(severity: DiagnosticSeverity) -> &'static str {
+    match severity {
+        DiagnosticSeverity::Healthy => "Healthy",
+        DiagnosticSeverity::Warning => "Warning",
+        DiagnosticSeverity::Broken => "Broken",
+    }
+}
+
+pub fn suggested_fixes(summary: &DiagnosticSummary) -> Vec<String> {
+    let mut fixes = Vec::new();
+
+    for message in &summary.messages {
+        if message.contains("running kernel does not match") {
+            fixes.push("Reboot into the kernel that matches the installed NVIDIA module, or rebuild the module for the current kernel".to_string());
+        }
+        if message.contains("missing expected firmware paths") {
+            fixes.push("Reinstall the matching NVIDIA userspace/firmware packages and verify the expected firmware directories exist".to_string());
+        }
+        if message.contains("mixed package state") {
+            fixes.push("Make sure nvidia-open, nvidia-utils, and firmware packages come from the same 595 release branch".to_string());
+        }
+        if message.contains("Both nvidia and nvidia-open are installed") {
+            fixes.push("Remove the branch you are not using, for example: sudo pacman -Rns nvidia or sudo pacman -Rns nvidia-open".to_string());
+        }
+        if message
+            .contains("Both proprietary and open NVIDIA kernel package variants are installed")
+        {
+            fixes.push("Remove the unused branch packages so only one kernel-driver family remains installed, for example: sudo pacman -Rns nvidia nvidia-dkms or sudo pacman -Rns nvidia-open nvidia-open-dkms".to_string());
+        }
+        if message.contains("Both nvidia and nvidia-dkms are installed") {
+            fixes.push("Keep either `nvidia` or `nvidia-dkms`, then rebuild initramfs for the remaining branch".to_string());
+        }
+        if message.contains("Both nvidia-open and nvidia-open-dkms are installed") {
+            fixes.push("Keep either `nvidia-open` or `nvidia-open-dkms`, then rerun `nvctl driver dkms doctor` if you stay on DKMS".to_string());
+        }
+        if message.contains("nvidia-utils version") {
+            fixes.push("Sync driver userspace packages to one branch, for example: sudo pacman -Syu nvidia-utils nvidia-open or sudo pacman -Syu nvidia-utils nvidia".to_string());
+        }
+        if message.contains("lib32-nvidia-utils version") {
+            fixes.push("Match `lib32-nvidia-utils` to the same branch/version as `nvidia-utils`, for example: sudo pacman -Syu nvidia-utils lib32-nvidia-utils".to_string());
+        }
+        if message.contains("linux-firmware-nvidia is missing") {
+            fixes.push("Install the missing firmware package for Arch/CachyOS, for example: sudo pacman -Syu linux-firmware-nvidia".to_string());
+        }
+        if message.contains("no owning Arch package") {
+            fixes.push("Reinstall the firmware package that should own the missing path, for example: sudo pacman -Syu linux-firmware linux-firmware-nvidia".to_string());
+        }
+        if message.contains("dkms") {
+            fixes.push("Run `nvctl driver dkms fix` after confirming matching kernel headers are installed".to_string());
+        }
+        if message.contains("boot/initramfs") {
+            fixes.push("Verify the detected initramfs tool, regenerate images after kernel/driver changes, and confirm the running kernel has a matching /boot entry".to_string());
+        }
+    }
+
+    fixes.sort();
+    fixes.dedup();
+    fixes
 }
 
 impl DriverType {
@@ -79,17 +238,1108 @@ pub fn get_driver_status() -> NvResult<DriverStatus> {
 }
 
 fn determine_driver_type(_version: &str) -> String {
-    // Try to determine if it's open or proprietary driver
-    if let Ok(output) = Command::new("modinfo").arg("nvidia").output() {
-        let modinfo = String::from_utf8_lossy(&output.stdout);
-        if modinfo.contains("nvidia-open") {
-            "Open Source".to_string()
-        } else {
+    if GspManager::is_nvidia_open() {
+        "Open Source".to_string()
+    } else if let Ok(version_info) = std::fs::read_to_string("/proc/driver/nvidia/version") {
+        if version_info.contains("NVIDIA UNIX") {
             "Proprietary".to_string()
+        } else {
+            "Unknown".to_string()
         }
     } else {
         "Unknown".to_string()
     }
+}
+
+fn normalize_pci_bus_id(bus_id: &str) -> Option<String> {
+    let trimmed = bus_id.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    if trimmed.len() == 12 && trimmed.chars().nth(4) == Some(':') {
+        return Some(trimmed.to_lowercase());
+    }
+
+    Some(trimmed.to_lowercase())
+}
+
+fn read_pci_device_id(bus_id: &str) -> Option<String> {
+    let normalized = normalize_pci_bus_id(bus_id)?;
+    let path = format!("/sys/bus/pci/devices/{}/device", normalized);
+    std::fs::read_to_string(path)
+        .ok()
+        .map(|value: String| value.trim().trim_start_matches("0x").to_lowercase())
+}
+
+fn lookup_pci_ids_name(device_id: &str) -> Option<String> {
+    let pci_ids = fs::read_to_string("/usr/share/hwdata/pci.ids")
+        .or_else(|_| fs::read_to_string("/usr/share/misc/pci.ids"))
+        .ok()?;
+
+    let mut in_nvidia = false;
+    for line in pci_ids.lines() {
+        if !line.starts_with('\t') {
+            in_nvidia = line.starts_with("10de  ") || line.starts_with("10de ");
+            continue;
+        }
+        if in_nvidia {
+            let trimmed = line.trim_start();
+            if trimmed.len() >= 4 && trimmed[..4].to_lowercase() == device_id {
+                return Some(trimmed[4..].trim().to_string());
+            }
+        }
+    }
+
+    None
+}
+
+fn detect_gpu_architecture_by_compute_capability(major: u32, minor: u32) -> Option<(String, bool)> {
+    Some(match (major, minor) {
+        (12, _) | (10, _) => ("Blackwell".to_string(), false),
+        (8, 9) => ("Ada Lovelace".to_string(), false),
+        (8, 6) | (8, 0) => ("Ampere".to_string(), false),
+        (7, 5) => ("Turing".to_string(), false),
+        (7, 0) => ("Volta".to_string(), true),
+        (6, _) => ("Pascal".to_string(), true),
+        (5, _) => ("Maxwell".to_string(), true),
+        _ => return None,
+    })
+}
+
+fn detect_gpu_architecture_by_pci_id(device_id: &str) -> Option<(String, bool)> {
+    let id = u32::from_str_radix(device_id, 16).ok()?;
+
+    const PCI_ARCH_TABLE: &[(u32, u32, &str, bool)] = &[
+        (0x2900, 0x29ff, "Blackwell", false),
+        (0x2800, 0x28ff, "Ada Lovelace", false),
+        (0x2700, 0x27ff, "Ada Lovelace", false),
+        (0x2500, 0x26ff, "Ampere", false),
+        (0x2480, 0x24ff, "Ampere", false),
+        (0x2300, 0x23ff, "Hopper", false),
+        (0x2200, 0x22ff, "Ampere", false),
+        (0x1e00, 0x21ff, "Turing", false),
+        (0x1d00, 0x1dff, "Volta", true),
+        (0x1b00, 0x1cff, "Pascal", true),
+        (0x1300, 0x17ff, "Maxwell", true),
+        (0x0f00, 0x12ff, "Kepler", true),
+    ];
+
+    PCI_ARCH_TABLE
+        .iter()
+        .find_map(|(start, end, arch, legacy)| {
+            (id >= *start && id <= *end).then(|| ((*arch).to_string(), *legacy))
+        })
+}
+
+fn detect_chip_code_by_pci_id(device_id: &str) -> Option<String> {
+    let id = u32::from_str_radix(device_id, 16).ok()?;
+    const CHIP_TABLE: &[(u32, u32, &str)] = &[
+        (0x2900, 0x29ff, "gb2xx"),
+        (0x2800, 0x28ff, "ad10x"),
+        (0x2700, 0x27ff, "ad10x"),
+        (0x2500, 0x26ff, "ga10x"),
+        (0x2480, 0x24ff, "ga10x"),
+        (0x2300, 0x23ff, "gh100"),
+        (0x2200, 0x22ff, "ga10x"),
+        (0x1e00, 0x21ff, "tu10x"),
+        (0x1d00, 0x1dff, "gv100"),
+        (0x1b00, 0x1cff, "gp10x"),
+        (0x1300, 0x17ff, "gm20x"),
+        (0x0f00, 0x12ff, "gk10x"),
+    ];
+
+    CHIP_TABLE
+        .iter()
+        .find_map(|(start, end, chip)| (id >= *start && id <= *end).then(|| (*chip).to_string()))
+}
+
+fn collect_arch_package_diagnostics() -> Vec<PackageDiagnostic> {
+    let packages = [
+        "nvidia",
+        "nvidia-dkms",
+        "nvidia-open",
+        "nvidia-open-dkms",
+        "nvidia-utils",
+        "lib32-nvidia-utils",
+        "linux-firmware",
+        "linux-firmware-nvidia",
+        "dkms",
+    ];
+    let mut diagnostics = Vec::new();
+
+    for package in packages {
+        let installed_version = Command::new("pacman")
+            .args(["-Q", package])
+            .output()
+            .ok()
+            .filter(|output| output.status.success())
+            .and_then(|output| {
+                String::from_utf8_lossy(&output.stdout)
+                    .split_whitespace()
+                    .nth(1)
+                    .map(ToString::to_string)
+            });
+
+        diagnostics.push(PackageDiagnostic {
+            package: package.to_string(),
+            status: if installed_version.is_some() {
+                "installed".to_string()
+            } else {
+                "missing".to_string()
+            },
+            installed_version,
+        });
+    }
+
+    diagnostics
+}
+
+fn detect_initramfs_tool() -> Option<String> {
+    if std::path::Path::new("/usr/bin/mkinitcpio").exists() {
+        Some("mkinitcpio".to_string())
+    } else if std::path::Path::new("/usr/bin/dracut").exists() {
+        Some("dracut".to_string())
+    } else if std::path::Path::new("/usr/sbin/update-initramfs").exists()
+        || std::path::Path::new("/usr/bin/update-initramfs").exists()
+    {
+        Some("update-initramfs".to_string())
+    } else {
+        None
+    }
+}
+
+fn list_boot_entries() -> Vec<String> {
+    let mut entries = Vec::new();
+    if let Ok(dir) = fs::read_dir("/boot") {
+        for entry in dir.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with("vmlinuz-") || name.starts_with("initramfs-") {
+                entries.push(name);
+            }
+        }
+    }
+    entries.sort();
+    entries
+}
+
+fn list_installed_kernels() -> Vec<String> {
+    let mut kernels = Vec::new();
+    if let Ok(dir) = fs::read_dir("/lib/modules") {
+        for entry in dir.flatten() {
+            kernels.push(entry.file_name().to_string_lossy().to_string());
+        }
+    }
+    kernels.sort();
+    kernels
+}
+
+fn list_initramfs_images() -> Vec<String> {
+    let mut images = Vec::new();
+    if let Ok(dir) = fs::read_dir("/boot") {
+        for entry in dir.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with("initramfs-") && name.ends_with(".img") {
+                images.push(name);
+            }
+        }
+    }
+    images.sort();
+    images
+}
+
+fn collect_initramfs_findings(
+    running_kernel: &str,
+    initramfs_tool: Option<&str>,
+    boot_cmdline: Option<&str>,
+    initramfs_images: &[String],
+) -> Vec<String> {
+    let mut findings = Vec::new();
+    let expected_image = format!("initramfs-{}.img", running_kernel);
+
+    if !initramfs_images
+        .iter()
+        .any(|image| image == &expected_image)
+    {
+        findings.push(format!(
+            "boot image for running kernel not found in /boot: {}",
+            expected_image
+        ));
+    }
+
+    match initramfs_tool {
+        Some("mkinitcpio") if !std::path::Path::new("/etc/mkinitcpio.conf").exists() => {
+            findings.push("mkinitcpio detected but /etc/mkinitcpio.conf is missing".to_string());
+        }
+        Some("dracut")
+            if !std::path::Path::new("/etc/dracut.conf").exists()
+                && !std::path::Path::new("/etc/dracut.conf.d").exists() =>
+        {
+            findings
+                .push("dracut detected without a visible config file or config dir".to_string());
+        }
+        _ => {}
+    }
+
+    if let Some(cmdline) = boot_cmdline {
+        if !cmdline.contains("nvidia_drm.modeset=1") {
+            findings.push("boot cmdline is missing nvidia_drm.modeset=1".to_string());
+        }
+        if !cmdline.contains("nvidia.NVreg_PreserveVideoMemoryAllocations=1") {
+            findings.push(
+                "boot cmdline is missing nvidia.NVreg_PreserveVideoMemoryAllocations=1".to_string(),
+            );
+        }
+    }
+
+    findings.sort();
+    findings.dedup();
+    findings
+}
+
+fn collect_package_inventory() -> Vec<String> {
+    let mut lines = Vec::new();
+    if let Ok(output) = Command::new("pacman")
+        .args([
+            "-Q",
+            "nvidia",
+            "nvidia-dkms",
+            "nvidia-open",
+            "nvidia-open-dkms",
+            "nvidia-utils",
+            "lib32-nvidia-utils",
+            "linux-firmware",
+            "linux-firmware-nvidia",
+            "dkms",
+            "linux-cachyos-lto",
+            "linux-zen",
+            "linux-lts",
+            "linux",
+        ])
+        .output()
+    {
+        if output.status.success() || !output.stdout.is_empty() {
+            lines.extend(
+                String::from_utf8_lossy(&output.stdout)
+                    .lines()
+                    .map(|line| line.to_string()),
+            );
+        }
+    }
+    lines
+}
+
+fn collect_package_findings(
+    driver_version: Option<&str>,
+    arch_packages: &[PackageDiagnostic],
+    ownership: &[OwnershipDiagnostic],
+) -> Vec<String> {
+    let mut findings = Vec::new();
+
+    let package_version = |name: &str| {
+        arch_packages
+            .iter()
+            .find(|pkg| pkg.package == name)
+            .and_then(|pkg| pkg.installed_version.as_deref())
+    };
+
+    let has_open = package_version("nvidia-open").is_some();
+    let has_open_dkms = package_version("nvidia-open-dkms").is_some();
+    let has_prop = package_version("nvidia").is_some();
+    let has_prop_dkms = package_version("nvidia-dkms").is_some();
+    let utils = package_version("nvidia-utils");
+    let lib32_utils = package_version("lib32-nvidia-utils");
+    let firmware_nvidia = package_version("linux-firmware-nvidia");
+
+    if (has_open || has_open_dkms) && (has_prop || has_prop_dkms) {
+        findings.push(
+            "Both proprietary and open NVIDIA kernel package variants are installed; keep only the branch you actually use".to_string(),
+        );
+    }
+
+    if let (Some(driver), Some(utils_version)) = (driver_version, utils) {
+        if !utils_version.starts_with(driver) {
+            findings.push(format!(
+                "nvidia-utils version {} does not match detected driver {}",
+                utils_version, driver
+            ));
+        }
+    }
+
+    if (has_open || has_open_dkms) && utils.is_none() {
+        findings.push(
+            "nvidia-open is installed without nvidia-utils; userspace components are incomplete"
+                .to_string(),
+        );
+    }
+
+    if let (Some(utils_version), Some(lib32_version)) = (utils, lib32_utils)
+        && utils_version != lib32_version
+    {
+        findings.push(format!(
+            "lib32-nvidia-utils version {} does not match nvidia-utils version {}",
+            lib32_version, utils_version
+        ));
+    }
+
+    if utils.is_some() && firmware_nvidia.is_none() {
+        findings.push(
+            "nvidia-utils is installed but linux-firmware-nvidia is missing; firmware packaging may be incomplete on Arch/CachyOS"
+                .to_string(),
+        );
+    }
+
+    if has_prop && has_prop_dkms {
+        findings.push(
+            "Both nvidia and nvidia-dkms are installed; keep either the prebuilt package or the DKMS variant, not both"
+                .to_string(),
+        );
+    }
+
+    if has_open && has_open_dkms {
+        findings.push(
+            "Both nvidia-open and nvidia-open-dkms are installed; keep either the prebuilt package or the DKMS variant, not both"
+                .to_string(),
+        );
+    }
+
+    if ownership.iter().any(|item| item.owner.is_none()) {
+        findings.push(
+            "At least one expected firmware path has no owning Arch package; firmware installation may be incomplete"
+                .to_string(),
+        );
+    }
+
+    if ownership.iter().any(|item| {
+        item.owner
+            .as_deref()
+            .map(|owner| owner.contains("nvidia-utils-beta") || owner.contains("nvidia-open-beta"))
+            .unwrap_or(false)
+    }) {
+        findings.push(
+            "Firmware ownership points to beta packages; verify that your loaded driver branch matches the installed beta userspace stack"
+                .to_string(),
+        );
+    }
+
+    findings.sort();
+    findings.dedup();
+    findings
+}
+
+fn collect_gpu_release_diagnostics() -> Vec<GpuReleaseDiagnostic> {
+    let mut diagnostics = Vec::new();
+
+    if let Ok(output) = Command::new("nvidia-smi")
+        .args([
+            "--query-gpu=name,pci.bus_id,compute_cap",
+            "--format=csv,noheader",
+        ])
+        .output()
+    {
+        if output.status.success() {
+            let gpu_info = String::from_utf8_lossy(&output.stdout);
+            for line in gpu_info.trim().lines() {
+                let parts: Vec<&str> = line.split(", ").collect();
+                let pci_bus_id = parts.get(1).map(|value| value.to_string());
+                let pci_device_id = pci_bus_id.as_deref().and_then(read_pci_device_id);
+                let compute_cap = parts.get(2).and_then(|cap| {
+                    let (major, minor) = cap.split_once('.')?;
+                    Some((major.parse::<u32>().ok()?, minor.parse::<u32>().ok()?))
+                });
+                let (architecture, legacy) = compute_cap
+                    .and_then(|(major, minor)| {
+                        detect_gpu_architecture_by_compute_capability(major, minor)
+                    })
+                    .or_else(|| {
+                        pci_device_id
+                            .as_deref()
+                            .and_then(detect_gpu_architecture_by_pci_id)
+                    })
+                    .or_else(|| parts.first().map(|name| detect_gpu_architecture(name)))
+                    .unwrap_or_else(|| ("Unknown".to_string(), false));
+                let resolved_name = pci_device_id
+                    .as_deref()
+                    .and_then(lookup_pci_ids_name)
+                    .unwrap_or_else(|| parts.first().copied().unwrap_or("Unknown").to_string());
+
+                diagnostics.push(GpuReleaseDiagnostic {
+                    gpu_name: resolved_name,
+                    pci_bus_id,
+                    pci_device_id: pci_device_id.clone(),
+                    chip_code: pci_device_id
+                        .as_deref()
+                        .and_then(detect_chip_code_by_pci_id),
+                    open_driver_capable: !legacy,
+                    architecture,
+                    legacy,
+                });
+            }
+        }
+    }
+
+    diagnostics
+}
+
+fn collect_ownership_diagnostics(paths: &[String]) -> Vec<OwnershipDiagnostic> {
+    let mut diagnostics = Vec::new();
+
+    for path in paths {
+        let owner = Command::new("pacman")
+            .args(["-Qo", path])
+            .output()
+            .ok()
+            .filter(|output| output.status.success())
+            .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string());
+
+        let package_check = owner.as_ref().and_then(|owner_line| {
+            owner_line
+                .split_whitespace()
+                .last()
+                .map(|pkg| pkg.trim().to_string())
+                .and_then(|pkg| {
+                    Command::new("pacman")
+                        .args(["-Qkk", &pkg])
+                        .output()
+                        .ok()
+                        .filter(|output| output.status.success())
+                        .map(|output| {
+                            String::from_utf8_lossy(&output.stdout)
+                                .lines()
+                                .next()
+                                .unwrap_or("")
+                                .to_string()
+                        })
+                })
+        });
+
+        diagnostics.push(OwnershipDiagnostic {
+            path: path.clone(),
+            owner,
+            package_check,
+        });
+    }
+
+    diagnostics
+}
+
+pub fn collect_release_diagnostics() -> ReleaseDiagnostics {
+    let running_kernel = Command::new("uname")
+        .arg("-r")
+        .output()
+        .ok()
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "Unknown".to_string());
+
+    let module_kernel = Command::new("modinfo")
+        .args(["nvidia", "-F", "vermagic"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+        .and_then(|vermagic| vermagic.split_whitespace().next().map(ToString::to_string))
+        .unwrap_or_else(|| "Unknown".to_string());
+
+    let gsp_status = GspManager::new().get_deep_status();
+    let boot_cmdline = fs::read_to_string("/proc/cmdline")
+        .ok()
+        .map(|line| line.trim().to_string());
+    let initramfs_tool = detect_initramfs_tool();
+    let boot_entries = list_boot_entries();
+    let installed_kernels = list_installed_kernels();
+    let initramfs_images = list_initramfs_images();
+    let initramfs_findings = collect_initramfs_findings(
+        &running_kernel,
+        initramfs_tool.as_deref(),
+        boot_cmdline.as_deref(),
+        &initramfs_images,
+    );
+    let mut expected_firmware_paths = Vec::new();
+    if let Some(arch) = &gsp_status.gpu_arch {
+        expected_firmware_paths.push(format!("/lib/firmware/nvidia/{}/gsp", arch));
+    }
+    if let Some(version) = &gsp_status.firmware_version {
+        expected_firmware_paths.push(format!("/lib/firmware/nvidia/{}", version));
+    }
+    let ownership = collect_ownership_diagnostics(&expected_firmware_paths);
+    let arch_packages = collect_arch_package_diagnostics();
+    let package_findings = collect_package_findings(
+        gsp_status.firmware_version.as_deref(),
+        &arch_packages,
+        &ownership,
+    );
+    let package_inventory = collect_package_inventory();
+
+    ReleaseDiagnostics {
+        running_kernel: running_kernel.clone(),
+        module_kernel: module_kernel.clone(),
+        kernel_match: running_kernel == module_kernel,
+        boot_cmdline,
+        initramfs_tool,
+        boot_entries,
+        installed_kernels,
+        initramfs_images,
+        initramfs_findings,
+        userspace_driver_version: gsp_status.firmware_version,
+        kernel_module_version: gsp_status.kernel_module_version,
+        firmware_layout: gsp_status.firmware_layout,
+        firmware_path: gsp_status.firmware_path,
+        firmware_file: gsp_status.firmware_file,
+        release_alignment: gsp_status.release_alignment,
+        expected_firmware_paths,
+        ownership,
+        gpu_diagnostics: collect_gpu_release_diagnostics(),
+        arch_packages,
+        package_findings,
+        package_inventory,
+    }
+}
+
+pub fn print_release_diagnostics() -> NvResult<()> {
+    let diagnostics = collect_release_diagnostics();
+
+    println!("Release Diagnostics");
+    println!("{}", "═".repeat(50));
+    println!();
+    println!("Running Kernel:  {}", diagnostics.running_kernel);
+    println!("Module Kernel:   {}", diagnostics.module_kernel);
+    println!(
+        "Kernel Match:    {}",
+        if diagnostics.kernel_match {
+            "yes"
+        } else {
+            "no"
+        }
+    );
+    if let Some(tool) = &diagnostics.initramfs_tool {
+        println!("Initramfs Tool:  {}", tool);
+    }
+
+    if let Some(version) = &diagnostics.userspace_driver_version {
+        println!("Userspace:       {}", version);
+    }
+    if let Some(version) = &diagnostics.kernel_module_version {
+        println!("Kernel Module:   {}", version);
+    }
+    if let Some(alignment) = &diagnostics.release_alignment {
+        println!("Release Match:   {}", alignment);
+    }
+    if let Some(layout) = &diagnostics.firmware_layout {
+        println!("FW Layout:       {}", layout);
+    }
+    if let Some(path) = &diagnostics.firmware_path {
+        println!("FW Path:         {}", path);
+    }
+    if let Some(file) = &diagnostics.firmware_file {
+        println!("FW File:         {}", file);
+    }
+
+    if !diagnostics.expected_firmware_paths.is_empty() {
+        println!("Expected Paths:");
+        for path in &diagnostics.expected_firmware_paths {
+            let status = if std::path::Path::new(path).exists() {
+                "present"
+            } else {
+                "missing"
+            };
+            println!("  - {} ({})", path, status);
+        }
+    }
+
+    if let Some(cmdline) = &diagnostics.boot_cmdline {
+        println!("Boot Cmdline:    {}", cmdline);
+    }
+
+    if !diagnostics.installed_kernels.is_empty() {
+        println!("Installed Kernels:");
+        for kernel in &diagnostics.installed_kernels {
+            println!("  - {}", kernel);
+        }
+    }
+
+    if !diagnostics.initramfs_images.is_empty() {
+        println!("Initramfs Images:");
+        for image in &diagnostics.initramfs_images {
+            println!("  - {}", image);
+        }
+    }
+
+    if !diagnostics.initramfs_findings.is_empty() {
+        println!();
+        println!("Boot/Initramfs Findings:");
+        for finding in &diagnostics.initramfs_findings {
+            println!("  - {}", finding);
+        }
+    }
+
+    if !diagnostics.gpu_diagnostics.is_empty() {
+        println!();
+        println!("GPU Support:");
+        for gpu in &diagnostics.gpu_diagnostics {
+            println!(
+                "  - {} [{}{}] -> {}{} ({})",
+                gpu.gpu_name,
+                gpu.pci_bus_id.as_deref().unwrap_or("unknown pci"),
+                gpu.pci_device_id
+                    .as_ref()
+                    .map(|id| format!(", 0x{}", id))
+                    .unwrap_or_default(),
+                gpu.architecture,
+                gpu.chip_code
+                    .as_ref()
+                    .map(|chip| format!(", {}", chip))
+                    .unwrap_or_default(),
+                if gpu.open_driver_capable {
+                    "open-driver capable"
+                } else {
+                    "legacy/proprietary-only"
+                }
+            );
+        }
+    }
+
+    if !diagnostics.ownership.is_empty() {
+        println!();
+        println!("Ownership Checks:");
+        for item in &diagnostics.ownership {
+            println!(
+                "  - {} -> {}{}",
+                item.path,
+                item.owner.as_deref().unwrap_or("no package owner found"),
+                item.package_check
+                    .as_ref()
+                    .map(|line| format!(" [{}]", line))
+                    .unwrap_or_default()
+            );
+        }
+    }
+
+    if !diagnostics.arch_packages.is_empty() {
+        println!();
+        println!("Arch Packages:");
+        for pkg in &diagnostics.arch_packages {
+            println!(
+                "  - {}: {}{}",
+                pkg.package,
+                pkg.status,
+                pkg.installed_version
+                    .as_ref()
+                    .map(|v| format!(" ({})", v))
+                    .unwrap_or_default()
+            );
+        }
+    }
+
+    if !diagnostics.package_findings.is_empty() {
+        println!();
+        println!("Package Findings:");
+        for finding in &diagnostics.package_findings {
+            println!("  - {}", finding);
+        }
+    }
+
+    Ok(())
+}
+
+pub fn summarize_release_diagnostics(diagnostics: &ReleaseDiagnostics) -> DiagnosticSummary {
+    let mut messages = Vec::new();
+    let mut severity = DiagnosticSeverity::Healthy;
+
+    if !diagnostics.kernel_match {
+        severity = DiagnosticSeverity::Broken;
+        messages.push("running kernel does not match the loaded NVIDIA module target".to_string());
+    }
+
+    if let Some(alignment) = &diagnostics.release_alignment {
+        if alignment.starts_with("mismatch") {
+            severity = DiagnosticSeverity::Broken;
+            messages.push(format!("release mismatch: {}", alignment));
+        } else if alignment.starts_with("structurally aligned")
+            && severity != DiagnosticSeverity::Broken
+        {
+            severity = DiagnosticSeverity::Warning;
+            messages.push(format!("firmware filename is non-versioned: {}", alignment));
+        }
+    }
+
+    let missing_paths: Vec<_> = diagnostics
+        .expected_firmware_paths
+        .iter()
+        .filter(|path| !std::path::Path::new(path.as_str()).exists())
+        .cloned()
+        .collect();
+    if !missing_paths.is_empty() {
+        severity = DiagnosticSeverity::Broken;
+        messages.push(format!(
+            "missing expected firmware paths: {}",
+            missing_paths.join(", ")
+        ));
+    }
+
+    for finding in &diagnostics.package_findings {
+        if finding.contains("does not match") || finding.contains("keep only") {
+            severity = DiagnosticSeverity::Broken;
+        } else if severity != DiagnosticSeverity::Broken {
+            severity = DiagnosticSeverity::Warning;
+        }
+        messages.push(finding.clone());
+    }
+
+    for finding in &diagnostics.initramfs_findings {
+        if severity != DiagnosticSeverity::Broken {
+            severity = DiagnosticSeverity::Warning;
+        }
+        messages.push(format!("boot/initramfs: {}", finding));
+    }
+
+    let has_mixed_arch_state = diagnostics
+        .arch_packages
+        .iter()
+        .any(|pkg| pkg.package == "nvidia-utils" && pkg.installed_version.is_some())
+        && diagnostics
+            .arch_packages
+            .iter()
+            .all(|pkg| pkg.package != "nvidia-open" || pkg.installed_version.is_none())
+        && diagnostics.firmware_layout.as_deref() == Some("per-chip");
+    if has_mixed_arch_state && severity != DiagnosticSeverity::Broken {
+        severity = DiagnosticSeverity::Warning;
+        messages.push(
+            "595-era mixed package state suspected: per-chip firmware is visible but the expected nvidia-open package is not installed"
+                .to_string(),
+        );
+    }
+
+    if messages.is_empty() {
+        messages.push("release diagnostics look healthy".to_string());
+    }
+
+    DiagnosticSummary { severity, messages }
+}
+
+pub fn write_support_bundle(output_path: &str) -> NvResult<()> {
+    write_support_bundle_with_options(output_path, false, false, false, false, 40)
+}
+
+pub fn support_state_dir() -> std::path::PathBuf {
+    if let Some(state_dir) = dirs::state_dir() {
+        state_dir.join("nvcontrol").join("support")
+    } else if let Some(config_dir) = dirs::config_dir() {
+        config_dir.join("nvcontrol").join("support")
+    } else {
+        std::env::temp_dir().join("nvcontrol-support")
+    }
+}
+
+pub fn default_support_bundle_path(file_name: &str) -> String {
+    let dir = support_state_dir();
+    let _ = std::fs::create_dir_all(&dir);
+    dir.join(file_name).display().to_string()
+}
+
+pub fn write_support_bundle_with_options(
+    output_path: &str,
+    tarball: bool,
+    gzip: bool,
+    redact_paths: bool,
+    redact_ids: bool,
+    log_tail: usize,
+) -> NvResult<()> {
+    let mut report = String::new();
+    let diagnostics = collect_release_diagnostics();
+    let gsp_status = GspManager::new().get_deep_status();
+
+    let _ = writeln!(report, "nvcontrol support bundle");
+    let _ = writeln!(report, "=======================");
+    let _ = writeln!(report);
+    let _ = writeln!(report, "[release diagnostics]");
+    let _ = writeln!(report, "running_kernel={}", diagnostics.running_kernel);
+    let _ = writeln!(report, "module_kernel={}", diagnostics.module_kernel);
+    let _ = writeln!(report, "kernel_match={}", diagnostics.kernel_match);
+    if let Some(tool) = diagnostics.initramfs_tool.as_ref() {
+        let _ = writeln!(report, "initramfs_tool={}", tool);
+    }
+    if let Some(cmdline) = diagnostics.boot_cmdline.as_ref() {
+        let _ = writeln!(report, "boot_cmdline={}", cmdline);
+    }
+    if let Some(version) = diagnostics.userspace_driver_version.as_ref() {
+        let _ = writeln!(report, "userspace_driver_version={}", version);
+    }
+    if let Some(version) = diagnostics.kernel_module_version.as_ref() {
+        let _ = writeln!(report, "kernel_module_version={}", version);
+    }
+    if let Some(alignment) = diagnostics.release_alignment.as_ref() {
+        let _ = writeln!(report, "release_alignment={}", alignment);
+    }
+
+    let _ = writeln!(report);
+    let _ = writeln!(report, "[gpus]");
+    for gpu in &diagnostics.gpu_diagnostics {
+        let _ = writeln!(
+            report,
+            "{} | pci={} | device={} | chip={} | arch={} | open_capable={}",
+            gpu.gpu_name,
+            if redact_ids {
+                "<redacted-pci>"
+            } else {
+                gpu.pci_bus_id.as_deref().unwrap_or("unknown")
+            },
+            if redact_ids {
+                "<redacted-device>"
+            } else {
+                gpu.pci_device_id.as_deref().unwrap_or("unknown")
+            },
+            gpu.chip_code.as_deref().unwrap_or("unknown"),
+            gpu.architecture,
+            gpu.open_driver_capable
+        );
+    }
+
+    let _ = writeln!(report);
+    let _ = writeln!(report, "[boot entries]");
+    for entry in &diagnostics.boot_entries {
+        let _ = writeln!(report, "{}", entry);
+    }
+
+    let _ = writeln!(report);
+    let _ = writeln!(report, "[installed kernels]");
+    for kernel in &diagnostics.installed_kernels {
+        let _ = writeln!(report, "{}", kernel);
+    }
+
+    let _ = writeln!(report);
+    let _ = writeln!(report, "[initramfs images]");
+    for image in &diagnostics.initramfs_images {
+        let _ = writeln!(report, "{}", image);
+    }
+
+    let _ = writeln!(report);
+    let _ = writeln!(report, "[boot/initramfs findings]");
+    if diagnostics.initramfs_findings.is_empty() {
+        let _ = writeln!(report, "none");
+    } else {
+        for finding in &diagnostics.initramfs_findings {
+            let _ = writeln!(report, "finding={}", finding);
+        }
+    }
+
+    let _ = writeln!(report);
+    let _ = writeln!(report, "[firmware paths]");
+    for path in &diagnostics.expected_firmware_paths {
+        let _ = writeln!(
+            report,
+            "{}",
+            if redact_paths {
+                "<redacted-path>"
+            } else {
+                path
+            }
+        );
+    }
+
+    let _ = writeln!(report);
+    let _ = writeln!(report, "[ownership]");
+    for item in &diagnostics.ownership {
+        let _ = writeln!(
+            report,
+            "{} | owner={} | verify={}",
+            if redact_paths {
+                "<redacted-path>"
+            } else {
+                &item.path
+            },
+            item.owner.as_deref().unwrap_or("unknown"),
+            item.package_check.as_deref().unwrap_or("n/a")
+        );
+    }
+
+    let _ = writeln!(report);
+    let _ = writeln!(report, "[arch packages]");
+    for pkg in &diagnostics.arch_packages {
+        let _ = writeln!(
+            report,
+            "{} | {} | {}",
+            pkg.package,
+            pkg.status,
+            pkg.installed_version.as_deref().unwrap_or("n/a")
+        );
+    }
+
+    let _ = writeln!(report);
+    let _ = writeln!(report, "[pacman package inventory]");
+    if diagnostics.package_inventory.is_empty() {
+        let _ = writeln!(report, "unavailable");
+    } else {
+        for line in &diagnostics.package_inventory {
+            let _ = writeln!(report, "{}", line);
+        }
+    }
+
+    let _ = writeln!(report);
+    let _ = writeln!(report, "[gsp status]");
+    let _ = writeln!(report, "enabled={}", gsp_status.enabled);
+    let _ = writeln!(report, "state={}", gsp_status.state);
+    let _ = writeln!(report, "errors={}", gsp_status.error_count);
+    if let Some(path) = gsp_status.firmware_path.as_ref() {
+        let _ = writeln!(report, "firmware_path={}", path);
+    }
+    if let Some(file) = gsp_status.firmware_file.as_ref() {
+        let _ = writeln!(report, "firmware_file={}", file);
+    }
+
+    let dkms_output = Command::new("dkms")
+        .arg("status")
+        .output()
+        .ok()
+        .map(|output| String::from_utf8_lossy(&output.stdout).to_string())
+        .unwrap_or_else(|| "dkms status unavailable".to_string());
+    let _ = writeln!(report);
+    let _ = writeln!(report, "[dkms]");
+    let _ = writeln!(report, "{}", dkms_output.trim());
+
+    let dkms_doctor = doctor_dkms();
+    let _ = writeln!(report);
+    let _ = writeln!(report, "[dkms doctor]");
+    let _ = writeln!(report, "severity={}", severity_label(dkms_doctor.severity));
+    for finding in &dkms_doctor.findings {
+        let _ = writeln!(report, "finding={}", finding);
+    }
+    for fix in &dkms_doctor.fixes {
+        let _ = writeln!(report, "fix={}", fix);
+    }
+
+    let source_state = inspect_source_build_state();
+    let _ = writeln!(report);
+    let _ = writeln!(report, "[source build]");
+    if let Some(path) = &source_state.source_path {
+        let _ = writeln!(report, "source_path={}", path);
+    }
+    let _ = writeln!(report, "source_type={}", source_state.source_type);
+    if let Some(tag) = &source_state.current_tag {
+        let _ = writeln!(report, "current_tag={}", tag);
+    }
+    if let Some(tag) = &source_state.latest_tag {
+        let _ = writeln!(report, "latest_tag={}", tag);
+    }
+    if let Some(commit) = &source_state.git_commit {
+        let _ = writeln!(report, "git_commit={}", commit);
+    }
+    if let Some(dirty) = source_state.git_dirty {
+        let _ = writeln!(report, "git_dirty={}", dirty);
+    }
+
+    let _ = writeln!(report);
+    let _ = writeln!(report, "[container runtime doctor]");
+    match NvContainerRuntime::new().and_then(|runtime| runtime.runtime_doctor(None)) {
+        Ok(runtime_report) => {
+            let _ = writeln!(report, "severity={}", runtime_report.severity);
+            if let Some(command) = runtime_report.smoke_test_command {
+                let _ = writeln!(report, "smoke_test={}", command);
+            }
+            for check in runtime_report.checks {
+                let _ = writeln!(
+                    report,
+                    "check={} ok={} details={}",
+                    check.name, check.ok, check.details
+                );
+            }
+        }
+        Err(err) => {
+            let _ = writeln!(report, "error={}", err);
+        }
+    }
+
+    for (section, pattern) in [
+        ("nvidia logs", "nvidia|NVRM"),
+        ("gsp logs", "GSP|gsp"),
+        ("xid logs", "Xid|NVRM.*Xid"),
+    ] {
+        let logs = Command::new("journalctl")
+            .args([
+                "-k",
+                "-g",
+                pattern,
+                "--no-pager",
+                "-q",
+                "-b",
+                "-n",
+                &log_tail.to_string(),
+            ])
+            .output()
+            .ok()
+            .filter(|output| output.status.success())
+            .map(|output| String::from_utf8_lossy(&output.stdout).to_string())
+            .unwrap_or_else(|| "no log data".to_string());
+        let _ = writeln!(report);
+        let _ = writeln!(report, "[{}]", section);
+        let _ = writeln!(report, "{}", logs.trim());
+    }
+
+    let text_path = if tarball {
+        format!("{}.txt", output_path.trim_end_matches(".tar.gz"))
+    } else if gzip {
+        output_path.trim_end_matches(".gz").to_string()
+    } else {
+        output_path.to_string()
+    };
+    fs::write(&text_path, &report)
+        .map_err(|e| NvControlError::IoError(format!("Failed to write support bundle: {}", e)))?;
+
+    let metadata = SupportBundleMetadata {
+        bundle_path: output_path.to_string(),
+        tarball,
+        gzip,
+        redact_paths,
+        redact_ids,
+        log_tail,
+        release_diagnostics: diagnostics,
+    };
+    let metadata_path = format!("{}.json", text_path);
+    let metadata_json = serde_json::to_string_pretty(&metadata).unwrap_or_default();
+    if !gzip {
+        fs::write(&metadata_path, &metadata_json)
+            .map_err(|e| NvControlError::IoError(format!("Failed to write metadata: {}", e)))?;
+    }
+
+    if tarball {
+        let tar_gz = fs::File::create(output_path).map_err(|e| {
+            NvControlError::IoError(format!("Failed to create tarball bundle: {}", e))
+        })?;
+        let encoder = GzEncoder::new(tar_gz, Compression::default());
+        let mut builder = Builder::new(encoder);
+        builder
+            .append_path_with_name(&text_path, "support.txt")
+            .map_err(|e| NvControlError::IoError(format!("Failed to add support.txt: {}", e)))?;
+        builder
+            .append_path_with_name(&metadata_path, "support.json")
+            .map_err(|e| NvControlError::IoError(format!("Failed to add support.json: {}", e)))?;
+        builder
+            .finish()
+            .map_err(|e| NvControlError::IoError(format!("Failed to finalize tarball: {}", e)))?;
+        let _ = fs::remove_file(&text_path);
+        let _ = fs::remove_file(&metadata_path);
+    } else if gzip {
+        let gz_path = format!("{}.gz", text_path);
+        let file = fs::File::create(&gz_path)
+            .map_err(|e| NvControlError::IoError(format!("Failed to create gzip bundle: {}", e)))?;
+        let mut encoder = GzEncoder::new(file, Compression::default());
+        use std::io::Write;
+        encoder.write_all(report.as_bytes()).map_err(|e| {
+            NvControlError::IoError(format!("Failed to gzip support bundle: {}", e))
+        })?;
+        encoder.write_all(b"\n\n[metadata json]\n").map_err(|e| {
+            NvControlError::IoError(format!("Failed to append gzip metadata header: {}", e))
+        })?;
+        encoder.write_all(metadata_json.as_bytes()).map_err(|e| {
+            NvControlError::IoError(format!("Failed to append gzip metadata: {}", e))
+        })?;
+        encoder.finish().map_err(|e| {
+            NvControlError::IoError(format!("Failed to finalize gzip bundle: {}", e))
+        })?;
+        let _ = fs::remove_file(&text_path);
+    }
+
+    Ok(())
 }
 
 fn get_dkms_status() -> NvResult<HashMap<String, String>> {
@@ -1168,20 +2418,15 @@ pub fn install_pacman_hooks() -> NvResult<()> {
     }
 
     // Create hook content - uses wrapper script for logging
-    let hook_content = r#"[Trigger]
+    let hook_content = format!(
+        r#"[Trigger]
 Operation = Install
 Operation = Upgrade
 Operation = Remove
 Type = Package
 Target = nvidia-open
 Target = nvidia-open-dkms
-Target = linux
-Target = linux-lts
-Target = linux-zen
-Target = linux-hardened
-Target = linux-cachyos
-Target = linux-cachyos-lto
-Target = linux-tkg-*
+{}
 
 [Action]
 Description = Rebuilding NVIDIA modules via DKMS...
@@ -1189,7 +2434,13 @@ Depends = dkms
 When = PostTransaction
 NeedsTargets
 Exec = /usr/local/bin/nvidia-dkms-build
-"#;
+"#,
+        ArchIntegration::pacman_kernel_targets()
+            .into_iter()
+            .map(|target| format!("Target = {}", target))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
 
     // Wrapper script with logging and notification
     let wrapper_script = r#"#!/bin/bash
@@ -1422,135 +2673,218 @@ pub fn print_dkms_status_detailed() -> NvResult<()> {
     Ok(())
 }
 
-pub fn generate_shell_completions(shell: &str) -> NvResult<()> {
-    let completion_script = match shell.to_lowercase().as_str() {
-        "bash" => generate_bash_completions(),
-        "zsh" => generate_zsh_completions(),
-        "fish" => generate_fish_completions(),
-        _ => {
-            return Err(NvControlError::DisplayDetectionFailed(format!(
-                "Unsupported shell: {shell}. Use: bash, zsh, fish"
-            )));
-        }
-    };
+pub fn doctor_dkms() -> DkmsDoctorReport {
+    let info = get_dkms_setup_info();
+    let mut severity = DiagnosticSeverity::Healthy;
+    let mut findings = Vec::new();
+    let mut fixes = Vec::new();
 
-    println!("{completion_script}");
+    if !info.dkms_installed {
+        severity = DiagnosticSeverity::Broken;
+        findings.push("DKMS is not installed".to_string());
+        fixes.push(
+            "Install dkms and matching kernel headers before rebuilding NVIDIA modules".to_string(),
+        );
+    }
+
+    if info.dkms_installed && !info.nvidia_registered {
+        if severity != DiagnosticSeverity::Broken {
+            severity = DiagnosticSeverity::Warning;
+        }
+        findings.push("nvidia is not registered with DKMS".to_string());
+        fixes.push(
+            "Run `nvctl driver dkms setup` to register the current NVIDIA source with DKMS"
+                .to_string(),
+        );
+    }
+
+    let mut all_kernels = Vec::new();
+    if let Ok(entries) = std::fs::read_dir("/lib/modules") {
+        for entry in entries.flatten() {
+            all_kernels.push(entry.file_name().to_string_lossy().to_string());
+        }
+    }
+    all_kernels.sort();
+
+    for kernel in &all_kernels {
+        let build_path = format!("/lib/modules/{}/build", kernel);
+        if !std::path::Path::new(&build_path).exists() {
+            if severity == DiagnosticSeverity::Healthy {
+                severity = DiagnosticSeverity::Warning;
+            }
+            findings.push(format!("kernel headers missing for {}", kernel));
+        }
+    }
+
+    for kernel in &info.kernels_missing {
+        if severity != DiagnosticSeverity::Broken {
+            severity = DiagnosticSeverity::Warning;
+        }
+        findings.push(format!("missing NVIDIA module for kernel {}", kernel));
+    }
+
+    let running_kernel = Command::new("uname")
+        .arg("-r")
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_default();
+    if !running_kernel.is_empty() && info.kernels_missing.contains(&running_kernel) {
+        severity = DiagnosticSeverity::Broken;
+        findings.push(format!(
+            "running kernel {} is missing a usable NVIDIA module",
+            running_kernel
+        ));
+    }
+
+    if let Some(version) = &info.nvidia_version {
+        let symlink_path = format!("/usr/src/nvidia-{}", version);
+        if let Ok(target) = std::fs::read_link(&symlink_path) {
+            if let Some(source_path) = &info.source_path {
+                if target.display().to_string() != *source_path {
+                    if severity != DiagnosticSeverity::Broken {
+                        severity = DiagnosticSeverity::Warning;
+                    }
+                    findings.push(format!(
+                        "{} points to {} instead of {}",
+                        symlink_path,
+                        target.display(),
+                        source_path
+                    ));
+                    fixes.push(format!(
+                        "Update the DKMS source symlink: sudo ln -sf {} {}",
+                        source_path, symlink_path
+                    ));
+                }
+            }
+        }
+    }
+
+    if findings.is_empty() {
+        findings.push("DKMS state looks healthy".to_string());
+    }
+
+    fixes.sort();
+    fixes.dedup();
+
+    DkmsDoctorReport {
+        severity,
+        findings,
+        fixes,
+    }
+}
+
+pub fn print_dkms_doctor() -> NvResult<()> {
+    let report = doctor_dkms();
+    println!("NVIDIA DKMS Doctor");
+    println!("{}", "═".repeat(50));
+    println!();
+    println!("Severity: {}", severity_label(report.severity));
+    println!();
+    println!("Findings:");
+    for finding in &report.findings {
+        println!("  - {}", finding);
+    }
+    if !report.fixes.is_empty() {
+        println!();
+        println!("Suggested Fixes:");
+        for fix in &report.fixes {
+            println!("  - {}", fix);
+        }
+    }
     Ok(())
 }
 
-fn generate_bash_completions() -> String {
-    r#"# nvctl bash completion
-_nvctl_completion() {
-    local cur prev opts
-    COMPREPLY=()
-    cur="${COMP_WORDS[COMP_CWORD]}"
-    prev="${COMP_WORDS[COMP_CWORD-1]}"
-    
-    case "${prev}" in
-        nvctl)
-            opts="gpu display fan overclock vrr upscaling drivers"
-            COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
-            return 0
-            ;;
-        gpu)
-            opts="info stat capabilities"
-            COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
-            return 0
-            ;;
-        display)
-            opts="info ls vibrance hdr"
-            COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
-            return 0
-            ;;
-        drivers)
-            opts="status install update rollback"
-            COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
-            return 0
-            ;;
-        install)
-            opts="proprietary open open-beta"
-            COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
-            return 0
-            ;;
-    esac
+pub fn inspect_source_build_state() -> SourceBuildState {
+    let info = get_dkms_setup_info();
+    let mut state = SourceBuildState {
+        source_path: info.source_path.clone(),
+        source_type: info.source_type.to_string(),
+        current_tag: None,
+        latest_tag: None,
+        git_commit: None,
+        git_dirty: None,
+        symlink_target: None,
+        tracked_version: info.nvidia_version.clone(),
+    };
+
+    if let Some(path) = &info.source_path {
+        if matches!(info.source_type, DkmsSourceType::Git { .. }) {
+            state.current_tag = Command::new("git")
+                .args(["-C", path, "describe", "--tags", "--always"])
+                .output()
+                .ok()
+                .filter(|o| o.status.success())
+                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
+            state.latest_tag = Command::new("git")
+                .args(["-C", path, "tag", "--sort=-v:refname"])
+                .output()
+                .ok()
+                .filter(|o| o.status.success())
+                .and_then(|o| {
+                    String::from_utf8_lossy(&o.stdout)
+                        .lines()
+                        .next()
+                        .map(|s| s.to_string())
+                });
+            state.git_commit = Command::new("git")
+                .args(["-C", path, "rev-parse", "--short", "HEAD"])
+                .output()
+                .ok()
+                .filter(|o| o.status.success())
+                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
+            state.git_dirty = Command::new("git")
+                .args(["-C", path, "status", "--porcelain"])
+                .output()
+                .ok()
+                .filter(|o| o.status.success())
+                .map(|o| !String::from_utf8_lossy(&o.stdout).trim().is_empty());
+        }
+
+        if let Some(version) = &info.nvidia_version {
+            let symlink_path = format!("/usr/src/nvidia-{}", version);
+            state.symlink_target = std::fs::read_link(&symlink_path)
+                .ok()
+                .map(|target| target.display().to_string());
+        }
+    }
+
+    state
 }
 
-complete -F _nvctl_completion nvctl"#
-        .to_string()
-}
-
-fn generate_zsh_completions() -> String {
-    r#"#compdef nvctl
-
-_nvctl() {
-    local context state line
-    
-    _arguments -C \
-        '1: :->commands' \
-        '*: :->args'
-    
-    case $state in
-        commands)
-            _values 'nvctl commands' \
-                'gpu[GPU management]' \
-                'display[Display management]' \
-                'fan[Fan control]' \
-                'overclock[Overclocking]' \
-                'vrr[Variable refresh rate]' \
-                'upscaling[DLSS/FSR management]' \
-                'drivers[Driver management]'
-            ;;
-        args)
-            case $words[2] in
-                gpu)
-                    _values 'GPU commands' \
-                        'info[Show GPU information]' \
-                        'stat[Live GPU monitoring]' \
-                        'capabilities[Show overclocking capabilities]'
-                    ;;
-                drivers)
-                    _values 'Driver commands' \
-                        'status[Show driver status]' \
-                        'install[Install driver]' \
-                        'update[Update driver]' \
-                        'rollback[Rollback driver]'
-                    ;;
-            esac
-            ;;
-    esac
-}
-
-_nvctl "$@""#
-        .to_string()
-}
-
-fn generate_fish_completions() -> String {
-    r#"# nvctl fish completion
-
-# Main commands
-complete -c nvctl -f -n '__fish_use_subcommand' -a 'gpu' -d 'GPU management'
-complete -c nvctl -f -n '__fish_use_subcommand' -a 'display' -d 'Display management'
-complete -c nvctl -f -n '__fish_use_subcommand' -a 'fan' -d 'Fan control'
-complete -c nvctl -f -n '__fish_use_subcommand' -a 'overclock' -d 'Overclocking'
-complete -c nvctl -f -n '__fish_use_subcommand' -a 'vrr' -d 'Variable refresh rate'
-complete -c nvctl -f -n '__fish_use_subcommand' -a 'upscaling' -d 'DLSS/FSR management'
-complete -c nvctl -f -n '__fish_use_subcommand' -a 'drivers' -d 'Driver management'
-
-# GPU subcommands
-complete -c nvctl -f -n '__fish_seen_subcommand_from gpu' -a 'info' -d 'Show GPU information'
-complete -c nvctl -f -n '__fish_seen_subcommand_from gpu' -a 'stat' -d 'Live GPU monitoring'
-complete -c nvctl -f -n '__fish_seen_subcommand_from gpu' -a 'capabilities' -d 'Overclocking capabilities'
-
-# Driver subcommands
-complete -c nvctl -f -n '__fish_seen_subcommand_from drivers' -a 'status' -d 'Show driver status'
-complete -c nvctl -f -n '__fish_seen_subcommand_from drivers' -a 'install' -d 'Install driver'
-complete -c nvctl -f -n '__fish_seen_subcommand_from drivers' -a 'update' -d 'Update driver'
-complete -c nvctl -f -n '__fish_seen_subcommand_from drivers' -a 'rollback' -d 'Rollback driver'
-
-# Driver types
-complete -c nvctl -f -n '__fish_seen_subcommand_from install' -a 'proprietary' -d 'NVIDIA proprietary driver'
-complete -c nvctl -f -n '__fish_seen_subcommand_from install' -a 'open' -d 'NVIDIA open source driver'
-complete -c nvctl -f -n '__fish_seen_subcommand_from install' -a 'open-beta' -d 'NVIDIA open source beta driver'"#.to_string()
+pub fn print_source_doctor() -> NvResult<()> {
+    let state = inspect_source_build_state();
+    println!("NVIDIA Source Build Doctor");
+    println!("{}", "═".repeat(50));
+    println!();
+    println!("Source Type: {}", state.source_type);
+    if let Some(path) = &state.source_path {
+        println!("Source Path: {}", path);
+    }
+    if let Some(version) = &state.tracked_version {
+        println!("Tracked Version: {}", version);
+    }
+    if let Some(tag) = &state.current_tag {
+        println!("Current Tag: {}", tag);
+    }
+    if let Some(tag) = &state.latest_tag {
+        println!("Latest Tag: {}", tag);
+    }
+    if let Some(commit) = &state.git_commit {
+        println!("Git Commit: {}", commit);
+    }
+    if let Some(dirty) = state.git_dirty {
+        println!("Git Dirty: {}", if dirty { "yes" } else { "no" });
+    }
+    if let Some(target) = &state.symlink_target {
+        println!("/usr/src symlink: {}", target);
+    }
+    if state.source_path.is_none() {
+        println!(
+            "\nNo tracked source tree. Initialize one with `nvctl driver source init <path>`."
+        );
+    }
+    Ok(())
 }
 
 /// Check for driver updates
@@ -2388,7 +3722,7 @@ pub fn print_driver_check() -> NvResult<()> {
 
         if !kernels_without_nvidia.is_empty() {
             warnings.push(format!(
-                "Multiple kernels installed but {} missing nvidia module: {}",
+                "{} non-running kernel(s) are missing an NVIDIA module: {}",
                 kernels_without_nvidia.len(),
                 kernels_without_nvidia.join(", ")
             ));
@@ -2401,33 +3735,64 @@ pub fn print_driver_check() -> NvResult<()> {
     }
 
     // 5. Check GSP firmware for nvidia-open
-    if let Ok(version_info) = fs::read_to_string("/proc/driver/nvidia/version") {
-        if version_info.contains("Open Kernel Module") {
-            // Check if GSP firmware exists
-            let driver_version = if let Ok(output) = Command::new("nvidia-smi")
-                .args(["--query-gpu=driver_version", "--format=csv,noheader"])
-                .output()
-            {
-                String::from_utf8_lossy(&output.stdout).trim().to_string()
-            } else {
-                "Unknown".to_string()
-            };
+    if GspManager::is_nvidia_open() {
+        let gsp_manager = GspManager::new();
+        let gsp_status = gsp_manager.get_deep_status();
+        let release = collect_release_diagnostics();
+        if let Some(ref path) = gsp_status.firmware_path {
+            passed.push(format!("GSP firmware present for nvidia-open at {}", path));
+            if let Some(ref layout) = gsp_status.firmware_layout {
+                passed.push(format!("GSP firmware layout detected: {}", layout));
+            }
+            if let Some(ref file) = gsp_status.firmware_file {
+                passed.push(format!("GSP firmware file resolved: {}", file));
+            }
+        } else {
+            errors.push(
+                "GSP firmware path not detected for nvidia-open (required for open kernel modules)"
+                    .to_string(),
+            );
+        }
 
-            let firmware_path = format!("/lib/firmware/nvidia/{}", driver_version);
-            if std::path::Path::new(&firmware_path).exists() {
-                passed.push("GSP firmware present for nvidia-open".to_string());
+        if let Some(ref alignment) = gsp_status.release_alignment {
+            if alignment.starts_with("aligned") {
+                passed.push(format!("Open driver release alignment OK: {}", alignment));
             } else {
-                errors.push(format!(
-                    "GSP firmware missing at {} (required for nvidia-open)",
-                    firmware_path
+                warnings.push(format!(
+                    "Open driver release alignment needs attention: {}",
+                    alignment
                 ));
             }
+        }
+
+        for expected_path in release.expected_firmware_paths {
+            if std::path::Path::new(&expected_path).exists() {
+                passed.push(format!(
+                    "Expected firmware search path present: {}",
+                    expected_path
+                ));
+            } else {
+                warnings.push(format!(
+                    "Expected firmware search path is missing: {}",
+                    expected_path
+                ));
+            }
+        }
+
+        if gsp_status.firmware_path.is_none() && gsp_status.enabled {
+            warnings.push(
+                "GSP is enabled but no firmware path was resolved; this usually means mixed nvidia-open/userspace packages or an incomplete firmware install"
+                    .to_string(),
+            );
         }
     }
 
     // 6. Check for legacy GPU compatibility issues
     if let Ok(output) = Command::new("nvidia-smi")
-        .args(["--query-gpu=name,driver_version", "--format=csv,noheader"])
+        .args([
+            "--query-gpu=name,driver_version,pci.bus_id",
+            "--format=csv,noheader",
+        ])
         .output()
     {
         if output.status.success() {
@@ -2444,7 +3809,11 @@ pub fn print_driver_check() -> NvResult<()> {
                 .unwrap_or(0);
 
             // Detect GPU architecture
-            let (arch, is_legacy) = detect_gpu_architecture(&gpu_name);
+            let pci_device_id = parts.get(2).and_then(|bus| read_pci_device_id(bus));
+            let (arch, is_legacy) = pci_device_id
+                .as_deref()
+                .and_then(detect_gpu_architecture_by_pci_id)
+                .unwrap_or_else(|| detect_gpu_architecture(&gpu_name));
 
             // Check for nvidia-open on pre-Turing GPUs (hard error)
             if is_legacy {
@@ -2456,6 +3825,25 @@ pub fn print_driver_check() -> NvResult<()> {
                             gpu_name.trim()
                         ));
                     }
+                }
+            }
+
+            if !is_legacy {
+                if arch == "Unknown" {
+                    warnings.push(format!(
+                        "Could not confidently classify GPU '{}' for open-driver support; verify PCI ID detection and package branch selection",
+                        gpu_name.trim()
+                    ));
+                } else if GspManager::is_nvidia_open() {
+                    passed.push(format!(
+                        "Detected {} GPU on open-driver-capable generation ({}){}",
+                        arch,
+                        gpu_name.trim(),
+                        pci_device_id
+                            .as_ref()
+                            .map(|id| format!(", pci 0x{}", id))
+                            .unwrap_or_default()
+                    ));
                 }
             }
 
@@ -2561,7 +3949,38 @@ pub fn print_driver_check() -> NvResult<()> {
         println!("✗ {} error(s), {} warning(s)", errors.len(), warnings.len());
     }
 
+    let summary = summarize_driver_check();
+    let fixes = suggested_fixes(&summary);
+    if !fixes.is_empty() {
+        println!();
+        println!("Suggested Fixes:");
+        for fix in fixes {
+            println!("  -> {}", fix);
+        }
+    }
+
     Ok(())
+}
+
+pub fn summarize_driver_check() -> DiagnosticSummary {
+    let release = collect_release_diagnostics();
+    let release_summary = summarize_release_diagnostics(&release);
+    let mut severity = release_summary.severity;
+    let mut messages = release_summary.messages;
+
+    if let Ok(output) = Command::new("dkms").arg("status").output() {
+        if output.status.success() {
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            if !output_str.lines().any(|l| l.contains("nvidia"))
+                && severity != DiagnosticSeverity::Broken
+            {
+                severity = DiagnosticSeverity::Warning;
+                messages.push("dkms installed but nvidia is not registered".to_string());
+            }
+        }
+    }
+
+    DiagnosticSummary { severity, messages }
 }
 
 // ==================== Driver Logs ====================
@@ -3125,7 +4544,7 @@ pub fn cleanup_old_kernels(keep: usize, execute: bool) -> NvResult<()> {
     }
 
     // Sort by modification time, newest first
-    kernels.sort_by(|a, b| b.1.cmp(&a.1));
+    kernels.sort_by_key(|entry| std::cmp::Reverse(entry.1));
 
     let kernel_names: Vec<&str> = kernels.iter().map(|(n, _)| n.as_str()).collect();
 
@@ -3217,6 +4636,11 @@ fn detect_gpu_architecture(gpu_name: &str) -> (String, bool) {
         || name.contains("5080")
         || name.contains("5070")
         || name.contains("5060")
+        || name.contains("rtx pro 6000 blackwell")
+        || name.contains("rtx pro 5000 blackwell")
+        || name.contains("gb202")
+        || name.contains("gb203")
+        || name.contains("gb205")
     {
         return ("Blackwell".to_string(), false);
     }
@@ -3227,9 +4651,20 @@ fn detect_gpu_architecture(gpu_name: &str) -> (String, bool) {
         || name.contains("4070")
         || name.contains("4060")
         || name.contains("l40")
+        || name.contains("l40s")
+        || name.contains("l4")
         || name.contains("rtx 4000")
         || name.contains("rtx 5000")
         || name.contains("rtx 6000")
+        || name.contains("rtx 2000 ada")
+        || name.contains("rtx 4000 ada")
+        || name.contains("rtx 5000 ada")
+        || name.contains("rtx 6000 ada")
+        || name.contains("ad102")
+        || name.contains("ad103")
+        || name.contains("ad104")
+        || name.contains("ad106")
+        || name.contains("ad107")
     {
         return ("Ada Lovelace".to_string(), false);
     }
@@ -3243,8 +4678,23 @@ fn detect_gpu_architecture(gpu_name: &str) -> (String, bool) {
         || name.contains("a40")
         || name.contains("a30")
         || name.contains("a10")
+        || name.contains("a16")
+        || name.contains("a2")
+        || name.contains("ga100")
+        || name.contains("ga102")
+        || name.contains("ga104")
+        || name.contains("ga106")
     {
         return ("Ampere".to_string(), false);
+    }
+
+    // Hopper
+    if name.contains("h100")
+        || name.contains("h200")
+        || name.contains("gh100")
+        || name.contains("gh200")
+    {
+        return ("Hopper".to_string(), false);
     }
 
     // RTX 20 series and GTX 16 series - Turing (last supported by nvidia-open)
@@ -3255,6 +4705,10 @@ fn detect_gpu_architecture(gpu_name: &str) -> (String, bool) {
         || name.contains("1650")
         || name.contains("t4")
         || name.contains("quadro rtx")
+        || name.contains("tu102")
+        || name.contains("tu104")
+        || name.contains("tu106")
+        || name.contains("tu117")
     {
         return ("Turing".to_string(), false);
     }
@@ -3549,5 +5003,45 @@ mod tests {
         let (arch, legacy) = detect_gpu_architecture("NVIDIA L40S");
         assert_eq!(arch, "Ada Lovelace");
         assert!(!legacy);
+    }
+
+    #[test]
+    fn test_detect_gpu_architecture_by_pci_id() {
+        assert_eq!(
+            detect_gpu_architecture_by_pci_id("2901"),
+            Some(("Blackwell".to_string(), false))
+        );
+        assert_eq!(
+            detect_gpu_architecture_by_pci_id("2704"),
+            Some(("Ada Lovelace".to_string(), false))
+        );
+        assert_eq!(
+            detect_gpu_architecture_by_pci_id("2330"),
+            Some(("Hopper".to_string(), false))
+        );
+        assert_eq!(
+            detect_gpu_architecture_by_pci_id("1f02"),
+            Some(("Turing".to_string(), false))
+        );
+        assert_eq!(
+            detect_gpu_architecture_by_pci_id("1b80"),
+            Some(("Pascal".to_string(), true))
+        );
+    }
+
+    #[test]
+    fn test_normalize_pci_bus_id() {
+        assert_eq!(
+            normalize_pci_bus_id("0000:01:00.0"),
+            Some("0000:01:00.0".to_string())
+        );
+        assert_eq!(normalize_pci_bus_id(""), None);
+    }
+
+    #[test]
+    fn test_collect_release_diagnostics_structure() {
+        let diagnostics = collect_release_diagnostics();
+        assert!(!diagnostics.running_kernel.is_empty());
+        assert!(!diagnostics.module_kernel.is_empty());
     }
 }

@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Issue reporting workflow
+    url: https://github.com/GhostKellz/nvcontrol/blob/main/docs/integration/issue-reporting.md
+    about: Use the support-bundle and diagnostics workflow before filing driver, DKMS, or GSP issues.

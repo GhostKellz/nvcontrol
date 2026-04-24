@@ -27,7 +27,7 @@ Set GPU power limit.
 
 **Usage:**
 ```bash
-nvctl power limit <percentage>
+nvctl power limit --percentage <percentage>
 ```
 
 **Arguments:**
@@ -35,7 +35,7 @@ nvctl power limit <percentage>
 
 **Example:**
 ```bash
-nvctl power limit 90
+nvctl power limit --percentage 90
 ```
 
 ---

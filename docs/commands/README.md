@@ -10,6 +10,7 @@ Complete command-line reference for nvcontrol.
 - [Gaming](gaming.md) - Game profiles, auto-application, latency
 - [Configuration](config.md) - Settings, profiles, import/export
 - [Containers](container.md) - Docker GPU management
+- [Driver Commands](driver.md) - Driver info, release diagnostics, GSP, DKMS
 
 ## Command Categories
 
@@ -42,9 +43,15 @@ nvctl power curve enable    # Enable curve mode
 ### Gaming
 ```bash
 nvctl gaming auto status    # Auto-profile status
+nvctl gaming auto start     # Start background service
+nvctl gaming auto stop      # Stop background service
+nvctl gaming auto install-service
+nvctl gaming auto enable-service
 nvctl gaming auto enable    # Enable auto-apply
 nvctl gaming auto config    # Configure settings
 nvctl gaming launch run     # Launch game with profile
+nvctl gaming launch hook-add
+nvctl gaming launch hook-remove
 nvctl gaming latency        # Latency optimizations
 nvctl gaming gamescope      # Gamescope compositor
 ```
@@ -56,13 +63,18 @@ nvctl config backup         # Backup settings
 nvctl config restore        # Restore from backup
 nvctl config export         # Export profile
 nvctl config import         # Import profile
+nvctl config capture --name <profile>
+nvctl config preview --input live
+nvctl config diff --current live --target <profile>
+nvctl config apply --input <profile>
 nvctl config profiles       # List profiles
 ```
 
 ### Containers
 ```bash
-nvctl nvbind list           # List GPU containers
 nvctl container list        # Docker containers
+nvctl container runtime doctor --runtime docker
+nvctl container runtime test --runtime docker
 ```
 
 ### Display & Vibrance
@@ -81,15 +93,26 @@ nvctl fan set <id> <pct>    # Set fan speed
 ### Diagnostics
 ```bash
 nvctl doctor                # System diagnostics & health check
+nvctl doctor --support      # Diagnostics + support tarball
 nvctl monitor               # System monitoring
 nvctl benchmark             # GPU benchmarks
 ```
 
+### Help Snapshots
+```bash
+nvctl doctor --help
+nvctl driver support-bundle --help
+nvctl companion --help
+```
+
 ### Drivers
 ```bash
-nvctl drivers status        # Driver information
 nvctl driver info           # Driver capabilities & requirements
 nvctl driver validate --driver 590  # Validate target branch
+nvctl driver diagnose-release       # Kernel/userspace/GSP alignment
+nvctl driver dkms doctor           # DKMS/header/source checks
+nvctl driver source doctor         # Source reproducibility checks
+nvctl driver support-bundle         # Support bundle + metadata
 ```
 
 ### Other
@@ -129,6 +152,7 @@ nvctl power curve enable
 ```bash
 nvctl gaming auto config --poll-interval 2 --apply-delay 3
 nvctl gaming auto enable
+nvctl gaming auto start
 ```
 
 **5. Export your tuned profile:**
@@ -153,7 +177,7 @@ nvctl overclock apply --gpu-offset 100 --memory-offset 400
 
 ```bash
 # List GPU containers
-nvctl nvbind list --gpu-only --metrics
+nvctl container list
 
 # Launch game with GPU optimization
 nvctl gaming gamescope launch --preset competitive steam

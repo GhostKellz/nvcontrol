@@ -59,7 +59,7 @@ pub fn get_gpu_info(backend: &SharedNvmlBackend) -> NvResult<GpuInfo> {
     let metrics = backend.get_metrics(0)?;
     let (mem_used, mem_total) = backend.get_memory_info(0)?;
     let driver = backend
-        .get_name(0)
+        .get_driver_version()
         .unwrap_or_else(|_| "Unknown".to_string());
     let cuda_compute = None; // Not available via backend yet
     let pcie_gen = None; // Not available via backend yet
@@ -344,6 +344,9 @@ pub fn get_gpu_info_with_format(format: OutputFormat, backend: &SharedNvmlBacken
         OutputFormat::Json => {
             println!("{}", serde_json::to_string_pretty(&gpu_info).unwrap());
         }
+        OutputFormat::Yaml => {
+            println!("{}", serde_yaml::to_string(&gpu_info).unwrap());
+        }
         OutputFormat::Table => {
             println!("┌──────────────────────┬──────────────────────────────┐");
             println!("│ Property             │ Value                        │");
@@ -412,5 +415,6 @@ pub fn get_gpu_info_with_format(format: OutputFormat, backend: &SharedNvmlBacken
 pub enum OutputFormat {
     Human,
     Json,
+    Yaml,
     Table,
 }

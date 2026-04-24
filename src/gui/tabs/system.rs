@@ -14,7 +14,7 @@ use crate::gui::state::GuiState;
 use crate::gui::widgets::Card;
 
 /// Cached system information
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub struct SystemInfo {
     pub hostname: String,
     pub os: String,
@@ -49,7 +49,7 @@ impl SystemInfo {
 }
 
 /// Driver, GSP, and DKMS information
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub struct DriverInfo {
     pub driver_version: String,
     pub driver_type: String,
@@ -60,6 +60,10 @@ pub struct DriverInfo {
     pub dkms_status: String,
     pub kernels_count: usize,
     pub kernels_with_nvidia: usize,
+    pub diagnostic_severity: String,
+    pub diagnostic_messages: Vec<String>,
+    pub suggested_fixes: Vec<String>,
+    pub last_bundle_path: Option<String>,
 }
 
 impl DriverInfo {
@@ -118,6 +122,19 @@ impl DriverInfo {
                 }
             }
         }
+
+        let summary = drivers::summarize_driver_check();
+        info.diagnostic_severity = drivers::severity_label(summary.severity).to_string();
+        info.diagnostic_messages = summary.messages.clone();
+        info.suggested_fixes = drivers::suggested_fixes(&summary);
+
+        let bundle_path = dirs::config_dir()
+            .map(|dir| dir.join("nvcontrol").join("last_support_bundle.txt"))
+            .filter(|path| path.exists())
+            .and_then(|path| fs::read_to_string(path).ok())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        info.last_bundle_path = bundle_path;
 
         info
     }
@@ -343,6 +360,15 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
 
     // Use cached system info (rate-limited to avoid subprocess spawns every frame)
     state.refresh_system_info();
+    if state.get_system_info().is_none() && state.support_job_running {
+        ui.label(
+            egui::RichText::new("Loading system information...")
+                .small()
+                .color(colors.comment.to_egui()),
+        );
+        ui.spinner();
+        return;
+    }
     let info = match state.get_system_info() {
         Some(info) => info.clone(),
         None => SystemInfo::default(), // Fallback while loading

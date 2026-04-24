@@ -3,7 +3,7 @@
 # Runs all tests: build, clippy, fmt, unit tests, CLI, and GUI stability
 # Specifically designed for KDE/Wayland stability testing
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
@@ -17,7 +17,7 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 echo "╔══════════════════════════════════════════════════════════════════╗"
-echo "║           nvcontrol Comprehensive Test Suite v0.8.6              ║"
+echo "║           nvcontrol Comprehensive Test Suite v0.8.7              ║"
 echo "║           KDE/Wayland Stability Testing                          ║"
 echo "╚══════════════════════════════════════════════════════════════════╝"
 echo ""
@@ -48,7 +48,7 @@ echo -e "${CYAN}━━━ Step 1: Building nvcontrol ━━━${NC}"
 echo ""
 
 echo "Building CLI (no default features)..."
-if cargo build --bin nvctl --release --no-default-features 2>&1 | tail -3; then
+if cargo build --bin nvctl --release --no-default-features; then
     echo -e "${GREEN}✅ CLI build successful${NC}"
 else
     echo -e "${RED}❌ CLI build failed${NC}"
@@ -56,7 +56,7 @@ else
 fi
 
 echo "Building GUI..."
-if cargo build --release --features gui 2>&1 | tail -3; then
+if cargo build --release --bin nvcontrol --features gui; then
     echo -e "${GREEN}✅ GUI build successful${NC}"
 else
     echo -e "${RED}❌ GUI build failed${NC}"
@@ -67,7 +67,7 @@ echo ""
 # Step 2: Clippy
 echo -e "${CYAN}━━━ Step 2: Clippy Lints ━━━${NC}"
 echo ""
-if cargo clippy --all-features -- -D warnings 2>&1 | tail -5; then
+if cargo clippy --all-targets --all-features -- -D warnings; then
     echo -e "${GREEN}✅ Clippy passed (zero warnings)${NC}"
 else
     echo -e "${RED}❌ Clippy warnings detected${NC}"
@@ -78,7 +78,7 @@ echo ""
 # Step 3: Unit Tests
 echo -e "${CYAN}━━━ Step 3: Unit Tests ━━━${NC}"
 echo ""
-if cargo test --lib --features gui,tray 2>&1 | tail -10; then
+if cargo test --lib --features gui; then
     echo -e "${GREEN}✅ Unit tests passed${NC}"
 else
     echo -e "${RED}❌ Unit tests failed${NC}"
@@ -101,8 +101,17 @@ echo ""
 echo -e "${CYAN}━━━ Step 5: Verifying Binaries ━━━${NC}"
 echo ""
 
-NVCTL="$PROJECT_DIR/target/x86_64-unknown-linux-gnu/release/nvctl"
-NVCONTROL="$PROJECT_DIR/target/x86_64-unknown-linux-gnu/release/nvcontrol"
+if [[ -f "$PROJECT_DIR/target/x86_64-unknown-linux-gnu/release/nvctl" ]]; then
+    NVCTL="$PROJECT_DIR/target/x86_64-unknown-linux-gnu/release/nvctl"
+else
+    NVCTL="$PROJECT_DIR/target/release/nvctl"
+fi
+
+if [[ -f "$PROJECT_DIR/target/x86_64-unknown-linux-gnu/release/nvcontrol" ]]; then
+    NVCONTROL="$PROJECT_DIR/target/x86_64-unknown-linux-gnu/release/nvcontrol"
+else
+    NVCONTROL="$PROJECT_DIR/target/release/nvcontrol"
+fi
 
 if [[ -f "$NVCTL" ]]; then
     echo -e "${GREEN}✅ nvctl binary: $NVCTL${NC}"
@@ -192,5 +201,5 @@ echo "  $NVCTL doctor"
 echo ""
 
 echo "╔══════════════════════════════════════════════════════════════════╗"
-echo "║           Test Suite Complete - v0.8.6                           ║"
+echo "║           Test Suite Complete - v0.8.7                           ║"
 echo "╚══════════════════════════════════════════════════════════════════╝"

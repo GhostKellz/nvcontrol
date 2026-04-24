@@ -91,19 +91,22 @@ impl NvControlApp {
                     self.state.tab = Tab::Display;
                 }
                 if i.key_pressed(egui::Key::Num4) {
-                    self.state.tab = Tab::Vibrance;
+                    self.state.tab = Tab::Power;
                 }
                 if i.key_pressed(egui::Key::Num5) {
-                    self.state.tab = Tab::Hdr;
+                    self.state.tab = Tab::Vibrance;
                 }
                 if i.key_pressed(egui::Key::Num6) {
-                    self.state.tab = Tab::GameProfiles;
+                    self.state.tab = Tab::Hdr;
                 }
                 if i.key_pressed(egui::Key::Num7) {
-                    self.state.tab = Tab::Osd;
+                    self.state.tab = Tab::GameProfiles;
                 }
                 if i.key_pressed(egui::Key::Num8) {
-                    self.state.tab = Tab::Settings;
+                    self.state.tab = Tab::Osd;
+                }
+                if i.key_pressed(egui::Key::Num9) {
+                    self.state.tab = Tab::Support;
                 }
             }
 
@@ -130,7 +133,7 @@ impl NvControlApp {
     fn render_sidebar(&mut self, ui: &mut egui::Ui) {
         let colors = self.state.theme_colors();
 
-        egui::Frame::none()
+        egui::Frame::new()
             .fill(colors.bg_dark.to_egui())
             .show(ui, |ui| {
                 ui.set_min_width(180.0);
@@ -218,57 +221,70 @@ impl Default for NvControlApp {
 }
 
 impl eframe::App for NvControlApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
+
         // Update GPU stats periodically
         if self.last_update.elapsed() >= self.update_interval {
             self.state.refresh_gpu_stats();
             self.state.refresh_asus_power();
+            self.state.poll_support_jobs();
             self.last_update = std::time::Instant::now();
         }
 
         // Handle keyboard shortcuts
-        self.handle_keyboard(ctx);
+        self.handle_keyboard(&ctx);
 
-        // Render header
-        egui::TopBottomPanel::top("header").show(ctx, |ui| {
+        egui::Panel::top("header").show_inside(ui, |ui| {
             self.render_header(ui);
         });
 
-        // Render sidebar
-        egui::SidePanel::left("sidebar")
+        egui::Panel::left("sidebar")
             .resizable(false)
-            .default_width(180.0)
-            .show(ctx, |ui| {
+            .default_size(180.0)
+            .show_inside(ui, |ui| {
                 self.render_sidebar(ui);
             });
 
-        // Render main content
-        egui::CentralPanel::default().show(ctx, |ui| match self.state.tab {
-            Tab::Gpu => super::tabs::gpu::render(ui, &mut self.state, ctx),
-            Tab::Fan => super::tabs::fan::render(ui, &mut self.state, ctx),
-            Tab::Display => super::tabs::display::render(ui, &mut self.state, ctx),
-            Tab::Vibrance => super::tabs::vibrance::render(ui, &mut self.state, ctx),
-            Tab::Hdr => super::tabs::hdr::render(ui, &mut self.state, ctx),
-            Tab::Vrr => super::tabs::vrr::render(ui, &mut self.state, ctx),
-            Tab::GameProfiles => super::tabs::game_profiles::render(ui, &mut self.state, ctx),
-            Tab::Dlss => super::tabs::dlss::render(ui, &mut self.state, ctx),
-            Tab::Osd => super::tabs::osd::render(ui, &mut self.state, ctx),
-            Tab::Latency => super::tabs::latency::render(ui, &mut self.state, ctx),
-            Tab::Gamescope => super::tabs::gamescope::render(ui, &mut self.state, ctx),
-            Tab::Recording => super::tabs::recording::render(ui, &mut self.state, ctx),
-            Tab::System => super::tabs::system::render(ui, &mut self.state, ctx),
-            Tab::Settings => super::tabs::settings::render(ui, &mut self.state, ctx),
+        egui::CentralPanel::default().show_inside(ui, |ui| match self.state.tab {
+            Tab::Gpu => super::tabs::gpu::render(ui, &mut self.state, &ctx),
+            Tab::Fan => super::tabs::fan::render(ui, &mut self.state, &ctx),
+            Tab::Display => super::tabs::display::render(ui, &mut self.state, &ctx),
+            Tab::Power => super::tabs::power::render(ui, &mut self.state, &ctx),
+            Tab::Vibrance => super::tabs::vibrance::render(ui, &mut self.state, &ctx),
+            Tab::Hdr => super::tabs::hdr::render(ui, &mut self.state, &ctx),
+            Tab::Vrr => super::tabs::vrr::render(ui, &mut self.state, &ctx),
+            Tab::GameProfiles => super::tabs::game_profiles::render(ui, &mut self.state, &ctx),
+            Tab::Dlss => super::tabs::dlss::render(ui, &mut self.state, &ctx),
+            Tab::Osd => super::tabs::osd::render(ui, &mut self.state, &ctx),
+            Tab::Latency => super::tabs::latency::render(ui, &mut self.state, &ctx),
+            Tab::Gamescope => super::tabs::gamescope::render(ui, &mut self.state, &ctx),
+            Tab::Recording => super::tabs::recording::render(ui, &mut self.state, &ctx),
+            Tab::System => super::tabs::system::render(ui, &mut self.state, &ctx),
+            Tab::Support => super::tabs::support::render(ui, &mut self.state, &ctx),
+            Tab::Settings => super::tabs::settings::render(ui, &mut self.state, &ctx),
         });
 
-        // Render toasts
         let colors = self.state.theme_colors();
-        self.state.toasts.show(ctx, &colors);
+        self.state.toasts.show(&ctx, &colors);
 
-        // Only request repaint when needed (GPU stats tab, toasts animating, etc.)
-        // This prevents CPU spin and Wayland compositor frame timing issues
         if matches!(self.state.tab, Tab::Gpu | Tab::Fan) || self.state.toasts.has_active() {
-            // Rate-limited repaint for live monitoring tabs
             ctx.request_repaint_after(std::time::Duration::from_millis(500));
         }
+
+        let _ = frame;
+    }
+
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        let mut root_ui = egui::Ui::new(
+            ctx.clone(),
+            egui::Id::new((ctx.viewport_id(), "nvcontrol_root_ui")),
+            egui::UiBuilder::new()
+                .layer_id(egui::LayerId::background())
+                .max_rect(ctx.content_rect()),
+        );
+        root_ui.set_clip_rect(ctx.content_rect());
+
+        egui::CentralPanel::default().show_inside(&mut root_ui, |ui| self.ui(ui, _frame));
     }
 }

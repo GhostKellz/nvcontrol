@@ -84,6 +84,7 @@ pub fn add(left: u64, right: u64) -> u64 {
 }
 
 pub mod benchmark;
+pub mod companion;
 pub mod config;
 pub mod display;
 
@@ -102,7 +103,6 @@ pub mod profiles;
 /// Safe environment variable wrappers (replaces scattered unsafe blocks)
 pub mod safe_env;
 pub mod setup;
-pub mod tray;
 pub mod vibrance;
 pub mod vibrance_native;
 pub mod vrr;

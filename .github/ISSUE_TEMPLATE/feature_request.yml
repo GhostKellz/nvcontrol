@@ -1,0 +1,33 @@
+name: Feature request
+description: Suggest a new capability, workflow improvement, or hardware support enhancement.
+title: "[feature] "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What problem are you trying to solve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the feature or workflow you want.
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Hardware / software context
+      description: GPU, driver branch, distro, compositor, or packaging context if relevant.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Existing commands, scripts, or workarounds you already tried.

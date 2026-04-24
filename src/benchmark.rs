@@ -245,7 +245,7 @@ impl BenchmarkSuite {
         }
 
         // Sort by timestamp
-        results.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        results.sort_by_key(|result| std::cmp::Reverse(result.timestamp));
 
         Ok(results)
     }

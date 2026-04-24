@@ -6,8 +6,34 @@ use crate::{NvControlError, NvResult};
 use notify_rust::{Notification, Timeout, Urgency};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
+
+const SUPPORT_BUNDLE_DEDUPE_SECS: u64 = 8;
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct SupportBundleNotificationState {
+    last_path: Option<String>,
+    last_sent_unix_secs: Option<u64>,
+}
+
+fn notification_icon() -> String {
+    let candidate_paths = [
+        concat!(env!("CARGO_MANIFEST_DIR"), "/assets/icons/nvctl_logo.png"),
+        concat!(env!("CARGO_MANIFEST_DIR"), "/assets/icons/icon-256x256.png"),
+        "/usr/share/icons/hicolor/256x256/apps/nvcontrol.png",
+        "/usr/share/icons/hicolor/128x128/apps/nvcontrol.png",
+        "/usr/share/pixmaps/nvcontrol.png",
+        "/usr/share/icons/hicolor/256x256/apps/nvidia.png",
+        "/usr/share/pixmaps/nvidia.png",
+    ];
+
+    candidate_paths
+        .iter()
+        .find(|path| Path::new(path).exists())
+        .map(|path| (*path).to_string())
+        .unwrap_or_else(|| "nvidia".to_string())
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AlertConfig {
@@ -107,10 +133,12 @@ impl NotificationManager {
         urgency: Urgency,
         timeout: Timeout,
     ) -> NvResult<()> {
+        let icon = notification_icon();
+
         Notification::new()
             .summary(summary)
             .body(body)
-            .icon("nvcontrol")
+            .icon(&icon)
             .appname("nvcontrol")
             .urgency(urgency)
             .timeout(timeout)
@@ -226,6 +254,33 @@ impl NotificationManager {
         Ok(())
     }
 
+    /// Notify that a support bundle was created
+    pub fn notify_support_bundle_created(&mut self, path: &str) -> NvResult<()> {
+        if std::env::var("NVCONTROL_SUPPRESS_SUPPORT_NOTIFICATIONS")
+            .ok()
+            .as_deref()
+            == Some("1")
+        {
+            return Ok(());
+        }
+
+        if !self.should_notify_support_bundle(path) {
+            return Ok(());
+        }
+
+        let display_name = Path::new(path)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or(path);
+
+        self.send_notification(
+            "nvcontrol Support Bundle Ready",
+            &format!("Saved: {}", display_name),
+            Urgency::Low,
+            Timeout::Milliseconds(4000),
+        )
+    }
+
     /// Send overclock applied notification
     pub fn notify_overclock_applied(&mut self, gpu_offset: i32, mem_offset: i32) -> NvResult<()> {
         if self.should_alert(AlertType::OverclockApplied) {
@@ -288,6 +343,54 @@ impl NotificationManager {
             Urgency::Normal,
             Timeout::Milliseconds(5000),
         )
+    }
+
+    fn support_bundle_state_path(&self) -> PathBuf {
+        self.config_path
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join("support-notify.toml")
+    }
+
+    fn load_support_bundle_state(&self) -> SupportBundleNotificationState {
+        let path = self.support_bundle_state_path();
+        fs::read_to_string(path)
+            .ok()
+            .and_then(|contents| toml::from_str(&contents).ok())
+            .unwrap_or_default()
+    }
+
+    fn save_support_bundle_state(&self, state: &SupportBundleNotificationState) -> NvResult<()> {
+        let path = self.support_bundle_state_path();
+        let contents = toml::to_string(state).map_err(|e| {
+            NvControlError::ConfigError(format!("Failed to serialize support notify state: {}", e))
+        })?;
+        fs::write(path, contents)?;
+        Ok(())
+    }
+
+    fn should_notify_support_bundle(&self, path: &str) -> bool {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let state = self.load_support_bundle_state();
+
+        if state.last_path.as_deref() == Some(path)
+            && state
+                .last_sent_unix_secs
+                .map(|last| now.saturating_sub(last) < SUPPORT_BUNDLE_DEDUPE_SECS)
+                .unwrap_or(false)
+        {
+            return false;
+        }
+
+        let new_state = SupportBundleNotificationState {
+            last_path: Some(path.to_string()),
+            last_sent_unix_secs: Some(now),
+        };
+        let _ = self.save_support_bundle_state(&new_state);
+        true
     }
 }
 

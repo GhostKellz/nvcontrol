@@ -1,72 +1,99 @@
 # Container Commands
 
 ## Overview
-Docker and container GPU management with NVIDIA runtime support.
-
-## Commands
-
-### `nvctl nvbind list`
-List all GPU containers.
-
-**Usage:**
-```bash
-nvctl nvbind list [--gpu-only] [--metrics]
-```
-
-**Options:**
-- `--gpu-only` - Show only containers using GPUs
-- `--metrics` - Display performance metrics
-
-**Output:**
-- Container ID
-- Container name
-- Image
-- GPU devices
-- GPU utilization (with --metrics)
-- Power usage (with --metrics)
-
-**Example:**
-```bash
-nvctl nvbind list --gpu-only --metrics
-```
-
-**Output format:**
-```
-┌────────────────────────────────────────────────────────────────────┐
-│                       GPU Containers                               │
-├──────────────┬──────────────────────┬─────────────┬───────────────┤
-│ Container ID │ Name                 │ Image       │ GPU Devices   │
-├──────────────┼──────────────────────┼─────────────┼───────────────┤
-│ abc123def456 │ ml-training          │ pytorch     │ 0,1           │
-│ 789ghi012jkl │ game-server          │ nvidia/cuda │ 0             │
-└──────────────┴──────────────────────┴─────────────┴───────────────┘
-```
-
----
+Docker, Podman, containerd, and GPU runtime diagnostics.
 
 ### `nvctl container list`
-List Docker containers with GPU information.
+List GPU-enabled containers.
 
 **Usage:**
 ```bash
 nvctl container list
 ```
 
-**Similar to `nvctl nvbind list` but uses Docker runtime directly**
+---
+
+### `nvctl container status`
+Show GPU status for a specific container.
+
+**Usage:**
+```bash
+nvctl container status [--container <id-or-name>]
+```
+
+---
+
+### `nvctl container launch`
+Launch a container with GPU access.
+
+**Usage:**
+```bash
+nvctl container launch --image <image> [--name <name>] [--gpu <all|0|0,1>] [--runtime <docker|podman|containerd>]
+```
+
+---
+
+### `nvctl container runtime info`
+Show detected runtime/toolkit information.
+
+**Usage:**
+```bash
+nvctl container runtime info
+```
+
+---
+
+### `nvctl container runtime doctor`
+Run NVIDIA container runtime diagnostics.
+
+**Usage:**
+```bash
+nvctl container runtime doctor [--runtime <docker|podman|containerd>]
+```
+
+---
+
+### `nvctl container runtime test`
+Run a runtime-specific GPU smoke test.
+
+**Usage:**
+```bash
+nvctl container runtime test [--runtime <docker|podman|containerd>]
+```
+
+---
+
+### `nvctl container runtime setup`
+Show or perform runtime setup guidance.
+
+**Usage:**
+```bash
+nvctl container runtime setup --runtime <docker|podman|containerd>
+```
+
+---
+
+### `nvctl container runtime configure`
+Write nvcontrol runtime configuration defaults.
+
+**Usage:**
+```bash
+nvctl container runtime configure
+```
 
 ---
 
 ## Requirements
 
-- Docker installed and running
+- Docker, Podman, or containerd installed when needed
 - NVIDIA Container Toolkit
-- User must be in `docker` group or use sudo
+- Appropriate runtime permissions (`docker` group or root where required)
 
 **Check installation:**
 ```bash
-docker --version
 nvidia-smi
-docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi
+nvctl container runtime doctor --runtime docker
+nvctl container runtime test --runtime docker
 ```
 
 ---
@@ -74,8 +101,8 @@ docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi
 ## Troubleshooting
 
 **No containers found:**
-- Make sure Docker is running: `sudo systemctl start docker`
-- Launch GPU container: `docker run --gpus all nvidia/cuda:11.0-base`
+- Make sure the chosen runtime is running
+- Launch a test container: `nvctl container runtime test --runtime docker`
 
 **Permission denied:**
 - Add user to docker group: `sudo usermod -aG docker $USER`
@@ -83,4 +110,7 @@ docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi
 
 **NVIDIA runtime not found:**
 - Install NVIDIA Container Toolkit
-- Configure Docker to use NVIDIA runtime
+- Configure the runtime with `nvctl container runtime setup --runtime docker`
+
+**Supportability note:**
+- container runtime doctor output is included automatically in `nvctl driver support-bundle` and `nvctl doctor --support`

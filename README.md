@@ -5,12 +5,12 @@
 
   **Modern NVIDIA Settings Manager for Linux + Wayland**
 
-  [![Rust](https://img.shields.io/badge/Rust-1.91+-orange.svg?style=for-the-badge)](https://www.rust-lang.org)
+  [![Rust](https://img.shields.io/badge/Rust-1.95+-orange.svg?style=for-the-badge)](https://www.rust-lang.org)
   [![NVIDIA](https://img.shields.io/badge/NVIDIA-Driver%20595+-green.svg?style=for-the-badge)](https://github.com/NVIDIA/open-gpu-kernel-modules)
   [![Wayland](https://img.shields.io/badge/Wayland-Native-brightgreen.svg?style=for-the-badge)](https://wayland.freedesktop.org/)
   [![TUI](https://img.shields.io/badge/TUI-ratatui-orange.svg?style=for-the-badge)](https://github.com/ratatui/ratatui)
   [![GUI](https://img.shields.io/badge/GUI-egui-blue.svg?style=for-the-badge)](https://github.com/emilk/egui)
-  [![ASUS](https://img.shields.io/badge/ASUS-Power%20Detector+-red.svg?style=for-the-badge)](docs/POWER_DETECTION.md)
+  [![ASUS](https://img.shields.io/badge/ASUS-Power%20Detector+-red.svg?style=for-the-badge)](docs/hardware/power-detection.md)
   [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 
   *The missing NVIDIA Control Panel for Linux*
@@ -35,6 +35,12 @@ nvcontrol is a comprehensive NVIDIA GPU control tool for Linux, designed from th
 
 ## Quick Start
 
+Install the latest desktop-first release:
+
+```bash
+curl -fsSL https://nvctl.cktech.sh | sudo bash
+```
+
 ```bash
 # GPU information (like nvidia-smi)
 nvctl gpu info
@@ -42,17 +48,48 @@ nvctl gpu info
 # Driver capabilities and requirements
 nvctl driver info
 
+# Release diagnostics and support bundle
+nvctl driver diagnose-release
+nvctl doctor --support
+
 # Validate readiness for driver 590 branch
 nvctl driver validate --driver 590
 
-# Live monitoring dashboard
+# Full TUI dashboard
 nvctl gpu stat
 
+# htop-style GPU monitor
+nvctl nvtop
+
 # Digital vibrance (0-200, default 100)
-nvctl display vibrance set 150
+nvctl vibrance 150
 
 # Launch GUI
 nvcontrol
+```
+
+## Support Workflow
+
+```bash
+# Human-readable diagnostics
+nvctl driver diagnose-release
+nvctl driver check
+
+# Machine-readable diagnostics
+nvctl driver diagnose-release --format json
+
+# Shareable support artifact
+nvctl driver support-bundle --tarball --redact-paths --redact-ids --log-tail 80 \
+  --output ~/.local/state/nvcontrol/support/support.tar.gz
+
+# One-shot support workflow
+nvctl doctor --support --output ~/.local/state/nvcontrol/support/doctor-support.tar.gz
+
+# TUI support actions
+nvctl gpu stat   # Drivers tab: b=create bundle, x=workflow hint
+
+# Shell completions
+nvctl completion bash > nvctl.bash
 ```
 
 ## Installation
@@ -70,27 +107,27 @@ makepkg -si -p release/arch/PKGBUILD
 
 ### Debian/Ubuntu
 ```bash
-# Download latest from releases
-wget https://github.com/GhostKellz/nvcontrol/releases/latest/download/nvcontrol_amd64.deb
-sudo apt install ./nvcontrol_amd64.deb
+# One-line install (downloads the latest full GUI + CLI tarball)
+curl -fsSL https://nvctl.cktech.sh | sudo bash
 ```
 
 ### Fedora/Nobara
 ```bash
-# Download latest from releases
-sudo dnf install https://github.com/GhostKellz/nvcontrol/releases/latest/download/nvcontrol.x86_64.rpm
+# One-line install (downloads the latest full GUI + CLI tarball)
+curl -fsSL https://nvctl.cktech.sh | sudo bash
 ```
 
 ### From Source
 ```bash
 git clone https://github.com/GhostKellz/nvcontrol
 cd nvcontrol
-cargo build --release
-sudo install -Dm755 target/release/nvctl /usr/bin/nvctl
-sudo install -Dm755 target/release/nvcontrol /usr/bin/nvcontrol
+cargo build --release --bin nvctl
+cargo build --release --bin nvcontrol --features gui
+sudo install -Dm755 target/x86_64-unknown-linux-gnu/release/nvctl /usr/local/bin/nvctl
+sudo install -Dm755 target/x86_64-unknown-linux-gnu/release/nvcontrol /usr/local/bin/nvcontrol
 ```
 
-See [BUILDING.md](BUILDING.md) for detailed build instructions.
+See [docs/building.md](docs/building.md) for detailed build instructions.
 
 ## Features
 
@@ -99,8 +136,9 @@ Native implementation using NVKMS ioctls - works on Wayland without nvidia-setti
 
 ```bash
 nvctl display vibrance list          # Show all displays
-nvctl display vibrance set 150       # Boost colors (100=default)
-nvctl display vibrance set 150 -d 1  # Specific display
+nvctl vibrance 150                   # Boost colors (100=default)
+nvctl display vibrance set-display 1 150
+nvctl color vibrance set --value 512 -d 1
 ```
 
 ### Display Controls
@@ -123,8 +161,18 @@ nvctl vrr disable DP-1               # Disable
 ```bash
 nvctl gpu info                       # GPU information
 nvctl gpu stat                       # TUI dashboard
+nvctl nvtop                          # htop-style monitor
 nvctl gpu watch                      # Live monitoring
-nvctl gpu watch --interval 500       # Custom refresh rate
+nvctl gpu watch --interval 1         # Custom refresh rate
+```
+
+### Driver Support Workflow
+```bash
+nvctl driver diagnose-release                       # Kernel/userspace/GSP alignment
+nvctl driver diagnose-release --format json         # Structured diagnostics
+nvctl driver support-bundle --gzip --redact-paths \
+  --redact-ids --output ~/.local/state/nvcontrol/support/support.txt.gz
+nvctl doctor --support                              # Run diagnostics + create support tarball
 ```
 
 ### Overclocking
@@ -150,7 +198,15 @@ nvctl fan auto                       # Return to auto
 
 ```bash
 nvctl power status                   # Power info
-nvctl power limit 90                 # Set power limit %
+nvctl power limit --percentage 90    # Set power limit %
+nvctl power persistence --enabled true
+```
+
+### Shell Completions
+```bash
+nvctl completion bash > nvctl.bash
+nvctl completion zsh > _nvctl
+nvctl completion fish > nvctl.fish
 ```
 
 ## Supported Hardware
@@ -207,7 +263,7 @@ nvctl asus power --json  # JSON output for scripts
 - ROG Astral RTX 5090
 - ROG Matrix RTX 5090 (planned)
 
-See [ASTRAL_OWNERS.md](ASTRAL_OWNERS.md) for Astral-specific guide.
+See [docs/hardware/astral-owners.md](docs/hardware/astral-owners.md) for Astral-specific guide.
 
 ## TUI Dashboard
 
@@ -245,15 +301,14 @@ Change theme with `t` in TUI or via Settings in GUI.
 
 ## Documentation
 
-- [COMMANDS.md](docs/COMMANDS.md) - Complete CLI reference
-- [BUILDING.md](BUILDING.md) - Build instructions
+- [docs/](docs/) - Complete documentation hub
+  - [docs/commands.md](docs/commands.md) - CLI reference
+  - [docs/building.md](docs/building.md) - Build instructions
+  - [docs/tui-user-guide.md](docs/tui-user-guide.md) - TUI dashboard guide
+  - [docs/features/](docs/features/) - Feature guides (vibrance, HDR, VRR, etc.)
+  - [docs/hardware/](docs/hardware/) - Hardware-specific guides
+  - [docs/drivers/](docs/drivers/) - Driver compatibility
 - [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
-- [ASTRAL_OWNERS.md](ASTRAL_OWNERS.md) - ASUS ROG Astral quick start
-- [docs/](docs/) - Additional documentation
-  - [TUI_USER_GUIDE.md](docs/TUI_USER_GUIDE.md) - TUI dashboard guide
-  - [RTX_5090_SETUP_GUIDE.md](docs/RTX_5090_SETUP_GUIDE.md) - RTX 50-series setup
-  - [POWER_DETECTION.md](docs/POWER_DETECTION.md) - ASUS Power Detector+ details
-  - [digital-vibrance.md](docs/digital-vibrance.md) - Vibrance implementation details
 
 ## Platform Support
 
@@ -270,7 +325,7 @@ Change theme with `t` in TUI or via Settings in GUI.
 
 - **NVIDIA Driver**: 535+ (565+ recommended, 580+ for RTX 50-series)
 - **Linux Kernel**: 6.0+ (6.6+ recommended)
-- **Rust**: 1.75+ (for building from source)
+- **Rust**: 1.95+ (for building from source)
 
 ## Contributing
 

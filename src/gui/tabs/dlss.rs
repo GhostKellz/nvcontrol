@@ -266,14 +266,14 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                         for (idx, game) in state.dlss_state.games.iter().enumerate() {
                             let is_selected = state.dlss_state.selected_game == Some(idx);
 
-                            let frame = egui::Frame::none()
+                            let frame = egui::Frame::new()
                                 .fill(if is_selected {
                                     colors.bg_highlight.to_egui()
                                 } else {
                                     egui::Color32::TRANSPARENT
                                 })
                                 .inner_margin(4.0)
-                                .rounding(4.0);
+                                .corner_radius(4.0);
 
                             frame.show(ui, |ui| {
                                 ui.horizontal(|ui| {
@@ -398,7 +398,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                         ui.horizontal(|ui| {
                             ui.monospace(&launch_str);
                             if ui.button("Copy").clicked() {
-                                ui.output_mut(|o| o.copied_text = launch_str.clone());
+                                ui.ctx().copy_text(launch_str.clone());
                                 state.toasts.success("Copied to clipboard");
                             }
                         });

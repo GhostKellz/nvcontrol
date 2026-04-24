@@ -45,10 +45,10 @@ impl<'a> Card<'a> {
 
     /// Show the card with content
     pub fn show<R>(self, ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui::Ui) -> R) -> R {
-        let frame = egui::Frame::none()
+        let frame = egui::Frame::new()
             .fill(self.colors.bg_highlight.to_egui())
             .stroke(egui::Stroke::new(1.0, self.colors.border.to_egui()))
-            .rounding(8.0)
+            .corner_radius(8.0)
             .inner_margin(12.0)
             .outer_margin(4.0);
 

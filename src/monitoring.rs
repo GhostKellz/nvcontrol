@@ -548,5 +548,5 @@ pub fn show_monitoring_status() {
     println!("📊 Monitoring Status:");
     println!("   Status: Active");
     println!("   Interval: 1s");
-    println!("   Log file: /tmp/nvcontrol_monitor.log");
+    println!("   Output: live terminal session");
 }

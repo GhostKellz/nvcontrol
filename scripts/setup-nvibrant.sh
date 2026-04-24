@@ -2,6 +2,16 @@
 # Setup script for nvibrant integration
 set -e
 
+resolve_release_dir() {
+    if [ -d "target/x86_64-unknown-linux-gnu/release" ]; then
+        printf '%s' "target/x86_64-unknown-linux-gnu/release"
+    else
+        printf '%s' "target/release"
+    fi
+}
+
+RELEASE_DIR="$(resolve_release_dir)"
+
 echo "🔧 Setting up nvibrant integration..."
 
 # Check if we need to add the submodule first
@@ -55,10 +65,10 @@ fi
 
 # Create symlink for bundled usage
 echo "🔗 Creating nvibrant symlink for bundled usage..."
-mkdir -p target/release 2>/dev/null || true
+mkdir -p "$RELEASE_DIR" 2>/dev/null || true
 if command -v nvibrant >/dev/null 2>&1; then
     NVIBRANT_PATH=$(which nvibrant)
-    ln -sf "$NVIBRANT_PATH" target/release/nvibrant 2>/dev/null || true
+    ln -sf "$NVIBRANT_PATH" "$RELEASE_DIR/nvibrant" 2>/dev/null || true
 fi
 
 echo "🎉 nvibrant integration setup complete!"

@@ -730,15 +730,11 @@ impl TuiApp {
                     .unwrap_or_else(Instant::now);
                 self.input_mode = InputMode::Normal;
             }
-            KeyCode::Left | KeyCode::Char('h') => {
-                if self.sort_selected_column > 0 {
-                    self.sort_selected_column -= 1;
-                }
+            KeyCode::Left | KeyCode::Char('h') if self.sort_selected_column > 0 => {
+                self.sort_selected_column -= 1;
             }
-            KeyCode::Right | KeyCode::Char('l') => {
-                if self.sort_selected_column < 3 {
-                    self.sort_selected_column += 1;
-                }
+            KeyCode::Right | KeyCode::Char('l') if self.sort_selected_column < 3 => {
+                self.sort_selected_column += 1;
             }
             KeyCode::Up | KeyCode::Down => {
                 // Cycle sort direction for current column
@@ -755,15 +751,11 @@ impl TuiApp {
 
     fn handle_menu_key(&mut self, code: KeyCode) {
         match code {
-            KeyCode::Up | KeyCode::Char('k') => {
-                if self.menu_selection > 0 {
-                    self.menu_selection -= 1;
-                }
+            KeyCode::Up | KeyCode::Char('k') if self.menu_selection > 0 => {
+                self.menu_selection -= 1;
             }
-            KeyCode::Down | KeyCode::Char('j') => {
-                if self.menu_selection < 3 {
-                    self.menu_selection += 1;
-                }
+            KeyCode::Down | KeyCode::Char('j') if self.menu_selection < 3 => {
+                self.menu_selection += 1;
             }
             KeyCode::Enter => {
                 match self.menu_selection {
@@ -804,13 +796,11 @@ impl TuiApp {
                 self.sort_selected_column = self.sort_column.column_index().unwrap_or(0);
             }
             // Clear filter
-            KeyCode::Esc => {
-                if !self.filter_text.is_empty() {
-                    self.filter_text.clear();
-                    self.processes_last_update = Instant::now()
-                        .checked_sub(Duration::from_secs(10))
-                        .unwrap_or_else(Instant::now);
-                }
+            KeyCode::Esc if !self.filter_text.is_empty() => {
+                self.filter_text.clear();
+                self.processes_last_update = Instant::now()
+                    .checked_sub(Duration::from_secs(10))
+                    .unwrap_or_else(Instant::now);
             }
             // Toggle sparkline graphs
             KeyCode::Char('g') => self.show_graphs = !self.show_graphs,
@@ -821,6 +811,7 @@ impl TuiApp {
     fn handle_dashboard_key(&mut self, code: KeyCode, _modifiers: KeyModifiers) {
         // Check if we're on Processes tab (index 5)
         let on_processes_tab = self.current_tab == 5;
+        let on_drivers_tab = self.current_tab == 12;
 
         match code {
             KeyCode::Tab => self.next_tab(),
@@ -859,6 +850,30 @@ impl TuiApp {
             }
             // Settings toggle (not on processes tab to avoid conflict with sort)
             KeyCode::Char('s') if !on_processes_tab => self.show_settings = !self.show_settings,
+            KeyCode::Char('b') if on_drivers_tab => {
+                let support_path =
+                    crate::drivers::default_support_bundle_path("tui-support.tar.gz");
+                match crate::drivers::write_support_bundle_with_options(
+                    &support_path,
+                    true,
+                    false,
+                    true,
+                    true,
+                    80,
+                ) {
+                    Ok(()) => self.set_status_message(format!(
+                        "Support tarball ready: {} | attach it to your issue",
+                        support_path
+                    )),
+                    Err(e) => self.set_status_message(format!("Support bundle failed: {}", e)),
+                }
+            }
+            KeyCode::Char('x') if on_drivers_tab => {
+                self.set_status_message(
+                    "Workflow: diagnose-release -> driver check -> support-bundle --tarball"
+                        .to_string(),
+                );
+            }
             _ => {}
         }
     }
@@ -2397,14 +2412,17 @@ impl TuiApp {
         let red = self.theme.red.to_ratatui();
         let fg = self.theme.fg.to_ratatui();
         let comment = self.theme.comment.to_ratatui();
+        let diag_summary = drivers::summarize_driver_check();
+        let diag_fixes = drivers::suggested_fixes(&diag_summary);
 
-        // Layout: Driver info, GSP, DKMS
+        // Layout: Driver info, GSP, DKMS, diagnostics
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(8), // Driver info
                 Constraint::Length(7), // GSP status
-                Constraint::Min(6),    // DKMS status
+                Constraint::Length(6), // DKMS status
+                Constraint::Min(7),    // Diagnostics
             ])
             .split(area);
 
@@ -2446,6 +2464,10 @@ impl TuiApp {
                     "no"
                 }
             ));
+            driver_lines.push(format!(
+                "Status:     {}",
+                drivers::severity_label(diag_summary.severity)
+            ));
         } else {
             driver_lines.push("Driver info not available".to_string());
         }
@@ -2464,7 +2486,10 @@ impl TuiApp {
         let gsp_mgr = GspManager::new();
         let gsp_status = gsp_mgr.get_deep_status();
 
-        let gsp_lines: Vec<Line> = if gsp_status.is_nvidia_open {
+        let gsp_lines: Vec<Line> = if gsp_status.is_nvidia_open
+            || gsp_status.enabled
+            || gsp_status.state != "not_loaded"
+        {
             let gsp_state_color = match gsp_status.state.as_str() {
                 "active" | "loaded" => green,
                 "failed" => red,
@@ -2503,7 +2528,7 @@ impl TuiApp {
             lines
         } else {
             vec![Line::from(Span::styled(
-                "N/A (proprietary driver)",
+                "No active GSP firmware state detected",
                 Style::default().fg(comment),
             ))]
         };
@@ -2518,6 +2543,11 @@ impl TuiApp {
 
         // DKMS Status section
         let dkms_info = drivers::get_dkms_setup_info();
+        let dkms_doctor = drivers::doctor_dkms();
+        let source_state = drivers::inspect_source_build_state();
+        let runtime_doctor = crate::container_runtime::NvContainerRuntime::new()
+            .and_then(|runtime| runtime.runtime_doctor(None))
+            .ok();
 
         let mut dkms_lines = vec![];
         if !dkms_info.dkms_installed {
@@ -2553,10 +2583,21 @@ impl TuiApp {
 
             let kernels_text = format!("{}/{} kernels have nvidia", nvidia_count, kernel_count);
             dkms_lines.push(format!("Kernels:    {}", kernels_text));
+            dkms_lines.push(format!(
+                "Doctor:     {}",
+                drivers::severity_label(dkms_doctor.severity)
+            ));
+
+            if let Some(path) = source_state.source_path.as_deref() {
+                dkms_lines.push(format!("Source:     {}", path));
+            }
+            if let Some(tag) = source_state.current_tag.as_deref() {
+                dkms_lines.push(format!("Git Tag:    {}", tag));
+            }
 
             if !dkms_info.nvidia_registered {
                 dkms_lines.push(String::new());
-                dkms_lines.push("Run: nvctl driver dkms setup".to_string());
+                dkms_lines.push("Next: nvctl driver dkms setup".to_string());
             }
         }
 
@@ -2569,6 +2610,71 @@ impl TuiApp {
             )
             .style(Style::default().fg(fg));
         f.render_widget(dkms_para, chunks[2]);
+
+        let severity_color = match diag_summary.severity {
+            drivers::DiagnosticSeverity::Healthy => green,
+            drivers::DiagnosticSeverity::Warning => yellow,
+            drivers::DiagnosticSeverity::Broken => red,
+        };
+        let mut diag_lines = vec![Line::from(vec![
+            Span::styled("Status: ", Style::default().fg(fg)),
+            Span::styled(
+                drivers::severity_label(diag_summary.severity),
+                Style::default().fg(severity_color),
+            ),
+        ])];
+        for message in diag_summary.messages.iter().take(3) {
+            diag_lines.push(Line::from(Span::styled(
+                format!("- {}", message),
+                Style::default().fg(fg),
+            )));
+        }
+        if !diag_fixes.is_empty() {
+            diag_lines.push(Line::from(Span::styled(
+                "Suggested fixes:",
+                Style::default().fg(accent),
+            )));
+            for fix in diag_fixes.iter().take(2) {
+                diag_lines.push(Line::from(Span::styled(
+                    format!("- {}", fix),
+                    Style::default().fg(comment),
+                )));
+            }
+        }
+        if let Some(runtime) = runtime_doctor {
+            let runtime_color = match runtime.severity.as_str() {
+                "healthy" => green,
+                "warning" => yellow,
+                _ => red,
+            };
+            diag_lines.push(Line::from(Span::styled(
+                format!("Runtime doctor: {}", runtime.severity),
+                Style::default().fg(runtime_color),
+            )));
+            if let Some(command) = runtime.smoke_test_command {
+                diag_lines.push(Line::from(Span::styled(
+                    format!("Smoke test: {}", command),
+                    Style::default().fg(comment),
+                )));
+            }
+        }
+        diag_lines.push(Line::from(Span::styled(
+            format!(
+                "Actions: b=create bundle  x=workflow  doctors: dkms/source/runtime  out={}",
+                crate::drivers::default_support_bundle_path("tui-support.tar.gz")
+            ),
+            Style::default().fg(comment),
+        )));
+
+        let diag_para = Paragraph::new(diag_lines)
+            .block(
+                Block::default()
+                    .title(" Diagnostics ")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(accent)),
+            )
+            .style(Style::default().fg(fg));
+        f.render_widget(diag_para, chunks[3]);
     }
 
     fn draw_dlss_tab(&self, f: &mut Frame, area: Rect) {
@@ -2888,10 +2994,16 @@ impl TuiApp {
    n            Nvtop view
    d            Dashboard view
 
- Controls:
-   Space/p      Pause updates
+  Controls:
+    Space/p      Pause updates
 
- Process Table (nvtop/Processes tab):
+  Drivers tab:
+   b            Create support bundle
+   x            Show support workflow hint
+    doctors      nvctl driver dkms doctor | nvctl driver source doctor
+    runtime      nvctl container runtime doctor --runtime docker
+
+  Process Table (nvtop/Processes tab):
    j/↓          Select next process
    k/↑          Select previous process
    Mouse wheel  Scroll process list
@@ -2899,6 +3011,11 @@ impl TuiApp {
    s            Sort by column
    Esc          Clear filter
    g            Toggle graphs
+
+  Profiles:
+    preview      nvctl config preview --input live
+    diff         nvctl config diff --current live --target <profile>
+    apply        nvctl config apply --input <profile>
 "#;
 
         let help = Paragraph::new(help_text)

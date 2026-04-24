@@ -5,6 +5,8 @@ set -e
 
 cd "$(dirname "$0")"
 
+COMPOSE_CMD="docker compose"
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -32,12 +34,12 @@ check_prereqs() {
     fi
     echo -e "${GREEN}✅ Docker installed${NC}"
 
-    if ! command -v docker-compose &> /dev/null; then
-        echo -e "${RED}❌ Docker Compose not found${NC}"
-        echo "Install: sudo pacman -S docker-compose"
+    if ! docker compose version &> /dev/null; then
+        echo -e "${RED}❌ Docker Compose v2 not found${NC}"
+        echo "Install the Docker Compose v2 plugin for your distro"
         exit 1
     fi
-    echo -e "${GREEN}✅ Docker Compose installed${NC}"
+    echo -e "${GREEN}✅ Docker Compose v2 installed${NC}"
 
     if ! docker ps &> /dev/null; then
         echo -e "${RED}❌ Docker daemon not accessible${NC}"
@@ -99,35 +101,35 @@ case "${1:-help}" in
 
     build)
         section "Building Docker Image"
-        docker-compose build
+        $COMPOSE_CMD build
         echo -e "${GREEN}✅ Build complete${NC}"
         ;;
 
     lint)
         check_prereqs
         section "Running Clippy Linter"
-        docker-compose up --exit-code-from nvcontrol-lint nvcontrol-lint
+        $COMPOSE_CMD up --exit-code-from nvcontrol-lint nvcontrol-lint
         echo -e "${GREEN}✅ Linting passed${NC}"
         ;;
 
     unit)
         check_prereqs
         section "Running Unit Tests"
-        docker-compose up --exit-code-from nvcontrol-unit-tests nvcontrol-unit-tests
+        $COMPOSE_CMD up --exit-code-from nvcontrol-unit-tests nvcontrol-unit-tests
         echo -e "${GREEN}✅ Unit tests passed${NC}"
         ;;
 
     integration)
         check_prereqs
         section "Running Integration Tests (GPU Required)"
-        docker-compose up --exit-code-from nvcontrol-integration-tests nvcontrol-integration-tests
+        $COMPOSE_CMD up --exit-code-from nvcontrol-integration-tests nvcontrol-integration-tests
         echo -e "${GREEN}✅ Integration tests passed${NC}"
         ;;
 
     bench)
         check_prereqs
         section "Running Benchmarks"
-        docker-compose up --exit-code-from nvcontrol-bench nvcontrol-bench
+        $COMPOSE_CMD up --exit-code-from nvcontrol-bench nvcontrol-bench
         echo -e "${GREEN}✅ Benchmarks complete${NC}"
         echo -e "Results: ${BLUE}../bench-results/${NC}"
         ;;
@@ -135,7 +137,7 @@ case "${1:-help}" in
     coverage)
         check_prereqs
         section "Generating Code Coverage"
-        docker-compose up --exit-code-from nvcontrol-coverage nvcontrol-coverage
+        $COMPOSE_CMD up --exit-code-from nvcontrol-coverage nvcontrol-coverage
         echo -e "${GREEN}✅ Coverage report generated${NC}"
         echo -e "Report: ${BLUE}../coverage/index.html${NC}"
         ;;
@@ -145,10 +147,10 @@ case "${1:-help}" in
         section "Quick Test Suite (Lint + Unit)"
 
         echo -e "${YELLOW}Running Clippy...${NC}"
-        docker-compose up --exit-code-from nvcontrol-lint nvcontrol-lint
+        $COMPOSE_CMD up --exit-code-from nvcontrol-lint nvcontrol-lint
 
         echo -e "${YELLOW}Running unit tests...${NC}"
-        docker-compose up --exit-code-from nvcontrol-unit-tests nvcontrol-unit-tests
+        $COMPOSE_CMD up --exit-code-from nvcontrol-unit-tests nvcontrol-unit-tests
 
         echo -e "\n${GREEN}✅ Quick tests passed!${NC}"
         ;;
@@ -158,13 +160,13 @@ case "${1:-help}" in
         section "Full Test Suite"
 
         echo -e "${YELLOW}1/3 Running Clippy...${NC}"
-        docker-compose up --exit-code-from nvcontrol-lint nvcontrol-lint
+        $COMPOSE_CMD up --exit-code-from nvcontrol-lint nvcontrol-lint
 
         echo -e "${YELLOW}2/3 Running unit tests...${NC}"
-        docker-compose up --exit-code-from nvcontrol-unit-tests nvcontrol-unit-tests
+        $COMPOSE_CMD up --exit-code-from nvcontrol-unit-tests nvcontrol-unit-tests
 
         echo -e "${YELLOW}3/3 Running integration tests...${NC}"
-        docker-compose up --exit-code-from nvcontrol-integration-tests nvcontrol-integration-tests
+        $COMPOSE_CMD up --exit-code-from nvcontrol-integration-tests nvcontrol-integration-tests
 
         echo -e "\n${GREEN}✅ All tests passed!${NC}"
         ;;
@@ -174,18 +176,18 @@ case "${1:-help}" in
         section "Interactive Development Shell"
         echo -e "${BLUE}Starting container with GPU access...${NC}"
         echo -e "${YELLOW}Tip: Run 'nvctl doctor' to verify NVIDIA setup${NC}\n"
-        docker-compose run --rm nvcontrol-dev
+        $COMPOSE_CMD run --rm nvcontrol-dev
         ;;
 
     clean)
         section "Cleaning Up"
         echo -e "${YELLOW}Stopping containers...${NC}"
-        docker-compose down
+        $COMPOSE_CMD down
 
         read -p "Remove volumes (including Cargo cache)? [y/N] " -n 1 -r
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
-            docker-compose down -v
+            $COMPOSE_CMD down -v
             echo -e "${GREEN}✅ Removed containers and volumes${NC}"
         else
             echo -e "${GREEN}✅ Removed containers (kept volumes)${NC}"

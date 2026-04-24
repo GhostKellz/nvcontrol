@@ -1,0 +1,136 @@
+name: Bug report
+description: Report a regression, runtime failure, packaging problem, or hardware-specific issue.
+title: "[bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, please include release diagnostics and a support bundle when possible.
+
+        Recommended commands:
+
+        ```bash
+        nvctl driver diagnose-release
+        nvctl doctor --support --output ~/.local/state/nvcontrol/support/doctor-support.tar.gz
+        ```
+
+        Redact local details if needed:
+
+        ```bash
+        nvctl driver support-bundle --gzip --redact-paths --redact-ids --output ~/.local/state/nvcontrol/support/support.txt.gz
+        ```
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is broken?
+      placeholder: Short description of the problem.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Exact steps, commands, or actions that reproduce the issue.
+      placeholder: |
+        1. Run ...
+        2. Open ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: nvcontrol version
+      placeholder: nvctl 0.8.7
+    validations:
+      required: true
+
+  - type: input
+    id: distro
+    attributes:
+      label: Distribution
+      placeholder: Arch Linux / Ubuntu 24.04 / Fedora 42
+    validations:
+      required: true
+
+  - type: input
+    id: kernel
+    attributes:
+      label: Kernel version
+      placeholder: 6.12.x
+    validations:
+      required: true
+
+  - type: input
+    id: driver
+    attributes:
+      label: NVIDIA driver version
+      placeholder: 570.211.01 / 590.48.01 / 595.x
+    validations:
+      required: true
+
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU
+      placeholder: RTX 2060 / RTX 5090 / etc.
+    validations:
+      required: true
+
+  - type: input
+    id: desktop
+    attributes:
+      label: Desktop / compositor
+      placeholder: KDE Plasma / GNOME / Hyprland / Sway / COSMIC
+
+  - type: dropdown
+    id: driver_stack
+    attributes:
+      label: Driver stack
+      options:
+        - proprietary nvidia
+        - nvidia-open
+        - not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics and attachments
+      description: Paste key output and mention any attached support bundle.
+      placeholder: |
+        - Attached doctor-support.tar.gz
+        - Attached support.txt.gz
+        - nvctl driver diagnose-release output:
+          ...
+
+  - type: textarea
+    id: changes
+    attributes:
+      label: What changed before this started?
+      description: Kernel update, driver switch, suspend/resume, package upgrade, etc.
+      placeholder: |
+        - kernel update
+        - switched from nvidia to nvidia-open
+        - resumed from suspend

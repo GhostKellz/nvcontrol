@@ -318,15 +318,14 @@ fn render_fan_curve_editor(
                 .show(ui, |plot_ui| {
                     // Draw the curve line
                     let curve_line: PlotPoints = curve_points_vec.clone().into();
-                    plot_ui.line(Line::new(curve_line).color(colors.cyan.to_egui()));
+                    plot_ui.line(Line::new("Curve", curve_line).color(colors.cyan.to_egui()));
 
                     // Draw the control points
                     let curve_pts: PlotPoints = curve_points_vec.into();
                     plot_ui.points(
-                        Points::new(curve_pts)
+                        Points::new("Control Points", curve_pts)
                             .radius(6.0)
-                            .color(colors.blue.to_egui())
-                            .name("Control Points"),
+                            .color(colors.blue.to_egui()),
                     );
 
                     // Draw current temperature indicator
@@ -335,10 +334,9 @@ fn render_fan_curve_editor(
                         let speed = state.fan_curve.get_speed_at_temp(temp);
                         let current_point: PlotPoints = vec![[temp, speed]].into();
                         plot_ui.points(
-                            Points::new(current_point)
+                            Points::new("Current", current_point)
                                 .radius(8.0)
-                                .color(colors.red.to_egui())
-                                .name("Current"),
+                                .color(colors.red.to_egui()),
                         );
                     }
                 });

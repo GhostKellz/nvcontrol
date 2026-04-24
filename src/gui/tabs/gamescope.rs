@@ -449,9 +449,9 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
 
             cmd.push_str(" -- %command%");
 
-            egui::Frame::none()
+            egui::Frame::new()
                 .fill(colors.bg_dark.to_egui())
-                .rounding(4.0)
+                .corner_radius(4.0)
                 .inner_margin(8.0)
                 .show(ui, |ui| {
                     ui.label(

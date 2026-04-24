@@ -11,10 +11,12 @@ pub mod gpu;
 pub mod hdr;
 pub mod latency;
 pub mod osd;
-// Note: overclock tab removed from GUI (v0.8.5) - OC is CLI-only on Wayland
+pub mod power;
+// Overclocking remains CLI-only on Wayland, so the GUI overclock tab stays disabled.
 // pub mod overclock;
 pub mod recording;
 pub mod settings;
+pub mod support;
 pub mod system;
 pub mod vibrance;
 pub mod vrr;
@@ -27,6 +29,7 @@ pub enum Tab {
     Fan,
     // Display tabs
     Display,
+    Power,
     Vibrance,
     Hdr,
     Vrr,
@@ -39,6 +42,7 @@ pub enum Tab {
     Recording,
     // System
     System,
+    Support,
     Settings,
 }
 
@@ -49,11 +53,12 @@ impl Tab {
             Tab::Gpu => Some(1),
             Tab::Fan => Some(2),
             Tab::Display => Some(3),
-            Tab::Vibrance => Some(4),
-            Tab::Hdr => Some(5),
-            Tab::GameProfiles => Some(6),
-            Tab::Osd => Some(7),
-            Tab::Settings => Some(8),
+            Tab::Power => Some(4),
+            Tab::Vibrance => Some(5),
+            Tab::Hdr => Some(6),
+            Tab::GameProfiles => Some(7),
+            Tab::Osd => Some(8),
+            Tab::Support => Some(9),
             _ => None,
         }
     }
@@ -66,6 +71,7 @@ impl Tab {
             (Tab::Fan, super::icons::FAN_ICON, "Fan Control"),
             // Display
             (Tab::Display, super::icons::DISPLAY, "Display"),
+            (Tab::Power, super::icons::POWER, "Power"),
             (Tab::Vibrance, super::icons::VIBRANCE, "Vibrance"),
             (Tab::Hdr, super::icons::HDR, "HDR"),
             (Tab::Vrr, super::icons::VRR, "VRR/G-Sync"),
@@ -78,6 +84,7 @@ impl Tab {
             (Tab::Recording, super::icons::RECORD, "Recording"),
             // System
             (Tab::System, super::icons::SYSTEM, "System"),
+            (Tab::Support, super::icons::BENCHMARK, "Support"),
             (Tab::Settings, super::icons::SETTINGS, "Settings"),
         ]
     }

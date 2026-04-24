@@ -60,6 +60,19 @@ impl AsusRogModel {
     pub fn supports_power_detector(&self) -> bool {
         matches!(self, Self::AstralRtx5090 | Self::MatrixRtx5090)
     }
+
+    pub fn capability_note(&self) -> &'static str {
+        match self {
+            Self::AstralRtx5090 => "Power Detector+ expected on supported read-only I2C path",
+            Self::MatrixRtx5090 => {
+                "Power Detector+ expected once Matrix subsystem IDs are confirmed"
+            }
+            Self::UnknownAsus => {
+                "ASUS GPU detected, but board-specific Power Detector+ support is not yet confirmed"
+            }
+            Self::NotAsus => "Not an ASUS GPU",
+        }
+    }
 }
 
 /// Health status for power connector
@@ -489,6 +502,21 @@ impl AsusPowerDetector {
     /// Check if this card supports Power Detector+
     pub fn is_supported(&self) -> bool {
         self.model.supports_power_detector() && self.i2c_bus.is_some()
+    }
+
+    pub fn support_status_message(&self) -> String {
+        if !self.model.supports_power_detector() {
+            return format!("{}: {}", self.model.name(), self.model.capability_note());
+        }
+
+        if self.i2c_bus.is_none() {
+            return format!(
+                "{} detected, but the power-monitor I2C bus was not found. Verify i2c-tools, i2c-dev, and i2c-nvidia_gpu access.",
+                self.model.name()
+            );
+        }
+
+        format!("{}: Power Detector+ available", self.model.name())
     }
 
     /// Get the detected card model

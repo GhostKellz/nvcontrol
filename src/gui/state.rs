@@ -18,6 +18,19 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
 
+#[derive(Debug, Clone)]
+pub enum SupportJobResult {
+    SystemRefresh {
+        system: crate::gui::tabs::system::SystemInfo,
+        driver: crate::gui::tabs::system::DriverInfo,
+    },
+    Refresh(crate::gui::tabs::system::DriverInfo),
+    BundleCreated {
+        path: String,
+    },
+    Error(String),
+}
+
 /// GPU statistics snapshot
 #[derive(Debug, Clone, Default)]
 pub struct GpuStats {
@@ -196,6 +209,12 @@ pub struct GuiState {
     pub cached_system_info: Option<crate::gui::tabs::system::SystemInfo>,
     pub cached_driver_info: Option<crate::gui::tabs::system::DriverInfo>,
     pub system_info_last_update: std::time::Instant,
+
+    // === Async Support Jobs ===
+    pub support_job_running: bool,
+    pub support_job_status: Option<String>,
+    support_job_rx: Receiver<SupportJobResult>,
+    support_job_tx: Sender<SupportJobResult>,
 }
 
 impl Default for GuiState {
@@ -245,6 +264,7 @@ impl GuiState {
 
         // Create channel for async GPU stats
         let (tx, rx) = std::sync::mpsc::channel();
+        let (support_tx, support_rx) = std::sync::mpsc::channel();
 
         // Shared atomic for GPU index - background thread reads this
         let selected_gpu_atomic = Arc::new(AtomicU32::new(0));
@@ -461,6 +481,10 @@ impl GuiState {
             system_info_last_update: std::time::Instant::now()
                 .checked_sub(std::time::Duration::from_secs(120))
                 .unwrap_or_else(std::time::Instant::now),
+            support_job_running: false,
+            support_job_status: None,
+            support_job_rx: support_rx,
+            support_job_tx: support_tx,
         }
     }
 
@@ -538,6 +562,77 @@ impl GuiState {
             self.gpu_stats = Some(stats);
             self.last_stats_update = std::time::Instant::now();
         }
+    }
+
+    pub fn poll_support_jobs(&mut self) {
+        while let Ok(result) = self.support_job_rx.try_recv() {
+            self.support_job_running = false;
+            match result {
+                SupportJobResult::SystemRefresh { system, driver } => {
+                    self.cached_system_info = Some(system);
+                    self.cached_driver_info = Some(driver);
+                    self.system_info_last_update = std::time::Instant::now();
+                    self.support_job_status = None;
+                }
+                SupportJobResult::Refresh(driver_info) => {
+                    self.cached_driver_info = Some(driver_info);
+                    self.system_info_last_update = std::time::Instant::now();
+                    self.support_job_status = Some("Support diagnostics refreshed".to_string());
+                    self.toasts.success("Support diagnostics refreshed");
+                }
+                SupportJobResult::BundleCreated { path } => {
+                    self.support_job_status = Some(format!("Saved support bundle to {}", path));
+                    self.toasts
+                        .success(format!("Support bundle saved to {}", path));
+                }
+                SupportJobResult::Error(error) => {
+                    self.support_job_status = Some(error.clone());
+                    self.toasts.error(error);
+                }
+            }
+        }
+    }
+
+    pub fn spawn_support_refresh(&mut self) {
+        if self.support_job_running {
+            return;
+        }
+        self.support_job_running = true;
+        self.support_job_status = Some("Refreshing support diagnostics...".to_string());
+        let tx = self.support_job_tx.clone();
+        std::thread::spawn(move || {
+            let info = crate::gui::tabs::system::DriverInfo::gather();
+            let _ = tx.send(SupportJobResult::Refresh(info));
+        });
+    }
+
+    pub fn spawn_support_bundle(&mut self, path: String) {
+        if self.support_job_running {
+            return;
+        }
+        self.support_job_running = true;
+        self.support_job_status = Some("Creating support bundle...".to_string());
+        let tx = self.support_job_tx.clone();
+        std::thread::spawn(move || {
+            match crate::drivers::write_support_bundle_with_options(
+                &path, true, false, true, true, 80,
+            ) {
+                Ok(()) => {
+                    if let Some(config_dir) = dirs::config_dir() {
+                        let dir = config_dir.join("nvcontrol");
+                        let _ = std::fs::create_dir_all(&dir);
+                        let _ = std::fs::write(dir.join("last_support_bundle.txt"), &path);
+                    }
+                    let _ = tx.send(SupportJobResult::BundleCreated { path });
+                }
+                Err(e) => {
+                    let _ = tx.send(SupportJobResult::Error(format!(
+                        "Support bundle failed: {}",
+                        e
+                    )));
+                }
+            }
+        });
     }
 
     /// Update ASUS Power Monitor+ status and record to history
@@ -627,10 +722,17 @@ impl GuiState {
     /// Refresh cached system info (rate-limited - involves subprocess calls)
     pub fn refresh_system_info(&mut self) {
         // Only refresh every 30 seconds - system info rarely changes
-        if self.system_info_last_update.elapsed() > std::time::Duration::from_secs(30) {
-            self.cached_system_info = Some(crate::gui::tabs::system::SystemInfo::gather());
-            self.cached_driver_info = Some(crate::gui::tabs::system::DriverInfo::gather());
-            self.system_info_last_update = std::time::Instant::now();
+        if self.system_info_last_update.elapsed() > std::time::Duration::from_secs(30)
+            && !self.support_job_running
+        {
+            self.support_job_running = true;
+            self.support_job_status = Some("Refreshing system information...".to_string());
+            let tx = self.support_job_tx.clone();
+            std::thread::spawn(move || {
+                let system = crate::gui::tabs::system::SystemInfo::gather();
+                let driver = crate::gui::tabs::system::DriverInfo::gather();
+                let _ = tx.send(SupportJobResult::SystemRefresh { system, driver });
+            });
         }
     }
 

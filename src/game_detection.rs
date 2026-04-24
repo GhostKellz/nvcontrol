@@ -1,34 +1,13 @@
 // Game Detection and Profile Auto-Switching
 // Monitors running processes and automatically applies GPU profiles per-game
 
+use crate::game_launcher::{GameProfile, ProcessPriority};
 use crate::{NvControlError, NvResult};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 use sysinfo::System;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GameProfile {
-    pub name: String,
-    pub executable: String,
-    pub gpu_offset: Option<i32>,
-    pub memory_offset: Option<i32>,
-    pub power_limit: Option<u32>,
-    pub fan_curve: Option<Vec<(u32, u32)>>, // (temp, speed) pairs
-    pub vibrance: Option<u32>,
-    pub fps_limit: Option<u32>,
-    pub priority: ProcessPriority,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ProcessPriority {
-    Low,
-    Normal,
-    High,
-    Realtime,
-}
 
 #[derive(Debug, Clone)]
 pub struct DetectedGame {
@@ -175,17 +154,12 @@ impl GameDetector {
 
     /// Create a default profile for a game
     pub fn create_default_profile(&self, name: &str, executable: &str) -> GameProfile {
-        GameProfile {
-            name: name.to_string(),
-            executable: executable.to_string(),
-            gpu_offset: Some(100),
-            memory_offset: Some(200),
-            power_limit: None,
-            fan_curve: None,
-            vibrance: Some(150),
-            fps_limit: None,
-            priority: ProcessPriority::High,
-        }
+        let mut profile = GameProfile::new(name.to_string(), executable.to_string());
+        profile.gpu_clock_offset = Some(100);
+        profile.mem_clock_offset = Some(200);
+        profile.vibrance = Some(150);
+        profile.priority = ProcessPriority::High;
+        profile
     }
 
     pub fn get_profile(&self, executable: &str) -> Option<&GameProfile> {
@@ -205,7 +179,7 @@ impl GameDetector {
         println!("🎮 Applying profile for: {}", profile.name);
 
         // Apply GPU overclock
-        if let (Some(gpu), Some(mem)) = (profile.gpu_offset, profile.memory_offset) {
+        if let (Some(gpu), Some(mem)) = (profile.gpu_clock_offset, profile.mem_clock_offset) {
             println!("   ⚡ GPU: +{} MHz, Memory: +{} MHz", gpu, mem);
             let oc_profile = crate::overclocking::OverclockProfile {
                 name: profile.name.clone(),
@@ -226,19 +200,9 @@ impl GameDetector {
         }
 
         // Apply fan curve
-        if let Some(ref curve) = profile.fan_curve {
-            println!("   🌀 Fan curve: {} points", curve.len());
-            let curve_points: Vec<(u8, u8)> = curve
-                .iter()
-                .map(|(temp, speed)| (*temp as u8, *speed as u8))
-                .collect();
-            crate::fan::set_fan_curve(0, &curve_points)?;
-        }
-
-        // Apply vibrance
         if let Some(vib) = profile.vibrance {
             println!("   🌈 Vibrance: {}%", vib);
-            crate::vibrance::set_vibrance_all(vib as i32)?;
+            let _ = crate::vibrance_native::set_vibrance_all_native(vib);
         }
 
         // Set process priority

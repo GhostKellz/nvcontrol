@@ -54,6 +54,15 @@ echo -e "${BLUE}=== Running Hardware Tests ===${NC}"
 
 cd "$PROJECT_DIR"
 
+# Resolve built CLI path
+resolve_nvctl_path() {
+    if [[ -f "$PROJECT_DIR/target/x86_64-unknown-linux-gnu/release/nvctl" ]]; then
+        printf '%s' "$PROJECT_DIR/target/x86_64-unknown-linux-gnu/release/nvctl"
+    else
+        printf '%s' "$PROJECT_DIR/target/release/nvctl"
+    fi
+}
+
 # Run ignored tests
 echo "Running ignored unit tests..."
 if cargo test --lib -- --ignored 2>&1; then
@@ -65,15 +74,12 @@ fi
 echo ""
 echo -e "${BLUE}=== Manual Hardware Checks ===${NC}"
 
-NVCTL="$PROJECT_DIR/target/release/nvctl"
-if [[ ! -f "$NVCTL" ]]; then
-    NVCTL="$PROJECT_DIR/target/x86_64-unknown-linux-gnu/release/nvctl"
-fi
+NVCTL="$(resolve_nvctl_path)"
 
 if [[ ! -f "$NVCTL" ]]; then
     echo "Building release binary..."
     cargo build --release --bin nvctl
-    NVCTL="$PROJECT_DIR/target/release/nvctl"
+    NVCTL="$(resolve_nvctl_path)"
 fi
 
 # VRR tests

@@ -1,7 +1,7 @@
 %global crate nvcontrol
 
 Name:           nvcontrol
-Version:        0.8.3
+Version:        0.8.7
 Release:        1%{?dist}
 Summary:        Modern NVIDIA Settings Manager for Linux + Wayland
 
@@ -10,7 +10,7 @@ URL:            https://github.com/GhostKellz/nvcontrol
 Source0:        %{url}/archive/v%{version}/%{crate}-%{version}.tar.gz
 
 # Rust requirements
-BuildRequires:  rust >= 1.75
+BuildRequires:  rust >= 1.95
 BuildRequires:  cargo
 BuildRequires:  clang-devel
 BuildRequires:  pkgconfig
@@ -70,7 +70,7 @@ install -Dm755 target/release/nvctl %{buildroot}%{_bindir}/nvctl
 install -Dm755 target/release/nvcontrol %{buildroot}%{_bindir}/nvcontrol
 
 # Desktop file
-install -Dm644 -t %{buildroot}%{_datadir}/applications/ << 'EOF'
+install -Dm644 /dev/stdin %{buildroot}%{_datadir}/applications/nvcontrol.desktop << 'EOF'
 [Desktop Entry]
 Name=nvcontrol
 Comment=NVIDIA GPU Control Panel for Linux
@@ -83,20 +83,21 @@ Keywords=nvidia;gpu;graphics;gaming;vibrance;vrr;hdr;
 StartupWMClass=nvcontrol
 EOF
 
-# Systemd user services
-install -Dm644 -t %{buildroot}%{_userunitdir}/ << 'EOF'
+# Systemd user service
+install -Dm644 /dev/stdin %{buildroot}%{_userunitdir}/nvcontrol-game-profile-auto.service << 'EOF'
 [Unit]
-Description=nvcontrol GPU Monitor
+Description=nvcontrol Game Profile Auto Service
 Documentation=https://github.com/GhostKellz/nvcontrol
+After=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=%{_bindir}/nvctl gpu watch --interval 5
+ExecStart=%{_bindir}/nvctl gaming auto daemon
 Restart=on-failure
 RestartSec=5
 
 [Install]
-WantedBy=default.target
+WantedBy=graphical-session.target
 EOF
 
 # Documentation
@@ -114,9 +115,16 @@ cargo test --release --lib -- --skip hardware --skip nvml || true
 %{_bindir}/nvctl
 %{_bindir}/nvcontrol
 %{_datadir}/applications/nvcontrol.desktop
-%{_userunitdir}/nvcontrol-monitor.service
+%{_userunitdir}/nvcontrol-game-profile-auto.service
 
 %changelog
+* Thu Apr 23 2026 CK Technology LLC <info@cktechx.com> - 0.8.7-1
+- Final 0.8.7 release polish for driver, DKMS, source-build, and container runtime diagnostics
+- Live profile bundle capture/diff/apply workflows including current display layout support
+- Real game auto-profile background lifecycle with optional systemd user service helpers
+- Support bundle expansion for boot/initramfs, package inventory, DKMS/source/runtime doctor output
+- GUI/TUI/CLI reliability and polish pass for release readiness
+
 * Mon Jan 13 2026 CK Technology LLC <info@cktechx.com> - 0.8.3-1
 - Legacy GPU detection with deprecation warnings for Maxwell/Pascal on driver 590+
 - Explicit Sync commands (nvctl wayland explicit-sync status/enable)

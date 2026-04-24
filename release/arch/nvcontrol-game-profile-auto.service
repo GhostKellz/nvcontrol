@@ -1,0 +1,28 @@
+[Unit]
+Description=nvcontrol Game Profile Auto Service
+Documentation=https://github.com/GhostKellz/nvcontrol
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/nvctl gaming auto daemon
+Restart=on-failure
+RestartSec=10s
+
+# Resource limits
+Nice=0
+CPUQuota=5%
+
+# Security
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+NoNewPrivileges=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nvcontrol-game-profile-auto
+
+[Install]
+WantedBy=graphical-session.target

@@ -9,7 +9,6 @@ services:
     image: nvcontrol:test
     container_name: nvcontrol-test
     hostname: nvcontrol-test
-    runtime: nvidia
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=all
@@ -34,8 +33,7 @@ services:
     privileged: false
     cap_add:
       - SYS_ADMIN  # For testing some GPU operations
-    networks:
-      - nvcontrol-net
+    network_mode: host
     command: bash -c "cargo test --all-features -- --test-threads=1 --nocapture"
 
   # Unit test runner (no GPU required)
@@ -49,8 +47,7 @@ services:
       - ..:/workspace/nvcontrol
       - ../test-results:/workspace/test-results
       - cargo-cache:/home/tester/.cargo
-    networks:
-      - nvcontrol-net
+    network_mode: host
     command: bash -c "cargo test --lib --all-features -- --nocapture"
 
   # Integration test runner (requires GPU)
@@ -60,7 +57,6 @@ services:
       dockerfile: dev/Dockerfile
     image: nvcontrol:test
     container_name: nvcontrol-integration-tests
-    runtime: nvidia
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=all
@@ -73,8 +69,7 @@ services:
       - /dev/nvidia0:/dev/nvidia0
       - /dev/nvidiactl:/dev/nvidiactl
       - /dev/nvidia-modeset:/dev/nvidia-modeset
-    networks:
-      - nvcontrol-net
+    network_mode: host
     command: bash -c "cargo test --test '*' --all-features -- --test-threads=1 --nocapture"
 
   # Benchmark runner
@@ -84,7 +79,6 @@ services:
       dockerfile: dev/Dockerfile
     image: nvcontrol:test
     container_name: nvcontrol-bench
-    runtime: nvidia
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=all
@@ -95,8 +89,7 @@ services:
     devices:
       - /dev/nvidia0:/dev/nvidia0
       - /dev/nvidiactl:/dev/nvidiactl
-    networks:
-      - nvcontrol-net
+    network_mode: host
     command: bash -c "cargo bench --all-features"
 
   # Code coverage runner
@@ -110,8 +103,7 @@ services:
       - ..:/workspace/nvcontrol
       - ../coverage:/workspace/coverage
       - cargo-cache:/home/tester/.cargo
-    networks:
-      - nvcontrol-net
+    network_mode: host
     command: bash -c "cargo tarpaulin --out Html --output-dir /workspace/coverage --all-features"
 
   # Clippy linter
@@ -124,8 +116,7 @@ services:
     volumes:
       - ..:/workspace/nvcontrol
       - cargo-cache:/home/tester/.cargo
-    networks:
-      - nvcontrol-net
+    network_mode: host
     command: bash -c "cargo clippy --all-features -- -D warnings"
 
   # Interactive development shell
@@ -135,7 +126,6 @@ services:
       dockerfile: dev/Dockerfile
     image: nvcontrol:test
     container_name: nvcontrol-dev
-    runtime: nvidia
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=all
@@ -148,15 +138,10 @@ services:
     devices:
       - /dev/nvidia0:/dev/nvidia0
       - /dev/nvidiactl:/dev/nvidiactl
-    networks:
-      - nvcontrol-net
+    network_mode: host
     stdin_open: true
     tty: true
     command: /bin/bash
-
-networks:
-  nvcontrol-net:
-    driver: bridge
 
 volumes:
   cargo-cache:

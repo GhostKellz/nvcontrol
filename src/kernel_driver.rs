@@ -79,12 +79,31 @@ impl KernelDriverInfo {
 
     /// Detect which NVIDIA driver type is loaded
     fn detect_driver_type() -> DriverType {
+        if let Ok(version_info) = fs::read_to_string("/proc/driver/nvidia/version") {
+            if version_info.contains("Open Kernel Module") {
+                return DriverType::OpenKernel;
+            }
+            if version_info.contains("NVIDIA UNIX") {
+                return DriverType::Proprietary;
+            }
+        }
+
+        if let Ok(output) = Command::new("modinfo")
+            .args(["-F", "license", "nvidia"])
+            .output()
+        {
+            if output.status.success() {
+                let license = String::from_utf8_lossy(&output.stdout);
+                if license.contains("MIT") || license.contains("GPL") {
+                    return DriverType::OpenKernel;
+                }
+            }
+        }
+
         if let Ok(output) = Command::new("lsmod").output() {
             let output_str = String::from_utf8_lossy(&output.stdout);
 
-            if output_str.contains("nvidia_open") {
-                return DriverType::OpenKernel;
-            } else if output_str.contains("nvidia ") && !output_str.contains("nouveau") {
+            if output_str.contains("nvidia ") && !output_str.contains("nouveau") {
                 return DriverType::Proprietary;
             } else if output_str.contains("nouveau") {
                 return DriverType::Nouveau;
@@ -173,7 +192,7 @@ impl KernelDriverInfo {
             multi_instance_gpu: false,
         };
 
-        // Open kernel modules require GSP firmware
+        // Open kernel modules require GSP firmware, but newer proprietary stacks may also use GSP.
         if *driver_type == DriverType::OpenKernel {
             features.gsp_firmware = true;
         }
@@ -200,6 +219,10 @@ impl KernelDriverInfo {
 
             if output_str.contains("MIG") || output_str.contains("Multi-Instance GPU") {
                 features.multi_instance_gpu = true;
+            }
+
+            if output_str.to_lowercase().contains("gsp") {
+                features.gsp_firmware = true;
             }
         }
 
@@ -232,8 +255,8 @@ impl KernelDriverInfo {
 
         if let Some(gsp_version) = &self.gsp_firmware_version {
             println!("GSP Firmware: {}", gsp_version);
-        } else if self.driver_type == DriverType::OpenKernel {
-            println!("GSP Firmware: Required but version unknown");
+        } else if self.features.gsp_firmware {
+            println!("GSP Firmware: Enabled/expected but version unknown");
         }
 
         println!("\nLoaded Modules:");

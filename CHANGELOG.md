@@ -7,6 +7,96 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.7] - 2026-04-22
+
+### Changed
+- **Dependency Updates**: Updated selected Rust dependencies for the next incremental release
+  - `ratatui` 0.30
+  - `indicatif` 0.18
+- **GUI Stack Refresh**: Updated the egui/eframe stack to current 0.34-era releases
+  - `eframe` 0.34.1
+  - `egui_plot` 0.35.0
+  - `egui-phosphor` 0.12.0
+- **Tray Support Removed**: Removed the GTK3/libappindicator-backed tray implementation
+  - This eliminates the remaining RustSec warnings from the default codebase
+- **GUI Dependency Surface**: Disabled `eframe` default features and kept the explicit native Linux backend set used by nvcontrol
+- **Driver Diagnostics Workflow**: Expanded release diagnostics and support collection into a fuller supportability pipeline
+  - `nvctl driver diagnose-release` now supports JSON and YAML output
+  - `nvctl driver support-bundle` now writes a text report plus JSON metadata sidecar
+  - support bundles support gzip, tarball packaging, identifier/path redaction, and configurable log capture
+  - `nvctl doctor --support` now runs diagnostics and produces a support tarball in one step
+- **Display Preset Workflow**: Extended `nvctl monitors` to expose built-in monitor presets from the existing monitor profile system
+  - added preset listing, suggestion, preview, and direct apply flows
+  - reused the existing monitor profile definitions instead of adding another layout format
+- **Profile Bundle Workflow**: `nvctl config` now has working bundle import/export/list behavior plus preview and diff commands
+  - bundle previews summarize included OC, vibrance, and game profile content
+  - bundle diffs support saved profile names or direct JSON bundle paths
+  - bundle preview/diff now also accept `live` to snapshot current state
+  - added bundle apply flow for replaying saved OC, power, fan, and vibrance settings
+  - added `config capture` for saving current live state directly as a reusable bundle
+  - live bundle capture now includes the current display layout
+- **Game Launch Hooks**: Game launcher profiles now support pre-launch and post-exit hooks
+  - launch flow now applies configured OC and power-limit settings through the existing launcher path
+  - profile inspection now shows configured launch hooks in CLI output
+  - added game profile create/delete flows, hook removal, and gamescope preset assignment
+- **Game Auto Service**: `nvctl gaming auto start|stop|status` now uses a real PID-backed background lifecycle
+  - added systemd user service install/enable/disable/uninstall flows for persistent startup
+- **Container Runtime Doctor**: Added runtime doctor and smoke-test flows for Docker, Podman, and containerd
+  - support bundles now include container runtime diagnostic output alongside DKMS/source-build data
+- **Arch Hook Coverage**: Pacman hook generation now covers stock Arch kernels, `linux-zen`, `linux-cachyos-lto`, and custom `/boot/vmlinuz-*` kernel names such as `linux-ghost`
+- **CLI Completion Generation**: Replaced the old hard-coded completion backend with clap-driven completion generation
+  - refreshed the shipped Bash, Zsh, and Fish completion files from the real parser
+  - completion generation now acts as a parser sanity check for the current CLI surface
+- **CLI Surface Cleanup**: Tightened the public parser surface around current command paths
+  - added the top-level `nvctl completion <bash|zsh|fish>` command
+  - kept `nvctl vibrance <percentage>` as the primary workflow while preserving the `vibe` alias
+  - removed deprecated top-level `drivers` and duplicate top-level `gsp` exposure in favor of `nvctl driver gsp`
+- **Release Packaging Refresh**: Updated the release/install surfaces for the `0.8.7` desktop-first distribution flow
+  - added `release/install-system.sh` to install the latest GitHub release tarball into `/usr/local`
+  - installer now prefers the full `nvcontrol` GUI+CLI archive and falls back to the CLI-only `nvctl` archive when needed
+  - Arch, Fedora, AppImage, Flatpak, Pop!_OS COSMIC, and root packaging metadata were refreshed for current binaries, desktop entry, icon paths, and release versioning
+- **Release Workflow Refresh**: Release automation is now aligned with the single self-hosted Ubuntu 24.04 runner flow
+  - tag builds validate and archive CLI and GUI artifacts before the publish job creates the GitHub release
+  - stale runner-home assumptions were removed from CI/nightly/release workflow files
+- **Developer Install Flow**: Refreshed local install and helper scripts for the current binary and completion workflow
+  - `dev/install.sh` now builds the CLI and GUI explicitly, fails fast if artifacts are missing, and generates Bash/Zsh/Fish completions from the installed binary
+- **Issue Reporting Templates**: Added GitHub issue templates for bug reports and feature requests
+  - bug reports now direct users toward `nvctl driver diagnose-release` and support-bundle output before filing
+- **Support UI Workflow**: Added a dedicated GUI support tab and companion support actions for diagnostics sharing
+  - GUI support actions can create bundles, reopen the last bundle, and copy a redacted support workflow command
+- **Game Auto Service Packaging**: Packaging moved toward the current `nvctl gaming auto daemon` user-service flow
+  - Arch and Fedora package definitions were updated to ship the newer game auto-profile service behavior instead of the older game-detect wording
+
+### Fixed
+- **GPU Driver Reporting**: Corrected GPU info paths that could report the GPU name instead of the loaded driver version
+- **Open Driver Detection**: Improved runtime detection of NVIDIA open kernel modules using `/proc/driver/nvidia/version` and module license data
+- **GSP Firmware Checks**: Reworked firmware validation to use nvcontrol's current GSP status logic instead of relying on legacy version-only firmware paths
+- **GSP Status Messaging**: Improved CLI/TUI output so newer proprietary-driver systems do not incorrectly report GSP as unavailable
+- **Open Driver Diagnostics**: Improved release-alignment, firmware-layout, package-state, and ownership diagnostics for NVIDIA 595-era open-driver troubleshooting
+- **Driver/TUI Workflow Hints**: Drivers TUI tab now surfaces DKMS doctor, source state, runtime doctor, and updated support workflow hints
+- **Support Artifact Defaults**: Moved support bundle defaults away from `/tmp` to XDG state storage under `~/.local/state/nvcontrol/support/`
+- **Support Bundle UX**: Removed automatic archive opening after bundle creation to avoid `xdg-open`/Ark spam and kept opening as an explicit user action
+- **Support Bundle Payload**: Added boot entries, installed kernels, initramfs tool/images/findings, and Arch package inventory to support artifacts
+- **Support Notification Dedupe**: Support-bundle notifications are now deduped by saved path, and integration tests suppress support notifications entirely to avoid desktop spam during `cargo test`
+- **Boot/Initramfs Diagnostics**: Release diagnostics now report boot cmdline and initramfs state conservatively as supportability facts and warnings instead of treating healthy `nvidia-open` runtime systems as broken from initramfs contents alone
+- **ASUS Power Monitor UI**: Reworked GUI presentation so the power monitor remains visible in the header while also having a dedicated Power tab and clearer support messaging
+- **Clap Parser Cleanup**: Fixed several command definitions that were invalid or stale once real completion generation exercised the parser
+  - resolved duplicate short-flag collisions in container and gamescope-related commands
+  - changed value-taking boolean toggles to explicit `--enabled <true|false>` forms where required by clap
+  - kept the top-level `nvctl vibrance <percentage>` workflow working while tightening related display/color command argument forms
+- **Deprecated Driver Noise**: Removed the noisy `nvctl drivers is deprecated` warning from the legacy hidden path
+- **Fedora Packaging Service Install**: Corrected the Fedora spec to install the desktop entry and current `nvcontrol-game-profile-auto.service` user unit explicitly
+- **Installer Runtime Compatibility**: The release installer now accepts either `python3` or `python` when resolving release metadata
+- **AppImage Base Refresh**: Updated the AppImage builder to Ubuntu 24.04 (`noble`) and `nvidia-utils-590`, and removed the stale GTK3 dependency from that surface
+
+### Maintenance
+- **Release Audit Review**: Reviewed the archived NVIDIA open GPU kernel modules snapshot (`595.58.03`) against current nvcontrol assumptions
+- **Open Driver Polish**: Identified follow-up work for release alignment checks, broader PCI ID support diagnostics, and more precise GSP firmware layout reporting
+- **Cargo Audit Cleanup**: Removed the `paste` advisory by updating the egui stack and removed GTK3/libappindicator advisories by deleting tray support
+- **Documentation Refresh**: Added command, diagnostics, companion, and issue-reporting docs for the new support workflow
+- **Release Surface Audit**: Reviewed shipped assets, package metadata, and release archives to remove stale paths and update package/install docs for the current release layout
+- **Test Suite Hardening**: Modernized release-surface CLI tests around `assert_cmd` and `tempfile`, and added dedicated `help_contracts`, `regressions`, and `packaging_sanity` suites to catch parser, packaging, and workflow drift earlier
+
 ## [0.8.6] - 2026-03-06
 
 ### Added
@@ -182,7 +272,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **TUI Session Persistence**: Settings survive restarts
   - `TuiSessionState` struct in `config.rs` saves selected GPU, tab, fan curve, OC settings
   - Automatic load on startup and save on exit
-- Deterministic backend tests (`tests/test_mock_backends.rs`) with 37 test cases:
+- Deterministic backend tests (`tests/mock_nvml.rs`, `tests/mock_display.rs`, `tests/mock_gui.rs`) covering NVML, display, and GUI mock flows:
   - GPU metrics collection and multi-GPU enumeration via mocks
   - Display detection flows (X11/Wayland/headless)
   - Monitoring loop simulation without hardware
@@ -213,7 +303,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `BackendStatus` integrated for displaying error banners when NVML/display unavailable
 - `src/tray.rs`: `SystemTray::with_backend()` accepts shared backend, eliminates duplicate NVML sessions
 - `src/notifications.rs`: `AlertMonitorThread::with_backend()` uses shared backend for metrics polling
-- nvbind and bolt moved to expirmental and testing functionality. Still early concept and not ready for daily use. 
 
 ### Security
 - **ShellDisplayRunner Hardening**: Command allow-list with absolute paths

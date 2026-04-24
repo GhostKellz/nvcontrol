@@ -1,7 +1,7 @@
 // Game Library Scanner
 // Scans Steam, Lutris, Heroic for installed games and creates profiles
 
-use crate::game_detection::GameProfile;
+use crate::game_launcher::GameProfile;
 use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -334,7 +334,7 @@ impl GameLibraryScanner {
 
     /// Generate recommended profile for a game based on its name/genre
     pub fn generate_recommended_profile(&self, game: &ScannedGame) -> GameProfile {
-        use crate::game_detection::ProcessPriority;
+        use crate::game_launcher::ProcessPriority;
 
         let name = game.name.to_lowercase();
 
@@ -345,17 +345,14 @@ impl GameLibraryScanner {
             || name.contains("fortnite")
             || name.contains("warzone")
         {
-            return GameProfile {
-                name: game.name.clone(),
-                executable: game.executable.clone(),
-                gpu_offset: Some(150),
-                memory_offset: Some(300),
-                power_limit: Some(100),
-                fan_curve: Some(vec![(40, 40), (60, 60), (75, 80), (85, 100)]),
-                vibrance: Some(175), // High vibrance for competitive
-                fps_limit: None,
-                priority: ProcessPriority::Realtime,
-            };
+            let mut profile = GameProfile::new(game.name.clone(), game.executable.clone());
+            profile.gpu_clock_offset = Some(150);
+            profile.mem_clock_offset = Some(300);
+            profile.power_limit = Some(100);
+            profile.vibrance = Some(175);
+            profile.priority = ProcessPriority::Realtime;
+            profile.gamescope_preset = Some("competitive".to_string());
+            return profile;
         }
 
         // AAA single-player - balanced
@@ -364,31 +361,25 @@ impl GameLibraryScanner {
             || name.contains("red dead")
             || name.contains("elden ring")
         {
-            return GameProfile {
-                name: game.name.clone(),
-                executable: game.executable.clone(),
-                gpu_offset: Some(100),
-                memory_offset: Some(200),
-                power_limit: Some(95),
-                fan_curve: Some(vec![(40, 30), (60, 50), (75, 70), (85, 90)]),
-                vibrance: Some(125), // Moderate vibrance
-                fps_limit: Some(144),
-                priority: ProcessPriority::High,
-            };
+            let mut profile = GameProfile::new(game.name.clone(), game.executable.clone());
+            profile.gpu_clock_offset = Some(100);
+            profile.mem_clock_offset = Some(200);
+            profile.power_limit = Some(95);
+            profile.vibrance = Some(125);
+            profile.fps_limit = Some(144);
+            profile.priority = ProcessPriority::High;
+            profile.gamescope_preset = Some("quality".to_string());
+            return profile;
         }
 
         // Default profile
-        GameProfile {
-            name: game.name.clone(),
-            executable: game.executable.clone(),
-            gpu_offset: Some(75),
-            memory_offset: Some(150),
-            power_limit: None,
-            fan_curve: None,
-            vibrance: Some(120),
-            fps_limit: None,
-            priority: ProcessPriority::High,
-        }
+        let mut profile = GameProfile::new(game.name.clone(), game.executable.clone());
+        profile.gpu_clock_offset = Some(75);
+        profile.mem_clock_offset = Some(150);
+        profile.vibrance = Some(120);
+        profile.priority = ProcessPriority::High;
+        profile.gamescope_preset = Some("balanced".to_string());
+        profile
     }
 
     /// Bulk create profiles for all scanned games

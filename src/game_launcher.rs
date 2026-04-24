@@ -8,11 +8,28 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LaunchHook {
+    pub command: String,
+    pub args: Vec<String>,
+    pub ignore_failure: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ProcessPriority {
+    Low,
+    Normal,
+    High,
+    Realtime,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GameProfile {
     pub name: String,
     pub executable: String,
     pub working_dir: Option<String>,
+    pub pre_launch_hooks: Vec<LaunchHook>,
+    pub post_exit_hooks: Vec<LaunchHook>,
 
     // Environment variables
     pub env_vars: HashMap<String, String>,
@@ -43,6 +60,10 @@ pub struct GameProfile {
     pub gpu_clock_offset: Option<i32>,
     pub mem_clock_offset: Option<i32>,
     pub power_limit: Option<u32>,
+    pub vibrance: Option<u32>,
+    pub fps_limit: Option<u32>,
+    pub gamescope_preset: Option<String>,
+    pub priority: ProcessPriority,
 }
 
 impl Default for GameProfile {
@@ -60,6 +81,8 @@ impl Default for GameProfile {
             name: "default".to_string(),
             executable: String::new(),
             working_dir: None,
+            pre_launch_hooks: Vec::new(),
+            post_exit_hooks: Vec::new(),
             env_vars,
             use_gamescope: false,
             gamescope_width: None,
@@ -78,6 +101,10 @@ impl Default for GameProfile {
             gpu_clock_offset: None,
             mem_clock_offset: None,
             power_limit: None,
+            vibrance: None,
+            fps_limit: None,
+            gamescope_preset: None,
+            priority: ProcessPriority::Normal,
         }
     }
 }
@@ -141,6 +168,24 @@ impl GameProfile {
             .insert("VKD3D_SHADER_CACHE_PATH".to_string(), path);
         self
     }
+
+    pub fn with_pre_launch_hook(mut self, command: impl Into<String>, args: Vec<String>) -> Self {
+        self.pre_launch_hooks.push(LaunchHook {
+            command: command.into(),
+            args,
+            ignore_failure: false,
+        });
+        self
+    }
+
+    pub fn with_post_exit_hook(mut self, command: impl Into<String>, args: Vec<String>) -> Self {
+        self.post_exit_hooks.push(LaunchHook {
+            command: command.into(),
+            args,
+            ignore_failure: true,
+        });
+        self
+    }
 }
 
 /// Game launcher that applies profiles and optimizations
@@ -178,6 +223,16 @@ impl GameLauncher {
             .map_err(|e| NvControlError::ConfigError(format!("Failed to write profile: {}", e)))?;
 
         println!("✅ Saved game profile: {}", profile_path.display());
+        Ok(())
+    }
+
+    pub fn delete_profile(&self, name: &str) -> NvResult<()> {
+        let profile_path = self.profiles_dir.join(format!("{}.toml", name));
+        if profile_path.exists() {
+            fs::remove_file(&profile_path).map_err(|e| {
+                NvControlError::ConfigError(format!("Failed to delete profile: {}", e))
+            })?;
+        }
         Ok(())
     }
 
@@ -219,6 +274,8 @@ impl GameLauncher {
     pub fn launch_game(&self, profile: &GameProfile, args: Vec<String>) -> NvResult<()> {
         println!("🚀 Launching game: {}", profile.name);
 
+        self.run_hooks("pre-launch", &profile.pre_launch_hooks, profile)?;
+
         // Apply power profile if specified
         if let Some(power_profile) = &profile.power_profile {
             println!("   Applying power profile: {}", power_profile);
@@ -228,7 +285,26 @@ impl GameLauncher {
         // Apply GPU overclocking if specified
         if profile.gpu_clock_offset.is_some() || profile.mem_clock_offset.is_some() {
             println!("   Applying GPU overclocking settings...");
-            // Note: Would need to implement GPU OC functions
+            let oc_profile = crate::overclocking::OverclockProfile {
+                name: profile.name.clone(),
+                gpu_clock_offset: profile.gpu_clock_offset.unwrap_or(0),
+                memory_clock_offset: profile.mem_clock_offset.unwrap_or(0),
+                power_limit: profile.power_limit.unwrap_or(100) as u8,
+                voltage_offset: 0,
+                temp_limit: 85,
+                fan_curve: Vec::new(),
+            };
+            crate::overclocking::apply_overclock_profile(&oc_profile)?;
+        }
+
+        if let Some(power_limit) = profile.power_limit {
+            println!("   Applying power limit: {}%", power_limit);
+            crate::power::set_power_limit_percentage(power_limit)?;
+        }
+
+        if let Some(vibrance) = profile.vibrance {
+            println!("   Applying vibrance: {}%", vibrance);
+            let _ = crate::vibrance_native::set_vibrance_all_native(vibrance);
         }
 
         // Set CPU affinity if specified
@@ -283,43 +359,95 @@ impl GameLauncher {
             .map_err(|e| NvControlError::CommandFailed(format!("Failed to launch game: {}", e)))?;
 
         if !status.success() {
+            let _ = self.run_hooks("post-exit", &profile.post_exit_hooks, profile);
             return Err(NvControlError::CommandFailed(format!(
                 "Game exited with error code: {:?}",
                 status.code()
             )));
         }
 
+        self.run_hooks("post-exit", &profile.post_exit_hooks, profile)?;
         println!("\n✅ Game exited successfully");
         Ok(())
     }
 
+    fn run_hooks(&self, phase: &str, hooks: &[LaunchHook], profile: &GameProfile) -> NvResult<()> {
+        for hook in hooks {
+            println!(
+                "   Running {} hook: {} {:?}",
+                phase, hook.command, hook.args
+            );
+
+            let mut cmd = Command::new(&hook.command);
+            cmd.args(&hook.args);
+
+            if let Some(work_dir) = &profile.working_dir {
+                cmd.current_dir(work_dir);
+            }
+
+            for (key, value) in &profile.env_vars {
+                cmd.env(key, value);
+            }
+
+            let status = cmd.status().map_err(|e| {
+                NvControlError::CommandFailed(format!(
+                    "Failed to execute {} hook '{}': {}",
+                    phase, hook.command, e
+                ))
+            })?;
+
+            if !status.success() && !hook.ignore_failure {
+                return Err(NvControlError::CommandFailed(format!(
+                    "{} hook '{}' failed with status {:?}",
+                    phase,
+                    hook.command,
+                    status.code()
+                )));
+            }
+        }
+
+        Ok(())
+    }
+
     fn build_gamescope_command(&self, profile: &GameProfile) -> NvResult<Command> {
-        let mut cmd = Command::new("gamescope");
+        let mut config = if let Some(preset) = profile.gamescope_preset.as_deref() {
+            Self::gamescope_config_from_preset(preset)
+        } else {
+            crate::gamescope::GamescopeConfig::default()
+        };
 
         if let Some(width) = profile.gamescope_width {
-            cmd.args(&["-w", &width.to_string()]);
+            config.width = width;
         }
 
         if let Some(height) = profile.gamescope_height {
-            cmd.args(&["-h", &height.to_string()]);
+            config.height = height;
         }
 
         if let Some(refresh) = profile.gamescope_refresh {
-            cmd.args(&["-r", &refresh.to_string()]);
+            config.refresh_rate = Some(refresh);
         }
 
-        if profile.gamescope_hdr {
-            cmd.arg("--hdr-enabled");
-        }
+        config.hdr_enabled = profile.gamescope_hdr;
+        config.adaptive_sync = profile.gamescope_vrr;
 
-        if profile.gamescope_vrr {
-            cmd.arg("--adaptive-sync");
-        }
-
-        cmd.arg("--");
-        cmd.arg(&profile.executable);
-
+        let command = crate::gamescope::generate_advanced_command(&config, &profile.executable);
+        let mut cmd = Command::new(&command[0]);
+        cmd.args(&command[1..]);
         Ok(cmd)
+    }
+
+    fn gamescope_config_from_preset(preset: &str) -> crate::gamescope::GamescopeConfig {
+        match preset.to_lowercase().as_str() {
+            "performance" => crate::gamescope::GamescopePreset::Performance.to_config(),
+            "quality" => crate::gamescope::GamescopePreset::Quality.to_config(),
+            "balanced" => crate::gamescope::GamescopePreset::Balanced.to_config(),
+            "competitive" => crate::gamescope::GamescopePreset::Competitive.to_config(),
+            "cinematic" => crate::gamescope::GamescopePreset::Cinematic.to_config(),
+            "steamdeck" => crate::gamescope::GamescopePreset::SteamDeck.to_config(),
+            "desktop" => crate::gamescope::GamescopePreset::Desktop.to_config(),
+            _ => crate::gamescope::GamescopeConfig::default(),
+        }
     }
 
     fn build_proton_command(&self, profile: &GameProfile) -> NvResult<Command> {
@@ -413,8 +541,19 @@ impl GameLauncher {
         cyberpunk.gamescope_height = Some(1440);
         cyberpunk.gamescope_refresh = Some(144);
         cyberpunk.gamescope_hdr = true;
+        cyberpunk.gamescope_preset = Some("quality".to_string());
         cyberpunk.power_profile = Some("performance".to_string());
         cyberpunk.use_proton = true;
+        cyberpunk.vibrance = Some(130);
+        cyberpunk.priority = ProcessPriority::High;
+        cyberpunk.pre_launch_hooks.push(LaunchHook {
+            command: "sh".to_string(),
+            args: vec![
+                "-c".to_string(),
+                "notify-send 'nvcontrol' 'Launching Cyberpunk 2077'".to_string(),
+            ],
+            ignore_failure: true,
+        });
 
         self.save_profile(&cyberpunk)?;
 
@@ -428,8 +567,19 @@ impl GameLauncher {
         cs2.gamescope_height = Some(1080);
         cs2.gamescope_refresh = Some(240);
         cs2.gamescope_vrr = true;
+        cs2.gamescope_preset = Some("competitive".to_string());
         cs2.power_profile = Some("performance".to_string());
         cs2.cpu_affinity = Some(vec![0, 1, 2, 3, 4, 5, 6, 7]); // Pin to first CCD
+        cs2.fps_limit = Some(240);
+        cs2.priority = ProcessPriority::Realtime;
+        cs2.post_exit_hooks.push(LaunchHook {
+            command: "sh".to_string(),
+            args: vec![
+                "-c".to_string(),
+                "notify-send 'nvcontrol' 'CS2 exited'".to_string(),
+            ],
+            ignore_failure: true,
+        });
 
         self.save_profile(&cs2)?;
 
@@ -444,7 +594,9 @@ impl GameLauncher {
         elden_ring.gamescope_width = Some(1920);
         elden_ring.gamescope_height = Some(1080);
         elden_ring.gamescope_refresh = Some(60);
+        elden_ring.gamescope_preset = Some("balanced".to_string());
         elden_ring.power_profile = Some("balanced".to_string());
+        elden_ring.priority = ProcessPriority::High;
 
         self.save_profile(&elden_ring)?;
 
@@ -452,5 +604,29 @@ impl GameLauncher {
         println!("   Profiles saved to: {}", self.profiles_dir.display());
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_profile_has_no_hooks() {
+        let profile = GameProfile::default();
+        assert!(profile.pre_launch_hooks.is_empty());
+        assert!(profile.post_exit_hooks.is_empty());
+    }
+
+    #[test]
+    fn builder_adds_hooks() {
+        let profile = GameProfile::new("test".to_string(), "game".to_string())
+            .with_pre_launch_hook("echo", vec!["before".to_string()])
+            .with_post_exit_hook("echo", vec!["after".to_string()]);
+
+        assert_eq!(profile.pre_launch_hooks.len(), 1);
+        assert_eq!(profile.post_exit_hooks.len(), 1);
+        assert_eq!(profile.pre_launch_hooks[0].command, "echo");
+        assert!(profile.post_exit_hooks[0].ignore_failure);
     }
 }

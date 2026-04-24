@@ -179,7 +179,7 @@ impl ToastManager {
         let mut to_remove = Vec::new();
 
         // Show toasts from bottom-right corner
-        let screen_rect = ctx.screen_rect();
+        let screen_rect = ctx.content_rect();
         let toast_width = 350.0;
         let toast_height = 60.0;
         let margin = 16.0;
@@ -220,10 +220,10 @@ impl ToastManager {
                 .fixed_pos(rect.min)
                 .order(egui::Order::Foreground)
                 .show(ctx, |ui| {
-                    egui::Frame::none()
+                    egui::Frame::new()
                         .fill(bg_color)
                         .stroke(egui::Stroke::new(2.0, border_color))
-                        .rounding(8.0)
+                        .corner_radius(8.0)
                         .inner_margin(12.0)
                         .show(ui, |ui| {
                             ui.set_min_size(egui::vec2(toast_width - 24.0, toast_height - 24.0));

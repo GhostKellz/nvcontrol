@@ -123,10 +123,10 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, ctx: &egui::Context) {
                     };
 
                     ui.horizontal(|ui| {
-                        egui::Frame::none()
+                        egui::Frame::new()
                             .fill(arch_color.gamma_multiply(0.2))
-                            .rounding(4.0)
-                            .inner_margin(egui::Margin::symmetric(8.0, 4.0))
+                            .corner_radius(4.0)
+                            .inner_margin(egui::Margin::symmetric(8, 4))
                             .show(ui, |ui| {
                                 ui.label(
                                     egui::RichText::new(&stats.architecture)
@@ -137,10 +137,10 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, ctx: &egui::Context) {
                             });
 
                         // Show compute capability
-                        egui::Frame::none()
+                        egui::Frame::new()
                             .fill(colors.bg_dark.to_egui())
-                            .rounding(4.0)
-                            .inner_margin(egui::Margin::symmetric(8.0, 4.0))
+                            .corner_radius(4.0)
+                            .inner_margin(egui::Margin::symmetric(8, 4))
                             .show(ui, |ui| {
                                 ui.label(
                                     egui::RichText::new(&stats.compute_capability)
@@ -371,267 +371,43 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, ctx: &egui::Context) {
             .icon(icons::POWER)
             .show(ui, |ui| {
                 if let Some(ref status) = state.asus_power_status {
-                    // Overall status indicator with health
-                    let (status_text, status_color) = if status.has_warnings {
-                        ("Warning", colors.yellow.to_egui())
-                    } else {
-                        match status.health {
-                            crate::asus_power_detector::PowerHealth::Good => {
-                                ("Good", colors.green.to_egui())
-                            }
-                            crate::asus_power_detector::PowerHealth::Warning => {
-                                ("Warning", colors.yellow.to_egui())
-                            }
-                            crate::asus_power_detector::PowerHealth::Critical => {
-                                ("Critical", colors.red.to_egui())
-                            }
-                            crate::asus_power_detector::PowerHealth::Unknown => {
-                                ("Unknown", colors.fg_dark.to_egui())
-                            }
-                        }
-                    };
-
                     ui.horizontal(|ui| {
-                        // Status badge
-                        egui::Frame::none()
-                            .fill(status_color.gamma_multiply(0.2))
-                            .rounding(4.0)
-                            .inner_margin(egui::Margin::symmetric(12.0, 6.0))
-                            .show(ui, |ui| {
-                                ui.label(
-                                    egui::RichText::new(format!("Health: {}", status_text))
-                                        .strong()
-                                        .color(status_color),
-                                );
-                            });
-
-                        // Total power if available
+                        ui.label(
+                            egui::RichText::new(format!("{}", status.model))
+                                .strong()
+                                .color(colors.fg.to_egui()),
+                        );
                         if let Some(total_power) = status.total_power_w {
-                            egui::Frame::none()
-                                .fill(colors.bg_dark.to_egui())
-                                .rounding(4.0)
-                                .inner_margin(egui::Margin::symmetric(12.0, 6.0))
-                                .show(ui, |ui| {
-                                    ui.label(
-                                        egui::RichText::new(format!("{:.1}W Total", total_power))
-                                            .strong()
-                                            .color(colors.cyan.to_egui()),
-                                    );
-                                });
-                        }
-
-                        // Trend indicator from history
-                        let trend = state.asus_power_history.trend();
-                        let (trend_icon, trend_color) = match trend {
-                            crate::asus_power_detector::PowerTrend::Rising => {
-                                ("↑", colors.orange.to_egui())
-                            }
-                            crate::asus_power_detector::PowerTrend::Falling => {
-                                ("↓", colors.green.to_egui())
-                            }
-                            crate::asus_power_detector::PowerTrend::Stable => {
-                                ("→", colors.cyan.to_egui())
-                            }
-                            crate::asus_power_detector::PowerTrend::Unknown => {
-                                ("?", colors.fg_dark.to_egui())
-                            }
-                        };
-                        egui::Frame::none()
-                            .fill(colors.bg_dark.to_egui())
-                            .rounding(4.0)
-                            .inner_margin(egui::Margin::symmetric(8.0, 6.0))
-                            .show(ui, |ui| {
-                                ui.label(
-                                    egui::RichText::new(trend_icon)
-                                        .size(14.0)
-                                        .color(trend_color),
-                                );
-                            });
-                    });
-
-                    ui.add_space(8.0);
-
-                    // Two-column layout for rails and stats
-                    ui.columns(2, |columns| {
-                        // Left column: Power rails
-                        columns[0].label(
-                            egui::RichText::new("12V-2x6 Power Rails")
-                                .strong()
-                                .color(colors.fg.to_egui()),
-                        );
-                        columns[0].add_space(4.0);
-
-                        if !status.rails.is_empty() {
-                            egui::Grid::new("power_rails_grid")
-                                .num_columns(3)
-                                .spacing([12.0, 4.0])
-                                .show(&mut columns[0], |ui| {
-                                    for rail in &status.rails {
-                                        ui.label(
-                                            egui::RichText::new(format!("Rail {}", rail.rail_id))
-                                                .small()
-                                                .color(colors.fg_dark.to_egui()),
-                                        );
-
-                                        if let Some(current_ma) = rail.current_ma {
-                                            ui.label(
-                                                egui::RichText::new(format!(
-                                                    "{:.2}A",
-                                                    current_ma as f32 / 1000.0
-                                                ))
-                                                .small()
-                                                .color(colors.cyan.to_egui()),
-                                            );
-                                        } else {
-                                            ui.label(
-                                                egui::RichText::new("-")
-                                                    .small()
-                                                    .color(colors.fg_dark.to_egui()),
-                                            );
-                                        }
-
-                                        let rail_color = if rail.warning {
-                                            colors.yellow.to_egui()
-                                        } else {
-                                            colors.green.to_egui()
-                                        };
-                                        ui.label(
-                                            egui::RichText::new(if rail.warning {
-                                                "!"
-                                            } else {
-                                                "✓"
-                                            })
-                                            .small()
-                                            .color(rail_color),
-                                        );
-                                        ui.end_row();
-                                    }
-                                });
-                        }
-
-                        // Right column: History stats
-                        columns[1].label(
-                            egui::RichText::new("Power Statistics")
-                                .strong()
-                                .color(colors.fg.to_egui()),
-                        );
-                        columns[1].add_space(4.0);
-
-                        let history = &state.asus_power_history;
-                        if !history.is_empty() {
-                            egui::Grid::new("power_stats_grid")
-                                .num_columns(2)
-                                .spacing([12.0, 4.0])
-                                .show(&mut columns[1], |ui| {
-                                    if let Some(avg) = history.average_power() {
-                                        ui.label(
-                                            egui::RichText::new("Avg:")
-                                                .small()
-                                                .color(colors.fg_dark.to_egui()),
-                                        );
-                                        ui.label(
-                                            egui::RichText::new(format!("{:.1}W", avg))
-                                                .small()
-                                                .color(colors.cyan.to_egui()),
-                                        );
-                                        ui.end_row();
-                                    }
-
-                                    if let Some(peak) = history.peak_power() {
-                                        ui.label(
-                                            egui::RichText::new("Peak:")
-                                                .small()
-                                                .color(colors.fg_dark.to_egui()),
-                                        );
-                                        ui.label(
-                                            egui::RichText::new(format!("{:.1}W", peak))
-                                                .small()
-                                                .color(colors.orange.to_egui()),
-                                        );
-                                        ui.end_row();
-                                    }
-
-                                    if let Some(min) = history.min_power() {
-                                        ui.label(
-                                            egui::RichText::new("Min:")
-                                                .small()
-                                                .color(colors.fg_dark.to_egui()),
-                                        );
-                                        ui.label(
-                                            egui::RichText::new(format!("{:.1}W", min))
-                                                .small()
-                                                .color(colors.green.to_egui()),
-                                        );
-                                        ui.end_row();
-                                    }
-
-                                    ui.label(
-                                        egui::RichText::new("Samples:")
-                                            .small()
-                                            .color(colors.fg_dark.to_egui()),
-                                    );
-                                    ui.label(
-                                        egui::RichText::new(format!("{}", history.len()))
-                                            .small()
-                                            .color(colors.fg_dark.to_egui()),
-                                    );
-                                    ui.end_row();
-
-                                    let warnings = history.warning_count();
-                                    if warnings > 0 {
-                                        ui.label(
-                                            egui::RichText::new("Warnings:")
-                                                .small()
-                                                .color(colors.yellow.to_egui()),
-                                        );
-                                        ui.label(
-                                            egui::RichText::new(format!("{}", warnings))
-                                                .small()
-                                                .color(colors.yellow.to_egui()),
-                                        );
-                                        ui.end_row();
-                                    }
-                                });
-                        } else {
-                            columns[1].label(
-                                egui::RichText::new("Collecting data...")
-                                    .small()
-                                    .italics()
-                                    .color(colors.fg_dark.to_egui()),
+                            ui.separator();
+                            ui.label(
+                                egui::RichText::new(format!("{:.1}W connector", total_power))
+                                    .strong()
+                                    .color(colors.cyan.to_egui()),
                             );
                         }
                     });
 
-                    // Model info at bottom
-                    ui.add_space(4.0);
+                    ui.add_space(6.0);
                     ui.label(
                         egui::RichText::new(format!(
-                            "{} (I2C bus {})",
-                            status.model, status.i2c_bus
+                            "{} rail(s), {} sample(s), bus {}",
+                            status.rails.len(),
+                            state.asus_power_history.len(),
+                            status.i2c_bus
                         ))
                         .small()
                         .color(colors.fg_dark.to_egui()),
                     );
-
-                    // Warnings section
-                    if status.has_warnings {
-                        ui.add_space(8.0);
-                        ui.separator();
-                        ui.add_space(4.0);
-
-                        ui.horizontal(|ui| {
-                            ui.label(
-                                egui::RichText::new(icons::WARN).color(colors.yellow.to_egui()),
-                            );
-                            ui.label(
-                                egui::RichText::new("Power rail warning - check connector seating")
-                                    .color(colors.yellow.to_egui()),
-                            );
-                        });
-                    }
+                    ui.label(
+                        egui::RichText::new(
+                            "See the Power tab for full connector-health details and history",
+                        )
+                        .small()
+                        .color(colors.comment.to_egui()),
+                    );
                 } else {
                     ui.label(
-                        egui::RichText::new("Initializing power monitoring...")
+                        egui::RichText::new("Initializing ASUS power monitoring...")
                             .color(colors.fg_dark.to_egui()),
                     );
                 }

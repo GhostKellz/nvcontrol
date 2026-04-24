@@ -13,7 +13,7 @@ Push/PR to main → Self-hosted Runner (RTX 2060) → Build + Test + GPU Smoke T
 | Stage | Description |
 |-------|-------------|
 | **Build CLI** | `cargo build --bin nvctl --release --no-default-features` |
-| **Clippy** | Zero warnings policy (`-D warnings`) |
+| **Clippy** | Full repo zero warnings policy (`cargo clippy --all-targets --all-features -- -D warnings`) |
 | **Format Check** | `cargo fmt --check` |
 | **Unit Tests** | `cargo test --lib --no-default-features` |
 | **GPU Smoke Test** | Real GPU commands (`gpu info`, `doctor`) |
@@ -136,7 +136,7 @@ jobs:
 
 ### Prerequisites
 - NVIDIA GPU with driver 535+
-- Rust stable toolchain
+- Rust 1.95 stable toolchain
 - `nvidia-smi` accessible
 
 ### Commands
@@ -144,23 +144,29 @@ jobs:
 ```bash
 # Full CI pipeline
 cargo build --bin nvctl --release --no-default-features
-cargo clippy --bin nvctl --lib --no-default-features -- -D warnings
+cargo clippy --all-targets --all-features -- -D warnings
 cargo fmt --check
-cargo test --lib --no-default-features
+cargo test
+cargo audit
 
 # GPU smoke test
-./target/release/nvctl gpu info
-./target/release/nvctl doctor
+NVCTL=$(find target -path '*/release/nvctl' -type f -executable | head -1)
+$NVCTL gpu info
+$NVCTL doctor
 ```
 
 ### With All Features (GUI/TUI)
 
 ```bash
 # Full build with GUI
-cargo build --release
+cargo build --release --bin nvctl
+cargo build --release --bin nvcontrol --features gui
 
 # All tests
 cargo test
+
+# Release-quality lint pass
+cargo clippy --all-targets --all-features -- -D warnings
 ```
 
 ## CI Configuration
@@ -177,7 +183,7 @@ cargo test
 - Linux x86_64
 - NVIDIA driver 535+ (550+ recommended)
 - nvidia-open preferred for GSP testing
-- Rust stable (1.75+)
+- Rust stable (1.95.0 pinned in `rust-toolchain.toml`)
 - 8GB+ RAM
 - SSD recommended for fast builds
 
@@ -206,6 +212,7 @@ Fix: Ensure runner has GPU access and nvidia-smi works.
 error: ... warning: ...
 ```
 Fix: Run `cargo clippy -- -D warnings` locally and fix all warnings.
+Fix: Run `cargo clippy --all-targets --all-features -- -D warnings` locally and fix all warnings.
 
 **Format check fails:**
 ```
@@ -229,12 +236,12 @@ When adding new features:
 1. Ensure unit tests don't require GPU
 2. Add GPU smoke tests for new commands
 3. Document architecture-specific behavior
-4. Test locally with `cargo clippy -- -D warnings`
+4. Test locally with `cargo clippy --all-targets --all-features -- -D warnings`
 5. Run `cargo fmt` before committing
 
 ## References
 
 - [GitHub Actions Self-Hosted Runners](https://docs.github.com/en/actions/hosting-your-own-runners)
 - [NVIDIA Driver Documentation](https://docs.nvidia.com/datacenter/tesla/index.html)
-- [nvcontrol DKMS Guide](docs/DKMS.md)
-- [nvcontrol GSP Guide](docs/GSP.md)
+- [nvcontrol DKMS Guide](docs/drivers/dkms.md)
+- [nvcontrol GSP Guide](docs/drivers/gsp.md)

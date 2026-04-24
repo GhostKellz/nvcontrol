@@ -6,16 +6,14 @@ This directory documents nvcontrol's integrations with other tools in the CKTech
 
 | Integration | Status | Description |
 |-------------|--------|-------------|
-| [nvhud](./NVHUD.md) | 🔄 Planned | Zig-based GPU monitoring overlay |
+| [nvhud](./nvhud.md) | 🔄 Planned | Zig-based GPU monitoring overlay |
 
 ## Experimental Integrations
 
-The following integrations have been moved to `experimental/` for future re-integration:
+The following integration remains in `experimental/`:
 
 | Integration | Status | Description |
 |-------------|--------|-------------|
-| nvbind | 🧪 Experimental | GPU container runtime with sub-microsecond latency |
-| Bolt | 🧪 Experimental | Gaming-optimized container runtime |
 | ghostwave | 🧪 Experimental | GPU-accelerated audio denoising |
 
 See [experimental/README.md](../../experimental/README.md) for details on these features.
@@ -69,5 +67,5 @@ nvctl container monitor -c my-container
 
 ## See Also
 
-- [Backend Architecture](../config/BACKEND_ARCHITECTURE.md) - Internal backend design
+- [Backend Architecture](../config/backend-architecture.md) - Internal backend design
 - [API Reference](../api/README.md) - nvcontrol Rust API

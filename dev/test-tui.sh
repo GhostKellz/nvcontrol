@@ -6,7 +6,16 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-BINARY="$PROJECT_DIR/target/x86_64-unknown-linux-gnu/release/nvctl"
+
+resolve_nvctl_path() {
+    if [[ -f "$PROJECT_DIR/target/x86_64-unknown-linux-gnu/release/nvctl" ]]; then
+        printf '%s' "$PROJECT_DIR/target/x86_64-unknown-linux-gnu/release/nvctl"
+    else
+        printf '%s' "$PROJECT_DIR/target/release/nvctl"
+    fi
+}
+
+BINARY="$(resolve_nvctl_path)"
 
 echo "╔══════════════════════════════════════════════════════════╗"
 echo "║           nvcontrol TUI Test Script                      ║"
@@ -19,7 +28,7 @@ if [[ ! -f "$BINARY" ]]; then
     echo "   Building..."
     cd "$PROJECT_DIR"
     cargo build --release
-    BINARY="$PROJECT_DIR/target/x86_64-unknown-linux-gnu/release/nvctl"
+    BINARY="$(resolve_nvctl_path)"
 fi
 
 # Check if we're in a terminal

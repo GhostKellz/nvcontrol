@@ -4,7 +4,7 @@
 #
 # This test uses strace to count nvml-related system calls
 
-set -e
+set -euo pipefail
 
 echo "=== Fan Cache Performance Test ==="
 echo ""

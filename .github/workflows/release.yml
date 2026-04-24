@@ -14,8 +14,6 @@ jobs:
     runs-on: self-hosted
     name: Build CLI (nv-osmium)
     timeout-minutes: 20
-    env:
-      PATH: /home/runner/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -69,13 +67,11 @@ jobs:
           name: nvctl-cli
           path: nvctl-${{ github.ref_name }}-linux-x86_64.tar.gz
 
-  # Job 2: Full GUI build on nv-palladium
+  # Job 2: Full GUI build on self-hosted runner
   release-gui:
-    runs-on: [self-hosted, gui]
-    name: Build GUI (nv-palladium)
+    runs-on: self-hosted
+    name: Build GUI (self-hosted)
     timeout-minutes: 30
-    env:
-      PATH: /home/runner/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:/home/runner/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -97,7 +93,7 @@ jobs:
           key: nvcontrol-gui
 
       - name: Build Release (Full GUI)
-        run: cargo build --release --features gui,tray --no-default-features
+        run: cargo build --release --features gui --no-default-features
 
       - name: Run Tests
         run: cargo test --lib --no-default-features
@@ -107,10 +103,12 @@ jobs:
           set -euo pipefail
           VERSION="${{ github.ref_name }}"
           ARCHIVE_DIR="nvcontrol-${VERSION}"
+          NVCONTROL=$(find target -path "*/release/nvcontrol" -type f -executable | head -1)
+          NVCTL=$(find target -path "*/release/nvctl" -type f -executable | head -1)
 
           mkdir -p "$ARCHIVE_DIR"
-          cp target/release/nvcontrol "$ARCHIVE_DIR/" 2>/dev/null || cp target/release/nvctl "$ARCHIVE_DIR/nvcontrol"
-          cp target/release/nvctl "$ARCHIVE_DIR/" 2>/dev/null || true
+          cp "$NVCONTROL" "$ARCHIVE_DIR/nvcontrol"
+          cp "$NVCTL" "$ARCHIVE_DIR/nvctl" 2>/dev/null || true
           cp README.md LICENSE "$ARCHIVE_DIR/" 2>/dev/null || true
 
           # Include assets (icons, desktop file)

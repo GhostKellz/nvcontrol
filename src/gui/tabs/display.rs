@@ -154,9 +154,9 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                 ui.label(egui::RichText::new("No displays detected").weak().italics());
             } else {
                 for disp in displays {
-                    egui::Frame::none()
+                    egui::Frame::new()
                         .fill(colors.bg_dark.to_egui())
-                        .rounding(6.0)
+                        .corner_radius(6.0)
                         .inner_margin(8.0)
                         .show(ui, |ui| {
                             ui.horizontal(|ui| {

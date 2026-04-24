@@ -3,7 +3,7 @@
 # Premier platform: Arch Linux
 
 pkgname=nvcontrol
-pkgver=0.8.3
+pkgver=0.8.7
 pkgrel=1
 pkgdesc="Modern NVIDIA Settings Manager for Linux + Wayland - Digital Vibrance, VRR, HDR, Overclocking"
 arch=('x86_64')
@@ -148,27 +148,28 @@ EOF
 [Unit]
 Description=nvcontrol GPU Monitor
 Documentation=https://github.com/GhostKellz/nvcontrol
+After=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/nvctl gpu watch --interval 5
+ExecStart=/usr/bin/nvctl monitor start
 Restart=on-failure
 RestartSec=5
 
 [Install]
-WantedBy=default.target
+WantedBy=graphical-session.target
 EOF
 
-    # Game detection service
-    install -Dm644 /dev/stdin "$pkgdir/usr/lib/systemd/user/nvcontrol-gamedetect.service" << 'EOF'
+    # Game profile auto-application service
+    install -Dm644 /dev/stdin "$pkgdir/usr/lib/systemd/user/nvcontrol-game-profile-auto.service" << 'EOF'
 [Unit]
-Description=nvcontrol Game Detection
+Description=nvcontrol Game Profile Auto Service
 Documentation=https://github.com/GhostKellz/nvcontrol
 After=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/nvctl game detect --daemon
+ExecStart=/usr/bin/nvctl gaming auto daemon
 Restart=on-failure
 RestartSec=10
 
@@ -185,12 +186,12 @@ post_install() {
     echo ""
     echo "==> Quick start:"
     echo "    nvctl gpu info          # GPU information"
-    echo "    nvctl gpu stat          # TUI dashboard"
+    echo "    nvctl nvtop             # TUI dashboard"
     echo "    nvctl display vibrance list  # Digital vibrance"
     echo ""
     echo "==> Enable services (optional):"
     echo "    systemctl --user enable --now nvcontrol-monitor"
-    echo "    systemctl --user enable --now nvcontrol-gamedetect"
+    echo "    systemctl --user enable --now nvcontrol-game-profile-auto"
 }
 
 post_upgrade() {

@@ -3,7 +3,8 @@
 
 export DH_VERBOSE = 1
 export CARGO_HOME = $(CURDIR)/debian/.cargo
-export RUSTUP_TOOLCHAIN = stable
+export RUSTUP_TOOLCHAIN = 1.95.0
+export CARGO_TARGET_DIR = $(CURDIR)/target
 
 %:
 	dh $@
@@ -14,15 +15,15 @@ override_dh_auto_build:
 
 override_dh_auto_install:
 	# Install binaries
-	install -Dm755 target/release/nvctl debian/nvcontrol/usr/bin/nvctl
-	install -Dm755 target/release/nvcontrol debian/nvcontrol/usr/bin/nvcontrol
+	install -Dm755 $(CARGO_TARGET_DIR)/release/nvctl debian/nvcontrol/usr/bin/nvctl
+	install -Dm755 $(CARGO_TARGET_DIR)/release/nvcontrol debian/nvcontrol/usr/bin/nvcontrol
 
 	# Install desktop file
-	install -Dm644 debian/nvcontrol.desktop debian/nvcontrol/usr/share/applications/nvcontrol.desktop
+	install -Dm644 assets/nvcontrol.desktop debian/nvcontrol/usr/share/applications/nvcontrol.desktop
 
 	# Install systemd user services
-	install -Dm644 debian/nvcontrol-monitor.service debian/nvcontrol/usr/lib/systemd/user/nvcontrol-monitor.service
-	install -Dm644 debian/nvcontrol-gamedetect.service debian/nvcontrol/usr/lib/systemd/user/nvcontrol-gamedetect.service
+	install -Dm644 release/arch/nvcontrol-monitor.service debian/nvcontrol/usr/lib/systemd/user/nvcontrol-monitor.service
+	install -Dm644 release/arch/nvcontrol-game-profile-auto.service debian/nvcontrol/usr/lib/systemd/user/nvcontrol-game-profile-auto.service
 
 	# Install documentation
 	install -Dm644 README.md debian/nvcontrol/usr/share/doc/nvcontrol/README.md

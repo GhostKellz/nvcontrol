@@ -1,8 +1,9 @@
-// NVIDIA GSP Firmware Manager (nvidia-open specific)
+// NVIDIA GSP Firmware Manager
 // Monitor, control, and update GSP firmware
 //
 // GSP (GPU System Processor) offloads GPU management from CPU to a dedicated
-// RISC-V processor on the GPU. Required for nvidia-open driver on Turing+.
+// RISC-V processor on the GPU. Required for nvidia-open driver on Turing+ and
+// may also be active on newer proprietary driver stacks.
 
 use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
@@ -38,8 +39,16 @@ pub struct GspStatus {
     pub state: String,
     /// Firmware version (from driver or firmware file)
     pub firmware_version: Option<String>,
+    /// Loaded kernel module version if detectable
+    pub kernel_module_version: Option<String>,
     /// Path to firmware file(s)
     pub firmware_path: Option<String>,
+    /// Actual firmware file if one was resolved
+    pub firmware_file: Option<String>,
+    /// Firmware layout style detected on disk
+    pub firmware_layout: Option<String>,
+    /// Whether kernel/userspace/firmware versions appear aligned
+    pub release_alignment: Option<String>,
     /// GSP init result from dmesg
     pub init_result: Option<String>,
     /// Init timestamp from dmesg
@@ -121,7 +130,7 @@ impl GspManager {
             }
         }
 
-        // 3. Default: GSP is enabled by default with nvidia-open on Turing+
+        // 3. Default: assume enabled when running nvidia-open.
         Ok(Self::is_nvidia_open())
     }
 
@@ -207,20 +216,30 @@ impl GspManager {
         let enabled = Self::is_gsp_enabled().unwrap_or(false);
         let is_nvidia_open = Self::is_nvidia_open();
         let gpu_arch = Self::detect_gpu_arch();
+        let kernel_module_version = self.get_kernel_module_version();
+        let userspace_version = self.get_driver_version();
 
         // Determine GSP state from multiple sources
         let (state, init_result, init_timestamp, error_count, message_count) =
             self.parse_gsp_dmesg();
 
-        // Find firmware path
-        let firmware_path = self.find_firmware_path(&gpu_arch);
-        let firmware_version = self.get_driver_version();
+        // Find firmware details
+        let (firmware_path, firmware_file, firmware_layout) = self.find_firmware_details(&gpu_arch);
+        let release_alignment = Self::evaluate_release_alignment(
+            kernel_module_version.as_deref(),
+            userspace_version.as_deref(),
+            firmware_file.as_deref(),
+        );
 
         GspStatus {
             enabled,
             state,
-            firmware_version,
+            firmware_version: userspace_version,
+            kernel_module_version,
             firmware_path,
+            firmware_file,
+            firmware_layout,
+            release_alignment,
             init_result,
             init_timestamp,
             error_count,
@@ -334,15 +353,40 @@ impl GspManager {
         None
     }
 
-    /// Find firmware path (supports new per-chip layout)
-    fn find_firmware_path(&self, gpu_arch: &Option<String>) -> Option<String> {
-        let driver_version = self.get_driver_version()?;
+    /// Find firmware path and actual file (supports new per-chip layout)
+    fn find_firmware_details(
+        &self,
+        gpu_arch: &Option<String>,
+    ) -> (Option<String>, Option<String>, Option<String>) {
+        let Some(driver_version) = self.get_driver_version() else {
+            return (None, None, None);
+        };
 
         // New layout: /lib/firmware/nvidia/<arch>/gsp/gsp-<ver>.bin.zst
         if let Some(arch) = gpu_arch {
             let new_path = self.firmware_dir.join(arch).join("gsp");
             if new_path.exists() {
-                return Some(new_path.display().to_string());
+                if let Ok(entries) = fs::read_dir(&new_path) {
+                    for entry in entries.flatten() {
+                        let name = entry.file_name();
+                        let name_str = name.to_string_lossy();
+                        if name_str.contains("gsp")
+                            && (name_str.ends_with(".bin.zst") || name_str.ends_with(".bin"))
+                        {
+                            return (
+                                Some(new_path.display().to_string()),
+                                Some(entry.path().display().to_string()),
+                                Some("per-chip".to_string()),
+                            );
+                        }
+                    }
+                }
+
+                return (
+                    Some(new_path.display().to_string()),
+                    None,
+                    Some("per-chip".to_string()),
+                );
             }
         }
 
@@ -355,14 +399,57 @@ impl GspManager {
                     let name = entry.file_name();
                     let name_str = name.to_string_lossy();
                     if name_str.starts_with("gsp_") && name_str.ends_with(".bin") {
-                        return Some(entry.path().display().to_string());
+                        return (
+                            Some(legacy_path.display().to_string()),
+                            Some(entry.path().display().to_string()),
+                            Some("legacy-versioned".to_string()),
+                        );
                     }
                 }
             }
-            return Some(legacy_path.display().to_string());
+            return (
+                Some(legacy_path.display().to_string()),
+                None,
+                Some("legacy-versioned".to_string()),
+            );
         }
 
-        None
+        (None, None, None)
+    }
+
+    fn get_kernel_module_version(&self) -> Option<String> {
+        let version_info = fs::read_to_string("/proc/driver/nvidia/version").ok()?;
+        version_info
+            .split_whitespace()
+            .find(|token| token.chars().all(|c| c.is_ascii_digit() || c == '.'))
+            .map(ToString::to_string)
+    }
+
+    fn evaluate_release_alignment(
+        kernel_module_version: Option<&str>,
+        userspace_version: Option<&str>,
+        firmware_file: Option<&str>,
+    ) -> Option<String> {
+        let kernel = kernel_module_version?;
+        let userspace = userspace_version?;
+
+        if kernel != userspace {
+            return Some(format!(
+                "mismatch: kernel module {} vs userspace {}",
+                kernel, userspace
+            ));
+        }
+
+        if let Some(file) = firmware_file {
+            if !file.contains(kernel) {
+                return Some(format!(
+                    "structurally aligned at {}, firmware file present but filename does not encode release",
+                    kernel
+                ));
+            }
+        }
+
+        Some(format!("aligned at {}", kernel))
     }
 
     /// Get driver version from nvidia-smi
@@ -387,9 +474,9 @@ impl GspManager {
         let mut recommendations = Vec::new();
         let mut all_passed = true;
 
-        let is_open = Self::is_nvidia_open();
-        let enabled = Self::is_gsp_enabled().unwrap_or(false);
         let status = self.get_deep_status();
+        let is_open = status.is_nvidia_open;
+        let enabled = status.enabled;
 
         // Check 1: nvidia-open driver
         checks.push(GspCheck {
@@ -402,8 +489,9 @@ impl GspManager {
             },
         });
 
-        if !is_open {
-            recommendations.push("GSP is only available with nvidia-open driver".to_string());
+        if !is_open && !status.enabled && status.state == "not_loaded" {
+            recommendations
+                .push("Load the NVIDIA driver before checking GSP runtime state".to_string());
         }
 
         // Check 2: GSP enabled
@@ -426,7 +514,7 @@ impl GspManager {
         }
 
         // Check 3: GSP init status
-        if enabled && is_open {
+        if enabled {
             let init_ok = status.state == "active" || status.state == "loaded";
             checks.push(GspCheck {
                 name: "GSP initialization".to_string(),
@@ -480,6 +568,23 @@ impl GspManager {
                 all_passed = false;
                 recommendations
                     .push("Reinstall nvidia-open package to restore firmware".to_string());
+            }
+        }
+
+        if let Some(ref alignment) = status.release_alignment {
+            let aligned = alignment.starts_with("aligned");
+            checks.push(GspCheck {
+                name: "Release alignment".to_string(),
+                passed: aligned,
+                message: alignment.clone(),
+            });
+
+            if !aligned {
+                all_passed = false;
+                recommendations.push(
+                    "Ensure kernel module, userspace driver, and GSP firmware come from the same NVIDIA release"
+                        .to_string(),
+                );
             }
         }
 
@@ -811,6 +916,18 @@ impl GspManager {
         if let Some(ref path) = status.firmware_path {
             println!("Firmware Path:  {}", path);
         }
+        if let Some(ref file) = status.firmware_file {
+            println!("Firmware File:  {}", file);
+        }
+        if let Some(ref layout) = status.firmware_layout {
+            println!("FW Layout:      {}", layout);
+        }
+        if let Some(ref kernel_ver) = status.kernel_module_version {
+            println!("Kernel Module:  {}", kernel_ver);
+        }
+        if let Some(ref alignment) = status.release_alignment {
+            println!("Release Match:  {}", alignment);
+        }
 
         println!();
 
@@ -869,9 +986,10 @@ impl GspManager {
         println!("GSP State:      {}", status.state);
 
         if !status.is_nvidia_open {
-            println!("\nnvidia-open driver not detected");
-            println!("GSP firmware is only available with nvidia-open");
-            return Ok(());
+            println!("Driver Type:    proprietary or unknown");
+            println!(
+                "Note: GSP is required on nvidia-open and may also appear on newer proprietary stacks"
+            );
         }
 
         if let Some(ref ver) = status.firmware_version {
@@ -882,8 +1000,24 @@ impl GspManager {
             println!("Firmware:       {}", path);
         }
 
+        if let Some(ref file) = status.firmware_file {
+            println!("Firmware File:  {}", file);
+        }
+
+        if let Some(ref layout) = status.firmware_layout {
+            println!("FW Layout:      {}", layout);
+        }
+
         if let Some(ref arch) = status.gpu_arch {
             println!("GPU Arch:       {}", arch);
+        }
+
+        if let Some(ref kernel_ver) = status.kernel_module_version {
+            println!("Kernel Module:  {}", kernel_ver);
+        }
+
+        if let Some(ref alignment) = status.release_alignment {
+            println!("Release Match:  {}", alignment);
         }
 
         if status.error_count > 0 {

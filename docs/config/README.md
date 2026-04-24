@@ -13,9 +13,9 @@ nvcontrol stores configuration in `~/.config/nvcontrol/`:
 
 ## Documentation
 
-- [Session Persistence](./SESSION_PERSISTENCE.md) - TUI state saving/loading
-- [Backend Architecture](./BACKEND_ARCHITECTURE.md) - NVML/Display abstraction layer
-- [Migration Guide](./MIGRATION.md) - Upgrading from previous versions
+- [Session Persistence](session-persistence.md) - TUI state saving/loading
+- [Backend Architecture](backend-architecture.md) - NVML/Display abstraction layer
+- [Migration Guide](migration.md) - Upgrading from previous versions
 
 ## Quick Reference
 
@@ -39,5 +39,5 @@ rm ~/.config/nvcontrol/tui_state.toml
 
 ## See Also
 
-- [COMMANDS.md](../COMMANDS.md) - CLI command reference
-- [TUI_USER_GUIDE.md](../TUI_USER_GUIDE.md) - TUI usage guide
+- [commands.md](../commands.md) - CLI command reference
+- [tui-user-guide.md](../tui-user-guide.md) - TUI usage guide

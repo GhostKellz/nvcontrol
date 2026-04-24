@@ -6,7 +6,16 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-NVCTL="$PROJECT_DIR/target/x86_64-unknown-linux-gnu/release/nvctl"
+
+resolve_nvctl_path() {
+    if [[ -f "$PROJECT_DIR/target/x86_64-unknown-linux-gnu/release/nvctl" ]]; then
+        printf '%s' "$PROJECT_DIR/target/x86_64-unknown-linux-gnu/release/nvctl"
+    else
+        printf '%s' "$PROJECT_DIR/target/release/nvctl"
+    fi
+}
+
+NVCTL="$(resolve_nvctl_path)"
 
 # Colors
 RED='\033[0;31m'
@@ -30,6 +39,7 @@ if [[ ! -f "$NVCTL" ]]; then
     echo "   Building..."
     cd "$PROJECT_DIR"
     cargo build --release
+    NVCTL="$(resolve_nvctl_path)"
 fi
 
 test_command() {

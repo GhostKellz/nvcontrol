@@ -16,7 +16,7 @@ This directory contains Docker-based testing infrastructure for nvcontrol on Arc
 
 2. **Docker Compose v2**
    ```bash
-   sudo pacman -S docker-compose
+   docker compose version
    ```
 
 3. **User Permissions**
@@ -32,17 +32,17 @@ From the project root:
 ```bash
 # Build all images
 cd dev
-docker-compose build
+docker compose build
 
 # Run all tests
-docker-compose up nvcontrol-test
+docker compose up nvcontrol-test
 
 # Run specific test suite
-docker-compose up nvcontrol-unit-tests        # Unit tests (no GPU)
-docker-compose up nvcontrol-integration-tests  # Integration tests (GPU required)
+docker compose up nvcontrol-unit-tests        # Unit tests (no GPU)
+docker compose up nvcontrol-integration-tests  # Integration tests (GPU required)
 
 # Interactive development shell with GPU access
-docker-compose run --rm nvcontrol-dev
+docker compose run --rm nvcontrol-dev
 ```
 
 ## Available Services
@@ -51,7 +51,7 @@ docker-compose run --rm nvcontrol-dev
 Full test suite with GPU access, Wayland/X11 support, and comprehensive logging.
 
 ```bash
-docker-compose up nvcontrol-test
+docker compose up nvcontrol-test
 ```
 
 Features:
@@ -64,7 +64,7 @@ Features:
 Runs library unit tests without GPU requirements.
 
 ```bash
-docker-compose up nvcontrol-unit-tests
+docker compose up nvcontrol-unit-tests
 ```
 
 Fast unit tests for business logic and non-GPU functionality.
@@ -73,7 +73,7 @@ Fast unit tests for business logic and non-GPU functionality.
 GPU-dependent integration tests with full backtrace.
 
 ```bash
-docker-compose up nvcontrol-integration-tests
+docker compose up nvcontrol-integration-tests
 ```
 
 Tests GPU control, NVML operations, fan control, overclocking, etc.
@@ -82,7 +82,7 @@ Tests GPU control, NVML operations, fan control, overclocking, etc.
 Run performance benchmarks.
 
 ```bash
-docker-compose up nvcontrol-bench
+docker compose up nvcontrol-bench
 ```
 
 Results saved to `../bench-results/` on the host.
@@ -91,7 +91,7 @@ Results saved to `../bench-results/` on the host.
 Generate code coverage reports with `cargo-tarpaulin`.
 
 ```bash
-docker-compose up nvcontrol-coverage
+docker compose up nvcontrol-coverage
 ```
 
 HTML coverage report saved to `../coverage/` on the host.
@@ -100,7 +100,7 @@ HTML coverage report saved to `../coverage/` on the host.
 Run Clippy with all warnings as errors.
 
 ```bash
-docker-compose up nvcontrol-lint
+docker compose up nvcontrol-lint
 ```
 
 Ensures code quality and catches common mistakes.
@@ -109,7 +109,7 @@ Ensures code quality and catches common mistakes.
 Interactive bash shell with full GPU access for debugging and exploration.
 
 ```bash
-docker-compose run --rm nvcontrol-dev
+docker compose run --rm nvcontrol-dev
 
 # Inside container:
 cargo build --all-features
@@ -148,7 +148,8 @@ The Dockerfile uses `archlinux:latest` to match the target deployment environmen
 
 ### GPU Access
 All GPU-enabled services use:
-- `runtime: nvidia` - NVIDIA Container Runtime
+- `NVIDIA_VISIBLE_DEVICES=all` and mounted `/dev/nvidia*` devices
+- `network_mode: host` to match the local workstation testing defaults
 - `/dev/nvidia*` devices mounted
 - `NVIDIA_VISIBLE_DEVICES=all`
 - `NVIDIA_DRIVER_CAPABILITIES=all`
@@ -158,20 +159,20 @@ All GPU-enabled services use:
 ### 1. Quick Validation
 ```bash
 # Lint + unit tests (no GPU needed)
-docker-compose up nvcontrol-lint
-docker-compose up nvcontrol-unit-tests
+docker compose up nvcontrol-lint
+docker compose up nvcontrol-unit-tests
 ```
 
 ### 2. Full Test Suite
 ```bash
 # All tests including GPU integration
-docker-compose up nvcontrol-test
+docker compose up nvcontrol-test
 ```
 
 ### 3. Specific Feature Testing
 ```bash
 # Interactive shell for manual testing
-docker-compose run --rm nvcontrol-dev
+docker compose run --rm nvcontrol-dev
 
 # Inside container:
 cargo test --test gpu_tests -- --nocapture
@@ -183,10 +184,10 @@ nvctl fan auto
 ### 4. Performance Analysis
 ```bash
 # Benchmarks
-docker-compose up nvcontrol-bench
+docker compose up nvcontrol-bench
 
 # Coverage
-docker-compose up nvcontrol-coverage
+docker compose up nvcontrol-coverage
 ```
 
 ## Troubleshooting
@@ -208,16 +209,16 @@ sudo usermod -aG docker $USER
 # Log out and back in
 
 # Or run with sudo (not recommended)
-sudo docker-compose up nvcontrol-test
+sudo docker compose up nvcontrol-test
 ```
 
 ### Build Failures
 ```bash
 # Clean rebuild
-docker-compose build --no-cache
+docker compose build --no-cache
 
 # Remove old containers
-docker-compose down -v
+docker compose down -v
 ```
 
 ### X11 Display Issues
@@ -227,7 +228,7 @@ xhost +local:docker
 
 # Or set DISPLAY manually
 export DISPLAY=:0
-docker-compose up nvcontrol-test
+docker compose up nvcontrol-test
 ```
 
 ## CI/CD Integration
@@ -248,8 +249,8 @@ jobs:
       - name: Run tests
         run: |
           cd dev
-          docker-compose up --exit-code-from nvcontrol-unit-tests nvcontrol-unit-tests
-          docker-compose up --exit-code-from nvcontrol-lint nvcontrol-lint
+          docker compose up --exit-code-from nvcontrol-unit-tests nvcontrol-unit-tests
+          docker compose up --exit-code-from nvcontrol-lint nvcontrol-lint
 ```
 
 For GPU-enabled CI, use self-hosted runners with NVIDIA GPUs.
@@ -267,10 +268,10 @@ To test specific GPUs:
 
 ```bash
 # Use only GPU 0
-NVIDIA_VISIBLE_DEVICES=0 docker-compose up nvcontrol-test
+NVIDIA_VISIBLE_DEVICES=0 docker compose up nvcontrol-test
 
 # Use GPUs 0 and 1
-NVIDIA_VISIBLE_DEVICES=0,1 docker-compose up nvcontrol-test
+NVIDIA_VISIBLE_DEVICES=0,1 docker compose up nvcontrol-test
 ```
 
 ## Debugging
@@ -282,12 +283,12 @@ docker exec -it nvcontrol-dev bash
 
 ### View Logs
 ```bash
-docker-compose logs -f nvcontrol-test
+docker compose logs -f nvcontrol-test
 ```
 
 ### Inspect State
 ```bash
-docker-compose run --rm nvcontrol-dev bash
+docker compose run --rm nvcontrol-dev bash
 # Inside:
 nvidia-smi
 lspci | grep -i nvidia
@@ -298,10 +299,10 @@ cat /proc/driver/nvidia/version
 
 ```bash
 # Stop all containers
-docker-compose down
+docker compose down
 
 # Remove volumes (including Cargo cache)
-docker-compose down -v
+docker compose down -v
 
 # Remove images
 docker rmi nvcontrol:test
@@ -313,13 +314,13 @@ For testing on your ROG Astral RTX 5090:
 
 ```bash
 # Verify GPU is detected
-docker-compose run --rm nvcontrol-dev nvidia-smi
+docker compose run --rm nvcontrol-dev nvidia-smi
 
 # Run full test suite with your GPU
-docker-compose up nvcontrol-test
+docker compose up nvcontrol-test
 
 # Interactive testing
-docker-compose run --rm nvcontrol-dev
+docker compose run --rm nvcontrol-dev
 # Inside:
 nvctl gpu info          # Should show ROG Astral RTX 5090
 nvctl overclock info    # Check OC capabilities

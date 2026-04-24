@@ -10,8 +10,8 @@ ghostwave uses GPU-accelerated audio denoising. nvcontrol can optimize GPU perfo
 
 ```bash
 # Set GPU for low-latency audio work
-nvctl power mode quiet         # Reduce fan noise
-nvctl overclock apply +100 +0  # Moderate GPU boost, no memory OC
+nvctl power profile --profile quiet                     # Reduce fan noise
+nvctl overclock apply --gpu-offset 100 --memory-offset 0  # Moderate GPU boost, no memory OC
 nvctl fan curve silent         # Silent fan profile
 ```
 

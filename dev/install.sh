@@ -2,15 +2,25 @@
 # Local development install script for nvcontrol
 # Builds and installs to ~/.local/bin for quick iteration
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 INSTALL_DIR="$HOME/.local/bin"
 COMPLETIONS_DIR="$HOME/.local/share/bash-completion/completions"
 ZSH_COMPLETIONS_DIR="$HOME/.local/share/zsh/site-functions"
+FISH_COMPLETIONS_DIR="$HOME/.local/share/fish/vendor_completions.d"
 DESKTOP_DIR="$HOME/.local/share/applications"
 MAN_DIR="$HOME/.local/share/man/man1"
+
+resolve_bin_dir() {
+    local profile_dir="$1"
+    if [[ -d "$PROJECT_DIR/target/x86_64-unknown-linux-gnu/$profile_dir" ]]; then
+        printf '%s' "$PROJECT_DIR/target/x86_64-unknown-linux-gnu/$profile_dir"
+    else
+        printf '%s' "$PROJECT_DIR/target/$profile_dir"
+    fi
+}
 
 # Colors
 RED='\033[0;31m'
@@ -61,9 +71,11 @@ if [[ "$SKIP_BUILD" == "false" ]]; then
     echo -e "${YELLOW}🔨 Building nvcontrol ($BUILD_TYPE)...${NC}"
 
     if [[ "$BUILD_TYPE" == "release" ]]; then
-        cargo build --release 2>&1 | tail -5
+        cargo build --release --bin nvctl
+        cargo build --release --bin nvcontrol --features gui
     else
-        cargo build 2>&1 | tail -5
+        cargo build --bin nvctl
+        cargo build --bin nvcontrol --features gui
     fi
 
     echo -e "${GREEN}✅ Build complete${NC}"
@@ -71,18 +83,9 @@ fi
 
 # Determine binary path
 if [[ "$BUILD_TYPE" == "release" ]]; then
-    # Check for cross-compiled path first
-    if [[ -d "$PROJECT_DIR/target/x86_64-unknown-linux-gnu/release" ]]; then
-        BIN_DIR="$PROJECT_DIR/target/x86_64-unknown-linux-gnu/release"
-    else
-        BIN_DIR="$PROJECT_DIR/target/release"
-    fi
+    BIN_DIR="$(resolve_bin_dir release)"
 else
-    if [[ -d "$PROJECT_DIR/target/x86_64-unknown-linux-gnu/debug" ]]; then
-        BIN_DIR="$PROJECT_DIR/target/x86_64-unknown-linux-gnu/debug"
-    else
-        BIN_DIR="$PROJECT_DIR/target/debug"
-    fi
+    BIN_DIR="$(resolve_bin_dir debug)"
 fi
 
 echo -e "${YELLOW}📦 Installing binaries to $INSTALL_DIR...${NC}"
@@ -94,7 +97,8 @@ if [[ -f "$BIN_DIR/nvctl" ]]; then
     chmod +x "$INSTALL_DIR/nvctl"
     echo -e "${GREEN}  ✅ nvctl${NC}"
 else
-    echo -e "${RED}  ❌ nvctl not found${NC}"
+    echo -e "${RED}  ❌ nvctl not found in $BIN_DIR${NC}"
+    exit 1
 fi
 
 # Install GUI
@@ -103,7 +107,8 @@ if [[ -f "$BIN_DIR/nvcontrol" ]]; then
     chmod +x "$INSTALL_DIR/nvcontrol"
     echo -e "${GREEN}  ✅ nvcontrol (GUI)${NC}"
 else
-    echo -e "${YELLOW}  ⚠️  nvcontrol (GUI) not found - build with: cargo build --release --features gui${NC}"
+    echo -e "${RED}  ❌ nvcontrol (GUI) not found in $BIN_DIR${NC}"
+    exit 1
 fi
 
 # Install shell completions
@@ -111,15 +116,17 @@ echo -e "${YELLOW}📝 Installing shell completions...${NC}"
 
 mkdir -p "$COMPLETIONS_DIR"
 mkdir -p "$ZSH_COMPLETIONS_DIR"
+mkdir -p "$FISH_COMPLETIONS_DIR"
 
-if [[ -f "$PROJECT_DIR/completions/nvctl.bash" ]]; then
-    cp "$PROJECT_DIR/completions/nvctl.bash" "$COMPLETIONS_DIR/nvctl"
+if [[ -x "$INSTALL_DIR/nvctl" ]]; then
+    "$INSTALL_DIR/nvctl" completion bash > "$COMPLETIONS_DIR/nvctl"
     echo -e "${GREEN}  ✅ Bash completions${NC}"
-fi
-
-if [[ -f "$PROJECT_DIR/completions/nvctl.zsh" ]]; then
-    cp "$PROJECT_DIR/completions/nvctl.zsh" "$ZSH_COMPLETIONS_DIR/_nvctl"
+    "$INSTALL_DIR/nvctl" completion zsh > "$ZSH_COMPLETIONS_DIR/_nvctl"
     echo -e "${GREEN}  ✅ Zsh completions${NC}"
+    "$INSTALL_DIR/nvctl" completion fish > "$FISH_COMPLETIONS_DIR/nvctl.fish"
+    echo -e "${GREEN}  ✅ Fish completions${NC}"
+else
+    echo -e "${YELLOW}  ⚠️  nvctl not installed; skipping completion generation${NC}"
 fi
 
 # Install desktop file

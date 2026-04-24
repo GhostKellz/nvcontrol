@@ -92,9 +92,9 @@ impl<'a> HeaderBar<'a> {
 
     /// Show the header bar
     pub fn show(self, ui: &mut egui::Ui) {
-        let frame = egui::Frame::none()
+        let frame = egui::Frame::new()
             .fill(self.colors.bg_dark.to_egui())
-            .inner_margin(egui::Margin::symmetric(16.0, 8.0));
+            .inner_margin(egui::Margin::symmetric(16, 8));
 
         frame.show(ui, |ui| {
             ui.horizontal(|ui| {
@@ -182,10 +182,10 @@ impl<'a> HeaderBar<'a> {
                         let color = pill.state.color(self.colors);
                         let icon = pill.state.icon();
 
-                        egui::Frame::none()
+                        egui::Frame::new()
                             .fill(color.gamma_multiply(0.2))
-                            .rounding(4.0)
-                            .inner_margin(egui::Margin::symmetric(6.0, 2.0))
+                            .corner_radius(4.0)
+                            .inner_margin(egui::Margin::symmetric(6, 2))
                             .show(ui, |ui| {
                                 ui.horizontal(|ui| {
                                     ui.label(egui::RichText::new(icon).size(10.0).color(color));

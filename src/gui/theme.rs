@@ -92,10 +92,10 @@ pub mod spacing {
 
 /// Draw a card-style container with consistent styling
 pub fn card_frame(colors: &ColorPalette) -> egui::Frame {
-    egui::Frame::none()
+    egui::Frame::new()
         .fill(colors.bg_highlight.to_egui())
         .stroke(egui::Stroke::new(1.0, colors.border.to_egui()))
-        .rounding(spacing::CARD_ROUNDING)
+        .corner_radius(spacing::CARD_ROUNDING)
         .inner_margin(spacing::CARD_PADDING)
         .outer_margin(spacing::XS)
 }

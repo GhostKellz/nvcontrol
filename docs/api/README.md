@@ -6,12 +6,12 @@ This directory contains API documentation for nvcontrol's Rust library.
 
 | Module | Description |
 |--------|-------------|
-| [GPU](./GPU.md) | GPU info, monitoring, real-time stats |
-| [Display](./DISPLAY.md) | Display detection, vibrance, color management |
-| [Fan](./FAN.md) | Fan speed control and curves |
-| [Power](./POWER.md) | Power limits and profiles |
-| [Overclock](./OVERCLOCK.md) | Clock offsets and stress testing |
-| [Backend](./BACKEND.md) | Backend abstraction for testing (v0.7.6+) |
+| [GPU](./gpu.md) | GPU info, monitoring, real-time stats |
+| [Display](./display.md) | Display detection, vibrance, color management |
+| [Fan](./fan.md) | Fan speed control and curves |
+| [Power](./power.md) | Power limits and profiles |
+| [Overclock](./overclock.md) | Clock offsets and stress testing |
+| [Backend](./backend.md) | Backend abstraction for testing (v0.7.6+) |
 
 ## Quick Start
 
@@ -51,4 +51,4 @@ fn safe_operation() -> NvResult<()> {
 
 ## Testing with Mocks
 
-See [BACKEND.md](./BACKEND.md) for testing with mock backends (v0.7.6+).
+See [backend.md](./backend.md) for testing with mock backends (v0.7.6+).

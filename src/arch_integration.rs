@@ -27,6 +27,40 @@ pub struct ArchIntegration {
 }
 
 impl ArchIntegration {
+    pub fn pacman_kernel_targets() -> Vec<String> {
+        let mut targets = vec![
+            "linux".to_string(),
+            "linux-lts".to_string(),
+            "linux-zen".to_string(),
+            "linux-hardened".to_string(),
+            "linux-cachyos".to_string(),
+            "linux-cachyos-lto".to_string(),
+        ];
+
+        if let Ok(entries) = fs::read_dir("/boot") {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if let Some(kernel_name) = name.strip_prefix("vmlinuz-") {
+                    let package = format!("linux-{}", kernel_name);
+                    targets.push(package);
+                }
+            }
+        }
+
+        targets.push("linux-tkg-*".to_string());
+        targets.sort();
+        targets.dedup();
+        targets
+    }
+
+    fn pacman_kernel_targets_block() -> String {
+        Self::pacman_kernel_targets()
+            .into_iter()
+            .map(|target| format!("Target = {}", target))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
     pub fn new() -> Self {
         Self {
             hooks_dir: PathBuf::from("/etc/pacman.d/hooks"),
@@ -143,7 +177,8 @@ impl ArchIntegration {
             NvControlError::ConfigError(format!("Failed to create hooks dir: {}", e))
         })?;
 
-        let hook_content = r#"[Trigger]
+        let hook_content = format!(
+            r#"[Trigger]
 Operation = Install
 Operation = Upgrade
 Operation = Remove
@@ -152,10 +187,7 @@ Target = nvidia
 Target = nvidia-dkms
 Target = nvidia-open
 Target = nvidia-open-dkms
-Target = linux
-Target = linux-lts
-Target = linux-zen
-Target = linux-hardened
+{}
 
 [Action]
 Description = Updating NVIDIA module in initcpio
@@ -163,7 +195,9 @@ Depends = mkinitcpio
 When = PostTransaction
 NeedsTargets
 Exec = /bin/sh -c 'while read -r trg; do case $trg in linux*) exit 0; esac; done; /usr/bin/mkinitcpio -P'
-"#;
+"#,
+            Self::pacman_kernel_targets_block()
+        );
 
         let hook_path = self.hooks_dir.join("nvidia-mkinitcpio.hook");
         fs::write(&hook_path, hook_content)
@@ -215,18 +249,19 @@ Exec = /usr/bin/dkms autoinstall
             ));
         }
 
-        let hook_content = r#"[Trigger]
+        let hook_content = format!(
+            r#"[Trigger]
 Operation = Upgrade
 Type = Package
-Target = linux
-Target = linux-lts
-Target = linux-zen
+{}
 
 [Action]
 Description = Checking NVIDIA compatibility before kernel upgrade
 When = PreTransaction
 Exec = /usr/bin/sh -c 'echo "⚠️  Kernel upgrade detected. NVIDIA drivers may need rebuilding after upgrade."'
-"#;
+"#,
+            Self::pacman_kernel_targets_block()
+        );
 
         let hook_path = self.hooks_dir.join("nvidia-kernel-warn.hook");
         fs::write(&hook_path, hook_content)

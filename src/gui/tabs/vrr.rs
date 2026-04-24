@@ -72,9 +72,9 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                     supports_freesync,
                 ) in &display_info
                 {
-                    egui::Frame::none()
+                    egui::Frame::new()
                         .fill(colors.bg_dark.to_egui())
-                        .rounding(6.0)
+                        .corner_radius(6.0)
                         .inner_margin(8.0)
                         .show(ui, |ui| {
                             ui.horizontal(|ui| {

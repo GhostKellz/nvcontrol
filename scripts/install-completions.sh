@@ -52,13 +52,13 @@ sudo mkdir -p "$COMPLETION_DIR"
 if command -v nvctl >/dev/null 2>&1; then
     case "$SHELL_TYPE" in
         bash)
-            nvctl drivers generate-completions bash | sudo tee "$COMPLETION_DIR/nvctl" > /dev/null
+            nvctl completion bash | sudo tee "$COMPLETION_DIR/nvctl" > /dev/null
             ;;
         zsh)
-            nvctl drivers generate-completions zsh | sudo tee "$COMPLETION_DIR/_nvctl" > /dev/null
+            nvctl completion zsh | sudo tee "$COMPLETION_DIR/_nvctl" > /dev/null
             ;;
         fish)
-            nvctl drivers generate-completions fish | sudo tee "$COMPLETION_DIR/nvctl.fish" > /dev/null
+            nvctl completion fish | sudo tee "$COMPLETION_DIR/nvctl.fish" > /dev/null
             ;;
     esac
     

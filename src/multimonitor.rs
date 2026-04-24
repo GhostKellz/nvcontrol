@@ -1,8 +1,10 @@
 // Multi-Monitor Wayland Workflow Optimizer
 // Per-display settings, layouts, and Gamescope integration
 
+use crate::monitor_profiles::{self, DisplayType, MonitorProfile, MultiMonitorLayout};
 use crate::{NvControlError, NvResult};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -39,6 +41,12 @@ pub struct DisplayLayout {
 pub struct MultiMonitorManager {
     layouts_dir: PathBuf,
     current_layout: Option<DisplayLayout>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PresetSuggestion {
+    pub preset_key: String,
+    pub reason: String,
 }
 
 impl MultiMonitorManager {
@@ -123,6 +131,55 @@ impl MultiMonitorManager {
         })
     }
 
+    pub fn list_builtin_presets(&self) -> Vec<DisplayLayout> {
+        let mut presets: Vec<DisplayLayout> = monitor_profiles::get_preset_layouts()
+            .into_iter()
+            .map(|(key, layout)| Self::preset_to_display_layout(&key, &layout))
+            .collect();
+        presets.sort_by(|a, b| a.name.cmp(&b.name));
+        presets
+    }
+
+    pub fn suggest_builtin_presets(&self) -> NvResult<Vec<PresetSuggestion>> {
+        let suggestions = monitor_profiles::detect_and_suggest_layout()?;
+        let presets = monitor_profiles::get_preset_layouts();
+        let mut results = Self::normalize_preset_suggestions(&suggestions, &presets);
+
+        if results.is_empty() {
+            let display_count = Self::detect_displays()
+                .map(|displays| displays.len())
+                .unwrap_or(0);
+            for (key, layout) in &presets {
+                if layout.monitors.len() == display_count && display_count > 0 {
+                    results.push(PresetSuggestion {
+                        preset_key: key.clone(),
+                        reason: format!("matches detected display count ({display_count})"),
+                    });
+                }
+            }
+        }
+
+        results.sort_by(|a, b| a.preset_key.cmp(&b.preset_key));
+        results.dedup_by(|a, b| a.preset_key == b.preset_key);
+        Ok(results)
+    }
+
+    pub fn preview_builtin_preset(&self, preset_key: &str) -> NvResult<DisplayLayout> {
+        let mut presets = monitor_profiles::get_preset_layouts();
+        let layout = presets.remove(preset_key).ok_or_else(|| {
+            NvControlError::ConfigError(format!("Unknown monitor preset: {preset_key}"))
+        })?;
+
+        Ok(Self::preset_to_display_layout(preset_key, &layout))
+    }
+
+    pub fn apply_builtin_preset(&mut self, preset_key: &str) -> NvResult<()> {
+        let layout = self.preview_builtin_preset(preset_key)?;
+        self.apply_layout(&layout)?;
+        self.current_layout = Some(layout);
+        Ok(())
+    }
+
     /// Save current layout with a name
     pub fn save_layout(&mut self, name: &str) -> NvResult<()> {
         println!("💾 Saving display layout: {}", name);
@@ -173,6 +230,92 @@ impl MultiMonitorManager {
         }
 
         Ok(())
+    }
+
+    pub fn apply_live_layout(&mut self, layout: &DisplayLayout) -> NvResult<()> {
+        self.apply_layout(layout)?;
+        self.current_layout = Some(layout.clone());
+        Ok(())
+    }
+
+    fn preset_to_display_layout(preset_key: &str, layout: &MultiMonitorLayout) -> DisplayLayout {
+        DisplayLayout {
+            name: preset_key.to_string(),
+            displays: layout
+                .monitors
+                .iter()
+                .map(Self::monitor_profile_to_display_config)
+                .collect(),
+        }
+    }
+
+    fn monitor_profile_to_display_config(profile: &MonitorProfile) -> DisplayConfig {
+        DisplayConfig {
+            name: profile.name.clone(),
+            connector: profile.connector.clone(),
+            enabled: true,
+            resolution: (profile.resolution.width, profile.resolution.height),
+            refresh_rate: profile.refresh_rate,
+            position: (profile.position.x, profile.position.y),
+            scale: 1.0,
+            rotation: Rotation::Normal,
+            vrr_enabled: profile.refresh_rate >= 120,
+            digital_vibrance: Self::preset_vibrance_to_display_value(
+                profile.display_type.clone(),
+                profile.vibrance_settings.vibrance,
+            ),
+            color_profile: Some(Self::preset_color_profile_name(profile)),
+        }
+    }
+
+    fn preset_color_profile_name(profile: &MonitorProfile) -> String {
+        let display_type = match &profile.display_type {
+            DisplayType::OLED => "oled",
+            DisplayType::IPS => "ips",
+            DisplayType::TN => "tn",
+            DisplayType::VA => "va",
+            DisplayType::MiniLED => "miniled",
+            DisplayType::Unknown => "generic",
+        };
+
+        let hdr = if profile.hdr_enabled { "hdr" } else { "sdr" };
+        format!("{display_type}-{hdr}")
+    }
+
+    fn preset_vibrance_to_display_value(display_type: DisplayType, vibrance: i32) -> i16 {
+        let baseline = match display_type {
+            DisplayType::OLED => 300,
+            DisplayType::MiniLED => 350,
+            DisplayType::IPS => 500,
+            DisplayType::VA => 450,
+            DisplayType::TN => 550,
+            DisplayType::Unknown => 500,
+        };
+
+        let adjusted = vibrance - baseline;
+        adjusted.clamp(-200, 200) as i16
+    }
+
+    fn normalize_preset_suggestions(
+        suggestions: &[String],
+        presets: &HashMap<String, MultiMonitorLayout>,
+    ) -> Vec<PresetSuggestion> {
+        let mut results = Vec::new();
+
+        for suggestion in suggestions {
+            for key in suggestion
+                .split(" or ")
+                .map(str::trim)
+                .filter(|value| presets.contains_key(*value))
+            {
+                results.push(PresetSuggestion {
+                    preset_key: key.to_string(),
+                    reason: suggestion.clone(),
+                });
+            }
+        }
+
+        results
     }
 
     /// Apply configuration to a single display
@@ -502,5 +645,71 @@ impl MultiMonitorManager {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::monitor_profiles::{DisplayType, MonitorPosition, Resolution};
+    use crate::vibrance::EnhancedVibranceSettings;
+
+    #[test]
+    fn converts_monitor_profile_to_display_config() {
+        let profile = MonitorProfile {
+            name: "Gaming".to_string(),
+            connector: "DP-1".to_string(),
+            display_type: DisplayType::IPS,
+            resolution: Resolution {
+                width: 2560,
+                height: 1440,
+            },
+            refresh_rate: 240,
+            is_primary: true,
+            hdr_enabled: false,
+            vibrance_settings: EnhancedVibranceSettings {
+                vibrance: 700,
+                saturation: 1.2,
+                contrast: 1.1,
+                brightness: 1.0,
+                gamma: 2.2,
+                hue_shift: 0.0,
+                color_temperature: 6500,
+                enabled: true,
+            },
+            position: MonitorPosition { x: 0, y: 0 },
+        };
+
+        let config = MultiMonitorManager::monitor_profile_to_display_config(&profile);
+        assert_eq!(config.connector, "DP-1");
+        assert_eq!(config.resolution, (2560, 1440));
+        assert_eq!(config.refresh_rate, 240);
+        assert!(config.vrr_enabled);
+        assert_eq!(config.digital_vibrance, 200);
+        assert_eq!(config.color_profile.as_deref(), Some("ips-sdr"));
+    }
+
+    #[test]
+    fn converts_builtin_preset_to_layout() {
+        let preset = monitor_profiles::get_preset_layouts()
+            .remove("dual_oled_ips")
+            .expect("preset exists");
+
+        let layout = MultiMonitorManager::preset_to_display_layout("dual_oled_ips", &preset);
+        assert_eq!(layout.name, "dual_oled_ips");
+        assert_eq!(layout.displays.len(), 2);
+        assert_eq!(layout.displays[0].connector, "DP-0");
+        assert_eq!(layout.displays[1].position, (3840, 0));
+    }
+
+    #[test]
+    fn normalizes_preset_suggestions() {
+        let presets = monitor_profiles::get_preset_layouts();
+        let suggestions = vec!["single_oled_4k or single_1440p".to_string()];
+
+        let normalized = MultiMonitorManager::normalize_preset_suggestions(&suggestions, &presets);
+        assert_eq!(normalized.len(), 2);
+        assert_eq!(normalized[0].preset_key, "single_oled_4k");
+        assert_eq!(normalized[1].preset_key, "single_1440p");
     }
 }

@@ -42,7 +42,7 @@ RUN pacman -Syu --noconfirm && \
     tmux \
     && pacman -Scc --noconfirm
 
-# Install Rust nightly for testing
+# Install stable Rust toolchain for testing
 RUN rustup default stable && \
     rustup component add clippy rustfmt
 

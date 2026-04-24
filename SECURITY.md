@@ -41,7 +41,7 @@ nvcontrol interacts with NVIDIA kernel drivers and requires elevated privileges 
 | Location | Contents | Permissions |
 |----------|----------|-------------|
 | `~/.config/nvcontrol/` | User profiles, settings | User-only (0600) |
-| `/tmp/nvcontrol/` | Runtime state | User-only |
+| `~/.local/state/nvcontrol/` | Support bundles, runtime state, diagnostics output | User-only |
 
 ### Network
 
@@ -61,39 +61,33 @@ cargo install cargo-audit
 cargo audit
 ```
 
-### v0.8.6 Advisory Status
+### v0.8.7 Advisory Status
 
-Audit performed: 2026-04-03
+Audit performed: 2026-04-22
 Tool version: cargo-audit 0.21.x
-Result: **0 vulnerabilities on Linux**, 13 warnings
+Result: **0 known vulnerabilities on Linux**, with the GTK3 tray surface removed and the advisory set reduced accordingly
 
 #### Accepted Warnings
 
-The following advisory warnings are accepted for v0.8.6. They are transitive dependencies with low practical risk:
+The following advisory warnings are accepted for v0.8.7. They are transitive dependencies with low practical risk:
 
 | Advisory | Crate | Severity | Source | Disposition |
 |----------|-------|----------|--------|-------------|
 | RUSTSEC-2026-0009 | `time` | Medium (DoS) | `mac-notification-sys` | macOS-only, not compiled on Linux |
-| RUSTSEC-2024-0412-0420 | GTK3 bindings | Warning (unmaintained) | `tray-icon` | Functional, awaiting GTK4 migration |
-| RUSTSEC-2024-0429 | `glib` | Warning (unsound) | `tray-icon` -> GTK3 | VariantStrIter not in code path |
 | RUSTSEC-2026-0002 | `lru` | Warning (unsound) | `ratatui` | IterMut not in code path |
 | RUSTSEC-2025-0119 | `number_prefix` | Warning (unmaintained) | `indicatif` | Progress bars only |
-| RUSTSEC-2024-0436 | `paste` | Warning (unmaintained) | `ratatui`, `metal` | Macro crate, no runtime risk |
-| RUSTSEC-2024-0370 | `proc-macro-error` | Warning (unmaintained) | `glib-macros` | Compile-time only |
 
 #### Rationale
 
 - **time DoS**: Only affects macOS via `mac-notification-sys`. nvcontrol is Linux-only.
-- **GTK3 unmaintained**: `tray-icon` crate uses GTK3 for system tray on Linux. Still functional, upstream will migrate to GTK4.
-- **glib/lru unsoundness**: Affected iterator APIs are not used in our code paths.
-- **Compile-time crates**: `paste`, `proc-macro-error` only run at compile time.
+- **lru unsoundness**: The affected iterator API is not used in nvcontrol paths.
+- **number_prefix**: Used only for progress display.
 
 #### Remediation Plan
 
 These warnings will be addressed when:
-1. `tray-icon` migrates to GTK4 bindings
-2. `ratatui` updates `lru` dependency
-3. `indicatif` replaces `number_prefix`
+1. `ratatui` updates `lru` dependency
+2. `indicatif` replaces `number_prefix`
 
 ## Security Hardening Checklist
 
@@ -103,7 +97,7 @@ For users running nvcontrol:
 - [ ] Use `sudo nvctl` only for operations requiring root (fan control, power limits)
 - [ ] Review profiles before importing from untrusted sources
 - [ ] Keep NVIDIA drivers updated (535+ required)
-- [ ] Verify binary signatures if installing from releases
+- [ ] Review support bundles before sharing if using `nvctl doctor --support` or `nvctl driver support-bundle`
 
 ## Changelog
 

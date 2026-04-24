@@ -5,6 +5,31 @@ Game profile management and automatic GPU optimization for gaming.
 
 ## Auto-Profile Application
 
+### `nvctl gaming auto start`
+Start the background auto-profile service.
+
+**Usage:**
+```bash
+nvctl gaming auto start
+```
+
+**Notes:**
+- syncs launcher profiles into the detector store first
+- spawns a background `nvctl` service process
+- `status` reports PID and last applied profile when available
+
+---
+
+### `nvctl gaming auto stop`
+Stop the background auto-profile service.
+
+**Usage:**
+```bash
+nvctl gaming auto stop
+```
+
+---
+
 ### `nvctl gaming auto status`
 Show game profile auto-application status and configuration.
 
@@ -15,6 +40,9 @@ nvctl gaming auto status
 
 **Output:**
 - Enabled/disabled status
+- Running state
+- Service PID (when active)
+- systemd user service status (when available)
 - Poll interval (seconds)
 - Apply delay (seconds)
 - Restore on exit setting
@@ -29,10 +57,7 @@ Enable automatic profile application.
 nvctl gaming auto enable
 ```
 
-**Behavior:**
-- Monitors running processes every poll interval
-- Applies GPU profiles when games are detected
-- Restores defaults when games exit
+This updates the saved configuration. Use `nvctl gaming auto start` to launch the background service.
 
 ---
 
@@ -66,6 +91,48 @@ nvctl gaming auto config --poll-interval 1 --apply-delay 0
 
 # Safe mode with 5 second delay
 nvctl gaming auto config --poll-interval 2 --apply-delay 5 --restore-on-exit true
+```
+
+---
+
+### `nvctl gaming auto install-service`
+Install a systemd user service unit for persistent auto-profile startup.
+
+**Usage:**
+```bash
+nvctl gaming auto install-service
+```
+
+---
+
+### `nvctl gaming auto uninstall-service`
+Remove the systemd user service unit.
+
+**Usage:**
+```bash
+nvctl gaming auto uninstall-service
+```
+
+---
+
+### `nvctl gaming auto enable-service`
+Enable and start the systemd user service.
+
+**Usage:**
+```bash
+nvctl gaming auto enable-service
+```
+
+This is the recommended persistent startup path if you want auto-profile handling across login sessions.
+
+---
+
+### `nvctl gaming auto disable-service`
+Disable and stop the systemd user service.
+
+**Usage:**
+```bash
+nvctl gaming auto disable-service
 ```
 
 ---
@@ -107,6 +174,74 @@ nvctl gaming launch show <profile>
 ```
 
 ---
+
+### `nvctl gaming launch create`
+Create a new game launch profile.
+
+**Usage:**
+```bash
+nvctl gaming launch create <profile> <executable>
+```
+
+---
+
+### `nvctl gaming launch delete`
+Delete a game launch profile.
+
+**Usage:**
+```bash
+nvctl gaming launch delete <profile>
+```
+
+---
+
+### `nvctl gaming launch hook-add`
+Add a pre-launch or post-exit hook.
+
+**Usage:**
+```bash
+nvctl gaming launch hook-add <profile> <pre|post> <command> [args...]
+```
+
+---
+
+### `nvctl gaming launch hook-list`
+List hooks for a game profile.
+
+**Usage:**
+```bash
+nvctl gaming launch hook-list <profile>
+```
+
+---
+
+### `nvctl gaming launch hook-remove`
+Remove a hook by phase and index from `hook-list`.
+
+**Usage:**
+```bash
+nvctl gaming launch hook-remove <profile> <pre|post> <index>
+```
+
+---
+
+### `nvctl gaming launch set-gamescope-preset`
+Assign a named Gamescope preset to a launch profile.
+
+**Usage:**
+```bash
+nvctl gaming launch set-gamescope-preset <profile> <preset>
+```
+
+---
+
+### `nvctl gaming launch examples`
+Create example launch profiles.
+
+**Usage:**
+```bash
+nvctl gaming launch examples
+```
 
 ## Latency Optimization
 
