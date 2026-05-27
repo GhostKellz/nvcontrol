@@ -83,11 +83,11 @@ impl WaylandCompositor {
     pub fn capabilities(&self) -> CompositorCapabilities {
         match self {
             Self::KdePlasma => CompositorCapabilities {
-                digital_vibrance: true, // Via nVibrant or kwin-effects
-                vrr_control: true,      // Native KWin VRR
-                hdr_support: true,      // Plasma 6+
-                color_management: true, // Native support
-                display_config: true,   // KScreen
+                digital_vibrance: true,                      // Via nVibrant or kwin-effects
+                vrr_control: true,                           // Native KWin VRR
+                hdr_support: true,                           // Plasma 6+
+                color_management: true,                      // Native support
+                display_config: true,                        // KScreen
                 fp16_egl: crate::drivers::detect_egl_fp16(), // Driver 610+
             },
             Self::Gnome => CompositorCapabilities {
