@@ -7,7 +7,7 @@ AppDir:
     id: com.github.nvcontrol
     name: nvcontrol
     icon: nvcontrol
-    version: 0.8.7
+    version: 0.8.8
     exec: usr/bin/nvcontrol
     exec_args: $@
 
@@ -17,7 +17,7 @@ AppDir:
       - sourceline: 'deb [arch=amd64] http://archive.ubuntu.com/ubuntu/ noble main restricted universe multiverse'
 
     include:
-      - nvidia-utils-590
+      - nvidia-utils-610
       - libwayland-client0
       - libxcb1
 

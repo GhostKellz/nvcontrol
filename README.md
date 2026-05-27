@@ -6,7 +6,7 @@
   **Modern NVIDIA Settings Manager for Linux + Wayland**
 
   [![Rust](https://img.shields.io/badge/Rust-1.95+-orange.svg?style=for-the-badge)](https://www.rust-lang.org)
-  [![NVIDIA](https://img.shields.io/badge/NVIDIA-Driver%20595+-green.svg?style=for-the-badge)](https://github.com/NVIDIA/open-gpu-kernel-modules)
+  [![NVIDIA](https://img.shields.io/badge/NVIDIA-Driver%20610+-green.svg?style=for-the-badge)](https://github.com/NVIDIA/open-gpu-kernel-modules)
   [![Wayland](https://img.shields.io/badge/Wayland-Native-brightgreen.svg?style=for-the-badge)](https://wayland.freedesktop.org/)
   [![TUI](https://img.shields.io/badge/TUI-ratatui-orange.svg?style=for-the-badge)](https://github.com/ratatui/ratatui)
   [![GUI](https://img.shields.io/badge/GUI-egui-blue.svg?style=for-the-badge)](https://github.com/emilk/egui)
@@ -53,7 +53,7 @@ nvctl driver diagnose-release
 nvctl doctor --support
 
 # Validate readiness for driver 590 branch
-nvctl driver validate --driver 590
+nvctl driver validate --driver 610
 
 # Full TUI dashboard
 nvctl gpu stat
@@ -323,8 +323,8 @@ Change theme with `t` in TUI or via Settings in GUI.
 
 ## Requirements
 
-- **NVIDIA Driver**: 535+ (565+ recommended, 580+ for RTX 50-series)
-- **Linux Kernel**: 6.0+ (6.6+ recommended)
+- **NVIDIA Driver**: 610+ (NVIDIA open kernel modules required)
+- **Linux Kernel**: 6.6+ (7.0+ recommended)
 - **Rust**: 1.95+ (for building from source)
 
 ## Contributing

@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.8] - 2026-05-26
+
+### Added
+- **NVIDIA Driver 610 Support**: Full support for driver 610.43.02 (open kernel modules)
+  - Updated NVKMS `NvKmsAllocDeviceReply` struct size from 888 to 816 bytes to match 610 ABI
+  - Digital vibrance working on driver 610+
+  - Documentation: `docs/drivers/open-610.md` details all ABI changes and new capabilities
+- **610+ Driver Capability Flags**: Four new fields in `DriverCapabilities`
+  - `has_vulkan_device_group` — VK_KHR_device_group_creation support
+  - `has_fp16_egl_wayland` — FP16 EGL framebuffer configs on Wayland
+  - `has_dmabuf_mmap` — mmap on DMABUF file descriptors from discrete GPUs
+  - `has_drm_color_pipeline` — per-plane DRM color pipeline (kernel 6.19+)
+- **Runtime Feature Detection**: New helper functions for live capability probing
+  - `detect_vulkan_extensions()` — queries `vulkaninfo --summary` for notable 610+ Vulkan extensions
+  - `detect_egl_fp16()` — queries `eglinfo` for FP16 framebuffer support
+  - `is_kernel_at_least()` — kernel version check for DRM color pipeline gating
+- **610+ Features in CLI Output**: `nvctl driver info` now shows a dedicated 610+ section with runtime-detected Vulkan extensions, FP16 EGL status, DMABUF mmap, and DRM color pipeline (active/driver-ready/no)
+- **FP16 EGL in Wayland Status**: Added `fp16_egl` field to `CompositorCapabilities` and `WaylandInfo::print_info()` output
+- **Driver Analysis Doc**: Created `docs/drivers/open-610.md` covering the NVKMS ABI break, new Vulkan extensions, FP16 EGL, DMABUF mmap, DRM color pipeline, and nvcontrol compatibility matrix
+
+### Changed
+- **Minimum Driver Baseline**: Updated from 595+/580+ to 610+ across the project
+  - README badge: `Driver 595+` → `Driver 610+`
+  - README requirements: `610+ (NVIDIA open kernel modules required)`
+  - Kernel requirement: `6.6+ (7.0+ recommended)`
+  - CLI/GUI vibrance error hints updated from `580+` to `610+`
+- **Documentation Version Examples**: Updated `docs/commands/driver.md` examples to 610.43.02 and kernel 7.0.10
+- **Hardcoded Version Strings Cleaned**: Removed stale version references in driver diagnostics
+  - Default fallback version updated to 610.43.02
+  - DKMS parsing example made version-agnostic
+  - Release branch message made version-agnostic
+- **ABI Change Tracking**: Renamed `docs/drivers/595-abi-changes.md` → `docs/drivers/nvkms-abi-changes.md` and added 610 section
+- **Packaging Version Bump**: Updated all packaging surfaces to 0.8.8 and driver 610+ baseline
+  - Arch PKGBUILD: `nvidia-utils>=610`
+  - Fedora spec: `nvidia-driver-libs >= 610`, new changelog entry
+  - Debian changelog: new 0.8.8-1 entry
+  - Flatpak manifest: tag `v0.8.8`
+  - AppImage builder: version 0.8.8, `nvidia-utils-610`
+  - Pop!_OS COSMIC README: driver recommendation updated to 610+
+- **Shell Completions Regenerated**: Bash, Zsh, and Fish completions regenerated from current CLI parser with updated help text examples (590 → 610)
+
+### Fixed
+- **EPERM on vibrance ioctl with driver 610**: Corrected `NvKmsAllocDeviceReply` struct size (888 → 816 bytes) to match the 610.43.02 ABI, fixing `nvctl vibe` and all NVKMS ioctls that were failing with misleading permission errors
+
 ## [0.8.7] - 2026-04-22
 
 ### Changed

@@ -21,7 +21,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
         .title("Vibrance Backend Status")
         .icon(icons::INFO)
         .show(ui, |ui| {
-            // Try native NVKMS controller first (preferred for 580+ drivers)
+            // Try native NVKMS controller first (preferred for 610+ drivers)
             match crate::vibrance_native::get_vibrance_controller() {
                 Ok(guard) => {
                     if let Some(controller) = guard.as_ref() {
@@ -82,7 +82,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                         ui.label(egui::RichText::new(format!("Error: {}", e)).small().weak());
                         ui.add_space(4.0);
                         ui.label("Requirements:");
-                        ui.label(egui::RichText::new("• NVIDIA open drivers 580+").small());
+                        ui.label(egui::RichText::new("• NVIDIA open drivers 610+").small());
                         ui.label(
                             egui::RichText::new("• nvidia_drm.modeset=1 in kernel params").small(),
                         );

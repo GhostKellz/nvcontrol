@@ -75,6 +75,7 @@ pub struct CompositorCapabilities {
     pub hdr_support: bool,
     pub color_management: bool,
     pub display_config: bool,
+    pub fp16_egl: bool,
 }
 
 impl WaylandCompositor {
@@ -87,6 +88,7 @@ impl WaylandCompositor {
                 hdr_support: true,      // Plasma 6+
                 color_management: true, // Native support
                 display_config: true,   // KScreen
+                fp16_egl: crate::drivers::detect_egl_fp16(), // Driver 610+
             },
             Self::Gnome => CompositorCapabilities {
                 digital_vibrance: false, // Limited support
@@ -94,6 +96,7 @@ impl WaylandCompositor {
                 hdr_support: true,       // GNOME 47+
                 color_management: false, // Experimental
                 display_config: true,    // GNOME Display Settings
+                fp16_egl: crate::drivers::detect_egl_fp16(),
             },
             Self::Hyprland => CompositorCapabilities {
                 digital_vibrance: true,  // Via nVibrant
@@ -101,6 +104,7 @@ impl WaylandCompositor {
                 hdr_support: false,      // Planned
                 color_management: false, // Planned
                 display_config: true,    // hyprctl
+                fp16_egl: crate::drivers::detect_egl_fp16(),
             },
             Self::Sway => CompositorCapabilities {
                 digital_vibrance: true,  // Via nVibrant
@@ -108,6 +112,7 @@ impl WaylandCompositor {
                 hdr_support: false,      // Not planned
                 color_management: false, // Not planned
                 display_config: true,    // swaymsg
+                fp16_egl: crate::drivers::detect_egl_fp16(),
             },
             Self::Cosmic => CompositorCapabilities {
                 digital_vibrance: true, // Native NVKMS (like KDE)
@@ -115,6 +120,7 @@ impl WaylandCompositor {
                 hdr_support: true,      // COSMIC compositor supports HDR
                 color_management: true, // Native support planned
                 display_config: true,   // cosmic-randr / cosmic-settings
+                fp16_egl: crate::drivers::detect_egl_fp16(),
             },
             Self::Weston => CompositorCapabilities {
                 digital_vibrance: false, // Reference compositor
@@ -122,6 +128,7 @@ impl WaylandCompositor {
                 hdr_support: false,
                 color_management: false,
                 display_config: false,
+                fp16_egl: false,
             },
             Self::Unknown => CompositorCapabilities {
                 digital_vibrance: false,
@@ -129,6 +136,7 @@ impl WaylandCompositor {
                 hdr_support: false,
                 color_management: false,
                 display_config: false,
+                fp16_egl: false,
             },
         }
     }
@@ -475,6 +483,14 @@ impl WaylandInfo {
             "  Display Config: {}",
             if self.capabilities.display_config {
                 "✓"
+            } else {
+                "✗"
+            }
+        );
+        println!(
+            "  FP16 EGL:       {}",
+            if self.capabilities.fp16_egl {
+                "✓ (driver 610+)"
             } else {
                 "✗"
             }

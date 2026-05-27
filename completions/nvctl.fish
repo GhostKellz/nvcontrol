@@ -816,7 +816,7 @@ table\t''"
 complete -c nvctl -n "__fish_nvctl_using_subcommand driver; and __fish_seen_subcommand_from capabilities" -s v -l verbose -d 'Enable verbose output'
 complete -c nvctl -n "__fish_nvctl_using_subcommand driver; and __fish_seen_subcommand_from capabilities" -l no-color -d 'Disable colored output'
 complete -c nvctl -n "__fish_nvctl_using_subcommand driver; and __fish_seen_subcommand_from capabilities" -s h -l help -d 'Print help'
-complete -c nvctl -n "__fish_nvctl_using_subcommand driver; and __fish_seen_subcommand_from validate" -l driver -d 'Target driver major version (e.g., 590)' -r
+complete -c nvctl -n "__fish_nvctl_using_subcommand driver; and __fish_seen_subcommand_from validate" -l driver -d 'Target driver major version (e.g., 610)' -r
 complete -c nvctl -n "__fish_nvctl_using_subcommand driver; and __fish_seen_subcommand_from validate" -l format -d 'Output format' -r -f -a "human\t''
 json\t''
 yaml\t''

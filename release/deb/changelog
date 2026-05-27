@@ -1,3 +1,11 @@
+nvcontrol (0.8.8-1) unstable; urgency=medium
+
+  * NVIDIA driver 610.43.02 support (NVKMS ABI fix, capability flags, runtime detection)
+  * 610+ feature surfacing in CLI output (Vulkan extensions, FP16 EGL, DMABUF, DRM color pipeline)
+  * Minimum driver baseline updated to 610+ (NVIDIA open kernel modules required)
+
+ -- CK Technology LLC <info@cktechx.com>  Mon, 26 May 2026 20:00:00 +0000
+
 nvcontrol (0.8.7-1) unstable; urgency=medium
 
   * Final 0.8.7 release polish for driver, DKMS, source-build, and container runtime diagnostics

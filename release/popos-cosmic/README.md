@@ -66,7 +66,7 @@ nvcontrol works with both:
 - `system76-driver-nvidia` (Pop!_OS default)
 - Standard `nvidia-driver` packages
 
-Recommended driver version: 535+ (580+ optimal for RTX 50-series)
+Recommended driver version: 610+ (NVIDIA open kernel modules required)
 
 ## Quick Start
 

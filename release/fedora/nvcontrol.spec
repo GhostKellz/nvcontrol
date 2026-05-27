@@ -1,7 +1,7 @@
 %global crate nvcontrol
 
 Name:           nvcontrol
-Version:        0.8.7
+Version:        0.8.8
 Release:        1%{?dist}
 Summary:        Modern NVIDIA Settings Manager for Linux + Wayland
 
@@ -20,7 +20,7 @@ BuildRequires:  fontconfig-devel
 BuildRequires:  freetype-devel
 
 # Runtime dependencies
-Requires:       nvidia-driver-libs >= 535
+Requires:       nvidia-driver-libs >= 610
 Requires:       wayland
 Requires:       libxkbcommon
 Requires:       fontconfig
@@ -118,6 +118,11 @@ cargo test --release --lib -- --skip hardware --skip nvml || true
 %{_userunitdir}/nvcontrol-game-profile-auto.service
 
 %changelog
+* Mon May 26 2026 CK Technology LLC <info@cktechx.com> - 0.8.8-1
+- NVIDIA driver 610.43.02 support (NVKMS ABI fix, capability flags, runtime detection)
+- 610+ feature surfacing in CLI output (Vulkan extensions, FP16 EGL, DMABUF, DRM color pipeline)
+- Minimum driver baseline updated to 610+ (NVIDIA open kernel modules required)
+
 * Thu Apr 23 2026 CK Technology LLC <info@cktechx.com> - 0.8.7-1
 - Final 0.8.7 release polish for driver, DKMS, source-build, and container runtime diagnostics
 - Live profile bundle capture/diff/apply workflows including current display layout support

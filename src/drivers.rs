@@ -139,7 +139,7 @@ pub fn suggested_fixes(summary: &DiagnosticSummary) -> Vec<String> {
             fixes.push("Reinstall the matching NVIDIA userspace/firmware packages and verify the expected firmware directories exist".to_string());
         }
         if message.contains("mixed package state") {
-            fixes.push("Make sure nvidia-open, nvidia-utils, and firmware packages come from the same 595 release branch".to_string());
+            fixes.push("Make sure nvidia-open, nvidia-utils, and firmware packages come from the same release branch".to_string());
         }
         if message.contains("Both nvidia and nvidia-open are installed") {
             fixes.push("Remove the branch you are not using, for example: sudo pacman -Rns nvidia or sudo pacman -Rns nvidia-open".to_string());
@@ -1876,7 +1876,7 @@ pub fn get_dkms_setup_info() -> DkmsSetupInfo {
                 if line.contains("nvidia") {
                     info.nvidia_registered = true;
                     // Parse kernel versions that have nvidia built
-                    // Format: nvidia/590.48.01, 6.18.2-1-cachyos-lto, x86_64: installed
+                    // Format: nvidia/<version>, <kernel>, x86_64: installed
                     let parts: Vec<&str> = line.split(',').collect();
                     if parts.len() >= 2 {
                         let kernel = parts[1].trim();
@@ -2272,7 +2272,7 @@ pub fn print_dkms_logs(kernel: Option<&str>, tail: Option<usize>) -> NvResult<()
     // Check DKMS internal logs
     let version = info
         .nvidia_version
-        .unwrap_or_else(|| "590.48.01".to_string());
+        .unwrap_or_else(|| "610.43.02".to_string());
     let dkms_base = format!("/var/lib/dkms/nvidia/{}", version);
 
     if std::path::Path::new(&dkms_base).exists() {
@@ -2941,6 +2941,11 @@ pub struct DriverCapabilities {
     pub has_usb4_dp_support: bool,
     pub supports_preempt_rt: bool,
     pub has_powermizer_wayland_fix: bool,
+    // 610+ capabilities
+    pub has_vulkan_device_group: bool,
+    pub has_fp16_egl_wayland: bool,
+    pub has_dmabuf_mmap: bool,
+    pub has_drm_color_pipeline: bool,
 }
 
 impl DriverCapabilities {
@@ -2973,6 +2978,11 @@ impl DriverCapabilities {
             has_usb4_dp_support: major >= 590,
             supports_preempt_rt: major >= 590,
             has_powermizer_wayland_fix: major >= 590,
+            // 610+ capabilities
+            has_vulkan_device_group: major >= 610,
+            has_fp16_egl_wayland: major >= 610,
+            has_dmabuf_mmap: major >= 610,
+            has_drm_color_pipeline: major >= 610,
         })
     }
 
@@ -3060,6 +3070,66 @@ pub fn is_preempt_rt_kernel() -> bool {
     std::fs::read_to_string("/proc/version")
         .map(|v| v.contains("PREEMPT_RT"))
         .unwrap_or(false)
+}
+
+/// Check if running kernel is at least major.minor
+pub fn is_kernel_at_least(major: u32, minor: u32) -> bool {
+    if let Ok(output) = Command::new("uname").arg("-r").output() {
+        let ver = String::from_utf8_lossy(&output.stdout);
+        let parts: Vec<u32> = ver
+            .trim()
+            .split(|c: char| !c.is_ascii_digit())
+            .take(2)
+            .filter_map(|p| p.parse().ok())
+            .collect();
+        if parts.len() >= 2 {
+            return parts[0] > major || (parts[0] == major && parts[1] >= minor);
+        }
+    }
+    false
+}
+
+/// Detect notable Vulkan extensions via vulkaninfo
+pub fn detect_vulkan_extensions() -> Vec<String> {
+    let notable = [
+        "VK_KHR_device_group_creation",
+        "VK_EXT_shader_long_vector",
+        "VK_KHR_internally_synchronized_queues",
+        "VK_NV_push_constant_bank",
+    ];
+
+    let output = match Command::new("vulkaninfo").arg("--summary").output() {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).to_string(),
+        _ => return Vec::new(),
+    };
+
+    notable
+        .iter()
+        .filter(|ext| output.contains(**ext))
+        .map(|ext| ext.to_string())
+        .collect()
+}
+
+/// Detect FP16 EGL framebuffer support (610+ on Wayland)
+pub fn detect_egl_fp16() -> bool {
+    // Check via eglinfo or EGL_EXT_pixel_format_float
+    if let Ok(output) = Command::new("eglinfo").output() {
+        if output.status.success() {
+            let info = String::from_utf8_lossy(&output.stdout);
+            return info.contains("EGL_EXT_pixel_format_float")
+                || info.contains("GBM_FORMAT_ABGR16161616F");
+        }
+    }
+
+    // Fallback: check if EGL platform files advertise fp16
+    if let Ok(output) = Command::new("eglinfo").arg("-B").output() {
+        if output.status.success() {
+            let info = String::from_utf8_lossy(&output.stdout);
+            return info.contains("float") || info.contains("fp16");
+        }
+    }
+
+    false
 }
 
 /// Get Wayland compositor version
@@ -3179,6 +3249,44 @@ pub fn print_driver_info() -> NvResult<()> {
             "May have issues"
         }
     );
+
+    // 610+ features
+    if caps.major_version >= 610 {
+        println!();
+        println!("610+ Features:");
+        println!(
+            "  Vulkan device group (VK_KHR_device_group): {}",
+            if caps.has_vulkan_device_group {
+                "Yes"
+            } else {
+                "No"
+            }
+        );
+        println!(
+            "  FP16 EGL on Wayland: {}",
+            if caps.has_fp16_egl_wayland {
+                "Yes"
+            } else {
+                "No"
+            }
+        );
+        println!(
+            "  DMABUF mmap (discrete GPU): {}",
+            if caps.has_dmabuf_mmap { "Yes" } else { "No" }
+        );
+
+        let kernel_supports_color_pipeline = is_kernel_at_least(6, 19);
+        println!(
+            "  DRM color pipeline: {}",
+            if caps.has_drm_color_pipeline && kernel_supports_color_pipeline {
+                "Active"
+            } else if caps.has_drm_color_pipeline {
+                "Driver ready (kernel 6.19+ required)"
+            } else {
+                "No"
+            }
+        );
+    }
 
     Ok(())
 }
@@ -3453,6 +3561,56 @@ pub fn print_driver_info_full() -> NvResult<()> {
             if !nvidia_modules.is_empty() {
                 println!("Modules Loaded: {}", nvidia_modules.join(" "));
             }
+        }
+    }
+
+    // 610+ runtime feature detection
+    let caps = DriverCapabilities::from_version(&driver_version);
+    if let Ok(ref caps) = caps {
+        if caps.major_version >= 610 {
+            println!();
+            println!("610+ Features:");
+
+            // Vulkan extensions
+            let vk_exts = detect_vulkan_extensions();
+            if !vk_exts.is_empty() {
+                println!("  Vulkan Extensions:");
+                for ext in &vk_exts {
+                    println!("    - {}", ext);
+                }
+            } else {
+                println!("  Vulkan Extensions:  (vulkaninfo not available)");
+            }
+
+            // FP16 EGL
+            let fp16 = detect_egl_fp16();
+            println!(
+                "  FP16 EGL Wayland:   {}",
+                if fp16 { "Active" } else { "Not detected" }
+            );
+
+            // DMABUF mmap
+            println!(
+                "  DMABUF mmap:        {}",
+                if caps.has_dmabuf_mmap {
+                    "Supported"
+                } else {
+                    "No"
+                }
+            );
+
+            // DRM color pipeline with kernel version check
+            let kernel_ok = is_kernel_at_least(6, 19);
+            println!(
+                "  DRM color pipeline: {}",
+                if caps.has_drm_color_pipeline && kernel_ok {
+                    "Active"
+                } else if caps.has_drm_color_pipeline {
+                    "Driver ready (kernel 6.19+ required)"
+                } else {
+                    "No"
+                }
+            );
         }
     }
 
@@ -4810,11 +4968,25 @@ mod tests {
 
     #[test]
     fn test_driver_capabilities_from_version() {
+        // Test 610 driver
+        let caps = DriverCapabilities::from_version("610.43.02").unwrap();
+        assert_eq!(caps.major_version, 610);
+        assert!(caps.has_vulkan_swapchain_perf);
+        assert!(caps.supports_preempt_rt);
+        assert!(caps.has_vulkan_device_group);
+        assert!(caps.has_fp16_egl_wayland);
+        assert!(caps.has_dmabuf_mmap);
+        assert!(caps.has_drm_color_pipeline);
+        assert_eq!(caps.wayland_min_version, "1.20");
+        assert_eq!(caps.glibc_min_version, "2.27");
+
         // Test 590 driver
         let caps = DriverCapabilities::from_version("590.44.01").unwrap();
         assert_eq!(caps.major_version, 590);
         assert!(caps.has_vulkan_swapchain_perf);
         assert!(caps.supports_preempt_rt);
+        assert!(!caps.has_vulkan_device_group);
+        assert!(!caps.has_fp16_egl_wayland);
         assert_eq!(caps.wayland_min_version, "1.20");
         assert_eq!(caps.glibc_min_version, "2.27");
 
@@ -4823,6 +4995,7 @@ mod tests {
         assert_eq!(caps.major_version, 570);
         assert!(!caps.has_vulkan_swapchain_perf);
         assert!(!caps.supports_preempt_rt);
+        assert!(!caps.has_vulkan_device_group);
         assert_eq!(caps.wayland_min_version, "1.17");
         assert_eq!(caps.glibc_min_version, "2.17");
     }

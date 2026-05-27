@@ -3076,7 +3076,7 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (validate)
 _arguments "${_arguments_options[@]}" : \
-'--driver=[Target driver major version (e.g., 590)]:DRIVER:_default' \
+'--driver=[Target driver major version (e.g., 610)]:DRIVER:_default' \
 '--format=[Output format]:FORMAT:(human json yaml table)' \
 '-v[Enable verbose output]' \
 '--verbose[Enable verbose output]' \

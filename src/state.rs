@@ -71,7 +71,7 @@ pub struct SessionState {
 pub struct DriverValidationState {
     /// Driver version that was validated
     pub driver_version: String,
-    /// Major version number (e.g., 590)
+    /// Major version number (e.g., 610)
     pub major_version: u32,
     /// Whether the driver is a beta release
     pub is_beta: bool,

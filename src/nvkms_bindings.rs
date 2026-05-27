@@ -1,5 +1,7 @@
 // NVIDIA NVKMS (Kernel Mode Setting) API Bindings
-// Based on NVIDIA Open GPU Kernel Modules 580+
+// Based on NVIDIA Open GPU Kernel Modules 610+ (minimum supported driver)
+// The NVKMS ioctl ABI is not versioned — struct sizes must match the loaded
+// driver exactly or the kernel returns EPERM. See docs/drivers/nvkms-abi-changes.md.
 // SPDX-License-Identifier: MIT
 
 use bytemuck::{Pod, Zeroable};
@@ -85,8 +87,7 @@ pub enum NvKmsIoctlCommand {
     GetDispAttributeValidValues = 27,
 }
 
-// ===== Display Attributes from nvkms-api.h (595.45+) =====
-// Note: ImageSharpening attributes were removed in driver 595
+// ===== Display Attributes from nvkms-api.h (610+) =====
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum NvKmsDpyAttribute {
@@ -101,7 +102,6 @@ pub enum NvKmsDpyAttribute {
     CurrentDitheringMode = 8,
     CurrentDitheringDepth = 9,
     DigitalVibrance = 10,
-    // ImageSharpening attributes removed in 595
     RequestedColorSpace = 11,
     CurrentColorSpace = 12,
     RequestedColorRange = 13,
@@ -339,7 +339,7 @@ pub struct NvKmsQueryConnectorStaticDataParams {
 }
 
 // ===== Query Dpy Dynamic Data =====
-// Sizes verified from driver 595.45.04 headers:
+// Sizes verified from driver 610.43.02 headers:
 // - Request: 2072 bytes (has EDID buffer and many flags)
 // - Reply: 35096 bytes (connected at offset 132)
 // - Total Params: 37168 bytes
@@ -399,8 +399,7 @@ pub struct RegistryKey {
     pub value: NvU32,
 }
 
-// AllocDeviceRequest: 620 bytes (driver 595.45+)
-// Note: sli_mosaic fields were removed in driver 595
+// AllocDeviceRequest: 620 bytes (driver 610+)
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct NvKmsAllocDeviceRequest {
@@ -412,7 +411,7 @@ pub struct NvKmsAllocDeviceRequest {
     pub registry_keys: [RegistryKey; NVKMS_MAX_DEVICE_REGISTRY_KEYS],
 }
 
-// AllocDeviceStatus enum values changed in driver 595
+// AllocDeviceStatus enum values (610+)
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum NvKmsAllocDeviceStatus {
@@ -424,9 +423,10 @@ pub enum NvKmsAllocDeviceStatus {
     CoreChannelAllocFailed = 5,
 }
 
-// AllocDeviceReply: 888 bytes total (verified from driver 595.45.04 headers)
+// AllocDeviceReply: 816 bytes total (verified from driver 610.43.02 headers)
 // Key fields: status (offset 0), deviceHandle (offset 4), numDisps (offset 16), dispHandles (offset 20)
 // NOTE: align(8) required because Reply contains NvU64 fields (vtFbBaseAddress, vtFbSize)
+// History: 888 bytes in 595.45.04, reduced to 816 in 610.43.02
 #[repr(C, align(8))]
 #[derive(Copy, Clone)]
 pub struct NvKmsAllocDeviceReply {
@@ -437,7 +437,7 @@ pub struct NvKmsAllocDeviceReply {
     pub num_disps: NvU32,                 // offset 16
     pub disp_handles: [NvKmsDispHandle; NVKMS_MAX_SUBDEVICES], // offset 20
     // Remaining fields (caps, layer info, etc.)
-    pub _padding: [u8; 888 - 20 - (NVKMS_MAX_SUBDEVICES * 4)], // 888 - 52 = 836
+    pub _padding: [u8; 816 - 20 - (NVKMS_MAX_SUBDEVICES * 4)], // 816 - 52 = 764
 }
 
 #[repr(C)]

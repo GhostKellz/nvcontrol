@@ -80,12 +80,12 @@ The release diagnostics and `driver check` paths now help surface cases like:
 ### Good State
 
 ```text
-Running Kernel:  6.18.2-1-cachyos
-Module Kernel:   6.18.2-1-cachyos
+Running Kernel:  7.0.10-1-cachyos-lto
+Module Kernel:   7.0.10-1-cachyos-lto
 Kernel Match:    yes
-Userspace:       595.58.03
-Kernel Module:   595.58.03
-Release Match:   aligned at 595.58.03
+Userspace:       610.43.02
+Kernel Module:   610.43.02
+Release Match:   aligned at 610.43.02
 FW Layout:       per-chip
 FW Path:         /lib/firmware/nvidia/gb202/gsp
 ```
@@ -93,12 +93,12 @@ FW Path:         /lib/firmware/nvidia/gb202/gsp
 ### Bad State
 
 ```text
-Running Kernel:  6.18.2-1-cachyos
-Module Kernel:   6.17.9-arch1-1
+Running Kernel:  7.0.10-1-cachyos-lto
+Module Kernel:   6.12.8-arch1-1
 Kernel Match:    no
-Userspace:       595.58.03
-Kernel Module:   590.48.01
-Release Match:   mismatch: kernel module 590.48.01 vs userspace 595.58.03
+Userspace:       610.43.02
+Kernel Module:   595.58.03
+Release Match:   mismatch: kernel module 595.58.03 vs userspace 610.43.02
 Expected Paths:
   - /lib/firmware/nvidia/gb202/gsp (missing)
 ```

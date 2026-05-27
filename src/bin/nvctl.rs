@@ -978,7 +978,7 @@ enum DriverSubcommand {
     Capabilities,
     /// Validate system readiness for a target driver version
     Validate {
-        /// Target driver major version (e.g., 590)
+        /// Target driver major version (e.g., 610)
         #[arg(long)]
         driver: u32,
     },
@@ -1814,11 +1814,8 @@ fn main() {
                 }
                 Err(e) => {
                     eprintln!("❌ Vibrance failed: {}", e);
-                    eprintln!("💡 Ensure NVIDIA open drivers 580+ with nvidia_drm.modeset=1");
-                    eprintln!(
-                        "   Or run with elevated permissions: sudo nvctl vibe {}",
-                        percentage
-                    );
+                    eprintln!("  → Try: nvidia-settings -q all | grep -i vibrance");
+                    eprintln!("💡 Ensure NVIDIA open drivers 610+ with nvidia_drm.modeset=1");
                 }
             }
         }
@@ -1985,7 +1982,7 @@ fn main() {
                             Err(e) => {
                                 eprintln!("❌ Digital vibrance error: {}", e);
                                 eprintln!(
-                                    "💡 Ensure NVIDIA open drivers (580+) with nvidia_drm.modeset=1"
+                                    "💡 Ensure NVIDIA open drivers (610+) with nvidia_drm.modeset=1"
                                 );
                             }
                         }
@@ -2100,7 +2097,7 @@ fn main() {
                             }
 
                             println!("\n🔧 Requirements:");
-                            println!("  • NVIDIA Open Drivers 580+");
+                            println!("  • NVIDIA Open Drivers 610+");
                             println!("  • nvidia_drm.modeset=1 kernel parameter");
                             println!("  • /dev/nvidia-modeset access (or run as root)");
                         }
@@ -6118,7 +6115,7 @@ fn main() {
                     let session = std::env::var("XDG_SESSION_TYPE").unwrap_or_default();
 
                     if session == "wayland" {
-                        println!("\n✅ Wayland Detected - Optimal for NVIDIA 580+ drivers");
+                        println!("\n✅ Wayland Detected - Optimal for NVIDIA 610+ drivers");
 
                         match compositor {
                             WaylandCompositor::KdePlasma => {
