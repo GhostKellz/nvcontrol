@@ -80,7 +80,7 @@ nvctl display vibrance info
 ```
 🌈 Pure Rust Digital Vibrance Information:
 ══════════════════════════════════════════════════
-  Driver Version: "580.95.05"
+  Driver Version: "610.43.02"
   NVIDIA Open Drivers: ✅ Yes
 
 💡 Features:
@@ -92,7 +92,7 @@ nvctl display vibrance info
 🖥️ Supported Displays: 2
 
 🔧 Requirements:
-  • NVIDIA Open Drivers 580+
+  • NVIDIA Open Drivers 610+ recommended
   • nvidia_drm.modeset=1 kernel parameter
   • /dev/nvidia-modeset access (or run as root)
 ```
@@ -109,7 +109,7 @@ After=graphical.target
 [Service]
 Type=oneshot
 ExecStartPre=/bin/sleep 3
-ExecStart=/usr/local/bin/nvctl vibe 150
+ExecStart=/usr/local/bin/nvctl vibrance 150
 
 [Install]
 WantedBy=default.target
@@ -136,8 +136,10 @@ alias vibe-gaming='nvctl vibrance 150'
 
 ### Supported Drivers
 
+For the exact nvcontrol build to use with each NVIDIA driver branch, see [`../drivers/nvidia-driver.md`](../drivers/nvidia-driver.md).
+
 - ✅ NVIDIA Proprietary (495+)
-- ✅ NVIDIA Open (515+, **recommended 580+**)
+- ✅ NVIDIA Open (515+, **recommended 610+**)
 - ✅ nvidia-dkms
 - ❌ Nouveau (not supported - lacks vibrance API)
 
@@ -221,7 +223,7 @@ sudo usermod -aG video $USER
 ### Option 3: Sudo (Quick Test)
 
 ```bash
-sudo nvctl vibe 150
+sudo nvctl vibrance 150
 ```
 
 ## GUI Integration
@@ -252,7 +254,7 @@ The nvcontrol GUI includes a vibrance slider:
 | **Pure Rust** | ✅ | ❌ (C++) | ❌ (C) | ❌ (C++) |
 | **GUI** | ✅ | ❌ | ✅ | ❌ |
 | **Per-Display** | ✅ | ✅ | ✅ | ❌ |
-| **CLI Simplicity** | `vibe 150` | `nvibrant 512` | Complex | Complex |
+| **CLI Simplicity** | `vibrance 150` | `nvibrant 512` | Complex | Complex |
 | **Auto-Apply** | ✅ | ⚠️ Manual | ⚠️ Manual | ⚠️ Manual |
 | **GPU Controls** | ✅ Full suite | ❌ | ✅ Limited | ❌ |
 
@@ -266,7 +268,7 @@ The nvcontrol GUI includes a vibrance slider:
 1. Check driver version:
    ```bash
    cat /sys/module/nvidia/version
-   # Should be 580+ for best compatibility
+   # 610+ is the current recommended open-driver baseline
    ```
 
 2. Verify modeset is enabled:
@@ -290,7 +292,7 @@ The nvcontrol GUI includes a vibrance slider:
 4. Use fallback (works without modeset):
    ```bash
    # Fallback automatically activates
-   nvctl vibe 150
+    nvctl vibrance 150
    ```
 
 ### "nvidia-settings failed"
@@ -381,7 +383,7 @@ nvctl display vibrance list
    sudo tee /lib/systemd/system-sleep/nvctl-vibrance <<'EOF'
    #!/bin/bash
    if [ "$1" = "post" ]; then
-       su - $USER -c "nvctl vibe 150"
+        su - $USER -c "nvctl vibrance 150"
    fi
    EOF
    sudo chmod +x /lib/systemd/system-sleep/nvctl-vibrance

@@ -38,8 +38,14 @@ nvcontrol is a comprehensive NVIDIA GPU control tool for Linux, designed from th
 Install the latest desktop-first release:
 
 ```bash
-curl -fsSL https://nvctl.cktech.sh | sudo bash
+curl -fsSL https://nv.cktech.sh | sudo bash
 ```
+
+`https://nv.cktech.sh` redirects to the current installer script at `https://raw.githubusercontent.com/GhostKellz/nvcontrol/main/release/install-system.sh`.
+
+nvcontrol currently targets the NVIDIA 610 open driver branch as the primary Linux driver path.
+
+For the full nvcontrol-to-driver compatibility matrix, see [docs/drivers/nvidia-driver.md](docs/drivers/nvidia-driver.md).
 
 ```bash
 # GPU information (like nvidia-smi)
@@ -52,7 +58,7 @@ nvctl driver info
 nvctl driver diagnose-release
 nvctl doctor --support
 
-# Validate readiness for driver 590 branch
+# Validate a 610 open-driver setup
 nvctl driver validate --driver 610
 
 # Full TUI dashboard
@@ -108,13 +114,13 @@ makepkg -si -p release/arch/PKGBUILD
 ### Debian/Ubuntu
 ```bash
 # One-line install (downloads the latest full GUI + CLI tarball)
-curl -fsSL https://nvctl.cktech.sh | sudo bash
+curl -fsSL https://nv.cktech.sh | sudo bash
 ```
 
 ### Fedora/Nobara
 ```bash
 # One-line install (downloads the latest full GUI + CLI tarball)
-curl -fsSL https://nvctl.cktech.sh | sudo bash
+curl -fsSL https://nv.cktech.sh | sudo bash
 ```
 
 ### From Source
@@ -123,8 +129,8 @@ git clone https://github.com/GhostKellz/nvcontrol
 cd nvcontrol
 cargo build --release --bin nvctl
 cargo build --release --bin nvcontrol --features gui
-sudo install -Dm755 target/x86_64-unknown-linux-gnu/release/nvctl /usr/local/bin/nvctl
-sudo install -Dm755 target/x86_64-unknown-linux-gnu/release/nvcontrol /usr/local/bin/nvcontrol
+sudo install -Dm755 target/release/nvctl /usr/local/bin/nvctl
+sudo install -Dm755 target/release/nvcontrol /usr/local/bin/nvcontrol
 ```
 
 See [docs/building.md](docs/building.md) for detailed build instructions.
@@ -174,6 +180,8 @@ nvctl driver support-bundle --gzip --redact-paths \
   --redact-ids --output ~/.local/state/nvcontrol/support/support.txt.gz
 nvctl doctor --support                              # Run diagnostics + create support tarball
 ```
+
+Use [docs/drivers/nvidia-driver.md](docs/drivers/nvidia-driver.md) for the nvcontrol-to-driver compatibility matrix.
 
 ### Overclocking
 

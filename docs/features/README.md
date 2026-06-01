@@ -16,7 +16,7 @@ Guides for nvcontrol display and GPU features.
 
 ```bash
 # Digital vibrance (color boost)
-nvctl vibe 150
+nvctl vibrance 150
 
 # Check HDR status
 nvctl display hdr status

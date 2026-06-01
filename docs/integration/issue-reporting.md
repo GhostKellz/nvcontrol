@@ -45,8 +45,8 @@ nvctl doctor --support --output ~/.local/state/nvcontrol/support/doctor-support.
 
 Good cases to validate before reporting or after changing packages:
 
-- proprietary 595 branch installed cleanly
-- `nvidia-open` 595 branch installed cleanly
+- proprietary 610 branch installed cleanly
+- `nvidia-open` 610 branch installed cleanly
 - kernel updated but DKMS not rebuilt yet
 - expected firmware path missing after package switch
 - `nvidia` and `nvidia-open` accidentally installed together

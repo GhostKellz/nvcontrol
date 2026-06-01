@@ -57,7 +57,7 @@ NVIDIA GSP Firmware Status
 
 GSP Enabled:    Yes
 GSP State:      loaded
-Version:        590.48.01
+Version:        <driver-version>
 Firmware:       /lib/firmware/nvidia/gb202/gsp
 GPU Arch:       gb202
 ```
@@ -101,7 +101,7 @@ Runs GSP diagnostics including:
 
 ```
 GSP:            enabled (loaded)
-GSP Firmware:   590.48.01
+GSP Firmware:   <driver-version>
                 /lib/firmware/nvidia/gb202/gsp
 GPU Arch:       gb202
 ```
@@ -165,7 +165,7 @@ nvctl driver logs --filter xid
 
 ### Legacy layout
 ```
-/lib/firmware/nvidia/590.48.01/
+/lib/firmware/nvidia/<driver-version>/
 ├── gsp_ga10x.bin
 └── gsp_tu10x.bin
 ```
@@ -247,8 +247,8 @@ nvctl driver info --paste
 
 Produces:
 ```
-GPU: NVIDIA GeForce RTX 5090, 590.48.01
-Kernel: 6.18.2-1-cachyos-lto
+GPU: NVIDIA GeForce RTX 5090, <driver-version>
+Kernel: <kernel-version>
 Module: nvidia-open
 GSP: on (loaded)
 Arch: gb202

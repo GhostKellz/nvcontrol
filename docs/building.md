@@ -8,8 +8,10 @@ This guide covers building nvcontrol from source for all supported platforms.
 
 - **Rust 1.95+** (edition 2024)
 - **Cargo** (comes with Rust)
-- **NVIDIA Driver 535+** (565+ recommended, 580+ optimal for RTX 50-series)
+- **NVIDIA Driver** compatible with your target nvcontrol build
 - **Linux kernel 6.0+** (6.6+ recommended)
+
+Use [drivers/nvidia-driver.md](drivers/nvidia-driver.md) as the source of truth for mapping NVIDIA driver branches to the correct nvcontrol version.
 
 ### Build Dependencies
 
@@ -187,14 +189,18 @@ error: NVIDIA drivers not detected
 Install NVIDIA drivers:
 ```bash
 # Arch
-sudo pacman -S nvidia nvidia-utils
+sudo pacman -S nvidia-open-dkms nvidia-utils
 
 # Ubuntu
-sudo apt install nvidia-driver-535
+sudo apt install nvidia-driver-610-open
 
 # Fedora
 sudo dnf install akmod-nvidia
 ```
+
+For nvcontrol's current primary path, prefer the NVIDIA 610 open kernel module packages where your distribution provides them.
+
+For older 590/595-era stacks, use the compatibility matrix instead of assuming the current `main` branch is correct.
 
 ### Permission Denied on /dev/nvidia-modeset
 ```bash

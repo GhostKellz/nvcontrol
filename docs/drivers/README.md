@@ -6,26 +6,25 @@ NVIDIA driver compatibility, installation, and optimization guides.
 
 | Document | Description |
 |----------|-------------|
-| [legacy.md](legacy.md) | Support for drivers 590 and earlier |
-| [595-abi-changes.md](595-abi-changes.md) | Driver 595 NVKMS API changes |
+| [nvidia-driver.md](nvidia-driver.md) | nvcontrol version guidance by NVIDIA driver branch |
+| [legacy.md](legacy.md) | Older-build notes for drivers 595 and earlier |
+| [nvkms-abi-changes.md](nvkms-abi-changes.md) | NVKMS ABI break tracking across releases |
 | [gsp.md](gsp.md) | GPU System Processor (GSP) firmware |
 | [diagnose-release.md](diagnose-release.md) | Interpreting release diagnostics |
 | [dkms.md](dkms.md) | Dynamic Kernel Module Support setup |
-| [open-590.md](open-590.md) | NVIDIA Open driver 590 features |
+| [open-610.md](open-610.md) | NVIDIA 610 open driver notes |
 | [kernel-580.md](kernel-580.md) | Kernel driver 580+ optimizations |
 
 ## Quick Links
 
-- **Using driver 590 or earlier?** See [legacy.md](legacy.md)
-- **Vibrance issues on 595+?** See [595-abi-changes.md](595-abi-changes.md)
+- **Need the version matrix first?** See [nvidia-driver.md](nvidia-driver.md)
+- **Using driver 595 or earlier?** See [legacy.md](legacy.md)
+- **Tracking NVKMS ABI breakage across releases?** See [nvkms-abi-changes.md](nvkms-abi-changes.md)
+- **Using the current open driver branch?** See [open-610.md](open-610.md)
 - **DKMS build failures?** See [dkms.md](dkms.md)
 
-## Driver Version Support Matrix
+## Compatibility Note
 
-| Driver Version | nvcontrol Version | Notes |
-|----------------|-------------------|-------|
-| 595+ | v0.8.6+ (latest) | Full support |
-| 560-590 | v0.8.5 | Use legacy build |
-| < 560 | v0.8.5 | Untested |
+Use [nvidia-driver.md](nvidia-driver.md) as the canonical nvcontrol-to-driver version matrix.
 
-See [legacy.md](legacy.md) for building older versions.
+Use [legacy.md](legacy.md) only when you specifically need older-build notes for 595-and-earlier stacks.

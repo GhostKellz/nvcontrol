@@ -10,6 +10,10 @@ Complete documentation for nvcontrol - Modern NVIDIA Settings Manager for Linux 
 3. [Commands](commands.md) - Current CLI reference
 4. [TUI Guide](tui-user-guide.md) - Terminal interface quickstart
 
+Installer shortcut: `https://nv.cktech.sh` -> `https://raw.githubusercontent.com/GhostKellz/nvcontrol/main/release/install-system.sh`
+
+Compatibility matrix: [drivers/nvidia-driver.md](drivers/nvidia-driver.md)
+
 **RTX 50-series Users:**
 - [RTX 5090 Setup](hardware/rtx-5090-setup.md) - Blackwell-specific setup
 
@@ -43,12 +47,13 @@ NVIDIA driver compatibility and optimization.
 
 | Document | Description |
 |----------|-------------|
-| [drivers/legacy.md](drivers/legacy.md) | Support for drivers 590 and earlier |
-| [drivers/595-abi-changes.md](drivers/595-abi-changes.md) | Driver 595 NVKMS API changes |
+| [drivers/nvidia-driver.md](drivers/nvidia-driver.md) | nvcontrol version guidance by NVIDIA driver branch |
+| [drivers/legacy.md](drivers/legacy.md) | Older-build notes for drivers 595 and earlier |
+| [drivers/nvkms-abi-changes.md](drivers/nvkms-abi-changes.md) | NVKMS ABI break tracking across releases |
 | [drivers/gsp.md](drivers/gsp.md) | GPU System Processor firmware |
 | [drivers/diagnose-release.md](drivers/diagnose-release.md) | How to read release diagnostics |
 | [drivers/dkms.md](drivers/dkms.md) | Dynamic Kernel Module Support |
-| [drivers/open-590.md](drivers/open-590.md) | NVIDIA Open driver 590 |
+| [drivers/open-610.md](drivers/open-610.md) | NVIDIA 610 open driver notes |
 | [drivers/kernel-580.md](drivers/kernel-580.md) | Kernel driver 580+ optimizations |
 
 ### Hardware
@@ -145,7 +150,7 @@ nvctl gpu stat
 nvctl nvtop
 
 # Digital vibrance
-nvctl vibe 150
+nvctl vibrance 150
 
 # Overclocking
 nvctl overclock apply --gpu-offset 150 --memory-offset 500

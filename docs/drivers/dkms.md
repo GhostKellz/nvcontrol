@@ -29,7 +29,7 @@ For power users building nvidia-open from the git repository:
 # Clone the repo
 git clone https://github.com/NVIDIA/open-gpu-kernel-modules.git ~/open-gpu-kernel-modules
 cd ~/open-gpu-kernel-modules
-git checkout 590.48.01
+git checkout <driver-tag>
 
 # Initialize (creates dkms.conf, symlink, registers with DKMS)
 sudo nvctl driver source init ~/open-gpu-kernel-modules
@@ -54,16 +54,16 @@ NVIDIA DKMS Status
 ══════════════════════════════════════════════════
 
 DKMS:           installed
-Driver:         590.48.01
+Driver:         <driver-version>
 Registered:     yes
-Source:         /usr/src/nvidia-590.48.01
+Source:         /usr/src/nvidia-<driver-version>
 Source Type:    git (https://github.com/NVIDIA/open-gpu-kernel-modules.git)
 
 Installed Kernels (4):
-  ✓ 6.18.1-zen1-2-zen [nvidia: dkms, headers: ✓]
-  ✓ 6.18.2-1-cachyos-lto [nvidia: dkms, headers: ✓] (running)
-  ✓ 6.18.2-273-tkg-linux-ghost [nvidia: dkms, headers: ✓]
-  ✗ 6.18.1-1-cachyos-lto [nvidia: MISSING, headers: ✗]
+  ✓ <kernel-a> [nvidia: dkms, headers: ✓]
+  ✓ <running-kernel> [nvidia: dkms, headers: ✓] (running)
+  ✓ <kernel-b> [nvidia: dkms, headers: ✓]
+  ✗ <kernel-c> [nvidia: MISSING, headers: ✗]
 
 Pacman Hook:    installed (auto-rebuild enabled)
 ```
@@ -95,14 +95,14 @@ For manual builds from source:
 ```bash
 git clone https://github.com/NVIDIA/open-gpu-kernel-modules.git
 cd open-gpu-kernel-modules
-git checkout 590.48.01
-sudo cp -r . /usr/src/nvidia-590.48.01
+git checkout <driver-tag>
+sudo cp -r . /usr/src/nvidia-<driver-version>
 ```
 
-Then create `/usr/src/nvidia-590.48.01/dkms.conf`:
+Then create `/usr/src/nvidia-<driver-version>/dkms.conf`:
 ```conf
 PACKAGE_NAME="nvidia"
-PACKAGE_VERSION="590.48.01"
+PACKAGE_VERSION="<driver-version>"
 BUILT_MODULE_NAME[0]="nvidia"
 BUILT_MODULE_NAME[1]="nvidia-modeset"
 BUILT_MODULE_NAME[2]="nvidia-drm"
@@ -125,11 +125,11 @@ Builds nvidia modules for all kernels with headers:
 nvctl driver dkms build
 
 # Build for specific kernel
-nvctl driver dkms build --kernel 6.18.2-1-cachyos-lto
+nvctl driver dkms build --kernel <kernel-version>
 
 # Force rebuild even if already installed
 nvctl driver dkms build --force
-nvctl driver dkms build -f --kernel 6.18.2-1-cachyos-lto
+nvctl driver dkms build -f --kernel <kernel-version>
 ```
 
 **Note:** Without `--force`, DKMS will skip kernels where nvidia is already installed. This is normal - use `--force` when you need to rebuild (e.g., after source changes).
@@ -150,7 +150,7 @@ nvctl driver dkms logs
 nvctl driver dkms logs -t 50
 
 # Logs for specific kernel only
-nvctl driver dkms logs -k 6.18.2-1-cachyos-lto
+nvctl driver dkms logs -k <kernel-version>
 ```
 
 **Example Output:**
@@ -160,13 +160,13 @@ NVIDIA DKMS Build Logs
 
 Pacman Hook Logs (/var/log/nvidia-dkms)
 ────────────────────────────────────────
-✓ build-20251219-235312.log [OK] - 2m ago (156 lines)
-✓ build-20251218-143022.log [OK] - 1d ago (142 lines)
+✓ build-<timestamp>.log [OK] - 2m ago (156 lines)
+✓ build-<older-timestamp>.log [OK] - 1d ago (142 lines)
 
-DKMS Build Logs (/var/lib/dkms/nvidia/590.48.01)
+DKMS Build Logs (/var/lib/dkms/nvidia/<driver-version>)
 ────────────────────────────────────────
-✓ 6.18.2-1-cachyos-lto [OK] - 3h ago (1842 lines)
-✓ 6.18.1-zen1-2-zen [OK] - 1d ago (1836 lines)
+✓ <running-kernel> [OK] - 3h ago (1842 lines)
+✓ <kernel-a> [OK] - 1d ago (1836 lines)
 ```
 
 Log locations:
@@ -231,18 +231,18 @@ nvctl driver dkms cleanup --keep 2 --execute
 NVIDIA DKMS Kernel Cleanup (dry run)
 ══════════════════════════════════════════════════
 
-Running kernel: 6.18.4-273-tkg-linux-ghost
+Running kernel: <running-kernel>
 Keeping: 2 most recent kernels (plus running)
 
 Keeping (3):
-  ✓ 6.18.4-273-tkg-linux-ghost (running)
-  ✓ 6.18.5-zen1-1-zen
-  ✓ 6.18.4-zen1-1-zen
+  ✓ <running-kernel> (running)
+  ✓ <kernel-a>
+  ✓ <kernel-b>
 
 To remove (3):
-  ✗ 6.18.4-1-cachyos-lto
-  ✗ 6.18.3-1-cachyos-lto
-  ✗ 6.18.2-1-cachyos-lto
+  ✗ <old-kernel-a>
+  ✗ <old-kernel-b>
+  ✗ <old-kernel-c>
 
 Dry run - no changes made.
 Run with --execute to actually remove.
@@ -267,13 +267,13 @@ nvctl driver source status
 NVIDIA Source Build Status
 ══════════════════════════════════════════════════
 
-Source Path:    /usr/src/nvidia-590.48.01
+Source Path:    /usr/src/nvidia-<driver-version>
 Source Type:    git (https://github.com/NVIDIA/open-gpu-kernel-modules.git)
 Remote URL:     https://github.com/NVIDIA/open-gpu-kernel-modules.git
-Current Tag:    590.48.01
-Latest Tag:     590.48.01
+Current Tag:    <driver-tag>
+Latest Tag:     <driver-tag>
 
-Driver Version: 590.48.01
+Driver Version: <driver-version>
 DKMS Registered: yes
 ```
 
@@ -315,7 +315,7 @@ Rebuild modules from current source without updating:
 nvctl driver source sync
 
 # Rebuild specific kernel
-nvctl driver source sync --kernel 6.18.4-273-tkg-linux-ghost
+nvctl driver source sync --kernel <kernel-version>
 
 # Force rebuild
 nvctl driver source sync --force
@@ -412,11 +412,11 @@ nvctl driver dkms logs
 nvctl driver dkms logs -t 100
 
 # Check specific kernel
-nvctl driver dkms logs -k 6.18.2-1-cachyos-lto -t 50
+nvctl driver dkms logs -k <kernel-version> -t 50
 
 # Or view raw log files
 cat /var/log/nvidia-dkms/latest.log
-cat /var/lib/dkms/nvidia/590.48.01/6.18.2-1-cachyos-lto/x86_64/log/make.log
+cat /var/lib/dkms/nvidia/<driver-version>/<kernel-version>/x86_64/log/make.log
 ```
 
 **Common errors in logs:**

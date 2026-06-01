@@ -8,6 +8,8 @@
 
 The NVIDIA 610 driver series is the first stable release following the 595 branch. It introduces new Vulkan extensions, FP16 EGL framebuffer support on Wayland, DMABUF mmap for discrete GPUs, and DRM color pipeline support (kernel 6.19+). This release also includes an NVKMS ABI break that required nvcontrol updates.
 
+For the full nvcontrol version matrix across 590, 595, and 610, see [nvidia-driver.md](nvidia-driver.md).
+
 ## Driver Requirements
 
 | Requirement | 610 Series | Previous (595) |
@@ -93,8 +95,8 @@ pub has_drm_color_pipeline: bool,
 
 ## Testing Checklist
 
-- [x] `nvctl vibe 200` — sets vibrance on all displays
-- [x] `nvctl vibe 100` — resets vibrance
+- [x] `nvctl vibrance 200` — sets vibrance on all displays
+- [x] `nvctl vibrance 100` — resets vibrance
 - [x] `nvctl driver info` — shows 610+ features section
 - [x] `nvctl wayland status` — shows FP16 EGL capability
 - [x] `cargo test` — all tests pass (346 total)

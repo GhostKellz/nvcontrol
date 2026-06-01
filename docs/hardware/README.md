@@ -25,3 +25,5 @@ Setup guides and optimizations for specific GPU models.
 
 - **RTX 50-series user?** Start with [rtx-5090-setup.md](rtx-5090-setup.md)
 - **ASUS ROG Astral/Matrix?** See [asus-astral.md](asus-astral.md)
+
+For nvcontrol-to-driver version guidance, see [`../drivers/nvidia-driver.md`](../drivers/nvidia-driver.md).

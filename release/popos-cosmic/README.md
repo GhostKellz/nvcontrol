@@ -10,8 +10,10 @@ nvcontrol provides native NVIDIA GPU control for Pop!_OS with the COSMIC desktop
 
 ```bash
 # One-line install (downloads the latest full GUI + CLI tarball)
-curl -fsSL https://nvctl.cktech.sh | sudo bash
+curl -fsSL https://nv.cktech.sh | sudo bash
 ```
+
+`https://nv.cktech.sh` redirects to `https://raw.githubusercontent.com/GhostKellz/nvcontrol/main/release/install-system.sh`.
 
 ### From source
 
@@ -26,8 +28,8 @@ cargo build --release --bin nvctl
 cargo build --release --bin nvcontrol --features gui
 
 # Install
-sudo install -Dm755 target/x86_64-unknown-linux-gnu/release/nvctl /usr/bin/nvctl
-sudo install -Dm755 target/x86_64-unknown-linux-gnu/release/nvcontrol /usr/bin/nvcontrol
+sudo install -Dm755 target/release/nvctl /usr/bin/nvctl
+sudo install -Dm755 target/release/nvcontrol /usr/bin/nvcontrol
 ```
 
 ## COSMIC Desktop Integration
@@ -66,7 +68,7 @@ nvcontrol works with both:
 - `system76-driver-nvidia` (Pop!_OS default)
 - Standard `nvidia-driver` packages
 
-Recommended driver version: 610+ (NVIDIA open kernel modules required)
+For nvcontrol-to-driver compatibility guidance, see [`../../docs/drivers/nvidia-driver.md`](../../docs/drivers/nvidia-driver.md).
 
 ## Quick Start
 
@@ -81,7 +83,7 @@ nvctl nvtop
 nvcontrol
 
 # Digital vibrance (boost colors)
-nvctl display vibrance set 150 --display 0
+nvctl display vibrance set-display 0 150
 
 # Enable VRR
 nvctl vrr enable DP-1

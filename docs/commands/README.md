@@ -81,7 +81,7 @@ nvctl container runtime test --runtime docker
 ```bash
 nvctl vibrance <pct>        # Set vibrance
 nvctl display info          # Display information
-nvctl display vrr           # VRR/G-Sync control
+nvctl vrr status            # VRR/G-Sync status
 ```
 
 ### Fan Control
@@ -94,8 +94,8 @@ nvctl fan set <id> <pct>    # Set fan speed
 ```bash
 nvctl doctor                # System diagnostics & health check
 nvctl doctor --support      # Diagnostics + support tarball
-nvctl monitor               # System monitoring
-nvctl benchmark             # GPU benchmarks
+nvctl monitor status        # Monitoring status
+nvctl gpu benchmark         # GPU benchmark
 ```
 
 ### Help Snapshots
@@ -108,7 +108,7 @@ nvctl companion --help
 ### Drivers
 ```bash
 nvctl driver info           # Driver capabilities & requirements
-nvctl driver validate --driver 590  # Validate target branch
+nvctl driver validate --driver 610  # Validate a 610 open-driver setup
 nvctl driver diagnose-release       # Kernel/userspace/GSP alignment
 nvctl driver dkms doctor           # DKMS/header/source checks
 nvctl driver source doctor         # Source reproducibility checks
@@ -126,6 +126,8 @@ All commands support:
 - `--help` - Show command help
 - `--format` - Output format where applicable (json, table, human)
 - `--no-color` - Disable colored output
+
+For driver branch compatibility, see [`../drivers/nvidia-driver.md`](../drivers/nvidia-driver.md).
 
 ## Examples
 

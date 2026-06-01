@@ -17,6 +17,8 @@ nvctl companion notify-test
 ## Documentation Checks
 
 - README support workflow is current
+- README installer URL matches `https://nv.cktech.sh`
+- `docs/drivers/nvidia-driver.md` remains the canonical compatibility matrix
 - driver command docs reflect the latest flags
 - issue-reporting docs reflect the latest support bundle workflow
 - release diagnostics interpretation doc is linked from the docs index

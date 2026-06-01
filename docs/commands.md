@@ -1,6 +1,6 @@
 # nvctl Command Reference
 
-The complete CLI reference for nvctl - your NVIDIA GPU control center.
+The complete CLI reference for `nvctl`.
 
 ```
 nvctl [OPTIONS] <COMMAND>
@@ -147,6 +147,19 @@ nvctl monitors suggest                   # Suggest presets for current setup
 nvctl monitors preview dual_oled_ips     # Preview built-in preset
 nvctl monitors apply-preset dual_oled_ips
 nvctl monitors set-vrr DP-1 --enabled true
+```
+
+### nvctl driver
+Driver management, release diagnostics, DKMS, and GSP workflows.
+
+For driver branch compatibility, use [drivers/nvidia-driver.md](drivers/nvidia-driver.md) as the source of truth.
+
+```bash
+nvctl driver info                      # Driver status, kernel, GSP, DKMS
+nvctl driver check                     # Driver health checks
+nvctl driver validate --driver 610     # Validate a 610 open-driver setup
+nvctl driver diagnose-release          # Kernel/userspace/GSP alignment
+nvctl driver support-bundle            # Support artifact with metadata
 ```
 
 ---
@@ -474,9 +487,9 @@ NVIDIA DKMS Status
 ══════════════════════════════════════════════════
 
 DKMS:           installed
-Driver:         590.48.01
+Driver:         <driver-version>
 Registered:     yes
-Source:         /usr/src/nvidia-590.48.01
+Source:         /usr/src/nvidia-<driver-version>
 Source Type:    git (https://github.com/NVIDIA/open-gpu-kernel-modules.git)
 
 Installed Kernels (4):
@@ -508,7 +521,7 @@ nvctl driver source sync --kernel <ver>  # Build specific kernel only
 ```
 
 #### Legacy GPU Support
-Driver 590+ deprecates Maxwell and Pascal GPUs. `nvctl driver check` will warn you.
+The current open-driver path deprecates Maxwell and Pascal GPUs. `nvctl driver check` will warn you.
 
 **Affected GPUs:**
 - **Maxwell (GTX 9xx)**: Deprecated, use `nvidia-470xx-dkms` from AUR
@@ -522,7 +535,7 @@ Driver 590+ deprecates Maxwell and Pascal GPUs. `nvctl driver check` will warn y
 # Clone the repo
 git clone https://github.com/NVIDIA/open-gpu-kernel-modules.git
 cd open-gpu-kernel-modules
-git checkout 590.48.01
+git checkout <driver-tag>
 
 # Initialize (creates dkms.conf, symlink, registers with DKMS)
 nvctl driver source init ~/open-gpu-kernel-modules
@@ -539,13 +552,13 @@ nvctl driver source update
 NVIDIA Source Build Status
 ══════════════════════════════════════════════════
 
-Source Path:    /usr/src/nvidia-590.48.01
+Source Path:    /usr/src/nvidia-<driver-version>
 Source Type:    git (https://github.com/NVIDIA/open-gpu-kernel-modules.git)
 Remote URL:     https://github.com/NVIDIA/open-gpu-kernel-modules.git
-Current Tag:    590.48.01
-Latest Tag:     590.48.01
+Current Tag:    <driver-tag>
+Latest Tag:     <driver-tag>
 
-Driver Version: 590.48.01
+Driver Version: <driver-version>
 DKMS Registered: yes
 ```
 
@@ -568,7 +581,7 @@ NVIDIA GSP Firmware Status
 
 GSP Enabled:    Yes
 GSP State:      loaded
-Version:        590.48.01
+Version:        <driver-version>
 Firmware:       /lib/firmware/nvidia/gb202/gsp
 GPU Arch:       gb202
 ```
@@ -578,16 +591,16 @@ GPU Arch:       gb202
 Driver Information
 ══════════════════════════════════════════════════
 
-GPU:            NVIDIA GeForce RTX 5090 [00000000:01:00.0]
-Driver:         590.48.01 (nvidia-open)
+GPU:            NVIDIA GeForce RTX 5090 [<pci-address>]
+Driver:         <driver-version> (nvidia-open)
 Module Type:    Open Kernel (Dual MIT/GPL)
-Built By:       chris@arch (Thu Dec 18 08:13:20 PM EST 2025)
+Built By:       <builder>@<host> (<build-date>)
 
-Kernel:         6.18.2-1-cachyos-lto (running)
-Module For:     6.18.2-1-cachyos-lto ✓
+Kernel:         <kernel-version> (running)
+Module For:     <kernel-version> ✓
 
 GSP:            enabled (loaded)
-GSP Firmware:   590.48.01
+GSP Firmware:   <driver-version>
                 /lib/firmware/nvidia/gb202/gsp
 GPU Arch:       gb202
 
@@ -821,11 +834,12 @@ mv nvctl.fish ~/.config/fish/completions/
 ## See Also
 
 - [DKMS Integration](drivers/dkms.md)
+- [NVIDIA Driver Compatibility](drivers/nvidia-driver.md)
 - [GSP Firmware](drivers/gsp.md)
 - [VRR/G-SYNC Control](features/vrr-gsync.md)
 - [HDR Control](features/hdr.md)
 - [Overclocking Guide](features/overclocking.md)
-- [NVIDIA 590 Driver](drivers/open-590.md)
+- [NVIDIA 610 Driver](drivers/open-610.md)
 - [Building from Source](building.md)
 
 ---

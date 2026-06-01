@@ -74,16 +74,17 @@ Stealth Mode - LEDs off
 **Usage Example:**
 ```bash
 # Set static ROG red
-nvcontrol rgb --mode static --color FF0000
+nvctl asus aura color FF0000
+nvctl asus aura mode static
 
 # Temperature reactive mode
-nvcontrol rgb --mode temp-reactive
+nvctl asus aura temp-reactive --enabled true
 
 # Rainbow mode
-nvcontrol rgb --mode rainbow
+nvctl asus aura mode rainbow
 
 # Turn off
-nvcontrol rgb --mode off
+nvctl asus aura mode off
 ```
 
 ### 4. **Premium Build Quality**
@@ -161,20 +162,21 @@ RGB: ASUS Aura ARGB
 
 **1. Cooling Management**
 ```bash
-# Set aggressive fan curve for the 4-fan setup
-nvcontrol fan --profile performance
+# Inspect current fan data
+nvctl fan info
 
-# Custom fan curve (temp:speed pairs)
-nvcontrol fan --curve 30:25 40:35 50:45 60:60 70:75 80:90 90:100
+# Set per-fan speeds as a quick validation step
+nvctl fan set 0 35
+nvctl fan set 1 35
 ```
 
 **2. Overclocking**
 ```bash
 # Apply Performance profile
-nvcontrol oc --profile performance
+nvctl overclock profile performance
 
 # Custom overclock (ASUS Astral can handle more)
-nvcontrol oc --gpu +200 --mem +1600 --power 105
+nvctl overclock apply --gpu-offset 200 --memory-offset 1600 --power-limit 105
 ```
 
 **3. RGB Control**
@@ -183,10 +185,11 @@ nvcontrol oc --gpu +200 --mem +1600 --power 105
 yay -S openrgb
 
 # Set RGB mode
-nvcontrol rgb --mode breathing --color 00FFFF
+nvctl asus aura color 00FFFF
+nvctl asus aura mode breathing
 
 # Temperature reactive
-nvcontrol rgb --mode temp-reactive
+nvctl asus aura temp-reactive --enabled true
 
 # Sync with system
 openrgb --mode rainbow --device 0
@@ -195,13 +198,14 @@ openrgb --mode rainbow --device 0
 **4. Multi-Monitor + HDR**
 ```bash
 # Your OLED + IPS setup
-nvcontrol monitors --layout dual-oled-ips
+nvctl monitors apply-preset dual_oled_ips
 
 # OLED: Lower vibrance (300), HDR enabled
 # IPS: Higher vibrance (600), SDR
 
-# Per-monitor RGB can match display colors
-nvcontrol rgb --display 0 --color based-on-wallpaper
+# Per-monitor vibrance tuning
+nvctl color vibrance set --value 300 -d 0
+nvctl color vibrance set --value 600 -d 1
 ```
 
 ## Setup Checklist for ASUS Astral
@@ -214,14 +218,15 @@ nvcontrol rgb --display 0 --color based-on-wallpaper
 - [ ] Above 4G Decoding ✅ (you already have this)
 
 ### After Installation:
-- [ ] Install latest nvidia drivers (580.105.08+)
+- [ ] Install the driver branch recommended by `docs/drivers/nvidia-driver.md`
 - [ ] Install OpenRGB for RGB control: `yay -S openrgb`
-- [ ] Run system validation: `nvcontrol validate-system`
-- [ ] Check detection: `nvcontrol gpu-info`
-- [ ] Test RGB: `nvcontrol rgb --mode rainbow`
-- [ ] Apply OC profile: `nvcontrol oc --profile performance`
-- [ ] Setup monitors: `nvcontrol monitors --layout dual-oled-ips`
-- [ ] Enable DLSS 4: `nvcontrol dlss --check`
+- [ ] Run system diagnostics: `nvctl doctor`
+- [ ] Check detection: `nvctl gpu info`
+- [ ] Test ASUS detection: `nvctl asus detect`
+- [ ] Test Aura RGB: `nvctl asus aura mode rainbow`
+- [ ] Apply an overclock profile if needed: `nvctl overclock profile performance`
+- [ ] Setup monitors: `nvctl monitors apply-preset dual_oled_ips`
+- [ ] Check DLSS support: `nvctl dlss status`
 
 ### Recommended Software:
 ```bash

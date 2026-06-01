@@ -1,5 +1,7 @@
 # NVIDIA 590 Beta Driver Analysis
 
+Historical note: this document is kept as a beta-era reference. The current primary driver guidance lives in [open-610.md](open-610.md).
+
 > **Driver Version:** 590.44.01 (Beta)
 > **Release Date:** December 2, 2025
 > **Kernel Modules:** open-gpu-kernel-modules 590.44.01
@@ -258,8 +260,8 @@ pub fn validate_for_590_driver() -> ValidationResult {
 
 ```bash
 # Check 590 compatibility
-nvctl driver-info
-nvctl validate --driver 590
+nvctl driver info
+nvctl driver validate --driver 590
 
 # Example output:
 # Driver: 590.44.01 (Beta)

@@ -1,7 +1,9 @@
 # ASUS ROG Astral RTX 5090 - Complete Setup Guide
 
 **Your Upgrade:** RTX 4090 → ASUS ROG Astral GeForce RTX 5090 (32GB GDDR7)
-**System:** Arch Linux + Wayland + NVIDIA Open Kernel Modules 580.105.08
+**System:** Arch Linux + Wayland + NVIDIA Open Kernel Modules
+
+Use [`../drivers/nvidia-driver.md`](../drivers/nvidia-driver.md) for the current nvcontrol-to-driver compatibility matrix.
 
 ---
 
@@ -29,7 +31,7 @@ Your Arch system is **ALREADY CONFIGURED** for RTX 5090:
 ✅ Resizable BAR: ENABLED (32 GB)
 ✅ Above 4G Decoding: ENABLED
 ✅ PCIe Gen 4: x16 @ 16 GT/s (fully compatible with Gen 5)
-✅ Open GPU Kernel Modules: 580.105.08 (latest, with Blackwell support)
+✅ Open GPU Kernel Modules: installed and Blackwell-capable
 ```
 
 ### Critical Pre-Checks
@@ -78,7 +80,7 @@ mokutil --sb-state
 # Check current driver version
 nvidia-smi --query-gpu=driver_version --format=csv,noheader
 
-# Should be: 580.105.08 or newer
+# Use the version recommended by the compatibility matrix
 ```
 
 If you need to update:
@@ -203,15 +205,15 @@ Boot into BIOS and verify:
 # 4. Check detection
 nvidia-smi
 
-# Expected output:
+# Expected output shape:
 # +-----------------------------------------------------------------------------------------+
-# | NVIDIA-SMI 580.105.08     Driver Version: 580.105.08      CUDA Version: 12.8           |
+# | NVIDIA-SMI <driver-version>     Driver Version: <driver-version>      CUDA Version: <cuda-version> |
 # |-----------------------------------------+------------------------+----------------------+
 # | GPU  Name                  Persistence-M | Bus-Id        Disp.A | Volatile Uncorr. ECC |
 # | Fan  Temp   Perf          Pwr:Usage/Cap |          Memory-Usage | GPU-Util  Compute M. |
 # |                                          |                       |               MIG M. |
 # |=========================================+========================+======================|
-# |   0  NVIDIA GeForce RTX 5090      Off   | 00000000:01:00.0 On  |                  N/A |
+# |   0  NVIDIA GeForce RTX 5090      Off   | <pci-address> On     |                  N/A |
 # |  0%   42C    P8              45W / 600W |    512MiB / 32768MiB |      2%      Default |
 # |                                          |                       |                  N/A |
 # +-----------------------------------------+------------------------+----------------------+
@@ -221,11 +223,11 @@ nvidia-smi
 
 ## Post-Installation Validation
 
-### Use nvcontrol for Comprehensive Validation
+### Use nvctl for Post-Install Validation
 
 ```bash
-# 1. Full system validation
-nvcontrol validate-system
+# 1. Run diagnostics
+nvctl doctor
 
 # Expected output:
 # ╔═══════════════════════════════════════════════════════╗
@@ -256,7 +258,7 @@ nvcontrol validate-system
 #   ⚠️  Secure Boot: Enabled (may cause issues)
 #
 #  Driver Status
-#   ✅ Version: 580.105.08
+#   ✅ Version: <driver-version>
 #   ✅ Type: OpenKernel
 #   ✅ GSP Firmware: Active
 #   ✅ Blackwell Support: Yes
@@ -264,7 +266,7 @@ nvcontrol validate-system
 # Overall Status: ✅ READY FOR RTX 5090
 
 # 2. Check GPU info
-nvcontrol gpu-info
+nvctl gpu info
 
 # Expected output:
 # ╔═══════════════════════════════════════════════════════╗
@@ -307,17 +309,17 @@ nvcontrol gpu-info
 ### Check Driver Info
 
 ```bash
-nvcontrol driver-info
+nvctl driver info
 
 # Expected output:
 # ╔═══════════════════════════════════════════════════════╗
 # ║           NVIDIA Kernel Driver Information            ║
 # ╚═══════════════════════════════════════════════════════╝
 #
-# Driver Version: 580.105.08
-# Kernel Version: 6.17.7-273-tkg-linux-ghost
+# Driver Version: <driver-version>
+# Kernel Version: <kernel-version>
 # Driver Type: OpenKernel
-# GSP Firmware: 580.105.08
+# GSP Firmware: <driver-version>
 #
 # Loaded Modules:
 #   • nvidia_open
@@ -342,7 +344,7 @@ nvcontrol driver-info
 ### Verify DLSS 4 Support
 
 ```bash
-nvcontrol dlss-info
+nvctl dlss status
 
 # Expected output:
 # ╔═══════════════════════════════════════════════════════╗
@@ -376,16 +378,14 @@ nvcontrol dlss-info
 ### Generate Optimized Profiles for RTX 5090
 
 ```bash
-# 1. Generate RTX 5090 profiles
-nvcontrol profile generate RTX-5090
+# Inspect available profiles
+nvctl config profiles
 
-# This creates profiles in: ~/.config/nvcontrol/profiles/
+# Capture the current state before tuning
+nvctl config capture --name rtx5090-baseline
 
-# Created profiles:
-# - stock.toml
-# - performance.toml
-# - quiet.toml
-# - max_performance.toml
+# Apply a saved profile
+nvctl config apply --input performance
 ```
 
 ### Profile Breakdown
@@ -495,20 +495,12 @@ nvctl config apply --input stock
 The ASUS Astral has a **quad-fan design** with better cooling capacity.
 
 ```bash
-# Set aggressive fan curve
-nvcontrol fan --curve 30:25 40:35 50:45 60:60 70:75 80:90 90:100
+# Review current fan state
+nvctl fan info
 
-# Explanation:
-# 30°C: 25% fan speed (quieter at idle)
-# 40°C: 35%
-# 50°C: 45%
-# 60°C: 60%
-# 70°C: 75%
-# 80°C: 90%
-# 90°C: 100% (max cooling)
-
-# Save as preset
-nvcontrol fan --save aggressive
+# Set fixed speeds per fan as a quick test
+nvctl fan set 0 35
+nvctl fan set 1 35
 ```
 
 ---
@@ -517,11 +509,21 @@ nvcontrol fan --save aggressive
 
 ### Generate Optimized Configuration
 
-nvcontrol can generate an optimized `/etc/modprobe.d/nvidia.conf`:
+Example optimized `/etc/modprobe.d/nvidia.conf` for an RTX 5090 system:
 
 ```bash
-# Generate config
-sudo nvcontrol driver-optimize --generate > /tmp/nvidia.conf
+# Write config
+cat >/tmp/nvidia.conf <<'EOF'
+options nvidia NVreg_EnableGpuFirmware=1
+options nvidia NVreg_EnableResizableBar=1
+options nvidia NVreg_DynamicPowerManagement=0x02
+options nvidia NVreg_PreserveVideoMemoryAllocations=1
+options nvidia NVreg_EnableHDMI20=1
+options nvidia NVreg_TemporalDithering=1
+options nvidia NVreg_EnableDP21=1
+options nvidia_drm modeset=1
+options nvidia_drm fbdev=1
+EOF
 
 # Review the config
 cat /tmp/nvidia.conf
@@ -538,7 +540,7 @@ sudo reboot
 
 ### Generated Configuration
 
-The `driver-optimize` command creates:
+Example configuration:
 
 ```bash
 # NVIDIA Kernel Module Configuration for RTX 50-Series (Blackwell)
@@ -646,39 +648,40 @@ sudo usermod -aG i2c $USER
 sudo reboot
 ```
 
-#### Use nvcontrol RGB Commands
+#### Use ASUS Aura Commands
 
 ```bash
 # Set static ROG red
-nvcontrol rgb --mode static --color FF0000
+nvctl asus aura color FF0000
+nvctl asus aura mode static
 
 # Temperature reactive mode (color changes with temp)
-nvcontrol rgb --mode temp-reactive
+nvctl asus aura temp-reactive --enabled true
 
 # Breathing cyan
-nvcontrol rgb --mode breathing --color 00FFFF
+nvctl asus aura color 00FFFF
+nvctl asus aura mode breathing
 
 # Rainbow mode
-nvcontrol rgb --mode rainbow
+nvctl asus aura mode rainbow
 
 # Turn off LEDs (stealth mode)
-nvcontrol rgb --mode off
+nvctl asus aura mode off
 ```
 
 #### RGB Modes Available
 
-| Mode | Description | nvcontrol Command |
+| Mode | Description | `nvctl` Command |
 |------|-------------|-------------------|
-| **Static** | Solid color | `--mode static --color RRGGBB` |
-| **Breathing** | Pulsing color | `--mode breathing --color RRGGBB` |
-| **Rainbow** | Full spectrum cycling | `--mode rainbow` |
-| **Temp Reactive** | Color based on GPU temp | `--mode temp-reactive` |
-| **Load Reactive** | Color based on GPU usage | `--mode load-reactive` |
-| **Off** | LEDs disabled | `--mode off` |
+| **Static** | Solid color | `nvctl asus aura color RRGGBB` then `nvctl asus aura mode static` |
+| **Breathing** | Pulsing color | `nvctl asus aura color RRGGBB` then `nvctl asus aura mode breathing` |
+| **Rainbow** | Full spectrum cycling | `nvctl asus aura mode rainbow` |
+| **Temp Reactive** | Color based on GPU temp | `nvctl asus aura temp-reactive --enabled true` |
+| **Off** | LEDs disabled | `nvctl asus aura mode off` |
 
 #### Temperature Reactive Colors
 
-When using `--mode temp-reactive`:
+When using `temp-reactive` mode:
 
 - **< 50°C:** Blue/Cyan (cool)
 - **50-60°C:** Green (normal)
@@ -692,17 +695,16 @@ The ASUS Astral has **4 fans** instead of the typical 3.
 
 ```bash
 # Check fan count
-nvcontrol fan --info
+nvctl fan info
 
 # Expected output:
 # Fans detected: 4
 # Current speed: 35%
 # Current temp: 42°C
 
-# Set custom curve optimized for quad-fan
-nvcontrol fan --curve 30:20 40:30 50:40 60:55 70:70 80:85 90:100
-
-# The lower idle speeds (20% at 30°C) are possible due to better cooling
+# Set per-fan speeds as a quick validation step
+nvctl fan set 0 30
+nvctl fan set 1 30
 ```
 
 ### Factory Overclock Detection
@@ -710,7 +712,7 @@ nvcontrol fan --curve 30:20 40:30 50:40 60:55 70:70 80:85 90:100
 The ASUS Astral comes factory overclocked to **2610 MHz boost**:
 
 ```bash
-nvcontrol gpu-info | grep "Boost"
+nvctl gpu info | grep "Boost"
 
 # Output:
 # Boost: 2610 MHz (OC Mode)
@@ -728,7 +730,7 @@ The ASUS Astral supports up to **630W** (vs 600W reference):
 nvidia-smi -q -d POWER
 
 # Set to max (105% = 630W)
-nvcontrol oc --power 105
+nvctl overclock apply --power-limit 105
 ```
 
 ---
@@ -739,11 +741,11 @@ nvcontrol oc --power 105
 
 You mentioned **OLED 4K + IPS 1440p** setup (possibly adding a third monitor).
 
-#### Apply nvcontrol Multi-Monitor Profile
+#### Apply Multi-Monitor Preset
 
 ```bash
 # Set up dual monitor layout with optimized settings
-nvcontrol monitors --layout dual-oled-ips
+nvctl monitors apply-preset dual_oled_ips
 
 # This automatically configures:
 # Monitor 1 (OLED 4K):
@@ -763,18 +765,18 @@ nvcontrol monitors --layout dual-oled-ips
 
 ```bash
 # List connected displays
-nvcontrol monitors --list
+nvctl monitors list
 
 # Output:
 # Display 0: DP-0 (OLED 4K, 3840x2160 @ 120Hz)
 # Display 1: DP-1 (IPS 1440p, 2560x1440 @ 165Hz)
 
 # Set vibrance per display
-nvcontrol vibrance --display 0 --value 300  # OLED
-nvcontrol vibrance --display 1 --value 600  # IPS
+nvctl color vibrance set --value 300 -d 0  # OLED
+nvctl color vibrance set --value 600 -d 1  # IPS
 
 # Enable HDR on OLED
-nvcontrol hdr --display 0 --enable
+nvctl hdr enable 0
 ```
 
 ### Gaming Optimizations
@@ -783,7 +785,7 @@ Apply Linux-specific gaming optimizations:
 
 ```bash
 # Apply competitive preset (max FPS, low latency)
-nvcontrol gaming-profile competitive
+nvctl gaming enable
 
 # This enables:
 # - PowerMizer: Prefer Maximum Performance
@@ -799,7 +801,7 @@ nvcontrol gaming-profile competitive
 
 ```bash
 # Enable DLSS with quality mode
-nvcontrol dlss --mode quality
+nvctl dlss enable --quality quality
 
 # Available modes:
 # - performance: Max FPS boost
@@ -807,8 +809,8 @@ nvcontrol dlss --mode quality
 # - quality: Best image quality
 # - ultra-quality: Native-like quality
 
-# Enable Multi-Frame Generation (2x/3x/4x)
-nvcontrol dlss --frame-gen 4x
+# Enable Frame Generation
+nvctl dlss enable --quality quality --frame-generation
 
 # This can give up to 4x FPS boost in supported games
 ```
@@ -892,8 +894,8 @@ sudo modprobe nvidia_drm
 dmesg | grep -i nvidia
 
 # 3. Rebuild modules
-sudo dkms remove nvidia-open/580.105.08 --all
-sudo dkms install nvidia-open/580.105.08
+sudo dkms remove nvidia-open/<driver-version> --all
+sudo dkms install nvidia-open/<driver-version>
 
 # 4. Regenerate initramfs
 sudo mkinitcpio -P
@@ -943,7 +945,7 @@ echo "options nvidia NVreg_EnableResizableBar=1" | sudo tee -a /etc/modprobe.d/n
 **Solutions:**
 
 ```bash
-# 1. Update to latest driver
+# 1. Update to the driver branch recommended by the compatibility matrix
 sudo pacman -Syu nvidia-open-dkms
 
 # 2. Check nvidia-settings
@@ -1082,41 +1084,41 @@ PROTON_ENABLE_NVAPI=1 DXVK_NVAPI_DRIVER_VERSION=58010508 %command%
 
 ## Quick Reference Commands
 
-### Essential nvcontrol Commands
+### Essential nvctl Commands
 
 ```bash
-# System validation
-nvcontrol validate-system
+# System diagnostics
+nvctl doctor
 
 # GPU info
-nvcontrol gpu-info
+nvctl gpu info
 
 # Driver info
-nvcontrol driver-info
+nvctl driver info
 
 # Apply profile
 nvctl config apply --input performance
 
 # Overclock
-nvcontrol oc --gpu +175 --mem +1500 --power 105
+nvctl overclock apply --gpu-offset 175 --memory-offset 1500 --power-limit 105
 
 # Fan control
-nvcontrol fan --curve 30:25 50:45 70:75 90:100
+nvctl fan info
 
 # RGB control
-nvcontrol rgb --mode temp-reactive
+nvctl asus aura temp-reactive --enabled true
 
 # Multi-monitor setup
-nvcontrol monitors --layout dual-oled-ips
+nvctl monitors apply-preset dual_oled_ips
 
 # DLSS configuration
-nvcontrol dlss --mode quality --frame-gen 4x
+nvctl dlss enable --quality quality --frame-generation
 
 # Gaming optimizations
-nvcontrol gaming-profile competitive
+nvctl gaming enable
 
-# Generate kernel config
-sudo nvcontrol driver-optimize --generate > /tmp/nvidia.conf
+# Driver diagnostics
+nvctl driver diagnose-release
 ```
 
 ### Essential nvidia-smi Commands
@@ -1175,7 +1177,7 @@ dmesg | grep -i "bar\|pci"
 - [ ] Case supports 357mm GPU length and 3.8 slots
 - [ ] Backup current config files
 - [ ] Check Secure Boot status
-- [ ] Update to driver 580.105.08 or newer
+- [ ] Install the driver branch recommended by `docs/drivers/nvidia-driver.md`
 
 ### Installation
 - [ ] Physically install RTX 5090
@@ -1184,20 +1186,19 @@ dmesg | grep -i "bar\|pci"
 - [ ] Boot and check `nvidia-smi` detects GPU
 
 ### Post-Installation
-- [ ] Run `nvcontrol validate-system`
-- [ ] Run `nvcontrol gpu-info` - should show "ASUS ROG Astral"
-- [ ] Run `nvcontrol driver-info` - should show driver 580.105.08+
+- [ ] Run `nvctl doctor`
+- [ ] Run `nvctl gpu info` - should show "ASUS ROG Astral"
+- [ ] Run `nvctl driver info` - should show the expected driver branch
 - [ ] Generate and install optimized kernel config
 - [ ] Enable early KMS in initramfs
 - [ ] Reboot
 
 ### Configuration
 - [ ] Apply performance profile: `nvctl config apply --input performance`
-- [ ] Set fan curve for quad-fan: `nvcontrol fan --curve 30:25 50:45 70:75 90:100`
-- [ ] Configure multi-monitor: `nvcontrol monitors --layout dual-oled-ips`
+- [ ] Configure multi-monitor: `nvctl monitors apply-preset dual_oled_ips`
 - [ ] Install OpenRGB and configure RGB
-- [ ] Test DLSS 4: `nvcontrol dlss-info`
-- [ ] Apply gaming optimizations: `nvcontrol gaming-profile competitive`
+- [ ] Test DLSS support: `nvctl dlss status`
+- [ ] Apply gaming optimizations: `nvctl gaming enable`
 
 ### Testing
 - [ ] Run benchmark (Heaven/Superposition)

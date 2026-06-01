@@ -1,6 +1,12 @@
-# Legacy Driver Support (590 and Earlier)
+# Legacy And Transitional Driver Support (595 and Earlier)
 
-If you're running NVIDIA driver **590 or earlier**, you need nvcontrol **v0.8.5** for digital vibrance support.
+If you're running NVIDIA driver **595 or earlier**, do not assume the current `main` branch is the right build.
+
+Use [nvidia-driver.md](nvidia-driver.md) as the source of truth for branch-to-version mapping. This document only expands on the older-build path.
+
+- **590 and earlier**: use an older vibrance-compatible commit path. The documented fallback here is `v0.8.5`.
+- **595**: use the transitional compatibility builds, typically `v0.8.4` or `v0.8.5`.
+- **610+ open driver**: use the current `main` branch.
 
 ## Why?
 
@@ -9,14 +15,15 @@ Driver 595 introduced breaking changes to the NVKMS ioctl API:
 - SLI/Mosaic fields removed from NvKmsAllocDeviceRequest
 - ImageSharpening attributes removed
 
-These changes are **not backwards compatible**. Using v0.8.6+ on driver 590 or earlier will fail with `EPERM` errors.
+These changes are **not backwards compatible**. The modern 610-targeted build should not be treated as the default choice for 595-and-earlier stacks.
 
 ## Quick Reference
 
 | Driver Version | nvcontrol Version | Git Reference |
 |----------------|-------------------|---------------|
-| 595+ | v0.8.6+ (latest) | `main` branch |
-| 560-590 | v0.8.5 | `v0.8.5` tag or commit `2235bb3` |
+| 610+ open driver | current `main` branch | latest |
+| 595 | `v0.8.4` or `v0.8.5` | transitional compatibility path |
+| 560-590 | older vibrance-compatible build, commonly `v0.8.5` | `v0.8.5` tag or commit `2235bb3` |
 | < 560 | v0.8.5 | Same as above (untested) |
 
 ## Building v0.8.5 for Legacy Drivers
@@ -56,14 +63,15 @@ nvctl gpu info
 
 ## Feature Differences
 
-v0.8.5 includes all features **except** driver 595 compatibility fixes:
-- Digital vibrance (works on 590 and earlier)
-- Image sharpening (available on 590 and earlier, removed in 595)
+For older stacks, `v0.8.5` is the documented fallback build:
+- Digital vibrance works on 590 and earlier with the older compatible build path
+- 595 is a transitional branch; if one tag does not behave correctly on your system, test `v0.8.4` and `v0.8.5`
+- Image sharpening was available on 590-era drivers and removed in 595
 - All other features identical
 
 ## Upgrade Path
 
-When you upgrade to driver 595+:
+When you upgrade to driver 610+ open:
 1. Update nvcontrol to latest: `git checkout main && cargo build --release`
 2. Reinstall: `sudo cp target/release/nvctl /usr/local/bin/`
 3. Note: Image sharpening is no longer available (NVIDIA removed it)
@@ -71,8 +79,12 @@ When you upgrade to driver 595+:
 ## Troubleshooting
 
 **"No connected displays found" on driver 590:**
-- Make sure you're using v0.8.5, not v0.8.6+
-- Check: `nvctl --version` should show `0.8.5`
+- Make sure you're using an older vibrance-compatible build, not the current 610-targeted build
+- `v0.8.5` is the first fallback to try
+
+**595 compatibility issues:**
+- Test `v0.8.4` and `v0.8.5`
+- Treat 595 as a transitional branch rather than the current baseline
 
 **EPERM errors:**
 - Version mismatch between nvctl and driver

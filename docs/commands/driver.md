@@ -11,7 +11,7 @@ nvctl driver check
 nvctl driver capabilities
 
 # Branch validation
-nvctl driver validate --driver 590
+nvctl driver validate --driver 610
 
 # Release alignment diagnostics
 nvctl driver diagnose-release
@@ -37,6 +37,8 @@ nvctl driver dkms fix
 nvctl driver source status
 nvctl driver source doctor
 ```
+
+For driver branch compatibility, see [driver compatibility](../drivers/nvidia-driver.md).
 
 ## Release Diagnostics
 
@@ -83,9 +85,9 @@ The release diagnostics and `driver check` paths now help surface cases like:
 Running Kernel:  7.0.10-1-cachyos-lto
 Module Kernel:   7.0.10-1-cachyos-lto
 Kernel Match:    yes
-Userspace:       610.43.02
-Kernel Module:   610.43.02
-Release Match:   aligned at 610.43.02
+Userspace:       <driver-version>
+Kernel Module:   <driver-version>
+Release Match:   aligned at <driver-version>
 FW Layout:       per-chip
 FW Path:         /lib/firmware/nvidia/gb202/gsp
 ```
@@ -96,9 +98,9 @@ FW Path:         /lib/firmware/nvidia/gb202/gsp
 Running Kernel:  7.0.10-1-cachyos-lto
 Module Kernel:   6.12.8-arch1-1
 Kernel Match:    no
-Userspace:       610.43.02
-Kernel Module:   595.58.03
-Release Match:   mismatch: kernel module 595.58.03 vs userspace 610.43.02
+Userspace:       <newer-driver-version>
+Kernel Module:   <older-driver-version>
+Release Match:   mismatch: kernel module <older-driver-version> vs userspace <newer-driver-version>
 Expected Paths:
   - /lib/firmware/nvidia/gb202/gsp (missing)
 ```
