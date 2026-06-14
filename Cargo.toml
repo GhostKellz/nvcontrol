@@ -35,7 +35,7 @@ egui-phosphor = { version = "0.12", optional = true, default-features = false, f
 anyhow = "1"
 thiserror = "1"
 serde = { version = "1", features = ["derive"] }
-which = "5"
+which = "8"
 directories = "5"
 ratatui = "0.30"
 crossterm = "0.29"
