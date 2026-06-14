@@ -45,7 +45,7 @@ toml = "0.8"
 regex = "1.10"
 chrono = { version = "0.4", features = ["serde"] }
 sysinfo = "0.30"
-notify = "6.1"
+notify = "8.2"
 notify-rust = "4.12"
 num_cpus = "1.16"
 sys-info = "0.9"
