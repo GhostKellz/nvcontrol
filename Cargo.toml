@@ -39,7 +39,7 @@ which = "5"
 directories = "5"
 ratatui = "0.30"
 crossterm = "0.29"
-nvml-wrapper = "0.11.0"
+nvml-wrapper = "0.12.1"
 toml = "0.8"
 # New dependencies for advanced features
 regex = "1.10"
