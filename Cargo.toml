@@ -36,7 +36,7 @@ anyhow = "1"
 thiserror = "1"
 serde = { version = "1", features = ["derive"] }
 which = "5"
-directories = "5"
+directories = "6"
 ratatui = "0.30"
 crossterm = "0.29"
 nvml-wrapper = "0.11.0"
