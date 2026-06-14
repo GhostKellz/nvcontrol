@@ -33,7 +33,7 @@ eframe = { version = "0.34", optional = true, default-features = false, features
 egui_plot = { version = "0.35", optional = true }
 egui-phosphor = { version = "0.12", optional = true, default-features = false, features = ["regular", "bold", "fill"] }
 anyhow = "1"
-thiserror = "1"
+thiserror = "2"
 serde = { version = "1", features = ["derive"] }
 which = "5"
 directories = "5"
