@@ -59,7 +59,7 @@ tar = "0.4"
 
 # Pure Rust vibrance and container support
 libc = "0.2"
-nix = { version = "0.29", features = ["ioctl", "user"] }
+nix = { version = "0.31", features = ["ioctl", "user"] }
 bytemuck = { version = "1.21", features = ["derive", "min_const_generics"] }
 tokio = { version = "1.0", features = ["full"] }
 
