@@ -1,7 +1,6 @@
 # ASUS ROG Astral RTX 5090 - Complete Setup Guide
 
-**Your Upgrade:** RTX 4090 → ASUS ROG Astral GeForce RTX 5090 (32GB GDDR7)
-**System:** Arch Linux + Wayland + NVIDIA Open Kernel Modules
+Focus: ASUS ROG Astral GeForce RTX 5090 on Linux with NVIDIA open kernel modules.
 
 Use [`../drivers/nvidia-driver.md`](../drivers/nvidia-driver.md) for the current nvcontrol-to-driver compatibility matrix.
 
@@ -23,15 +22,15 @@ Use [`../drivers/nvidia-driver.md`](../drivers/nvidia-driver.md) for the current
 
 ## Pre-Installation Checklist
 
-### ✅ Your System is Already Ready!
+### Platform Readiness Checks
 
-Your Arch system is **ALREADY CONFIGURED** for RTX 5090:
+Verify the platform before installing or troubleshooting an RTX 5090:
 
 ```
-✅ Resizable BAR: ENABLED (32 GB)
-✅ Above 4G Decoding: ENABLED
-✅ PCIe Gen 4: x16 @ 16 GT/s (fully compatible with Gen 5)
-✅ Open GPU Kernel Modules: installed and Blackwell-capable
+Resizable BAR: expected enabled for best performance
+Above 4G Decoding: expected enabled
+PCIe: Gen 4 x16 or Gen 5 x16 preferred
+Open GPU Kernel Modules: install the branch recommended by the compatibility matrix
 ```
 
 ### Critical Pre-Checks
@@ -39,7 +38,6 @@ Your Arch system is **ALREADY CONFIGURED** for RTX 5090:
 #### 1. **Power Supply (PSU)**
 - **Required:** 1000W or higher
 - **Connector:** 12V-2x6 (12VHPWR)
-- **Your 4090:** 450W TDP, 850W PSU recommended
 - **ASUS Astral 5090:** 600W TDP (630W max), **1000W PSU recommended**
 
 **Action:** Verify your current PSU wattage and connector availability.
@@ -93,19 +91,19 @@ sudo pacman -Syu nvidia-open-dkms nvidia-utils
 yay -Syu nvidia-open-dkms nvidia-utils
 ```
 
-#### 5. **Backup Your Current Configuration**
+#### 5. **Backup Current Configuration**
 
-Before removing your RTX 4090:
+Before changing GPUs or driver branches:
 
 ```bash
-# Backup nvcontrol config
-cp ~/.config/nvcontrol/config.toml ~/.config/nvcontrol/config.toml.4090.backup
+# Backup nvcontrol config directory
+cp -a ~/.config/nvcontrol ~/.config/nvcontrol.gpu-change.backup
 
 # Backup X11 config (if using X11)
 sudo cp /etc/X11/xorg.conf /etc/X11/xorg.conf.4090.backup
 
-# Export current nvidia-settings
-nvidia-settings --save=/tmp/nvidia-settings-4090.rc
+# Export current nvidia-settings if you rely on X11 settings
+nvidia-settings --save=/tmp/nvidia-settings-before-gpu-change.rc
 ```
 
 ---
@@ -338,7 +336,7 @@ nvctl driver info
 #   DisplayPort 2.1a: ✅
 #   Multi-Instance GPU: ✅
 #
-# RTX 50-Series Support: ✅ Fully Supported
+# RTX 50-Series Support: primary 610+ target
 ```
 
 ### Verify DLSS 4 Support
@@ -622,6 +620,36 @@ sudo reboot
 ---
 
 ## ASUS Astral Specific Features
+
+### Power Detector+
+
+The ROG Astral RTX 5090 Power Detector+ path is implemented and tested in nvcontrol. It is read-only and safe: nvcontrol uses I2C reads to inspect the 12V-2x6 rail monitor and never writes to the device.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Nvctl as nvctl asus power
+    participant Sysfs as /sys/bus/pci/devices
+    participant I2C as i2cget
+    participant Monitor as Astral power monitor 0x2b
+
+    User->>Nvctl: run power check
+    Nvctl->>Sysfs: find NVIDIA ASUS subsystem 1043:89e3
+    Nvctl->>Sysfs: enumerate GPU i2c-* buses
+    Nvctl->>I2C: probe 0x2b register 0x60
+    I2C->>Monitor: read word
+    Monitor-->>I2C: raw rail value
+    Nvctl->>I2C: read 0x60,0x62,0x64,0x66,0x68,0x6A
+    I2C-->>Nvctl: six raw rail values
+    Nvctl-->>User: health, rail amps, connector watts
+```
+
+```bash
+nvctl asus detect
+nvctl asus power
+nvctl asus power --json
+nvctl asus power --watch
+```
 
 ### RGB Control via OpenRGB
 
@@ -1022,9 +1050,9 @@ xrandr --verbose | grep -A 10 "DP-"
 # 5. Force DP 2.1a mode
 xrandr --output DP-0 --mode 3840x2160 --rate 480
 
-# 6. Use nvcontrol
-nvcontrol display --enable-dp21
-nvcontrol display --test-dp21
+# 6. Verify nvcontrol sees the active driver and display topology
+nvctl driver info
+nvctl display ls
 ```
 
 ### Issue 7: High Idle Power / Temps
@@ -1046,7 +1074,7 @@ nvidia-smi -q -d POWER
 nvctl config apply --input quiet
 
 # 4. Set conservative fan curve
-nvctl fan curve apply quiet
+nvctl fan curve apply silent
 
 # 5. Rebuild initramfs and reboot
 sudo mkinitcpio -P
@@ -1108,7 +1136,7 @@ nvctl fan info
 # RGB control
 nvctl asus aura temp-reactive --enabled true
 
-# Multi-monitor setup
+# Multi-monitor setup, if the preset matches your layout
 nvctl monitors apply-preset dual_oled_ips
 
 # DLSS configuration
@@ -1189,13 +1217,13 @@ dmesg | grep -i "bar\|pci"
 - [ ] Run `nvctl doctor`
 - [ ] Run `nvctl gpu info` - should show "ASUS ROG Astral"
 - [ ] Run `nvctl driver info` - should show the expected driver branch
-- [ ] Generate and install optimized kernel config
-- [ ] Enable early KMS in initramfs
+- [ ] Review driver diagnostics and current modprobe/initramfs state
+- [ ] Enable early KMS only if it matches your distro and boot workflow
 - [ ] Reboot
 
 ### Configuration
 - [ ] Apply performance profile: `nvctl config apply --input performance`
-- [ ] Configure multi-monitor: `nvctl monitors apply-preset dual_oled_ips`
+- [ ] Configure multi-monitor layout if needed
 - [ ] Install OpenRGB and configure RGB
 - [ ] Test DLSS support: `nvctl dlss status`
 - [ ] Apply gaming optimizations: `nvctl gaming enable`
@@ -1214,7 +1242,7 @@ dmesg | grep -i "bar\|pci"
 
 - **nvcontrol Documentation:** [docs/](../)
 - **ASUS Astral Features:** [asus-astral.md](asus-astral.md)
-- **Kernel Driver Optimizations:** [drivers/kernel-580.md](../drivers/kernel-580.md)
+- **Current Driver Guidance:** [drivers/open-610.md](../drivers/open-610.md)
 - **TUI User Guide:** [tui-user-guide.md](../tui-user-guide.md)
 
 ### External Links
@@ -1226,5 +1254,3 @@ dmesg | grep -i "bar\|pci"
 - [Arch Linux NVIDIA Wiki](https://wiki.archlinux.org/title/NVIDIA)
 
 ---
-
-**Your ASUS ROG Astral RTX 5090 is ready to unleash maximum performance on Arch Linux! 🚀**

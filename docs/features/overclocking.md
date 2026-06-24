@@ -454,5 +454,3 @@ echo "nvctl overclock apply --gpu-offset 100 --memory-offset 500" >> ~/.config/a
 - [VRR/G-SYNC](vrr-gsync.md) - Display optimization
 
 ---
-
-**Last Updated**: December 2024 (v0.7.3)

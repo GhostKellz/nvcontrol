@@ -262,5 +262,3 @@ kscreen-doctor output.DP-1.vrrpolicy.0
 - [Gaming Profiles](../commands/gaming.md) - Game-specific optimizations
 
 ---
-
-**Last Updated**: December 2024 (v0.7.3)

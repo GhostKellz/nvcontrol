@@ -5,6 +5,23 @@ Game profile management and automatic GPU optimization for gaming.
 
 ## Auto-Profile Application
 
+```mermaid
+stateDiagram-v2
+    [*] --> Disabled
+    Disabled --> Configured: gaming auto config
+    Configured --> Running: gaming auto start
+    Configured --> ServiceInstalled: install-service
+    ServiceInstalled --> Running: enable-service
+    Running --> Detecting: poll process list
+    Detecting --> Waiting: game match + apply-delay
+    Waiting --> Applied: profile applied
+    Applied --> Watching: game still running
+    Watching --> Restored: game exits + restore-on-exit
+    Restored --> Running
+    Running --> Stopped: stop / disable-service
+    Stopped --> Configured
+```
+
 ### `nvctl gaming auto start`
 Start the background auto-profile service.
 

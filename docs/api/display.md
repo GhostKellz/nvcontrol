@@ -185,14 +185,14 @@ fn optimize_multi_display() -> Result<()> {
 
 ## Wayland Support
 
-nvcontrol uses [nVibrant](https://github.com/Tremeschin/nVibrant) for Wayland digital vibrance:
+nvcontrol's current vibrance path uses the native NVIDIA display backend and NVKMS ioctl support where the loaded driver exposes the required interfaces. It does not require `nvidia-settings` for the primary Wayland vibrance workflow.
 
 ```bash
-# Ensure nVibrant is installed
-paru -S nvibrant-cli
+# Inspect displays first
+nvctl display vibrance list
 
-# nvcontrol will automatically use nVibrant on Wayland
-nvctl display vibrance DP-1 750
+# Apply vibrance on the selected display
+nvctl display vibrance set-display 1 150
 ```
 
 ## HDR Control

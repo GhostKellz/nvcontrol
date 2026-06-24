@@ -3183,7 +3183,7 @@ pub fn detect_vulkan_extensions() -> Vec<String> {
         "VK_NV_push_constant_bank",
     ];
 
-    let output = match Command::new("vulkaninfo").arg("--summary").output() {
+    let output = match overlay_safe_vulkaninfo_command().output() {
         Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).to_string(),
         _ => return Vec::new(),
     };
@@ -3193,6 +3193,24 @@ pub fn detect_vulkan_extensions() -> Vec<String> {
         .filter(|ext| output.contains(**ext))
         .map(|ext| ext.to_string())
         .collect()
+}
+
+fn overlay_safe_vulkaninfo_command() -> Command {
+    let mut command = Command::new("vulkaninfo");
+    command
+        .arg("--summary")
+        // MangoHud is commonly installed as an implicit Vulkan layer. If it is
+        // enabled globally, probing vulkaninfo can crash inside libMangoHud.
+        .env("DISABLE_MANGOHUD", "1")
+        .env("MANGOHUD", "0")
+        .env("DISABLE_VKBASALT", "1")
+        .env("ENABLE_VKBASALT", "0")
+        .env_remove("MANGOHUD_CONFIG")
+        .env_remove("MANGOHUD_CONFIGFILE")
+        .env_remove("VK_INSTANCE_LAYERS")
+        .env_remove("VK_LAYER_PATH")
+        .env_remove("LD_PRELOAD");
+    command
 }
 
 /// Detect FP16 EGL framebuffer support (610+ on Wayland)
@@ -5159,6 +5177,34 @@ mod tests {
         let caps = DriverCapabilities::from_version("abc.def.ghi").unwrap();
         assert_eq!(caps.major_version, 0);
         assert!(!caps.has_vulkan_swapchain_perf);
+    }
+
+    #[test]
+    fn test_vulkaninfo_probe_disables_overlay_layers() {
+        let command = overlay_safe_vulkaninfo_command();
+        let envs: std::collections::HashMap<_, _> = command.get_envs().collect();
+
+        assert_eq!(
+            envs.get(std::ffi::OsStr::new("DISABLE_MANGOHUD")),
+            Some(&Some(std::ffi::OsStr::new("1")))
+        );
+        assert_eq!(
+            envs.get(std::ffi::OsStr::new("MANGOHUD")),
+            Some(&Some(std::ffi::OsStr::new("0")))
+        );
+        assert_eq!(
+            envs.get(std::ffi::OsStr::new("DISABLE_VKBASALT")),
+            Some(&Some(std::ffi::OsStr::new("1")))
+        );
+        assert_eq!(
+            envs.get(std::ffi::OsStr::new("ENABLE_VKBASALT")),
+            Some(&Some(std::ffi::OsStr::new("0")))
+        );
+        assert_eq!(
+            envs.get(std::ffi::OsStr::new("VK_INSTANCE_LAYERS")),
+            Some(&None)
+        );
+        assert_eq!(envs.get(std::ffi::OsStr::new("LD_PRELOAD")), Some(&None));
     }
 
     #[test]

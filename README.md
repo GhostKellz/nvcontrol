@@ -244,11 +244,11 @@ nvctl completion fish > nvctl.fish
 
 | Generation | GPUs | Status |
 |------------|------|--------|
-| RTX 50 (Blackwell) | 5090, 5080, 5070 Ti/5070, 5060 Ti/5060 | Full Support |
-| RTX 40 (Ada) | 4090, 4080, 4070 Ti/4070, 4060 Ti/4060 | Full Support |
-| RTX 30 (Ampere) | 3090/3080/3070/3060 series | Full Support |
-| RTX 20 (Turing) | 2080/2070/2060 series | Supported |
-| GTX 16/10 | 1660/1650/1080/1070/1060 | Basic Support |
+| RTX 50 (Blackwell) | 5090, 5080, 5070 Ti/5070, 5060 Ti/5060 | Primary 610+ target; RTX 5090 path has local validation |
+| RTX 40 (Ada) | 4090, 4080, 4070 Ti/4070, 4060 Ti/4060 | Expected 610+ path; repeat live smoke coverage still wanted |
+| RTX 30 (Ampere) | 3090/3080/3070/3060 series | Expected 610+ path; repeat live smoke coverage still wanted |
+| RTX 20 (Turing) | 2080/2070/2060 series | Supported where the loaded driver exposes required NVML/display paths |
+| GTX 16/10 | 1660/1650/1080/1070/1060 | Basic/legacy support; check the driver compatibility matrix |
 
 ## Supported Compositors
 
@@ -300,20 +300,18 @@ See [docs/hardware/astral-owners.md](docs/hardware/astral-owners.md) for Astral-
 
 Launch with `nvctl gpu stat`:
 
-```
-┌─ nvcontrol │ GPU 0 │ 55°C │ 85% │ LIVE ───────────────────┐
-├─ Overview ─ Performance ─ Memory ─ Temp ─ Power ─ OC ─────┤
-│                                                            │
-│  GPU Stats                                                 │
-│  ┌────────────────────────────────────────────────────┐   │
-│  │ NVIDIA GeForce RTX 5090    72°C  ⚡ 380W           │   │
-│  │ GPU:  [████████████████░░░░] 85%                   │   │
-│  │ VRAM: [██████████████░░░░░░] 18.2/32.0 GB          │   │
-│  │ Fan:  [████████████░░░░░░░░] 65%                   │   │
-│  └────────────────────────────────────────────────────┘   │
-│                                                            │
-│  [q]uit [h]elp [t]heme [←→] tabs [↑↓] scroll              │
-└────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    launch["nvctl gpu stat"] --> loop["TUI event loop"]
+    loop --> tabs["dashboard tabs"]
+    tabs --> gpu["GPU metrics"]
+    tabs --> drivers["driver/support status"]
+    tabs --> cuda["CUDA/AI readiness"]
+    tabs --> power["power/fan/thermal state"]
+    gpu --> render["live terminal render"]
+    drivers --> render
+    cuda --> render
+    power --> render
 ```
 
 Tabs: Overview, Performance, Memory, Temperature, Power, Processes, Overclock, Fan Control, Profiles, Tuner, Profiler, OSD, Drivers, DLSS, CUDA/AI, Settings

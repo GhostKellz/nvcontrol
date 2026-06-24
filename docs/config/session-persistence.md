@@ -1,7 +1,5 @@
 # TUI Session Persistence
 
-*Added in v0.7.6*
-
 The TUI now saves your session state automatically, so your settings survive restarts.
 
 ## What's Saved
@@ -35,18 +33,27 @@ power_limit_percent = 95
 oc_preset = "Performance"
 ```
 
-## Version Migration
+## Schema Migration
 
-The `version` field tracks the config schema version for future migrations:
+The `version` field tracks the TUI state schema. Missing fields get defaults, old or incomplete state is validated, and corrupt state is backed up before nvcontrol falls back to defaults.
 
-| Version | nvcontrol Version | Changes |
-|---------|-------------------|---------|
-| 0 | Pre-0.7.6 | No version field (implicit) |
-| 1 | 0.7.6+ | Added version field, all current fields |
+```mermaid
+flowchart TD
+    load["load tui_state.toml"] --> parse{"parse ok?"}
+    parse -->|no| backup["copy to tui_state.toml.bak"]
+    backup --> defaults["use defaults"]
+    parse -->|yes| schema{"version current?"}
+    schema -->|no| migrate["fill missing fields"]
+    schema -->|yes| validate["validate ranges"]
+    migrate --> validate
+    defaults --> validate
+    validate --> current["runtime TUI state"]
+    current --> save["next save writes current schema"]
+```
 
 ### Upgrade Behavior
 
-When upgrading from v0.7.5 or earlier:
+When loading older or incomplete state:
 - Missing fields get safe defaults
 - Values are validated and clamped to safe ranges
 - Corrupt files are backed up to `*.toml.bak` before reset

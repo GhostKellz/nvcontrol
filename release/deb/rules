@@ -28,6 +28,9 @@ override_dh_auto_install:
 	# Install documentation
 	install -Dm644 README.md debian/nvcontrol/usr/share/doc/nvcontrol/README.md
 
+	# Install man page
+	install -Dm644 man/nvctl.1 debian/nvcontrol/usr/share/man/man1/nvctl.1
+
 override_dh_auto_test:
 	# Skip tests that require GPU hardware
 	cargo test --release --lib -- --skip hardware --skip nvml || true

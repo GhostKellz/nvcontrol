@@ -1,15 +1,12 @@
 # Image Sharpening
 
-NVIDIA GPU-based image sharpening control via NVKMS.
+NVIDIA image sharpening support status and compatibility notes.
 
 ## Overview
 
-nvcontrol provides native image sharpening control through NVIDIA's modeset kernel interface. This is a GPU-level post-processing effect that:
+Recent NVIDIA driver branches removed or changed the older NVKMS image-sharpening attribute path that earlier nvcontrol docs described. nvcontrol should treat image sharpening as a capability-dependent feature: report whether the loaded stack exposes it, avoid promising that it is available on every GPU, and prefer game/upscaler sharpening when the driver path is unavailable.
 
-- Enhances edge definition and clarity
-- Works globally across all applications
-- Has minimal performance impact
-- Operates independently of game settings
+When available, sharpening can enhance edge definition and clarity. When unavailable, commands should report that state instead of implying a permissions problem.
 
 ## Quick Start
 
@@ -17,10 +14,10 @@ nvcontrol provides native image sharpening control through NVIDIA's modeset kern
 # Check sharpening status
 nvctl display sharpening status
 
-# Enable with default intensity (50%)
+# Try a moderate intensity when reported available
 nvctl display sharpening set 50
 
-# Maximum sharpening
+# Maximum requested sharpening
 nvctl display sharpening set 100
 
 # Disable (set to 0)
@@ -46,7 +43,7 @@ Show current image sharpening status and capabilities.
 ```
 Image Sharpening Status:
 ══════════════════════════════════════
-  Available: ✅ Yes
+  Available: <yes|no>
   Current Value: 50
   Default Value: 0
   Range: 0 - 100
@@ -81,7 +78,7 @@ nvctl display sharpening reset
 
 ### Implementation
 
-nvcontrol uses NVKMS (NVIDIA Kernel Modeset) ioctls to control image sharpening:
+Older nvcontrol builds attempted to use NVKMS (NVIDIA Kernel Modeset) ioctls for image sharpening:
 
 - **Device:** `/dev/nvidia-modeset`
 - **Attribute:** `ImageSharpening`
@@ -91,18 +88,15 @@ nvcontrol uses NVKMS (NVIDIA Kernel Modeset) ioctls to control image sharpening:
 
 | Architecture | Support |
 |--------------|---------|
-| Blackwell (RTX 50xx) | ✅ Full |
-| Ada Lovelace (RTX 40xx) | ✅ Full |
-| Ampere (RTX 30xx) | ✅ Full |
-| Turing (RTX 20xx) | ✅ Full |
-| Pascal (GTX 10xx) | ⚠️ Limited |
+| Blackwell (RTX 50xx) | Capability-dependent; verify with `nvctl display sharpening status` |
+| Ada Lovelace (RTX 40xx) | Capability-dependent; verify with `nvctl display sharpening status` |
+| Ampere (RTX 30xx) | Capability-dependent; verify with `nvctl display sharpening status` |
+| Turing (RTX 20xx) | Capability-dependent; verify with `nvctl display sharpening status` |
+| Pascal (GTX 10xx) | Legacy/basic path; do not assume availability |
 
 ### Performance Impact
 
-Image sharpening has minimal GPU overhead:
-- < 1% performance impact at any setting
-- No additional VRAM usage
-- Works on desktop and fullscreen content
+When the driver exposes sharpening, performance impact is expected to be small. Validate visually and with the target game/application because driver behavior and compositor paths vary.
 
 ## Use Cases
 
@@ -141,7 +135,7 @@ nvctl display sharpening set 25
 
 ## Per-Display Control
 
-Image sharpening can be configured per display:
+Per-display sharpening is only available when the loaded driver/backend exposes the required control:
 
 ```bash
 # Set for specific display
@@ -153,7 +147,7 @@ nvctl display sharpening set-display 1 0
 
 | Feature | nvcontrol (NVKMS) | In-Game |
 |---------|-------------------|---------|
-| Scope | Global (all apps) | Per-game |
+| Scope | Driver/backend-dependent | Per-game |
 | Control | CLI/GUI | Game settings |
 | Persistence | System-wide | Per-game saves |
 | Performance | ~0% | Varies |
@@ -176,9 +170,9 @@ When using upscaling technologies:
 
 ### Sharpening Not Available
 
-1. **Check driver version:**
+1. **Check driver/runtime status:**
    ```bash
-   nvidia-smi --query-gpu=driver_version --format=csv
+   nvctl display sharpening status
    ```
 
 2. **Verify NVKMS access:**
@@ -186,9 +180,9 @@ When using upscaling technologies:
    ls -la /dev/nvidia-modeset
    ```
 
-3. **Check GPU support:**
-   - Pascal and newer GPUs support image sharpening
-   - Older GPUs may not have this feature
+3. **Check driver branch notes:**
+   - Current drivers may not expose the older NVKMS sharpening attribute
+   - If status reports unavailable, use game/upscaler sharpening instead
 
 ### No Visible Effect
 
@@ -228,6 +222,9 @@ use nvcontrol::display_controls::{DisplayControls, ImageSharpeningInfo};
 // Get sharpening info
 let controls = DisplayControls::new(device_handle, disp_handle, dpy_id)?;
 let info: ImageSharpeningInfo = controls.get_image_sharpening_info()?;
+if !info.available {
+    // Report unavailable to the user instead of applying.
+}
 
 // Set sharpening
 controls.set_image_sharpening(50)?;
@@ -243,5 +240,3 @@ controls.reset_image_sharpening()?;
 - [Overclocking Guide](overclocking.md) - Performance tuning
 
 ---
-
-**Last Updated**: December 2024 (v0.7.3)

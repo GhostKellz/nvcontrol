@@ -46,7 +46,23 @@ printf("NvKmsAllocDeviceReply: %zu\n", sizeof(struct NvKmsAllocDeviceReply));
 | `VK_KHR_internally_synchronized_queues` | Driver-managed queue synchronization |
 | `VK_NV_push_constant_bank` | Extended push constant storage |
 
-nvcontrol detects these at runtime via `vulkaninfo --summary` in the `detect_vulkan_extensions()` helper.
+nvcontrol detects these at runtime via `vulkaninfo --summary` in the `detect_vulkan_extensions()` helper. The helper is launched through an overlay-safe command path that disables MangoHud/vkBasalt environment toggles and clears explicit Vulkan layer/preload variables before spawning `vulkaninfo`; this keeps a broken implicit overlay from crashing the diagnostic path.
+
+```mermaid
+flowchart TD
+    info["nvctl driver info"] --> version{"driver >= 610?"}
+    version -->|no| skip["skip 610+ runtime feature block"]
+    version -->|yes| probes["runtime probes"]
+    probes --> vk["vulkaninfo --summary\noverlay-safe child process"]
+    probes --> egl["eglinfo / eglinfo -B"]
+    probes --> kernel["kernel version check"]
+    vk --> vkext["Vulkan extension flags"]
+    egl --> fp16["FP16 EGL Wayland signal"]
+    kernel --> drm["DRM color pipeline readiness"]
+    vkext --> output["610+ Features output"]
+    fp16 --> output
+    drm --> output
+```
 
 ### FP16 EGL on Wayland
 
@@ -101,7 +117,7 @@ pub has_drm_color_pipeline: bool,
 - [x] `nvctl wayland status` — shows FP16 EGL capability
 - [x] `cargo test` — all tests pass (346 total)
 - [x] NVKMS struct sizes verified against local `~/open-gpu-kernel-modules` headers at `NVIDIA_VERSION = 610.43.02`
-- [ ] `vulkaninfo --summary` — verify extension detection on live system
+- [x] overlay-safe `vulkaninfo --summary` probe — verified locally through `nvctl driver info` on RTX 5090 / 610.43.02
 - [ ] `eglinfo` — verify FP16 EGL detection on live system
 
 ## Hardware Validation Notes
@@ -124,5 +140,5 @@ pub has_drm_color_pipeline: bool,
 
 | Date | Change |
 |------|--------|
-| 2026-06-23 | Added v0.8.9 setup/support-bundle validation notes and local 610.43.02 source verification reference |
+| 2026-06-23 | Added v0.8.10 setup/support-bundle validation notes and local 610.43.02 source verification reference |
 | 2026-05-26 | Initial analysis of 610.43.02 — NVKMS ABI fix, capability flags, runtime detection |

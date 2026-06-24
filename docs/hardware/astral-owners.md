@@ -1,10 +1,10 @@
 # ASUS ROG Astral RTX 5090 - Linux Quick Start
 
-Welcome, Astral owner! This guide covers nvcontrol features specific to your card.
+This guide covers nvcontrol features specific to ROG Astral cards.
 
 ## Power Detector+
 
-Your Astral has ASUS Power Detector+ for monitoring the 12V-2x6 power connector health.
+ROG Astral RTX 5090 has tested nvcontrol support for ASUS Power Detector+ monitoring of the 12V-2x6 power connector.
 
 ### Quick Check
 
@@ -74,21 +74,18 @@ nvcontrol supports overclocking on the Astral:
 # View current clocks
 nvctl overclock info
 
-# Apply GPU offset (in MHz)
-nvctl overclock gpu-offset 100
-
-# Apply memory offset
-nvctl overclock mem-offset 200
+# Apply GPU and memory offsets
+nvctl overclock apply --gpu-offset 100 --memory-offset 200
 ```
 
 ## Fan Control
 
 ```bash
 # View fan status
-nvctl fan status
+nvctl fan info
 
-# Set fan curve
-nvctl fan curve "30:40,50:50,70:70,85:100"
+# Set fan 0 manually for validation
+nvctl fan set 0 35
 ```
 
 ## Troubleshooting
@@ -101,7 +98,7 @@ nvctl fan curve "30:40,50:50,70:70,85:100"
 
 ### Card Not Detected
 
-Your Astral should be detected automatically. Verify with:
+Astral should be detected automatically. Verify with:
 ```bash
 lspci -nn | grep -i nvidia
 # Should show: 10de:XXXX subsystem 1043:89e3

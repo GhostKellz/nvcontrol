@@ -1324,6 +1324,12 @@ _nvctl() {
             nvctl__subcmd__driver__subcmd__source__subcmd__help,update)
                 cmd="nvctl__subcmd__driver__subcmd__source__subcmd__help__subcmd__update"
                 ;;
+            nvctl__subcmd__fan,auto)
+                cmd="nvctl__subcmd__fan__subcmd__auto"
+                ;;
+            nvctl__subcmd__fan,curve)
+                cmd="nvctl__subcmd__fan__subcmd__curve"
+                ;;
             nvctl__subcmd__fan,help)
                 cmd="nvctl__subcmd__fan__subcmd__help"
                 ;;
@@ -1333,6 +1339,36 @@ _nvctl() {
             nvctl__subcmd__fan,set)
                 cmd="nvctl__subcmd__fan__subcmd__set"
                 ;;
+            nvctl__subcmd__fan__subcmd__curve,apply)
+                cmd="nvctl__subcmd__fan__subcmd__curve__subcmd__apply"
+                ;;
+            nvctl__subcmd__fan__subcmd__curve,help)
+                cmd="nvctl__subcmd__fan__subcmd__curve__subcmd__help"
+                ;;
+            nvctl__subcmd__fan__subcmd__curve,set)
+                cmd="nvctl__subcmd__fan__subcmd__curve__subcmd__set"
+                ;;
+            nvctl__subcmd__fan__subcmd__curve,show)
+                cmd="nvctl__subcmd__fan__subcmd__curve__subcmd__show"
+                ;;
+            nvctl__subcmd__fan__subcmd__curve__subcmd__help,apply)
+                cmd="nvctl__subcmd__fan__subcmd__curve__subcmd__help__subcmd__apply"
+                ;;
+            nvctl__subcmd__fan__subcmd__curve__subcmd__help,help)
+                cmd="nvctl__subcmd__fan__subcmd__curve__subcmd__help__subcmd__help"
+                ;;
+            nvctl__subcmd__fan__subcmd__curve__subcmd__help,set)
+                cmd="nvctl__subcmd__fan__subcmd__curve__subcmd__help__subcmd__set"
+                ;;
+            nvctl__subcmd__fan__subcmd__curve__subcmd__help,show)
+                cmd="nvctl__subcmd__fan__subcmd__curve__subcmd__help__subcmd__show"
+                ;;
+            nvctl__subcmd__fan__subcmd__help,auto)
+                cmd="nvctl__subcmd__fan__subcmd__help__subcmd__auto"
+                ;;
+            nvctl__subcmd__fan__subcmd__help,curve)
+                cmd="nvctl__subcmd__fan__subcmd__help__subcmd__curve"
+                ;;
             nvctl__subcmd__fan__subcmd__help,help)
                 cmd="nvctl__subcmd__fan__subcmd__help__subcmd__help"
                 ;;
@@ -1341,6 +1377,15 @@ _nvctl() {
                 ;;
             nvctl__subcmd__fan__subcmd__help,set)
                 cmd="nvctl__subcmd__fan__subcmd__help__subcmd__set"
+                ;;
+            nvctl__subcmd__fan__subcmd__help__subcmd__curve,apply)
+                cmd="nvctl__subcmd__fan__subcmd__help__subcmd__curve__subcmd__apply"
+                ;;
+            nvctl__subcmd__fan__subcmd__help__subcmd__curve,set)
+                cmd="nvctl__subcmd__fan__subcmd__help__subcmd__curve__subcmd__set"
+                ;;
+            nvctl__subcmd__fan__subcmd__help__subcmd__curve,show)
+                cmd="nvctl__subcmd__fan__subcmd__help__subcmd__curve__subcmd__show"
                 ;;
             nvctl__subcmd__gaming,auto)
                 cmd="nvctl__subcmd__gaming__subcmd__auto"
@@ -2299,11 +2344,26 @@ _nvctl() {
             nvctl__subcmd__help__subcmd__driver__subcmd__source,update)
                 cmd="nvctl__subcmd__help__subcmd__driver__subcmd__source__subcmd__update"
                 ;;
+            nvctl__subcmd__help__subcmd__fan,auto)
+                cmd="nvctl__subcmd__help__subcmd__fan__subcmd__auto"
+                ;;
+            nvctl__subcmd__help__subcmd__fan,curve)
+                cmd="nvctl__subcmd__help__subcmd__fan__subcmd__curve"
+                ;;
             nvctl__subcmd__help__subcmd__fan,info)
                 cmd="nvctl__subcmd__help__subcmd__fan__subcmd__info"
                 ;;
             nvctl__subcmd__help__subcmd__fan,set)
                 cmd="nvctl__subcmd__help__subcmd__fan__subcmd__set"
+                ;;
+            nvctl__subcmd__help__subcmd__fan__subcmd__curve,apply)
+                cmd="nvctl__subcmd__help__subcmd__fan__subcmd__curve__subcmd__apply"
+                ;;
+            nvctl__subcmd__help__subcmd__fan__subcmd__curve,set)
+                cmd="nvctl__subcmd__help__subcmd__fan__subcmd__curve__subcmd__set"
+                ;;
+            nvctl__subcmd__help__subcmd__fan__subcmd__curve,show)
+                cmd="nvctl__subcmd__help__subcmd__fan__subcmd__curve__subcmd__show"
                 ;;
             nvctl__subcmd__help__subcmd__gaming,auto)
                 cmd="nvctl__subcmd__help__subcmd__gaming__subcmd__auto"
@@ -10506,7 +10566,7 @@ _nvctl() {
             return 0
             ;;
         nvctl__subcmd__fan)
-            opts="-v -h --verbose --format --no-color --help info set help"
+            opts="-v -h --verbose --format --no-color --help info set auto curve help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -10523,9 +10583,247 @@ _nvctl() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        nvctl__subcmd__fan__subcmd__help)
-            opts="info set help"
+        nvctl__subcmd__fan__subcmd__auto)
+            opts="-v -h --verbose --format --no-color --help [FAN_ID]"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --format)
+                    COMPREPLY=($(compgen -W "human json yaml table" -- "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__fan__subcmd__curve)
+            opts="-v -h --verbose --format --no-color --help show apply set help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --format)
+                    COMPREPLY=($(compgen -W "human json yaml table" -- "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__fan__subcmd__curve__subcmd__apply)
+            opts="-v -h --fan-id --verbose --format --no-color --help <PROFILE>"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --fan-id)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --format)
+                    COMPREPLY=($(compgen -W "human json yaml table" -- "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__fan__subcmd__curve__subcmd__help)
+            opts="show apply set help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__fan__subcmd__curve__subcmd__help__subcmd__apply)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__fan__subcmd__curve__subcmd__help__subcmd__help)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__fan__subcmd__curve__subcmd__help__subcmd__set)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__fan__subcmd__curve__subcmd__help__subcmd__show)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__fan__subcmd__curve__subcmd__set)
+            opts="-v -h --fan-id --verbose --format --no-color --help <POINTS>"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --fan-id)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --format)
+                    COMPREPLY=($(compgen -W "human json yaml table" -- "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__fan__subcmd__curve__subcmd__show)
+            opts="-v -h --verbose --format --no-color --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --format)
+                    COMPREPLY=($(compgen -W "human json yaml table" -- "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__fan__subcmd__help)
+            opts="info set auto curve help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__fan__subcmd__help__subcmd__auto)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__fan__subcmd__help__subcmd__curve)
+            opts="show apply set"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__fan__subcmd__help__subcmd__curve__subcmd__apply)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__fan__subcmd__help__subcmd__curve__subcmd__set)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__fan__subcmd__help__subcmd__curve__subcmd__show)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
@@ -15132,8 +15430,78 @@ _nvctl() {
             return 0
             ;;
         nvctl__subcmd__help__subcmd__fan)
-            opts="info set"
+            opts="info set auto curve"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__help__subcmd__fan__subcmd__auto)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__help__subcmd__fan__subcmd__curve)
+            opts="show apply set"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__help__subcmd__fan__subcmd__curve__subcmd__apply)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__help__subcmd__fan__subcmd__curve__subcmd__set)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__help__subcmd__fan__subcmd__curve__subcmd__show)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 5 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi

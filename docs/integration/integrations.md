@@ -2,12 +2,6 @@
 
 This directory documents nvcontrol's integrations with other tools in the CKTechX ecosystem.
 
-## Available Integrations
-
-| Integration | Status | Description |
-|-------------|--------|-------------|
-| [nvhud](./nvhud.md) | 🔄 Planned | Zig-based GPU monitoring overlay |
-
 ## Experimental Integrations
 
 The following integration remains in `experimental/`:
@@ -41,28 +35,38 @@ nvctl container monitor -c my-container
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Application Layer                         │
-│  ┌─────────────┐  ┌─────────────────┐  ┌─────────────┐     │
-│  │   Docker    │  │     Podman      │  │   nvhud     │     │
-│  └──────┬──────┘  └────────┬────────┘  └──────┬──────┘     │
-│         │                  │                   │            │
-│         └──────────────────┴───────────────────┘            │
-│                            │                                │
-│                            ▼                                │
-│                     ┌─────────────┐                         │
-│                     │  nvcontrol  │                         │
-│                     │  (GPU API)  │                         │
-│                     └──────┬──────┘                         │
-│                            │                                │
-└────────────────────────────┼────────────────────────────────┘
-                             │
-                             ▼
-                    ┌─────────────────┐
-                    │  NVIDIA Driver  │
-                    │  (NVML / NVKMS) │
-                    └─────────────────┘
+```mermaid
+flowchart TD
+    subgraph Integrations["Integration surfaces"]
+        Docker["Docker"]
+        Podman["Podman"]
+        Containerd["containerd"]
+        Nix["NixOS containers"]
+    end
+
+    subgraph Nvcontrol["nvcontrol"]
+        CLI["nvctl container commands"]
+        RuntimeDoctor["container runtime doctor"]
+        GpuApi["GPU and driver APIs"]
+        Support["support bundle metadata"]
+    end
+
+    subgraph System["Local NVIDIA stack"]
+        Runtime["NVIDIA container runtime\nnvidia-ctk / CDI"]
+        Driver["NVIDIA driver\nNVML / NVKMS"]
+        Devices["/dev/nvidia* devices"]
+    end
+
+    Docker --> CLI
+    Podman --> CLI
+    Containerd --> CLI
+    Nix --> CLI
+    CLI --> RuntimeDoctor
+    RuntimeDoctor --> Runtime
+    RuntimeDoctor --> Support
+    GpuApi --> Driver
+    Runtime --> Devices
+    Driver --> Devices
 ```
 
 ## See Also

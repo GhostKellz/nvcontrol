@@ -214,13 +214,14 @@ nvctl fan info              # Fan RPM, percentage, capabilities
 nvctl fan set <id> <pct>    # Set fan speed (0-100%)
 nvctl fan curve apply <profile>  # Apply fan curve
 nvctl fan curve show        # Show current curve
+nvctl fan curve set "30:20,60:50,75:80,85:100"  # Apply inline curve
 nvctl fan auto              # Return to automatic control
 ```
 
 **Examples:**
 ```bash
 nvctl fan set 0 75          # First fan to 75%
-nvctl fan curve apply gaming  # Aggressive cooling curve
+nvctl fan curve apply aggressive  # Aggressive cooling curve
 nvctl fan auto              # Automatic fan control
 ```
 

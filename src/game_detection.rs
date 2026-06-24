@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
-use sysinfo::System;
+use sysinfo::{ProcessesToUpdate, System};
 
 #[derive(Debug, Clone)]
 pub struct DetectedGame {
@@ -93,18 +93,18 @@ impl GameDetector {
 
     /// Scan for running games and detect profile matches
     pub fn scan_running_games(&mut self) -> Vec<DetectedGame> {
-        self.system.refresh_processes();
+        self.system.refresh_processes(ProcessesToUpdate::All, true);
         self.active_games.clear();
 
         for (pid, process) in self.system.processes() {
-            let exe_name = process.name();
+            let exe_name = process.name().to_string_lossy();
             let exe_path = process
                 .exe()
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_default();
 
             // Check if this process matches any known game profile
-            if let Some(profile) = self.profiles.get(exe_name).or_else(|| {
+            if let Some(profile) = self.profiles.get(exe_name.as_ref()).or_else(|| {
                 // Try matching by full path
                 self.profiles.iter().find_map(
                     |(k, v)| {
@@ -114,7 +114,7 @@ impl GameDetector {
             }) {
                 self.active_games.push(DetectedGame {
                     name: profile.name.clone(),
-                    executable: exe_name.to_string(),
+                    executable: exe_name.into_owned(),
                     pid: pid.as_u32(),
                     profile: Some(profile.clone()),
                 });
@@ -219,7 +219,7 @@ impl GameDetector {
                 .system
                 .processes()
                 .iter()
-                .find(|(_, proc)| proc.name() == profile.executable.as_str())
+                .find(|(_, proc)| proc.name().to_string_lossy() == profile.executable)
             {
                 let nice_value = match profile.priority {
                     ProcessPriority::Realtime => -20,

@@ -580,12 +580,47 @@ enum DitheringSubcommand {
 
 #[derive(Subcommand)]
 enum FanSubcommand {
+    /// Show fan status
     Info,
+    /// Set a fan to a manual speed percentage
     Set {
         /// Fan ID (0, 1, 2, etc.)
         fan_id: usize,
         /// Fan speed percentage (0-100)
         percent: u8,
+    },
+    /// Reset a fan to automatic driver control
+    Auto {
+        /// Fan ID (0, 1, 2, etc.)
+        #[arg(default_value = "0")]
+        fan_id: usize,
+    },
+    /// Manage fan curves and presets
+    Curve {
+        #[command(subcommand)]
+        action: FanCurveSubcommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum FanCurveSubcommand {
+    /// Show available fan curve profiles
+    Show,
+    /// Apply a saved or built-in fan curve profile to a fan
+    Apply {
+        /// Profile name, such as balanced, silent, performance, or aggressive
+        profile: String,
+        /// Fan ID (0, 1, 2, etc.)
+        #[arg(long, default_value = "0")]
+        fan_id: usize,
+    },
+    /// Apply an inline curve, for example "30:20,60:50,75:80,85:100"
+    Set {
+        /// Curve points as temp:percent pairs separated by commas
+        points: String,
+        /// Fan ID (0, 1, 2, etc.)
+        #[arg(long, default_value = "0")]
+        fan_id: usize,
     },
 }
 
@@ -2536,6 +2571,75 @@ fn main() {
             FanSubcommand::Set { fan_id, percent } => match fan::set_fan_speed(fan_id, percent) {
                 Ok(()) => println!("Set fan {fan_id} to {percent}%"),
                 Err(e) => eprintln!("Failed to set fan speed: {e}"),
+            },
+            FanSubcommand::Auto { fan_id } => match fan::reset_fan_to_auto(fan_id) {
+                Ok(()) => println!("Fan {fan_id} reset to automatic control"),
+                Err(e) => eprintln!("Failed to reset fan to automatic control: {e}"),
+            },
+            FanSubcommand::Curve { action } => match action {
+                FanCurveSubcommand::Show => {
+                    println!("Fan Curve Profiles:");
+                    for profile in
+                        fan::load_fan_profiles().unwrap_or_else(|_| fan::get_predefined_profiles())
+                    {
+                        println!("  {}", profile.name);
+                        println!("    {}", profile.description);
+                        for (fan_id, curve) in &profile.curves {
+                            let points = curve
+                                .points
+                                .iter()
+                                .map(|point| format!("{}:{}%", point.temperature, point.duty_cycle))
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            println!("    fan {fan_id}: {points}");
+                        }
+                    }
+                }
+                FanCurveSubcommand::Apply { profile, fan_id } => {
+                    let profiles =
+                        fan::load_fan_profiles().unwrap_or_else(|_| fan::get_predefined_profiles());
+                    let Some(selected) = profiles
+                        .iter()
+                        .find(|candidate| candidate.name.eq_ignore_ascii_case(&profile))
+                    else {
+                        eprintln!("Unknown fan curve profile: {profile}");
+                        eprintln!("Run `nvctl fan curve show` to list available profiles.");
+                        return;
+                    };
+
+                    let curve = selected
+                        .curves
+                        .get(&fan_id)
+                        .or_else(|| selected.curves.values().next());
+                    let Some(curve) = curve else {
+                        eprintln!("Profile `{}` does not contain a fan curve", selected.name);
+                        return;
+                    };
+
+                    let result = nvcontrol::nvml_backend::create_real_backend()
+                        .get_temperature((fan_id / 10) as u32)
+                        .map(|temp| {
+                            fan::apply_fan_curve(fan_id, curve, temp.min(100) as u8, None)
+                                .map(|_| ())
+                        })
+                        .unwrap_or_else(|_| fan::set_fan_curve(fan_id, &fan_curve_points(curve)));
+
+                    match result {
+                        Ok(()) => println!(
+                            "Applied fan curve profile `{}` to fan {}",
+                            selected.name, fan_id
+                        ),
+                        Err(e) => eprintln!("Failed to apply fan curve `{}`: {e}", selected.name),
+                    }
+                }
+                FanCurveSubcommand::Set { points, fan_id } => match parse_fan_curve_points(&points)
+                {
+                    Ok(parsed) => match fan::set_fan_curve(fan_id, &parsed) {
+                        Ok(()) => println!("Applied inline fan curve to fan {fan_id}"),
+                        Err(e) => eprintln!("Failed to apply inline fan curve: {e}"),
+                    },
+                    Err(e) => eprintln!("{e}"),
+                },
             },
         },
         Command::Overclock { subcommand } => match subcommand {
@@ -6815,6 +6919,58 @@ fn print_formatted_output<T: serde::Serialize>(
                 );
             }
         }
+    }
+}
+
+fn fan_curve_points(curve: &fan::FanCurve) -> Vec<(u8, u8)> {
+    curve
+        .points
+        .iter()
+        .map(|point| (point.temperature, point.duty_cycle))
+        .collect()
+}
+
+fn parse_fan_curve_points(input: &str) -> Result<Vec<(u8, u8)>, String> {
+    let mut points = Vec::new();
+
+    for raw_pair in input.split(',') {
+        let pair = raw_pair.trim();
+        if pair.is_empty() {
+            continue;
+        }
+
+        let Some((temp, duty)) = pair.split_once(':') else {
+            return Err(format!(
+                "Invalid fan curve point `{pair}`. Expected temp:percent, for example 60:50."
+            ));
+        };
+
+        let temp = temp.trim().parse::<u8>().map_err(|_| {
+            format!(
+                "Invalid fan curve temperature `{}`. Expected 0-100.",
+                temp.trim()
+            )
+        })?;
+        let duty = duty.trim().parse::<u8>().map_err(|_| {
+            format!(
+                "Invalid fan curve percentage `{}`. Expected 0-100.",
+                duty.trim()
+            )
+        })?;
+
+        if temp > 100 || duty > 100 {
+            return Err(format!(
+                "Invalid fan curve point `{pair}`. Temperature and percentage must be 0-100."
+            ));
+        }
+
+        points.push((temp, duty));
+    }
+
+    if points.is_empty() {
+        Err("Fan curve requires at least one temp:percent point.".to_string())
+    } else {
+        Ok(points)
     }
 }
 

@@ -2,6 +2,29 @@
 
 `nvctl driver diagnose-release` is the quickest way to inspect kernel/userspace/GSP alignment on Linux NVIDIA systems.
 
+## Diagnostic Decision Tree
+
+```mermaid
+flowchart TD
+    start["nvctl driver diagnose-release"] --> kernel["read running kernel\nand module vermagic"]
+    kernel --> kmatch{"kernel match?"}
+    kmatch -->|no| dkms["flag module/kernel mismatch\nsuggest DKMS or initramfs review"]
+    kmatch -->|yes| versions["compare userspace and kernel module release"]
+
+    versions --> vmatch{"release aligned?"}
+    vmatch -->|no| packages["flag mixed userspace/kernel branch\nshow package hints where available"]
+    vmatch -->|yes| firmware["resolve GSP firmware layout"]
+
+    firmware --> fwok{"expected firmware present?"}
+    fwok -->|no| fwfix["show expected paths\nand ownership hints"]
+    fwok -->|yes| gpu["classify detected GPU support"]
+
+    dkms --> output["diagnostic report"]
+    packages --> output
+    fwfix --> output
+    gpu --> output
+```
+
 ## Fields
 
 ### `Running Kernel`

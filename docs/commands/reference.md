@@ -202,7 +202,7 @@ nvctl gaming gamescope launch --preset competitive steam
 Location: `~/.config/nvcontrol/`
 
 - `config.toml` - Main configuration
-- `tui_state.toml` - TUI session persistence (v0.7.6+)
+- `tui_state.toml` - TUI session persistence
 - `power_management.toml` - Power curves
 - `game_profile_auto.toml` - Game auto-profiles
 - `profiles/` - Saved profiles directory

@@ -2,7 +2,7 @@
 
 ## Overview
 
-nvcontrol implements **pure Rust digital vibrance control** that works on both Wayland and X11, with zero external dependencies except for the NVIDIA driver itself.
+nvcontrol implements native digital vibrance control for NVIDIA Linux systems. The current primary path is the Rust NVKMS backend used by the CLI, TUI, and GUI; older fallback behavior is kept only for compatibility where it still applies.
 
 ## Quick Start
 
@@ -27,7 +27,7 @@ nvctl vibrance 50
 
 ### Architecture
 
-nvcontrol uses a **dual-path approach** for maximum compatibility:
+nvcontrol uses a capability-based approach:
 
 1. **Primary: NVKMS ioctls** (requires permissions)
    - Direct `/dev/nvidia-modeset` device communication
@@ -35,10 +35,10 @@ nvcontrol uses a **dual-path approach** for maximum compatibility:
    - Zero overhead, instant response
    - Requires: user in `video` group OR sudo
 
-2. **Fallback: nvidia-settings** (works everywhere)
+2. **Fallback: nvidia-settings** (legacy/X11 compatibility)
    - Calls `nvidia-settings -a DigitalVibrance=X`
-   - Works without special permissions
-   - Compatible with existing setups
+   - X11-oriented and not the preferred current Wayland path
+   - Kept for systems where the native backend is unavailable
 
 ### Vibrance Range
 
@@ -138,10 +138,10 @@ alias vibe-gaming='nvctl vibrance 150'
 
 For the exact nvcontrol build to use with each NVIDIA driver branch, see [`../drivers/nvidia-driver.md`](../drivers/nvidia-driver.md).
 
-- ✅ NVIDIA Proprietary (495+)
-- ✅ NVIDIA Open (515+, **recommended 610+**)
-- ✅ nvidia-dkms
-- ❌ Nouveau (not supported - lacks vibrance API)
+- NVIDIA Open 610+ is the current recommended path
+- Proprietary driver support depends on whether the loaded stack exposes the required interfaces
+- Legacy branches should be checked against [`../drivers/nvidia-driver.md`](../drivers/nvidia-driver.md)
+- Nouveau is not supported because it lacks the NVIDIA vibrance API
 
 ### Display Servers
 
@@ -197,7 +197,7 @@ Our implementation is based on **[nvibrant](https://github.com/Tremeschin/nvibra
 ### Option 1: Udev Rules (Recommended)
 
 ```bash
-# Auto-setup (coming soon)
+# Auto-setup
 nvctl setup permissions
 
 # Manual setup
@@ -232,13 +232,14 @@ sudo nvctl vibrance 150
 
 The nvcontrol GUI includes a vibrance slider:
 
-```
-┌─────────────────────────────────────┐
-│ Digital Vibrance                    │
-├─────────────────────────────────────┤
-│ [━━━━━━━━━━━━━━━━━━━━━━━━━━━] 150% │
-│  0%    50%   100%  150%   200%      │
-└─────────────────────────────────────┘
+```mermaid
+flowchart LR
+    GUI["GUI vibrance slider"] --> Value["0-200% user value"]
+    Value --> Preview["preview/apply request"]
+    Preview --> Display["display backend"]
+    Display --> NVKMS["NVKMS vibrance ioctl"]
+    NVKMS --> Result["per-display result"]
+    Result --> Profile["optional saved profile"]
 ```
 
 - Real-time preview

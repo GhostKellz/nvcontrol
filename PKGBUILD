@@ -1,6 +1,6 @@
 # Maintainer: Christopher Kelley <ckelley@ghostkellz.sh>
 pkgname=nvcontrol
-pkgver=0.8.9
+pkgver=0.8.10
 pkgrel=1
 pkgdesc="The Ultimate NVIDIA GPU Control Tool for Linux - Advanced overclocking, fan control, and gaming optimization"
 arch=('x86_64')
@@ -61,6 +61,9 @@ package() {
     install -Dm644 "completions/nvctl.bash" "$pkgdir/usr/share/bash-completion/completions/nvctl"
     install -Dm644 "completions/nvctl.zsh" "$pkgdir/usr/share/zsh/site-functions/_nvctl"
     install -Dm644 "completions/nvctl.fish" "$pkgdir/usr/share/fish/vendor_completions.d/nvctl.fish"
+
+    # Install man page
+    install -Dm644 "man/nvctl.1" "$pkgdir/usr/share/man/man1/nvctl.1"
 
     # Install systemd user services
     install -dm755 "$pkgdir/usr/lib/systemd/user"

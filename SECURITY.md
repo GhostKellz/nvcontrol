@@ -61,19 +61,19 @@ cargo install cargo-audit
 cargo audit
 ```
 
-### v0.8.9 Advisory Status
+### v0.8.10 Advisory Status
 
 Audit performed: 2026-06-23
 Tool version: cargo-audit 0.21.x
-Result: **0 known vulnerabilities or warnings** after refreshing compatible Rust dependencies, including `memmap2` 0.9.11.
+Result: **0 known RustSec vulnerabilities reported by `cargo audit`** after refreshing compatible Rust dependencies, including `memmap2` 0.9.11.
 
 #### Accepted Warnings
 
-None for `v0.8.9`.
+`serde_yaml` remains present as a direct compatibility dependency. It is deprecated upstream but is not currently reported as a RustSec vulnerability by `cargo audit`.
 
 #### Remediation Plan
 
-Continue running `cargo audit` before each release and refresh compatible dependencies when advisories land in transitive GUI/TUI stacks.
+Continue running `cargo audit` before each release, refresh compatible dependencies when advisories land in transitive GUI/TUI stacks, and plan a YAML parser migration when it can be done without breaking existing profile/config workflows.
 
 ## Security Hardening Checklist
 

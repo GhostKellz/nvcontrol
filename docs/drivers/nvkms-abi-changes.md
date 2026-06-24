@@ -6,7 +6,7 @@ Tracks breaking NVKMS ioctl struct size changes across NVIDIA open driver releas
 
 **Breaking change:** `NvKmsAllocDeviceReply` reduced from 888 to **816 bytes** (72 bytes removed from internal capability fields).
 
-Local verification source for the v0.8.9 release pass: `~/open-gpu-kernel-modules/version.mk` reports `NVIDIA_VERSION = 610.43.02`, with the authoritative `NvKmsAllocDeviceReply` definition in `src/nvidia-modeset/interface/nvkms-api.h`.
+Local verification source for the v0.8.10 release pass: `~/open-gpu-kernel-modules/version.mk` reports `NVIDIA_VERSION = 610.43.02`, with the authoritative `NvKmsAllocDeviceReply` definition in `src/nvidia-modeset/interface/nvkms-api.h`.
 
 | Struct | 595 Size | 610 Size | Delta |
 |--------|----------|----------|-------|

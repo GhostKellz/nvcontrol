@@ -1,7 +1,7 @@
 %global crate nvcontrol
 
 Name:           nvcontrol
-Version:        0.8.9
+Version:        0.8.10
 Release:        1%{?dist}
 Summary:        Modern NVIDIA Settings Manager for Linux + Wayland
 
@@ -103,6 +103,9 @@ EOF
 # Documentation
 install -Dm644 README.md %{buildroot}%{_docdir}/%{name}/README.md
 
+# Man page
+install -Dm644 man/nvctl.1 %{buildroot}%{_mandir}/man1/nvctl.1
+
 # License
 install -Dm644 LICENSE %{buildroot}%{_licensedir}/%{name}/LICENSE
 
@@ -116,8 +119,14 @@ cargo test --release --lib -- --skip hardware --skip nvml || true
 %{_bindir}/nvcontrol
 %{_datadir}/applications/nvcontrol.desktop
 %{_userunitdir}/nvcontrol-game-profile-auto.service
+%{_mandir}/man1/nvctl.1*
 
 %changelog
+* Tue Jun 23 2026 CK Technology LLC <info@cktechx.com> - 0.8.10-1
+- Hotfix release metadata for v0.8.10 across packaging surfaces
+- Fan CLI contract wired for auto control and curve show/apply/set workflows
+- Man page and shell completion artifacts refreshed for current clap commands
+
 * Tue Jun 23 2026 CK Technology LLC <info@cktechx.com> - 0.8.9-1
 - Guided setup check for 610+ open-driver readiness, helper tools, and device access
 - Dependency refresh including memmap2 0.9.11 to clear the current RustSec warning

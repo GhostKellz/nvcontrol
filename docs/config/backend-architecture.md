@@ -1,209 +1,200 @@
 # Backend Architecture
 
-*Added in v0.7.6*
+nvcontrol uses a backend abstraction layer so the CLI, TUI, GUI, diagnostics, and tests can share the same GPU and display access model without opening duplicate driver sessions or shelling out through unreviewed command paths.
 
-nvcontrol uses a backend abstraction layer for deterministic testing and unified resource management.
+## Architecture Map
 
-## Overview
+```mermaid
+flowchart TD
+    subgraph Surfaces["User-facing surfaces"]
+        CLI["nvctl CLI"]
+        TUI["TUI dashboard"]
+        GUI["nvcontrol GUI"]
+        Notify["Notifications"]
+        Tests["Mock-driven tests"]
+    end
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     Application Layer                        │
-│  (CLI, TUI, GUI, Tray, Notifications)                       │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   GuiBackendContext                          │
-│  ┌─────────────────────┐  ┌─────────────────────────────┐   │
-│  │  SharedNvmlBackend  │  │  SharedDisplayRunner        │   │
-│  │  Arc<dyn NvmlBackend>│  │  Arc<dyn DisplayCommandRunner>│ │
-│  └─────────────────────┘  └─────────────────────────────┘   │
-│                                                              │
-│  + BackendStatus (debounced)                                │
-│  + CachedMetrics per GPU                                    │
-│  + StatusTracker (hotplug debouncing)                       │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-          ┌────────────────┴────────────────┐
-          ▼                                 ▼
-┌──────────────────────┐        ┌──────────────────────┐
-│   RealNvmlBackend    │        │  ShellDisplayRunner  │
-│   (nvml_wrapper)     │        │  (allow-listed cmds) │
-└──────────────────────┘        └──────────────────────┘
-          │                                 │
-          ▼                                 ▼
-    NVIDIA Driver                 System Binaries
-    (libnvidia-ml.so)       (/usr/bin/hyprctl, gsettings, etc.)
-```
+    subgraph Context["GuiBackendContext"]
+        NvmlShared["SharedNvmlBackend\nArc<dyn NvmlBackend>"]
+        DisplayShared["SharedDisplayRunner\nArc<dyn DisplayCommandRunner>"]
+        Status["BackendStatus"]
+        Tracker["StatusTracker\nhotplug debounce"]
+        Cache["CachedMetrics\nper GPU"]
+    end
 
-## Components
+    subgraph NvmlLayer["NVML backend layer"]
+        NvmlTrait["NvmlBackend trait"]
+        RealNvml["RealNvmlBackend\nnvml_wrapper"]
+        MockNvml["MockNvmlBackend\nunit/integration tests"]
+    end
 
-### NvmlBackend Trait
+    subgraph DisplayLayer["Display command layer"]
+        DisplayTrait["DisplayCommandRunner trait"]
+        ShellRunner["ShellDisplayRunner\nallow-listed commands"]
+        MockDisplay["MockDisplayRunner\nKDE/GNOME/Hyprland/Sway mocks"]
+    end
 
-Abstracts all NVML queries:
+    subgraph System["Local system interfaces"]
+        Driver["NVIDIA driver\nlibnvidia-ml.so"]
+        Device["/dev/nvidiactl\nNVKMS ioctls"]
+        Helpers["xrandr, nvidia-settings,\nhyprctl, gsettings,\nkscreen-doctor, swaymsg"]
+    end
 
-```rust
-pub trait NvmlBackend: Send + Sync {
-    fn is_available(&self) -> bool;
-    fn device_count(&self) -> NvResult<u32>;
-    fn get_metrics(&self, index: u32) -> NvResult<GpuMetrics>;
-    fn get_device_info(&self, index: u32) -> NvResult<GpuDeviceInfo>;
-    fn get_temperature(&self, index: u32) -> NvResult<u32>;
-    fn get_fan_speed(&self, index: u32, fan: u32) -> NvResult<u32>;
-    fn get_power_usage(&self, index: u32) -> NvResult<u32>;
-    // ... 20+ methods
-}
-```
+    CLI --> Context
+    TUI --> Context
+    GUI --> Context
+    Notify --> NvmlShared
+    Tests --> MockNvml
+    Tests --> MockDisplay
 
-**Implementations:**
-- `RealNvmlBackend` - Production (wraps nvml_wrapper)
-- `MockNvmlBackend` - Testing (configurable responses)
+    Context --> NvmlTrait
+    Context --> DisplayTrait
+    Context --> Status
+    Context --> Tracker
+    Context --> Cache
 
-### DisplayCommandRunner Trait
+    NvmlTrait --> RealNvml
+    NvmlTrait --> MockNvml
+    DisplayTrait --> ShellRunner
+    DisplayTrait --> MockDisplay
 
-Abstracts display-related shell commands:
-
-```rust
-pub trait DisplayCommandRunner: Send + Sync {
-    fn run_xrandr(&self, args: &[&str]) -> DisplayResult<String>;
-    fn run_nvidia_settings(&self, args: &[&str]) -> DisplayResult<String>;
-    fn run_wayland_info(&self) -> DisplayResult<String>;
-    fn run_command(&self, cmd: &str, args: &[&str]) -> DisplayResult<String>;
-    fn command_available(&self, cmd: &str) -> bool;
-    fn is_available(&self) -> bool;
-}
+    RealNvml --> Driver
+    ShellRunner --> Helpers
+    ShellRunner --> Device
 ```
 
-**Implementations:**
-- `ShellDisplayRunner` - Production (allow-listed absolute paths)
-- `MockDisplayRunner` - Testing (compositor-specific mocks)
+## Component Responsibilities
 
-### GuiBackendContext
+| Component | Primary type | Responsibility |
+|-----------|--------------|----------------|
+| Shared NVML backend | `SharedNvmlBackend` | Shared `Arc<dyn NvmlBackend>` used by GPU, monitoring, fan, power, notifications, multi-GPU, and UI paths |
+| Real NVML backend | `RealNvmlBackend` | Production NVML access through `nvml-wrapper` |
+| Mock NVML backend | `MockNvmlBackend` | Deterministic GPU metrics, device counts, and error states for tests |
+| Shared display runner | `SharedDisplayRunner` | Shared `Arc<dyn DisplayCommandRunner>` for display helper commands |
+| Shell display runner | `ShellDisplayRunner` | Production runner that only executes allow-listed display helper binaries |
+| Mock display runner | `MockDisplayRunner` | Deterministic compositor/display command responses for tests |
+| Backend context | `GuiBackendContext` | Combines NVML, display runner, device count, driver version, status, cache, and status debounce |
+| Status tracker | `StatusTracker` | Debounces backend availability changes so UI layers do not flicker during hotplug events |
+| Metrics cache | `CachedMetrics` | Keeps the latest successful GPU metrics and lets UI code detect stale values |
 
-Unified context for all UI layers:
+## Backend Creation Flow
 
-```rust
-pub struct GuiBackendContext {
-    pub nvml: SharedNvmlBackend,
-    pub display: SharedDisplayRunner,
-    pub device_count: u32,
-    pub driver_version: String,
-    pub status: BackendStatus,
-    // Internal: metrics_cache, status_tracker
-}
+```mermaid
+sequenceDiagram
+    participant Surface as CLI/TUI/GUI/Test
+    participant Context as GuiBackendContext
+    participant Nvml as NvmlBackend
+    participant Display as DisplayCommandRunner
+    participant Status as StatusTracker
+
+    Surface->>Context: new(), mock(), or with_backends()
+    Context->>Nvml: is_available()
+    Context->>Display: is_available()
+    Context->>Context: derive BackendStatus
+    Context->>Status: initialize reported status
+    Context-->>Surface: shared backend context
 ```
 
-**Usage:**
-```rust
-// Production
-let ctx = GuiBackendContext::new();
+Production callers use `GuiBackendContext::new()` or the shared backend constructors. Tests use `GuiBackendContext::mock()` or `GuiBackendContext::with_backends(...)` so they can exercise UI and command behavior without live NVIDIA hardware.
 
-// Testing
-let ctx = GuiBackendContext::mock();
+## Runtime Status Model
 
-// Custom backends
-let ctx = GuiBackendContext::with_backends(nvml, display);
+```mermaid
+stateDiagram-v2
+    [*] --> Available
+    Available --> PendingNvmlDown: NVML unavailable observed
+    Available --> PendingDisplayDown: display runner unavailable observed
+    PendingNvmlDown --> Available: backend recovers before debounce threshold
+    PendingDisplayDown --> Available: backend recovers before debounce threshold
+    PendingNvmlDown --> NvmlUnavailable: debounce threshold elapsed
+    PendingDisplayDown --> DisplayUnavailable: debounce threshold elapsed
+    NvmlUnavailable --> Available: NVML available again
+    DisplayUnavailable --> Available: display runner available again
+    NvmlUnavailable --> AllUnavailable: display runner also unavailable
+    DisplayUnavailable --> AllUnavailable: NVML also unavailable
+    AllUnavailable --> Available: both backends available
 ```
 
-## BackendStatus
+`BackendStatus` is intentionally coarse:
 
-Unified status reporting with debouncing:
+| Status | Meaning |
+|--------|---------|
+| `Available` | NVML and display command runner are available |
+| `NvmlUnavailable(String)` | Display path is available, but NVML is unavailable |
+| `DisplayUnavailable(String)` | NVML is available, but the display command runner is unavailable |
+| `AllUnavailable { ... }` | Neither backend path is currently available |
 
-```rust
-pub enum BackendStatus {
-    Available,
-    NvmlUnavailable(String),
-    DisplayUnavailable(String),
-    AllUnavailable { nvml_reason: String, display_reason: String },
-}
+## Metrics Cache Flow
+
+```mermaid
+flowchart TD
+    request["UI or command requests metrics"] --> cache{"cache fresh enough?"}
+    cache -->|yes| cached["return cached metrics"]
+    cache -->|no| nvml["query NvmlBackend"]
+    nvml --> ok{"query succeeded?"}
+    ok -->|yes| update["update CachedMetrics"]
+    update --> output["return live metrics"]
+    ok -->|no| fallback{"previous cache exists?"}
+    fallback -->|yes| stale["return stale cache with age available"]
+    fallback -->|no| error["return backend error"]
 ```
 
-### Hotplug Debouncing
+The cache keeps dashboards usable when a single NVML read fails, while still allowing stale-data checks through the cache age helpers.
 
-Status changes are debounced (2-second threshold) to prevent UI flicker during rapid attach/detach events (eGPU, USB-C docks):
+## Display Command Security Model
 
-```rust
-// Periodically refresh status (e.g., each frame)
-let status = ctx.refresh_status();
-
-// Check if transition is pending
-if ctx.is_status_transitioning() {
-    // Status may change soon
-}
+```mermaid
+flowchart TD
+    caller["Display feature request"] --> runner["ShellDisplayRunner"]
+    runner --> allow{"command allowed?"}
+    allow -->|no| reject["DisplayError::CommandNotAllowed"]
+    allow -->|yes| path{"absolute path known?"}
+    path -->|no| reject
+    path -->|yes| exec["run helper with explicit args"]
+    exec --> parse["parse helper output"]
+    parse --> result["DisplayResult"]
 ```
 
-## Security: Command Allow-List
+`ShellDisplayRunner` is not a generic shell wrapper. It is constrained to reviewed helper binaries such as `xrandr`, `nvidia-settings`, `hyprctl`, `gsettings`, `kscreen-doctor`, and `swaymsg`. Commands outside the allow-list are rejected before execution.
 
-`ShellDisplayRunner` only executes binaries from an allow-list of absolute paths:
+## Test Strategy
 
-| Command | Allowed Paths |
-|---------|---------------|
-| `xrandr` | `/usr/bin/xrandr` |
-| `nvidia-settings` | `/usr/bin/nvidia-settings`, `/usr/local/bin/nvidia-settings` |
-| `hyprctl` | `/usr/bin/hyprctl` |
-| `gsettings` | `/usr/bin/gsettings` |
-| `kscreen-doctor` | `/usr/bin/kscreen-doctor`, `/usr/lib/kf6/bin/kscreen-doctor` |
-| `swaymsg` | `/usr/bin/swaymsg` |
-| ... | See `get_allowed_commands()` in `display_backend.rs` |
-
-Commands not in the allow-list are rejected with `DisplayError::CommandNotAllowed`.
-
-## Cached Metrics
-
-Metrics are cached with staleness detection:
-
-```rust
-// Get metrics (updates cache on success)
-let metrics = ctx.get_metrics(0)?;
-
-// Check cache age
-if let Some(age) = ctx.get_cached_metrics_age(0) {
-    println!("Metrics are {}s old", age);
-}
-
-// Check staleness
-if ctx.are_metrics_stale(0, 5) {
-    println!("Metrics older than 5 seconds");
-}
+```mermaid
+flowchart LR
+    unit["Unit tests"] --> mock_nvml["MockNvmlBackend"]
+    unit --> mock_display["MockDisplayRunner"]
+    cli["CLI workflow tests"] --> context["GuiBackendContext::with_backends"]
+    tui["UI behavior tests"] --> context
+    context --> deterministic["deterministic metrics,\nGPU counts, compositor output"]
+    deterministic --> assertions["stable assertions without live hardware"]
 ```
 
-When NVML queries fail, cached values are returned if available.
+Mock backends cover:
 
-## Testing with Mocks
+- single-GPU, multi-GPU, and no-GPU NVML states
+- deterministic temperatures, fan speeds, power usage, utilization, clocks, and memory values
+- compositor-specific display command responses
+- unavailable backend states for status and fallback testing
 
-```rust
-#[test]
-fn test_with_mock_backend() {
-    let ctx = GuiBackendContext::mock();
+## Current Module Usage
 
-    // Mock returns predictable data
-    let metrics = ctx.get_metrics(0).unwrap();
-    assert!(metrics.temperature > 0);
+| Module | Backend path |
+|--------|--------------|
+| `gpu.rs` | `SharedNvmlBackend` |
+| `monitoring.rs` | `SharedNvmlBackend` |
+| `multi_gpu.rs` | `SharedNvmlBackend` |
+| `fan.rs` | `SharedNvmlBackend` |
+| `advanced_power.rs` | `SharedNvmlBackend` |
+| `interactive_cli.rs` | `SharedNvmlBackend` |
+| `notifications.rs` | `SharedNvmlBackend` |
+| `tui/mod.rs` | `GuiBackendContext` |
+| `display_backend.rs` | `SharedDisplayRunner` and `ShellDisplayRunner` |
+| `vrr.rs`, `hdr.rs`, display feature paths | `SharedDisplayRunner` where display helpers are required |
 
-    // Test with custom mock
-    let mock = MockNvmlBackend::multi_gpu(4);
-    let display = MockDisplayRunner::kde();
-    let ctx = GuiBackendContext::with_backends(
-        Arc::new(mock),
-        Arc::new(display),
-    );
-}
-```
+## Operational Boundaries
 
-## Module Migration Status
-
-All modules now use the backend abstraction:
-
-| Module | Status |
-|--------|--------|
-| `gpu.rs` | ✅ SharedNvmlBackend |
-| `monitoring.rs` | ✅ SharedNvmlBackend |
-| `multi_gpu.rs` | ✅ SharedNvmlBackend |
-| `fan.rs` | ✅ SharedNvmlBackend |
-| `advanced_power.rs` | ✅ SharedNvmlBackend |
-| `tui.rs` | ✅ GuiBackendContext |
-| `tray.rs` | ✅ SharedNvmlBackend |
-| `notifications.rs` | ✅ SharedNvmlBackend |
-| `vrr.rs` | ✅ SharedDisplayRunner |
-| `hdr.rs` | ✅ SharedDisplayRunner |
+- Backend docs should describe the current architecture rather than pinning historical release numbers.
+- Production backend paths should remain explicit about which local APIs they touch.
+- Test examples should use mock backends instead of requiring live NVIDIA hardware.
+- Display command execution should stay allow-listed and argument-based.
+- UI refresh code should treat temporary backend loss as a debounced state change, not an immediate hard failure.

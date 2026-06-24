@@ -15,11 +15,11 @@ Setup guides and optimizations for specific GPU models.
 
 | Architecture | GPUs | Status |
 |--------------|------|--------|
-| Blackwell | RTX 5060-5090 | Full support |
-| Ada Lovelace | RTX 4060-4090 | Full support |
-| Ampere | RTX 3060-3090 Ti | Full support |
-| Turing | RTX 2060-2080 Ti | Full support |
-| Pascal | GTX 1060-1080 Ti | Basic support |
+| Blackwell | RTX 5060-5090 | Primary 610+ target; RTX 5090 path has local validation |
+| Ada Lovelace | RTX 4060-4090 | Expected 610+ path; repeat live smoke coverage still wanted |
+| Ampere | RTX 3060-3090 Ti | Expected 610+ path; repeat live smoke coverage still wanted |
+| Turing | RTX 2060-2080 Ti | Supported where the loaded driver exposes required NVML/display paths |
+| Pascal | GTX 1060-1080 Ti | Basic/legacy support; check the driver compatibility matrix |
 
 ## Quick Links
 

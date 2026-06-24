@@ -70,6 +70,22 @@ nvctl config restore my-settings.tar.gz
 
 ## Profile Management
 
+```mermaid
+stateDiagram-v2
+    [*] --> Captured: config capture --name
+    [*] --> Imported: config import --input
+    Captured --> Previewed: config preview
+    Imported --> Previewed: config preview
+    Previewed --> Compared: config diff
+    Compared --> Applied: config apply
+    Previewed --> Applied: config apply
+    Applied --> Verified: inspect gpu/display/driver state
+    Applied --> Restored: apply previous capture
+    Restored --> Verified
+```
+
+Recommended release/debug workflow: capture the current state, preview the target bundle, diff it, apply only after the delta is understood, then keep the previous capture available as a rollback point.
+
 ### `nvctl config export`
 Export GPU profile to file.
 

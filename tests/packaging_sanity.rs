@@ -232,7 +232,7 @@ fn packaging_references_current_service_name() {
 }
 
 #[test]
-fn release_metadata_targets_0_8_9() {
+fn release_metadata_targets_0_8_10() {
     let cargo_toml = read_repo_file("Cargo.toml");
     let root_pkgbuild = read_repo_file("PKGBUILD");
     let arch_pkgbuild = read_repo_file("release/arch/PKGBUILD");
@@ -241,13 +241,44 @@ fn release_metadata_targets_0_8_9() {
     let appimage = read_repo_file("appimage/AppImageBuilder.yml");
     let flatpak = read_repo_file("flatpak/com.github.nvcontrol.yml");
 
-    assert!(cargo_toml.contains("version = \"0.8.9\""));
-    assert!(root_pkgbuild.contains("pkgver=0.8.9"));
-    assert!(arch_pkgbuild.contains("pkgver=0.8.9"));
-    assert!(fedora_spec.contains("Version:        0.8.9"));
-    assert!(deb_changelog.starts_with("nvcontrol (0.8.9-1)"));
-    assert!(appimage.contains("version: 0.8.9"));
-    assert!(flatpak.contains("tag: v0.8.9"));
+    assert!(cargo_toml.contains("version = \"0.8.10\""));
+    assert!(root_pkgbuild.contains("pkgver=0.8.10"));
+    assert!(arch_pkgbuild.contains("pkgver=0.8.10"));
+    assert!(fedora_spec.contains("Version:        0.8.10"));
+    assert!(deb_changelog.starts_with("nvcontrol (0.8.10-1)"));
+    assert!(appimage.contains("version: 0.8.10"));
+    assert!(flatpak.contains("tag: v0.8.10"));
+}
+
+#[test]
+fn package_artifacts_include_cli_docs_and_completions() {
+    let root_pkgbuild = read_repo_file("PKGBUILD");
+    let arch_pkgbuild = read_repo_file("release/arch/PKGBUILD");
+    let fedora_spec = read_repo_file("release/fedora/nvcontrol.spec");
+    let deb_rules = read_repo_file("release/deb/rules");
+    let release_installer = read_repo_file("release/install-system.sh");
+    let man_page = read_repo_file("man/nvctl.1");
+    let bash_completion = read_repo_file("completions/nvctl.bash");
+    let zsh_completion = read_repo_file("completions/_nvctl");
+    let fish_completion = read_repo_file("completions/nvctl.fish");
+
+    for content in [
+        &root_pkgbuild,
+        &arch_pkgbuild,
+        &fedora_spec,
+        &deb_rules,
+        &release_installer,
+    ] {
+        assert!(content.contains("man/nvctl.1"));
+    }
+    assert!(release_installer.contains("completions/nvctl.bash"));
+    assert!(release_installer.contains("completions/_nvctl"));
+    assert!(release_installer.contains("completions/nvctl.fish"));
+    assert!(man_page.contains("fan curve apply"));
+    assert!(man_page.contains("completion bash"));
+    assert!(bash_completion.contains("curve"));
+    assert!(zsh_completion.contains("auto"));
+    assert!(fish_completion.contains("aggressive"));
 }
 
 #[test]

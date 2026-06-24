@@ -34,8 +34,8 @@ nvctl ai workloads
 
 | Feature | Wayland | X11 | Driver Req |
 |---------|---------|-----|------------|
-| Digital Vibrance | Yes | Yes | 495+ |
-| HDR | Yes | Limited | 535+ |
-| VRR/G-SYNC | Yes | Yes | 470+ |
-| Overclocking | Yes | Yes | 535+ |
+| Digital Vibrance | Yes | Yes | 610+ recommended for current NVKMS path |
+| HDR | Compositor-dependent | Limited | 610+ recommended |
+| VRR/G-SYNC | Compositor-dependent | Yes | Current NVIDIA driver recommended |
+| Overclocking | Backend/permission-dependent | Backend/permission-dependent | Current NVIDIA driver recommended |
 | CUDA/AI diagnostics | Yes | Yes | 535+ runtime, 610+ preferred |

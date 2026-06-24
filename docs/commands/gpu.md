@@ -66,7 +66,7 @@ nvctl gpu select <index>
 nvctl gpu select 1
 ```
 
-**Note:** Currently not persistent across commands.
+**Note:** The selected GPU is saved in nvcontrol configuration and used as the default target by commands that honor the active GPU selection.
 
 ---
 

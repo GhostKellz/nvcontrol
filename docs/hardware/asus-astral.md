@@ -1,6 +1,6 @@
 # ASUS ROG Astral RTX 5090 - nvcontrol Support
 
-## Your Specific GPU
+## Supported GPU
 
 **ASUS ROG Astral GeForce RTX 5090 OC Edition (32GB GDDR7)**
 
@@ -95,10 +95,10 @@ nvctl asus aura mode off
 - Dimensions: 357.6 x 149.3 x 76 mm
 
 **System Requirements:**
-- ✅ Check case clearance: 357mm+ GPU length
-- ✅ Check slot availability: 3.8 slots
-- ✅ PSU: 1000W recommended (your current PSU?)
-- ✅ 12V-2x6 power connector
+- Check case clearance: 357mm+ GPU length
+- Check slot availability: 3.8 slots
+- PSU: 1000W recommended
+- 12V-2x6 power connector
 
 ### 5. **Enhanced Power Delivery**
 - Higher quality VRM components
@@ -141,7 +141,7 @@ nvctl asus aura mode off
   - 8K @ 165Hz
   - DSC (Display Stream Compression)
 
-**Perfect for your multi-monitor setup!**
+Useful for high-refresh multi-monitor setups when the display, cable, compositor, and driver all support the target mode.
 
 ## nvcontrol Integration
 
@@ -156,6 +156,49 @@ TDP: 600W (630W max)
 Boost Clock: 2610 MHz
 Cooling: Quad-Fan Vapor Chamber
 RGB: ASUS Aura ARGB
+```
+
+### Power Detector+ Implementation
+
+ROG Astral RTX 5090 Power Detector+ is supported and tested in nvcontrol. The implementation is read-only: it discovers the ASUS/NVIDIA PCI device, finds the GPU I2C bus, probes the Astral power monitor at `0x2b`, reads six 12V-2x6 rail registers, computes per-rail current and connector wattage, and reports health without writing to hardware.
+
+```mermaid
+flowchart TD
+    command["nvctl asus power"] --> pci["scan NVIDIA PCI devices"]
+    pci --> ids["read subsystem IDs"]
+    ids --> astral{"ASUS 1043:89e3?"}
+    astral -->|no| unsupported["report unsupported or unknown ASUS model"]
+    astral -->|yes| i2c["find GPU i2c-* bus"]
+    i2c --> probe["probe 0x2b power monitor"]
+    probe --> rails["read six rail registers"]
+    rails --> current["convert raw words to rail current"]
+    current --> health["GOOD / WARNING / CRITICAL"]
+    health --> output["CLI, JSON, GUI Power tab, TUI Drivers area"]
+```
+
+```mermaid
+flowchart LR
+    R0["Rail 0\n0x60"] --> Convert["byte-swap + current conversion"]
+    R1["Rail 1\n0x62"] --> Convert
+    R2["Rail 2\n0x64"] --> Convert
+    R3["Rail 3\n0x66"] --> Convert
+    R4["Rail 4\n0x68"] --> Convert
+    R5["Rail 5\n0x6A"] --> Convert
+    Convert --> Max["max rail current"]
+    Convert --> Total["sum rail current\n12V watts"]
+    Max --> Good["<= 7A: GOOD"]
+    Max --> Warning["> 7A: WARNING"]
+    Max --> Critical["> 9.2A: CRITICAL"]
+```
+
+Power Detector+ commands:
+
+```bash
+nvctl asus detect
+nvctl asus power
+nvctl asus power --json
+nvctl asus power --watch
+nvctl asus status
 ```
 
 ### Optimized Features
@@ -197,7 +240,7 @@ openrgb --mode rainbow --device 0
 
 **4. Multi-Monitor + HDR**
 ```bash
-# Your OLED + IPS setup
+# Example OLED + IPS setup
 nvctl monitors apply-preset dual_oled_ips
 
 # OLED: Lower vibrance (300), HDR enabled
@@ -214,8 +257,8 @@ nvctl color vibrance set --value 600 -d 1
 - [ ] Verify case clearance: **357mm length, 76mm width (3.8 slots)**
 - [ ] PSU check: **1000W recommended**
 - [ ] Check for 12V-2x6 power connector (or adapter)
-- [ ] ReBAR enabled ✅ (you already have this)
-- [ ] Above 4G Decoding ✅ (you already have this)
+- [ ] ReBAR enabled
+- [ ] Above 4G Decoding enabled
 
 ### After Installation:
 - [ ] Install the driver branch recommended by `docs/drivers/nvidia-driver.md`

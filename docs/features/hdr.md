@@ -142,11 +142,11 @@ env = WLR_DRM_FORCE_HDR,1
 
 | Architecture | HDR Support |
 |--------------|-------------|
-| Blackwell (RTX 50xx) | ✅ Full |
-| Ada Lovelace (RTX 40xx) | ✅ Full |
-| Ampere (RTX 30xx) | ✅ Full |
-| Turing (RTX 20xx) | ✅ Full |
-| Pascal (GTX 10xx) | ⚠️ Limited |
+| Blackwell (RTX 50xx) | Primary 610+ target; compositor support still matters |
+| Ada Lovelace (RTX 40xx) | Expected with current driver and compositor support |
+| Ampere (RTX 30xx) | Expected with current driver and compositor support |
+| Turing (RTX 20xx) | Depends on driver, compositor, and display capability |
+| Pascal (GTX 10xx) | Legacy/basic path; verify before assuming HDR control |
 
 ### Display Requirements
 
@@ -293,5 +293,3 @@ monitor=DP-1,2560x1440@165,auto,1,bitdepth,10
 - [Image Sharpening](image-sharpening.md) - GPU image processing
 
 ---
-
-**Last Updated**: December 2024 (v0.7.3)

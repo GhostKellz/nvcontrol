@@ -294,16 +294,18 @@ table\t''"
 complete -c nvctl -n "__fish_nvctl_using_subcommand vibrance" -s v -l verbose -d 'Enable verbose output'
 complete -c nvctl -n "__fish_nvctl_using_subcommand vibrance" -l no-color -d 'Disable colored output'
 complete -c nvctl -n "__fish_nvctl_using_subcommand vibrance" -s h -l help -d 'Print help'
-complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and not __fish_seen_subcommand_from info set help" -l format -d 'Output format' -r -f -a "human\t''
+complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and not __fish_seen_subcommand_from info set auto curve help" -l format -d 'Output format' -r -f -a "human\t''
 json\t''
 yaml\t''
 table\t''"
-complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and not __fish_seen_subcommand_from info set help" -s v -l verbose -d 'Enable verbose output'
-complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and not __fish_seen_subcommand_from info set help" -l no-color -d 'Disable colored output'
-complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and not __fish_seen_subcommand_from info set help" -s h -l help -d 'Print help'
-complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and not __fish_seen_subcommand_from info set help" -f -a "info"
-complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and not __fish_seen_subcommand_from info set help" -f -a "set"
-complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and not __fish_seen_subcommand_from info set help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
+complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and not __fish_seen_subcommand_from info set auto curve help" -s v -l verbose -d 'Enable verbose output'
+complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and not __fish_seen_subcommand_from info set auto curve help" -l no-color -d 'Disable colored output'
+complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and not __fish_seen_subcommand_from info set auto curve help" -s h -l help -d 'Print help'
+complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and not __fish_seen_subcommand_from info set auto curve help" -f -a "info" -d 'Show fan status'
+complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and not __fish_seen_subcommand_from info set auto curve help" -f -a "set" -d 'Set a fan to a manual speed percentage'
+complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and not __fish_seen_subcommand_from info set auto curve help" -f -a "auto" -d 'Reset a fan to automatic driver control'
+complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and not __fish_seen_subcommand_from info set auto curve help" -f -a "curve" -d 'Manage fan curves and presets'
+complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and not __fish_seen_subcommand_from info set auto curve help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
 complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and __fish_seen_subcommand_from info" -l format -d 'Output format' -r -f -a "human\t''
 json\t''
 yaml\t''
@@ -318,8 +320,28 @@ table\t''"
 complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and __fish_seen_subcommand_from set" -s v -l verbose -d 'Enable verbose output'
 complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and __fish_seen_subcommand_from set" -l no-color -d 'Disable colored output'
 complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and __fish_seen_subcommand_from set" -s h -l help -d 'Print help'
-complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and __fish_seen_subcommand_from help" -f -a "info"
-complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and __fish_seen_subcommand_from help" -f -a "set"
+complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and __fish_seen_subcommand_from auto" -l format -d 'Output format' -r -f -a "human\t''
+json\t''
+yaml\t''
+table\t''"
+complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and __fish_seen_subcommand_from auto" -s v -l verbose -d 'Enable verbose output'
+complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and __fish_seen_subcommand_from auto" -l no-color -d 'Disable colored output'
+complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and __fish_seen_subcommand_from auto" -s h -l help -d 'Print help'
+complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and __fish_seen_subcommand_from curve" -l format -d 'Output format' -r -f -a "human\t''
+json\t''
+yaml\t''
+table\t''"
+complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and __fish_seen_subcommand_from curve" -s v -l verbose -d 'Enable verbose output'
+complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and __fish_seen_subcommand_from curve" -l no-color -d 'Disable colored output'
+complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and __fish_seen_subcommand_from curve" -s h -l help -d 'Print help'
+complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and __fish_seen_subcommand_from curve" -f -a "show" -d 'Show available fan curve profiles'
+complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and __fish_seen_subcommand_from curve" -f -a "apply" -d 'Apply a saved or built-in fan curve profile to a fan'
+complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and __fish_seen_subcommand_from curve" -f -a "set" -d 'Apply an inline curve, for example "30:20,60:50,75:80,85:100"'
+complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and __fish_seen_subcommand_from curve" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
+complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and __fish_seen_subcommand_from help" -f -a "info" -d 'Show fan status'
+complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and __fish_seen_subcommand_from help" -f -a "set" -d 'Set a fan to a manual speed percentage'
+complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and __fish_seen_subcommand_from help" -f -a "auto" -d 'Reset a fan to automatic driver control'
+complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and __fish_seen_subcommand_from help" -f -a "curve" -d 'Manage fan curves and presets'
 complete -c nvctl -n "__fish_nvctl_using_subcommand fan; and __fish_seen_subcommand_from help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
 complete -c nvctl -n "__fish_nvctl_using_subcommand overclock; and not __fish_seen_subcommand_from info apply profile stress-test auto reset help" -l format -d 'Output format' -r -f -a "human\t''
 json\t''
@@ -2413,8 +2435,10 @@ complete -c nvctl -n "__fish_nvctl_using_subcommand help; and __fish_seen_subcom
 complete -c nvctl -n "__fish_nvctl_using_subcommand help; and __fish_seen_subcommand_from display" -f -a "color-range" -d 'Color range control (Full vs Limited RGB)'
 complete -c nvctl -n "__fish_nvctl_using_subcommand help; and __fish_seen_subcommand_from display" -f -a "color-space" -d 'Color space control (RGB, YCbCr422, YCbCr444)'
 complete -c nvctl -n "__fish_nvctl_using_subcommand help; and __fish_seen_subcommand_from display" -f -a "dithering" -d 'Dithering control for color banding reduction'
-complete -c nvctl -n "__fish_nvctl_using_subcommand help; and __fish_seen_subcommand_from fan" -f -a "info"
-complete -c nvctl -n "__fish_nvctl_using_subcommand help; and __fish_seen_subcommand_from fan" -f -a "set"
+complete -c nvctl -n "__fish_nvctl_using_subcommand help; and __fish_seen_subcommand_from fan" -f -a "info" -d 'Show fan status'
+complete -c nvctl -n "__fish_nvctl_using_subcommand help; and __fish_seen_subcommand_from fan" -f -a "set" -d 'Set a fan to a manual speed percentage'
+complete -c nvctl -n "__fish_nvctl_using_subcommand help; and __fish_seen_subcommand_from fan" -f -a "auto" -d 'Reset a fan to automatic driver control'
+complete -c nvctl -n "__fish_nvctl_using_subcommand help; and __fish_seen_subcommand_from fan" -f -a "curve" -d 'Manage fan curves and presets'
 complete -c nvctl -n "__fish_nvctl_using_subcommand help; and __fish_seen_subcommand_from overclock" -f -a "info"
 complete -c nvctl -n "__fish_nvctl_using_subcommand help; and __fish_seen_subcommand_from overclock" -f -a "apply"
 complete -c nvctl -n "__fish_nvctl_using_subcommand help; and __fish_seen_subcommand_from overclock" -f -a "profile"

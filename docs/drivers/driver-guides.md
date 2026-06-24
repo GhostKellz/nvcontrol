@@ -13,7 +13,7 @@ NVIDIA driver compatibility, installation, and optimization guides.
 | [diagnose-release.md](diagnose-release.md) | Interpreting release diagnostics |
 | [dkms.md](dkms.md) | Dynamic Kernel Module Support setup |
 | [open-610.md](open-610.md) | NVIDIA 610 open driver notes |
-| [kernel-580.md](kernel-580.md) | Kernel driver 580+ optimizations |
+| [kernel-580.md](kernel-580.md) | Historical kernel driver 580 notes |
 
 ## Quick Links
 

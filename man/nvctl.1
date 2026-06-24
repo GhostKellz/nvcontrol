@@ -1,0 +1,172 @@
+.TH NVCTL 1 "June 2026" "nvcontrol 0.8.10" "User Commands"
+.SH NAME
+nvctl \- NVIDIA GPU control, diagnostics, and tuning for Linux
+.SH SYNOPSIS
+.B nvctl
+[\fIOPTIONS\fR] \fICOMMAND\fR [\fIARGS\fR]
+.SH DESCRIPTION
+.B nvctl
+is the command-line interface for nvcontrol. It provides NVIDIA GPU information,
+display controls, digital vibrance, fan control, overclocking, driver diagnostics,
+CUDA/Ollama readiness checks, gaming workflows, and support bundle collection for
+Linux NVIDIA systems.
+.SH GLOBAL OPTIONS
+.TP
+.B -v, --verbose
+Enable verbose output.
+.TP
+.B --format <FORMAT>
+Set global output format where supported.
+.TP
+.B --no-color
+Disable colored output.
+.TP
+.B -h, --help
+Show command help.
+.TP
+.B -V, --version
+Print version.
+.SH COMMANDS
+.TP
+.B gpu
+Show GPU information, capabilities, selection, monitoring, export, and stress workflows.
+.TP
+.B display
+Manage display listing, vibrance, HDR, gamma, sharpening, color range, color space, and dithering.
+.TP
+.B vibrance
+Set digital vibrance percentage from 0 to 200.
+.TP
+.B fan
+Show fan status, set manual speed, reset automatic control, and manage fan curves.
+.TP
+.B overclock
+Show and apply GPU and memory overclocking settings.
+.TP
+.B vrr
+Manage Variable Refresh Rate and G-SYNC state.
+.TP
+.B monitor
+Run real-time monitoring workflows.
+.TP
+.B tui
+Launch the terminal user interface.
+.TP
+.B nvtop
+Launch the htop-style GPU monitor.
+.TP
+.B gaming
+Run gaming optimization, detection, and auto-profile workflows.
+.TP
+.B recording
+Manage recording and streaming helpers.
+.TP
+.B container
+Inspect and configure container GPU runtime support.
+.TP
+.B driver
+Inspect driver state, 610+ runtime capabilities, DKMS/source state, release alignment, and support bundles.
+.TP
+.B power
+Manage power limits, persistence mode, profiles, scheduling, and battery policies.
+.TP
+.B color
+Manage color and vibrance helpers.
+.TP
+.B config
+Manage nvcontrol configuration, profile capture, preview, diff, and apply workflows.
+.TP
+.B upscaling
+Inspect AI upscaling and enhancement features.
+.TP
+.B cuda
+Run CUDA, Ollama, and local AI/ML diagnostics.
+.TP
+.B dlss
+Inspect DLSS and related feature support.
+.TP
+.B shaders
+Manage shader cache workflows.
+.TP
+.B passthrough
+Inspect GPU passthrough, VFIO, container, and VM readiness.
+.TP
+.B wayland
+Inspect and optimize Wayland NVIDIA integration.
+.TP
+.B kde
+Inspect and optimize KDE Plasma compositor settings.
+.TP
+.B hdr
+Manage top-level HDR status and configuration.
+.TP
+.B power-profile
+Manage AC/battery power profiles and activity policies.
+.TP
+.B arch
+Inspect Arch Linux NVIDIA package and hook integration.
+.TP
+.B monitors
+Manage multi-monitor layouts and VRR.
+.TP
+.B osd
+Manage on-screen display helpers.
+.TP
+.B interactive
+Launch interactive menu mode.
+.TP
+.B system
+Show system information and platform detection.
+.TP
+.B doctor
+Run one-shot diagnostics and optional support bundle generation.
+.TP
+.B setup
+Run first-run setup checks and permission helpers.
+.TP
+.B completion
+Generate shell completion scripts for bash, zsh, or fish.
+.TP
+.B version
+Show detailed version information.
+.TP
+.B asus
+Inspect ASUS ROG GPU features including Power Detector+.
+.TP
+.B companion
+Run lightweight desktop companion actions.
+.SH FAN EXAMPLES
+.EX
+nvctl fan info
+nvctl fan set 0 75
+nvctl fan auto
+nvctl fan curve show
+nvctl fan curve apply aggressive
+nvctl fan curve apply balanced --fan-id 0
+nvctl fan curve set "30:20,60:50,75:80,85:100"
+.EE
+.SH COMPLETION EXAMPLES
+.EX
+nvctl completion bash > completions/nvctl.bash
+nvctl completion zsh > completions/_nvctl
+nvctl completion fish > completions/nvctl.fish
+.EE
+.SH DRIVER AND CUDA EXAMPLES
+.EX
+nvctl driver diagnose-release
+nvctl driver support-bundle --tarball --redact-paths
+nvctl doctor --support
+nvctl cuda doctor
+nvctl cuda ollama
+.EE
+.SH FILES
+.TP
+.I ~/.config/nvcontrol/config.toml
+Main nvcontrol configuration.
+.TP
+.I ~/.config/nvcontrol/tui_state.toml
+TUI session state.
+.SH SEE ALSO
+.BR nvidia-smi (1),
+.BR vulkaninfo (1),
+.BR systemctl (1)

@@ -190,7 +190,7 @@ nvctl cuda smoke --dry-run
 nvctl cuda smoke --dry-run --format json
 ```
 
-This command is intentionally dry-run only in `v0.8.9`. It prints commands such as
+This command is intentionally dry-run only in `v0.8.10`. It prints commands such as
 `nvidia-smi`, `nvcc --version`, `ollama list`, a CUDA container `nvidia-smi` smoke
 test, and the official Ollama GPU container command shape. It does not execute them.
 

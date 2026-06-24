@@ -2,7 +2,7 @@
 
 This document tracks remaining `unsafe` blocks in nvcontrol and plans for reducing them.
 
-## Current Status (v0.8.9)
+## Current Status (v0.8.10)
 
 | Category | Count | Status |
 |----------|-------|--------|
@@ -120,5 +120,3 @@ These will remain unsafe as they're fundamental to the architecture:
 - [nix crate ioctl](https://docs.rs/nix/latest/nix/sys/ioctl/index.html)
 
 ---
-
-*Last updated: v0.8.9 (2026-06-23)*

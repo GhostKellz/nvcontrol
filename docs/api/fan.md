@@ -128,18 +128,22 @@ nvctl fan auto
 # Automatic fan control enabled
 ```
 
-### `nvctl fan curve <preset|custom>`
+### `nvctl fan curve <show|apply|set>`
 
 Set fan curve.
 
 ```bash
-# Use preset
-nvctl fan curve silent
-nvctl fan curve balanced
-nvctl fan curve aggressive
+# List built-in and saved profiles
+nvctl fan curve show
+
+# Use a profile
+nvctl fan curve apply silent
+nvctl fan curve apply balanced
+nvctl fan curve apply performance
+nvctl fan curve apply aggressive
 
 # Custom curve
-nvctl fan curve "30:20,60:50,75:80,85:100"
+nvctl fan curve set "30:20,60:50,75:80,85:100"
 ```
 
 ### `nvctl fan info`

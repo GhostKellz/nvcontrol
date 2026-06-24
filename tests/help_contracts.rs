@@ -33,6 +33,20 @@ fn completion_help_mentions_supported_shells() {
 }
 
 #[test]
+fn fan_help_mentions_auto_and_curve_workflows() {
+    let stdout = help_output(&["fan", "--help"]);
+    assert!(stdout.contains("info"));
+    assert!(stdout.contains("set"));
+    assert!(stdout.contains("auto"));
+    assert!(stdout.contains("curve"));
+
+    let curve = help_output(&["fan", "curve", "--help"]);
+    assert!(curve.contains("show"));
+    assert!(curve.contains("apply"));
+    assert!(curve.contains("set"));
+}
+
+#[test]
 fn setup_help_mentions_readiness_and_permissions() {
     let stdout = help_output(&["setup", "--help"]);
     assert!(stdout.contains("check"));

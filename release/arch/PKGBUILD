@@ -3,7 +3,7 @@
 # Premier platform: Arch Linux
 
 pkgname=nvcontrol
-pkgver=0.8.9
+pkgver=0.8.10
 pkgrel=1
 pkgdesc="Modern NVIDIA Settings Manager for Linux + Wayland - Digital Vibrance, VRR, HDR, Overclocking"
 arch=('x86_64')
@@ -108,6 +108,11 @@ EOF
     fi
     if [ -f "completions/nvctl.fish" ]; then
         install -Dm644 "completions/nvctl.fish" "$pkgdir/usr/share/fish/vendor_completions.d/nvctl.fish"
+    fi
+
+    # Install man page
+    if [ -f "man/nvctl.1" ]; then
+        install -Dm644 "man/nvctl.1" "$pkgdir/usr/share/man/man1/nvctl.1"
     fi
 
     # Install documentation

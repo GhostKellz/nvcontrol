@@ -1,6 +1,24 @@
-# 0.8.9 Release Checklist
+# 0.8.10 Release Checklist
 
-Before shipping `v0.8.9`, verify:
+Before shipping `v0.8.10`, verify:
+
+```mermaid
+flowchart TD
+    source["reviewed source tree"] --> rust["fmt + check + clippy"]
+    rust --> audit["cargo audit"]
+    audit --> tests["cargo test or focused release suites"]
+    tests --> package["cargo package"]
+    package --> live["read-only 610+ live smoke"]
+    live --> install["install/update/uninstall smoke"]
+    install --> docs["docs and release notes drift check"]
+    docs --> decide{"ready to tag?"}
+    decide -->|no| fix["fix or defer explicitly"]
+    fix --> source
+    decide -->|yes| tag["tag and publish"]
+
+    live --> gated["hardware mutation gate\nvibrance opt-in only"]
+    gated --> docs
+```
 
 ```bash
 cargo fmt --all --check
@@ -38,4 +56,7 @@ NVCONTROL_RUN_HARDWARE_TESTS=1 cargo test --test regressions live_vibrance_level
 - support metadata JSON created or packaged successfully
 - no failing tests
 - no outstanding cargo audit advisories
-- release metadata is `0.8.9` across Cargo, Arch, Fedora, Debian, AppImage, and Flatpak surfaces
+- release metadata is `0.8.10` across Cargo, Arch, Fedora, Debian, AppImage, and Flatpak surfaces
+- man page and shell completion artifacts reflect current clap commands
+
+See [internals/release-validation.md](internals/release-validation.md) for the detailed gate matrix.

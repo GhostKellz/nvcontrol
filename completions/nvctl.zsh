@@ -1240,6 +1240,105 @@ _arguments "${_arguments_options[@]}" : \
 ':percent -- Fan speed percentage (0-100):_default' \
 && ret=0
 ;;
+(auto)
+_arguments "${_arguments_options[@]}" : \
+'--format=[Output format]:FORMAT:(human json yaml table)' \
+'-v[Enable verbose output]' \
+'--verbose[Enable verbose output]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::fan_id -- Fan ID (0, 1, 2, etc.):_default' \
+&& ret=0
+;;
+(curve)
+_arguments "${_arguments_options[@]}" : \
+'--format=[Output format]:FORMAT:(human json yaml table)' \
+'-v[Enable verbose output]' \
+'--verbose[Enable verbose output]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_nvctl__subcmd__fan__subcmd__curve_commands" \
+"*::: :->curve" \
+&& ret=0
+
+    case $state in
+    (curve)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:nvctl-fan-curve-command-$line[1]:"
+        case $line[1] in
+            (show)
+_arguments "${_arguments_options[@]}" : \
+'--format=[Output format]:FORMAT:(human json yaml table)' \
+'-v[Enable verbose output]' \
+'--verbose[Enable verbose output]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(apply)
+_arguments "${_arguments_options[@]}" : \
+'--fan-id=[Fan ID (0, 1, 2, etc.)]:FAN_ID:_default' \
+'--format=[Output format]:FORMAT:(human json yaml table)' \
+'-v[Enable verbose output]' \
+'--verbose[Enable verbose output]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':profile -- Profile name, such as balanced, silent, performance, or aggressive:_default' \
+&& ret=0
+;;
+(set)
+_arguments "${_arguments_options[@]}" : \
+'--fan-id=[Fan ID (0, 1, 2, etc.)]:FAN_ID:_default' \
+'--format=[Output format]:FORMAT:(human json yaml table)' \
+'-v[Enable verbose output]' \
+'--verbose[Enable verbose output]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':points -- Curve points as temp\:percent pairs separated by commas:_default' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_nvctl__subcmd__fan__subcmd__curve__subcmd__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:nvctl-fan-curve-help-command-$line[1]:"
+        case $line[1] in
+            (show)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(apply)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(set)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
 (help)
 _arguments "${_arguments_options[@]}" : \
 ":: :_nvctl__subcmd__fan__subcmd__help_commands" \
@@ -1259,6 +1358,38 @@ _arguments "${_arguments_options[@]}" : \
 (set)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
+;;
+(auto)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(curve)
+_arguments "${_arguments_options[@]}" : \
+":: :_nvctl__subcmd__fan__subcmd__help__subcmd__curve_commands" \
+"*::: :->curve" \
+&& ret=0
+
+    case $state in
+    (curve)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:nvctl-fan-help-curve-command-$line[1]:"
+        case $line[1] in
+            (show)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(apply)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(set)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
 ;;
 (help)
 _arguments "${_arguments_options[@]}" : \
@@ -4927,6 +5058,154 @@ esac
     ;;
 esac
 ;;
+(cuda)
+_arguments "${_arguments_options[@]}" : \
+'--format=[Output format]:FORMAT:(human json yaml table)' \
+'-v[Enable verbose output]' \
+'--verbose[Enable verbose output]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_nvctl__subcmd__cuda_commands" \
+"*::: :->cuda" \
+&& ret=0
+
+    case $state in
+    (cuda)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:nvctl-cuda-command-$line[1]:"
+        case $line[1] in
+            (info)
+_arguments "${_arguments_options[@]}" : \
+'-f+[Output format\: json, yaml, table]:FORMAT:(human json yaml table)' \
+'--format=[Output format\: json, yaml, table]:FORMAT:(human json yaml table)' \
+'-v[Enable verbose output]' \
+'--verbose[Enable verbose output]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(doctor)
+_arguments "${_arguments_options[@]}" : \
+'-f+[Output format\: json, yaml, table]:FORMAT:(human json yaml table)' \
+'--format=[Output format\: json, yaml, table]:FORMAT:(human json yaml table)' \
+'-v[Enable verbose output]' \
+'--verbose[Enable verbose output]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(ollama)
+_arguments "${_arguments_options[@]}" : \
+'-f+[Output format\: json, yaml, table]:FORMAT:(human json yaml table)' \
+'--format=[Output format\: json, yaml, table]:FORMAT:(human json yaml table)' \
+'-v[Enable verbose output]' \
+'--verbose[Enable verbose output]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(workloads)
+_arguments "${_arguments_options[@]}" : \
+'-f+[Output format\: json, yaml, table]:FORMAT:(human json yaml table)' \
+'--format=[Output format\: json, yaml, table]:FORMAT:(human json yaml table)' \
+'-v[Enable verbose output]' \
+'--verbose[Enable verbose output]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(tools)
+_arguments "${_arguments_options[@]}" : \
+'-f+[Output format\: json, yaml, table]:FORMAT:(human json yaml table)' \
+'--format=[Output format\: json, yaml, table]:FORMAT:(human json yaml table)' \
+'-v[Enable verbose output]' \
+'--verbose[Enable verbose output]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(env)
+_arguments "${_arguments_options[@]}" : \
+'-f+[Output format\: json, yaml, table]:FORMAT:(human json yaml table)' \
+'--format=[Output format\: json, yaml, table]:FORMAT:(human json yaml table)' \
+'-v[Enable verbose output]' \
+'--verbose[Enable verbose output]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(smoke)
+_arguments "${_arguments_options[@]}" : \
+'-f+[Output format\: json, yaml, table]:FORMAT:(human json yaml table)' \
+'--format=[Output format\: json, yaml, table]:FORMAT:(human json yaml table)' \
+'--dry-run[Keep this command non-mutating; currently required and always true]' \
+'-v[Enable verbose output]' \
+'--verbose[Enable verbose output]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_nvctl__subcmd__cuda__subcmd__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:nvctl-cuda-help-command-$line[1]:"
+        case $line[1] in
+            (info)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(doctor)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(ollama)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(workloads)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(tools)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(env)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(smoke)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
 (dlss)
 _arguments "${_arguments_options[@]}" : \
 '--format=[Output format]:FORMAT:(human json yaml table)' \
@@ -6702,6 +6981,105 @@ _arguments "${_arguments_options[@]}" : \
 '--help[Print help]' \
 && ret=0
 ;;
+(setup)
+_arguments "${_arguments_options[@]}" : \
+'--format=[Output format]:FORMAT:(human json yaml table)' \
+'-v[Enable verbose output]' \
+'--verbose[Enable verbose output]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_nvctl__subcmd__setup_commands" \
+"*::: :->setup" \
+&& ret=0
+
+    case $state in
+    (setup)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:nvctl-setup-command-$line[1]:"
+        case $line[1] in
+            (check)
+_arguments "${_arguments_options[@]}" : \
+'-f+[Output format\: json, yaml, table]:FORMAT:(human json yaml table)' \
+'--format=[Output format\: json, yaml, table]:FORMAT:(human json yaml table)' \
+'-v[Enable verbose output]' \
+'--verbose[Enable verbose output]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(permissions)
+_arguments "${_arguments_options[@]}" : \
+'--format=[Output format]:FORMAT:(human json yaml table)' \
+'-v[Enable verbose output]' \
+'--verbose[Enable verbose output]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(status)
+_arguments "${_arguments_options[@]}" : \
+'--format=[Output format]:FORMAT:(human json yaml table)' \
+'-v[Enable verbose output]' \
+'--verbose[Enable verbose output]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(remove)
+_arguments "${_arguments_options[@]}" : \
+'--format=[Output format]:FORMAT:(human json yaml table)' \
+'-v[Enable verbose output]' \
+'--verbose[Enable verbose output]' \
+'--no-color[Disable colored output]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_nvctl__subcmd__setup__subcmd__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:nvctl-setup-help-command-$line[1]:"
+        case $line[1] in
+            (check)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(permissions)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(status)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(remove)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
 (completion)
 _arguments "${_arguments_options[@]}" : \
 '--format=[Output format]:FORMAT:(human json yaml table)' \
@@ -7357,6 +7735,38 @@ _arguments "${_arguments_options[@]}" : \
 (set)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
+;;
+(auto)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(curve)
+_arguments "${_arguments_options[@]}" : \
+":: :_nvctl__subcmd__help__subcmd__fan__subcmd__curve_commands" \
+"*::: :->curve" \
+&& ret=0
+
+    case $state in
+    (curve)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:nvctl-help-fan-curve-command-$line[1]:"
+        case $line[1] in
+            (show)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(apply)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(set)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
 ;;
         esac
     ;;
@@ -8306,6 +8716,50 @@ _arguments "${_arguments_options[@]}" : \
     ;;
 esac
 ;;
+(cuda)
+_arguments "${_arguments_options[@]}" : \
+":: :_nvctl__subcmd__help__subcmd__cuda_commands" \
+"*::: :->cuda" \
+&& ret=0
+
+    case $state in
+    (cuda)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:nvctl-help-cuda-command-$line[1]:"
+        case $line[1] in
+            (info)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(doctor)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(ollama)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(workloads)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(tools)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(env)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(smoke)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
 (dlss)
 _arguments "${_arguments_options[@]}" : \
 ":: :_nvctl__subcmd__help__subcmd__dlss_commands" \
@@ -8842,6 +9296,38 @@ esac
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(setup)
+_arguments "${_arguments_options[@]}" : \
+":: :_nvctl__subcmd__help__subcmd__setup_commands" \
+"*::: :->setup" \
+&& ret=0
+
+    case $state in
+    (setup)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:nvctl-help-setup-command-$line[1]:"
+        case $line[1] in
+            (check)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(permissions)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(status)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(remove)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
 (completion)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -8971,6 +9457,7 @@ _nvctl_commands() {
 'color:🎨 Color and vibrance control' \
 'config:⚙️ Configuration and profiles' \
 'upscaling:📈 AI upscaling and enhancement' \
+'cuda:🧪 CUDA, Ollama, and local AI/ML diagnostics' \
 'dlss:🚀 DLSS and related features' \
 'shaders:🎨 Shader cache management' \
 'passthrough:🔌 GPU passthrough (VFIO/containers/VMs)' \
@@ -8984,6 +9471,7 @@ _nvctl_commands() {
 'interactive:🎛️ Interactive menu mode' \
 'system:💻 System information and platform detection' \
 'doctor:🔍 Run system diagnostics' \
+'setup:🧭 Guided first-run setup and readiness checks' \
 'completion:🧩 Generate shell completions' \
 'version:📋 Show detailed version information' \
 'asus:🎯 ASUS ROG GPU features (Power Detector+, Aura, etc.)' \
@@ -9971,6 +10459,109 @@ _nvctl__subcmd__container__subcmd__runtime__subcmd__test_commands() {
 _nvctl__subcmd__container__subcmd__status_commands() {
     local commands; commands=()
     _describe -t commands 'nvctl container status commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__cuda_commands] )) ||
+_nvctl__subcmd__cuda_commands() {
+    local commands; commands=(
+'info:Show CUDA driver, toolkit, and detected GPU memory' \
+'doctor:Check CUDA, developer tools, Ollama, and container GPU readiness' \
+'ollama:Show Ollama CUDA/native/container status and smoke-test commands' \
+'workloads:Recommend local AI/ML workloads from detected VRAM' \
+'tools:Show CUDA and AI helper tool availability' \
+'env:Emit shell exports for CUDA and Ollama workflows' \
+'smoke:Print a dry-run CUDA/Ollama validation plan' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'nvctl cuda commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__cuda__subcmd__doctor_commands] )) ||
+_nvctl__subcmd__cuda__subcmd__doctor_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl cuda doctor commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__cuda__subcmd__env_commands] )) ||
+_nvctl__subcmd__cuda__subcmd__env_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl cuda env commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__cuda__subcmd__help_commands] )) ||
+_nvctl__subcmd__cuda__subcmd__help_commands() {
+    local commands; commands=(
+'info:Show CUDA driver, toolkit, and detected GPU memory' \
+'doctor:Check CUDA, developer tools, Ollama, and container GPU readiness' \
+'ollama:Show Ollama CUDA/native/container status and smoke-test commands' \
+'workloads:Recommend local AI/ML workloads from detected VRAM' \
+'tools:Show CUDA and AI helper tool availability' \
+'env:Emit shell exports for CUDA and Ollama workflows' \
+'smoke:Print a dry-run CUDA/Ollama validation plan' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'nvctl cuda help commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__cuda__subcmd__help__subcmd__doctor_commands] )) ||
+_nvctl__subcmd__cuda__subcmd__help__subcmd__doctor_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl cuda help doctor commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__cuda__subcmd__help__subcmd__env_commands] )) ||
+_nvctl__subcmd__cuda__subcmd__help__subcmd__env_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl cuda help env commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__cuda__subcmd__help__subcmd__help_commands] )) ||
+_nvctl__subcmd__cuda__subcmd__help__subcmd__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl cuda help help commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__cuda__subcmd__help__subcmd__info_commands] )) ||
+_nvctl__subcmd__cuda__subcmd__help__subcmd__info_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl cuda help info commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__cuda__subcmd__help__subcmd__ollama_commands] )) ||
+_nvctl__subcmd__cuda__subcmd__help__subcmd__ollama_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl cuda help ollama commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__cuda__subcmd__help__subcmd__smoke_commands] )) ||
+_nvctl__subcmd__cuda__subcmd__help__subcmd__smoke_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl cuda help smoke commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__cuda__subcmd__help__subcmd__tools_commands] )) ||
+_nvctl__subcmd__cuda__subcmd__help__subcmd__tools_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl cuda help tools commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__cuda__subcmd__help__subcmd__workloads_commands] )) ||
+_nvctl__subcmd__cuda__subcmd__help__subcmd__workloads_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl cuda help workloads commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__cuda__subcmd__info_commands] )) ||
+_nvctl__subcmd__cuda__subcmd__info_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl cuda info commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__cuda__subcmd__ollama_commands] )) ||
+_nvctl__subcmd__cuda__subcmd__ollama_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl cuda ollama commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__cuda__subcmd__smoke_commands] )) ||
+_nvctl__subcmd__cuda__subcmd__smoke_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl cuda smoke commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__cuda__subcmd__tools_commands] )) ||
+_nvctl__subcmd__cuda__subcmd__tools_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl cuda tools commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__cuda__subcmd__workloads_commands] )) ||
+_nvctl__subcmd__cuda__subcmd__workloads_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl cuda workloads commands' commands "$@"
 }
 (( $+functions[_nvctl__subcmd__display_commands] )) ||
 _nvctl__subcmd__display_commands() {
@@ -11411,20 +12002,113 @@ _nvctl__subcmd__driver__subcmd__validate_commands() {
 (( $+functions[_nvctl__subcmd__fan_commands] )) ||
 _nvctl__subcmd__fan_commands() {
     local commands; commands=(
-'info:' \
-'set:' \
+'info:Show fan status' \
+'set:Set a fan to a manual speed percentage' \
+'auto:Reset a fan to automatic driver control' \
+'curve:Manage fan curves and presets' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'nvctl fan commands' commands "$@"
 }
+(( $+functions[_nvctl__subcmd__fan__subcmd__auto_commands] )) ||
+_nvctl__subcmd__fan__subcmd__auto_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl fan auto commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__fan__subcmd__curve_commands] )) ||
+_nvctl__subcmd__fan__subcmd__curve_commands() {
+    local commands; commands=(
+'show:Show available fan curve profiles' \
+'apply:Apply a saved or built-in fan curve profile to a fan' \
+'set:Apply an inline curve, for example "30\:20,60\:50,75\:80,85\:100"' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'nvctl fan curve commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__fan__subcmd__curve__subcmd__apply_commands] )) ||
+_nvctl__subcmd__fan__subcmd__curve__subcmd__apply_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl fan curve apply commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__fan__subcmd__curve__subcmd__help_commands] )) ||
+_nvctl__subcmd__fan__subcmd__curve__subcmd__help_commands() {
+    local commands; commands=(
+'show:Show available fan curve profiles' \
+'apply:Apply a saved or built-in fan curve profile to a fan' \
+'set:Apply an inline curve, for example "30\:20,60\:50,75\:80,85\:100"' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'nvctl fan curve help commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__fan__subcmd__curve__subcmd__help__subcmd__apply_commands] )) ||
+_nvctl__subcmd__fan__subcmd__curve__subcmd__help__subcmd__apply_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl fan curve help apply commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__fan__subcmd__curve__subcmd__help__subcmd__help_commands] )) ||
+_nvctl__subcmd__fan__subcmd__curve__subcmd__help__subcmd__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl fan curve help help commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__fan__subcmd__curve__subcmd__help__subcmd__set_commands] )) ||
+_nvctl__subcmd__fan__subcmd__curve__subcmd__help__subcmd__set_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl fan curve help set commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__fan__subcmd__curve__subcmd__help__subcmd__show_commands] )) ||
+_nvctl__subcmd__fan__subcmd__curve__subcmd__help__subcmd__show_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl fan curve help show commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__fan__subcmd__curve__subcmd__set_commands] )) ||
+_nvctl__subcmd__fan__subcmd__curve__subcmd__set_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl fan curve set commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__fan__subcmd__curve__subcmd__show_commands] )) ||
+_nvctl__subcmd__fan__subcmd__curve__subcmd__show_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl fan curve show commands' commands "$@"
+}
 (( $+functions[_nvctl__subcmd__fan__subcmd__help_commands] )) ||
 _nvctl__subcmd__fan__subcmd__help_commands() {
     local commands; commands=(
-'info:' \
-'set:' \
+'info:Show fan status' \
+'set:Set a fan to a manual speed percentage' \
+'auto:Reset a fan to automatic driver control' \
+'curve:Manage fan curves and presets' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'nvctl fan help commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__fan__subcmd__help__subcmd__auto_commands] )) ||
+_nvctl__subcmd__fan__subcmd__help__subcmd__auto_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl fan help auto commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__fan__subcmd__help__subcmd__curve_commands] )) ||
+_nvctl__subcmd__fan__subcmd__help__subcmd__curve_commands() {
+    local commands; commands=(
+'show:Show available fan curve profiles' \
+'apply:Apply a saved or built-in fan curve profile to a fan' \
+'set:Apply an inline curve, for example "30\:20,60\:50,75\:80,85\:100"' \
+    )
+    _describe -t commands 'nvctl fan help curve commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__fan__subcmd__help__subcmd__curve__subcmd__apply_commands] )) ||
+_nvctl__subcmd__fan__subcmd__help__subcmd__curve__subcmd__apply_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl fan help curve apply commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__fan__subcmd__help__subcmd__curve__subcmd__set_commands] )) ||
+_nvctl__subcmd__fan__subcmd__help__subcmd__curve__subcmd__set_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl fan help curve set commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__fan__subcmd__help__subcmd__curve__subcmd__show_commands] )) ||
+_nvctl__subcmd__fan__subcmd__help__subcmd__curve__subcmd__show_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl fan help curve show commands' commands "$@"
 }
 (( $+functions[_nvctl__subcmd__fan__subcmd__help__subcmd__help_commands] )) ||
 _nvctl__subcmd__fan__subcmd__help__subcmd__help_commands() {
@@ -12350,6 +13034,7 @@ _nvctl__subcmd__help_commands() {
 'color:🎨 Color and vibrance control' \
 'config:⚙️ Configuration and profiles' \
 'upscaling:📈 AI upscaling and enhancement' \
+'cuda:🧪 CUDA, Ollama, and local AI/ML diagnostics' \
 'dlss:🚀 DLSS and related features' \
 'shaders:🎨 Shader cache management' \
 'passthrough:🔌 GPU passthrough (VFIO/containers/VMs)' \
@@ -12363,6 +13048,7 @@ _nvctl__subcmd__help_commands() {
 'interactive:🎛️ Interactive menu mode' \
 'system:💻 System information and platform detection' \
 'doctor:🔍 Run system diagnostics' \
+'setup:🧭 Guided first-run setup and readiness checks' \
 'completion:🧩 Generate shell completions' \
 'version:📋 Show detailed version information' \
 'asus:🎯 ASUS ROG GPU features (Power Detector+, Aura, etc.)' \
@@ -12746,6 +13432,54 @@ _nvctl__subcmd__help__subcmd__container__subcmd__runtime__subcmd__test_commands(
 _nvctl__subcmd__help__subcmd__container__subcmd__status_commands() {
     local commands; commands=()
     _describe -t commands 'nvctl help container status commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__help__subcmd__cuda_commands] )) ||
+_nvctl__subcmd__help__subcmd__cuda_commands() {
+    local commands; commands=(
+'info:Show CUDA driver, toolkit, and detected GPU memory' \
+'doctor:Check CUDA, developer tools, Ollama, and container GPU readiness' \
+'ollama:Show Ollama CUDA/native/container status and smoke-test commands' \
+'workloads:Recommend local AI/ML workloads from detected VRAM' \
+'tools:Show CUDA and AI helper tool availability' \
+'env:Emit shell exports for CUDA and Ollama workflows' \
+'smoke:Print a dry-run CUDA/Ollama validation plan' \
+    )
+    _describe -t commands 'nvctl help cuda commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__help__subcmd__cuda__subcmd__doctor_commands] )) ||
+_nvctl__subcmd__help__subcmd__cuda__subcmd__doctor_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl help cuda doctor commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__help__subcmd__cuda__subcmd__env_commands] )) ||
+_nvctl__subcmd__help__subcmd__cuda__subcmd__env_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl help cuda env commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__help__subcmd__cuda__subcmd__info_commands] )) ||
+_nvctl__subcmd__help__subcmd__cuda__subcmd__info_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl help cuda info commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__help__subcmd__cuda__subcmd__ollama_commands] )) ||
+_nvctl__subcmd__help__subcmd__cuda__subcmd__ollama_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl help cuda ollama commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__help__subcmd__cuda__subcmd__smoke_commands] )) ||
+_nvctl__subcmd__help__subcmd__cuda__subcmd__smoke_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl help cuda smoke commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__help__subcmd__cuda__subcmd__tools_commands] )) ||
+_nvctl__subcmd__help__subcmd__cuda__subcmd__tools_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl help cuda tools commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__help__subcmd__cuda__subcmd__workloads_commands] )) ||
+_nvctl__subcmd__help__subcmd__cuda__subcmd__workloads_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl help cuda workloads commands' commands "$@"
 }
 (( $+functions[_nvctl__subcmd__help__subcmd__display_commands] )) ||
 _nvctl__subcmd__help__subcmd__display_commands() {
@@ -13257,10 +13991,41 @@ _nvctl__subcmd__help__subcmd__driver__subcmd__validate_commands() {
 (( $+functions[_nvctl__subcmd__help__subcmd__fan_commands] )) ||
 _nvctl__subcmd__help__subcmd__fan_commands() {
     local commands; commands=(
-'info:' \
-'set:' \
+'info:Show fan status' \
+'set:Set a fan to a manual speed percentage' \
+'auto:Reset a fan to automatic driver control' \
+'curve:Manage fan curves and presets' \
     )
     _describe -t commands 'nvctl help fan commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__help__subcmd__fan__subcmd__auto_commands] )) ||
+_nvctl__subcmd__help__subcmd__fan__subcmd__auto_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl help fan auto commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__help__subcmd__fan__subcmd__curve_commands] )) ||
+_nvctl__subcmd__help__subcmd__fan__subcmd__curve_commands() {
+    local commands; commands=(
+'show:Show available fan curve profiles' \
+'apply:Apply a saved or built-in fan curve profile to a fan' \
+'set:Apply an inline curve, for example "30\:20,60\:50,75\:80,85\:100"' \
+    )
+    _describe -t commands 'nvctl help fan curve commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__help__subcmd__fan__subcmd__curve__subcmd__apply_commands] )) ||
+_nvctl__subcmd__help__subcmd__fan__subcmd__curve__subcmd__apply_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl help fan curve apply commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__help__subcmd__fan__subcmd__curve__subcmd__set_commands] )) ||
+_nvctl__subcmd__help__subcmd__fan__subcmd__curve__subcmd__set_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl help fan curve set commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__help__subcmd__fan__subcmd__curve__subcmd__show_commands] )) ||
+_nvctl__subcmd__help__subcmd__fan__subcmd__curve__subcmd__show_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl help fan curve show commands' commands "$@"
 }
 (( $+functions[_nvctl__subcmd__help__subcmd__fan__subcmd__info_commands] )) ||
 _nvctl__subcmd__help__subcmd__fan__subcmd__info_commands() {
@@ -14150,6 +14915,36 @@ _nvctl__subcmd__help__subcmd__recording__subcmd__status_commands() {
 _nvctl__subcmd__help__subcmd__recording__subcmd__stop_commands() {
     local commands; commands=()
     _describe -t commands 'nvctl help recording stop commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__help__subcmd__setup_commands] )) ||
+_nvctl__subcmd__help__subcmd__setup_commands() {
+    local commands; commands=(
+'check:Check driver, compositor, permissions, services, and helper tools' \
+'permissions:Install udev permissions for NVIDIA device access' \
+'status:Show current NVIDIA device permission status' \
+'remove:Remove nvcontrol udev permission setup' \
+    )
+    _describe -t commands 'nvctl help setup commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__help__subcmd__setup__subcmd__check_commands] )) ||
+_nvctl__subcmd__help__subcmd__setup__subcmd__check_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl help setup check commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__help__subcmd__setup__subcmd__permissions_commands] )) ||
+_nvctl__subcmd__help__subcmd__setup__subcmd__permissions_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl help setup permissions commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__help__subcmd__setup__subcmd__remove_commands] )) ||
+_nvctl__subcmd__help__subcmd__setup__subcmd__remove_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl help setup remove commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__help__subcmd__setup__subcmd__status_commands] )) ||
+_nvctl__subcmd__help__subcmd__setup__subcmd__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl help setup status commands' commands "$@"
 }
 (( $+functions[_nvctl__subcmd__help__subcmd__shaders_commands] )) ||
 _nvctl__subcmd__help__subcmd__shaders_commands() {
@@ -15601,6 +16396,73 @@ _nvctl__subcmd__recording__subcmd__status_commands() {
 _nvctl__subcmd__recording__subcmd__stop_commands() {
     local commands; commands=()
     _describe -t commands 'nvctl recording stop commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__setup_commands] )) ||
+_nvctl__subcmd__setup_commands() {
+    local commands; commands=(
+'check:Check driver, compositor, permissions, services, and helper tools' \
+'permissions:Install udev permissions for NVIDIA device access' \
+'status:Show current NVIDIA device permission status' \
+'remove:Remove nvcontrol udev permission setup' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'nvctl setup commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__setup__subcmd__check_commands] )) ||
+_nvctl__subcmd__setup__subcmd__check_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl setup check commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__setup__subcmd__help_commands] )) ||
+_nvctl__subcmd__setup__subcmd__help_commands() {
+    local commands; commands=(
+'check:Check driver, compositor, permissions, services, and helper tools' \
+'permissions:Install udev permissions for NVIDIA device access' \
+'status:Show current NVIDIA device permission status' \
+'remove:Remove nvcontrol udev permission setup' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'nvctl setup help commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__setup__subcmd__help__subcmd__check_commands] )) ||
+_nvctl__subcmd__setup__subcmd__help__subcmd__check_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl setup help check commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__setup__subcmd__help__subcmd__help_commands] )) ||
+_nvctl__subcmd__setup__subcmd__help__subcmd__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl setup help help commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__setup__subcmd__help__subcmd__permissions_commands] )) ||
+_nvctl__subcmd__setup__subcmd__help__subcmd__permissions_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl setup help permissions commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__setup__subcmd__help__subcmd__remove_commands] )) ||
+_nvctl__subcmd__setup__subcmd__help__subcmd__remove_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl setup help remove commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__setup__subcmd__help__subcmd__status_commands] )) ||
+_nvctl__subcmd__setup__subcmd__help__subcmd__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl setup help status commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__setup__subcmd__permissions_commands] )) ||
+_nvctl__subcmd__setup__subcmd__permissions_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl setup permissions commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__setup__subcmd__remove_commands] )) ||
+_nvctl__subcmd__setup__subcmd__remove_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl setup remove commands' commands "$@"
+}
+(( $+functions[_nvctl__subcmd__setup__subcmd__status_commands] )) ||
+_nvctl__subcmd__setup__subcmd__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'nvctl setup status commands' commands "$@"
 }
 (( $+functions[_nvctl__subcmd__shaders_commands] )) ||
 _nvctl__subcmd__shaders_commands() {

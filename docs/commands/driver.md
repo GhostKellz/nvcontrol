@@ -40,6 +40,37 @@ nvctl driver source doctor
 
 For driver branch compatibility, see [driver compatibility](../drivers/nvidia-driver.md).
 
+## Diagnostic Flow
+
+```mermaid
+flowchart TD
+    start["nvctl driver command"] --> mode{"Requested workflow"}
+
+    mode -->|"info / capabilities"| caps["collect driver version\nand runtime capability probes"]
+    mode -->|"check"| health["quick health summary"]
+    mode -->|"validate --driver 610"| branch["branch-specific expectations"]
+    mode -->|"diagnose-release"| release["kernel/userspace/GSP alignment"]
+    mode -->|"support-bundle"| bundle["support artifact pipeline"]
+    mode -->|"dkms / source"| build["build and package state"]
+
+    caps --> helpers["optional helpers\nvulkaninfo, eglinfo"]
+    helpers --> safe_vk["overlay-safe Vulkan environment"]
+    safe_vk --> output["human / JSON / YAML output"]
+    health --> output
+    branch --> output
+    release --> output
+    build --> output
+
+    bundle --> release
+    bundle --> logs["journal/dmesg tails"]
+    bundle --> cuda["CUDA/AI diagnostics"]
+    bundle --> redact["redaction policy"]
+    release --> redact
+    logs --> redact
+    cuda --> redact
+    redact --> artifacts["support.txt + support.json\nor tar.gz"]
+```
+
 ## Release Diagnostics
 
 `nvctl driver diagnose-release` reports:
@@ -139,6 +170,27 @@ Support bundles now also capture:
 - boot/initramfs findings for the running kernel
 - Arch/CachyOS package inventory for NVIDIA/kernel packages
 - DKMS doctor, source-build doctor, and container runtime doctor output
+
+### Support Bundle Artifact Shape
+
+```mermaid
+flowchart LR
+    cli["support-bundle flags"] --> collectors["diagnostic collectors"]
+    collectors --> release["release diagnostics"]
+    collectors --> logs["log tails"]
+    collectors --> cuda["CUDA/AI diagnostics"]
+    collectors --> package["package/source/DKMS state"]
+
+    release --> redact{"redaction enabled?"}
+    logs --> redact
+    cuda --> redact
+    package --> redact
+
+    redact -->|plain text| text["support.txt"]
+    text --> sidecar["support.txt.json"]
+    redact -->|--gzip| gzip["support.txt.gz\nmetadata appended"]
+    redact -->|--tarball| tar["support.tar.gz\nsupport.txt + support.json"]
+```
 
 Arch pacman hook generation now covers:
 

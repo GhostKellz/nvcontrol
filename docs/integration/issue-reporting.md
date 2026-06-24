@@ -2,6 +2,27 @@
 
 For driver, GSP, DKMS, or firmware problems, include a support bundle whenever possible.
 
+## Report Pipeline
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Nvctl as nvctl
+    participant Host as local NVIDIA stack
+    participant Issue as GitHub issue
+
+    User->>Nvctl: driver diagnose-release
+    Nvctl->>Host: inspect kernel, module, firmware, packages
+    Host-->>Nvctl: alignment facts and warnings
+    Nvctl-->>User: readable summary
+
+    User->>Nvctl: doctor --support or driver support-bundle
+    Nvctl->>Host: collect redacted diagnostics and logs
+    Nvctl-->>User: support artifact path
+
+    User->>Issue: attach summary + support artifact + recent change
+```
+
 ## Recommended Workflow
 
 ```bash

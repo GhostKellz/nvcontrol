@@ -1,8 +1,6 @@
 # Backend Abstraction API
 
-*Added in v0.7.6*
-
-The backend abstraction layer enables deterministic testing without NVIDIA hardware.
+The backend abstraction layer enables deterministic testing without NVIDIA hardware and gives runtime surfaces one shared access model for NVML and display helper commands.
 
 ## Overview
 
@@ -11,6 +9,21 @@ nvcontrol separates hardware access into traits:
 - `DisplayCommandRunner` - Display commands (xrandr, hyprctl, gsettings)
 
 Both have real and mock implementations.
+
+```mermaid
+flowchart LR
+    test["Tests"] --> mock_nvml["MockNvmlBackend"]
+    test --> mock_display["MockDisplayRunner"]
+    app["CLI / TUI / GUI"] --> ctx["GuiBackendContext"]
+    ctx --> shared_nvml["SharedNvmlBackend"]
+    ctx --> shared_display["SharedDisplayRunner"]
+    shared_nvml --> real_nvml["RealNvmlBackend"]
+    shared_nvml --> mock_nvml
+    shared_display --> shell["ShellDisplayRunner"]
+    shared_display --> mock_display
+    real_nvml --> driver["NVIDIA NVML"]
+    shell --> helpers["allow-listed display helpers"]
+```
 
 ## NvmlBackend Trait
 
@@ -146,6 +159,20 @@ use nvcontrol::nvml_backend::create_mock_backend;
 
 let backend = create_mock_backend();
 let metrics = monitoring::collect_metrics_with_backend(&backend, 0)?;
+```
+
+## Mock Selection Flow
+
+```mermaid
+flowchart TD
+    need{"Test scenario"}
+    need -->|"normal desktop"| single["MockNvmlBackend::single_gpu()"]
+    need -->|"multi-GPU"| multi["MockNvmlBackend::multi_gpu(n)"]
+    need -->|"missing GPU"| none["MockNvmlBackend::no_gpu()"]
+    need -->|"KDE display path"| kde["MockDisplayRunner::kde()"]
+    need -->|"GNOME display path"| gnome["MockDisplayRunner::gnome()"]
+    need -->|"Hyprland display path"| hypr["MockDisplayRunner::hyprland()"]
+    need -->|"headless display path"| headless["MockDisplayRunner::headless()"]
 ```
 
 ## See Also

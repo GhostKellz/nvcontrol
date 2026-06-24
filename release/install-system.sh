@@ -71,7 +71,14 @@ tar -xzf "$archive_path" -C "$TMP_DIR"
 extract_root="$(find "$TMP_DIR" -mindepth 1 -maxdepth 1 -type d \( -name 'nvcontrol-*' -o -name 'nvctl-*' \) | head -n1)"
 [[ -n "$extract_root" ]] || fail "failed to find extracted release directory"
 
-install -d "${INSTALL_PREFIX}/bin" "${INSTALL_PREFIX}/share/applications" "${INSTALL_PREFIX}/share/icons/hicolor/256x256/apps"
+install -d \
+  "${INSTALL_PREFIX}/bin" \
+  "${INSTALL_PREFIX}/share/applications" \
+  "${INSTALL_PREFIX}/share/icons/hicolor/256x256/apps" \
+  "${INSTALL_PREFIX}/share/bash-completion/completions" \
+  "${INSTALL_PREFIX}/share/zsh/site-functions" \
+  "${INSTALL_PREFIX}/share/fish/vendor_completions.d" \
+  "${INSTALL_PREFIX}/share/man/man1"
 
 if [[ -f "${extract_root}/nvctl" ]]; then
   install -m755 "${extract_root}/nvctl" "${INSTALL_PREFIX}/bin/nvctl"
@@ -91,6 +98,29 @@ fi
 if [[ -f "${extract_root}/assets/icons/icon-256x256.png" ]]; then
   install -m644 "${extract_root}/assets/icons/icon-256x256.png" "${INSTALL_PREFIX}/share/icons/hicolor/256x256/apps/nvcontrol.png"
   log "Installed application icon"
+fi
+
+if [[ -f "${extract_root}/completions/nvctl.bash" ]]; then
+  install -m644 "${extract_root}/completions/nvctl.bash" "${INSTALL_PREFIX}/share/bash-completion/completions/nvctl"
+  log "Installed bash completion"
+fi
+
+if [[ -f "${extract_root}/completions/_nvctl" ]]; then
+  install -m644 "${extract_root}/completions/_nvctl" "${INSTALL_PREFIX}/share/zsh/site-functions/_nvctl"
+  log "Installed zsh completion"
+elif [[ -f "${extract_root}/completions/nvctl.zsh" ]]; then
+  install -m644 "${extract_root}/completions/nvctl.zsh" "${INSTALL_PREFIX}/share/zsh/site-functions/_nvctl"
+  log "Installed zsh completion"
+fi
+
+if [[ -f "${extract_root}/completions/nvctl.fish" ]]; then
+  install -m644 "${extract_root}/completions/nvctl.fish" "${INSTALL_PREFIX}/share/fish/vendor_completions.d/nvctl.fish"
+  log "Installed fish completion"
+fi
+
+if [[ -f "${extract_root}/man/nvctl.1" ]]; then
+  install -m644 "${extract_root}/man/nvctl.1" "${INSTALL_PREFIX}/share/man/man1/nvctl.1"
+  log "Installed nvctl(1) man page"
 fi
 
 if command -v update-desktop-database >/dev/null 2>&1; then

@@ -693,12 +693,12 @@ nvctl cuda doctor
 nvctl cuda ollama
 
 # Fan curves work together
-nvctl fan curve apply gaming
+nvctl fan curve apply aggressive
 ```
 
 ---
 
-## Future Features (Planned)
+## Future Work
 
 - [x] DLSS diagnostics tab
 - [x] CUDA/Ollama/AI diagnostics tab
@@ -722,5 +722,3 @@ nvctl fan curve apply gaming
 ---
 
 **Made for the Arch Linux + NVIDIA + Wayland community**
-
-*Last Updated: 2026-06-23 - v0.8.9 / 610+ open-driver path*

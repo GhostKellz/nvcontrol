@@ -11,7 +11,7 @@ This directory contains API documentation for nvcontrol's Rust library.
 | [Fan](./fan.md) | Fan speed control and curves |
 | [Power](./power.md) | Power limits and profiles |
 | [Overclock](./overclock.md) | Clock offsets and stress testing |
-| [Backend](./backend.md) | Backend abstraction for testing (v0.7.6+) |
+| [Backend](./backend.md) | Backend abstraction for testing and shared runtime access |
 
 ## Quick Start
 
@@ -51,4 +51,4 @@ fn safe_operation() -> NvResult<()> {
 
 ## Testing with Mocks
 
-See [backend.md](./backend.md) for testing with mock backends (v0.7.6+).
+See [backend.md](./backend.md) for testing with mock backends.

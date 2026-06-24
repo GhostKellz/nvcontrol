@@ -127,12 +127,19 @@ nvctl power curve reset
 ---
 
 ### `nvctl power schedule`
-Time-based power profile scheduling (coming soon).
+Time-based power profile scheduling.
 
 **Usage:**
 ```bash
 nvctl power schedule <action>
 ```
+
+**Actions:**
+- `list`
+- `add`
+- `remove`
+- `enable`
+- `disable`
 
 ---
 

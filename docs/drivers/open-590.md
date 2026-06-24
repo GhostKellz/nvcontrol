@@ -83,15 +83,16 @@ NvU32 dcTspLongTimescaleLimitOverridemA;  // New field
 
 ## nvcontrol Compatibility
 
-### Current Status: FULLY COMPATIBLE
+### Historical Status
 
-nvcontrol uses stable userspace APIs that are unaffected:
+This page predates the current 610+ open-driver baseline. Use it as a historical reference for 590 beta changes, not as a release-readiness claim for current nvcontrol. The stable userspace APIs listed here were not expected to be affected at the time:
 - **NVML** (nvml-wrapper) - No changes
 - **nvidia-settings** - PowerMizer fix benefits us on Wayland
 - **nvidia-smi** - No changes
 
-### No Breaking Changes
-All nvcontrol functionality works with 590 drivers without modification.
+### Current Guidance
+
+For a 590-era system, use the compatibility matrix in [nvidia-driver.md](nvidia-driver.md) and the older-build guidance in [legacy.md](legacy.md). Do not treat current `main` as the default choice for older NVKMS layouts.
 
 ---
 

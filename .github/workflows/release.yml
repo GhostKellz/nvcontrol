@@ -16,7 +16,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
 
@@ -63,7 +63,7 @@ jobs:
           ls -lh "nvctl-${VERSION}-linux-x86_64.tar.gz"
 
       - name: Upload CLI artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: nvctl-cli
           path: nvctl-${{ github.ref_name }}-linux-x86_64.tar.gz
@@ -75,7 +75,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
 
@@ -126,7 +126,7 @@ jobs:
           ls -lh "nvcontrol-${VERSION}-linux-x86_64.tar.gz"
 
       - name: Upload GUI artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: nvcontrol-gui
           path: nvcontrol-${{ github.ref_name }}-linux-x86_64.tar.gz
@@ -138,12 +138,12 @@ jobs:
     needs: [release-cli, release-gui]
     steps:
       - name: Download CLI artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: nvctl-cli
 
       - name: Download GUI artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: nvcontrol-gui
 
@@ -151,7 +151,7 @@ jobs:
         run: ls -lh *.tar.gz
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             nvctl-${{ github.ref_name }}-linux-x86_64.tar.gz

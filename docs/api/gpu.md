@@ -94,11 +94,11 @@ Display GPU information.
 nvctl gpu info
 
 # Output:
-# GPU 0: NVIDIA GeForce RTX 4090
-#   Driver: 545.29.06
-#   CUDA: 12.3
-#   Architecture: Ada Lovelace
-#   Memory: 24 GB
+# GPU 0: NVIDIA GeForce RTX 5090
+#   Driver: <loaded-driver-version>
+#   CUDA: <detected-cuda-version>
+#   Architecture: Blackwell
+#   Memory: 32 GB
 ```
 
 ### `nvctl gpu stat`

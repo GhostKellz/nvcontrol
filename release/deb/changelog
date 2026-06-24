@@ -1,3 +1,11 @@
+nvcontrol (0.8.10-1) unstable; urgency=medium
+
+  * Hotfix release metadata across Cargo and packaging surfaces
+  * Fan CLI contract wired for auto control and curve show/apply/set workflows
+  * Man page and shell completion artifacts refreshed for current clap commands
+
+ -- CK Technology LLC <info@cktechx.com>  Tue, 23 Jun 2026 21:30:00 +0000
+
 nvcontrol (0.8.9-1) unstable; urgency=medium
 
   * Guided setup check for 610+ open-driver readiness, helper tools, and device access

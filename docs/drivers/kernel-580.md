@@ -1,9 +1,11 @@
-# NVIDIA Open Kernel Modules 580.105.08 Optimizations
+# Historical NVIDIA Open Kernel Modules 580.105.08 Notes
+
+This page is retained as historical 580-era research. The current primary driver path is NVIDIA 610+ open drivers; use [open-610.md](open-610.md) and [nvidia-driver.md](nvidia-driver.md) for current release guidance.
 
 ## Driver Information
 
 **Version**: 580.105.08 (archive/open-gpu-kernel-modules)
-**Full Blackwell/GB202 Support**: ✅
+**Blackwell/GB202 Support**: historical 580-era claim; verify against current 610+ docs before using as guidance
 **Release**: January 2025
 
 ## What's New in 580.105.08 for RTX 50-Series
@@ -39,10 +41,10 @@ Open kernel modules **REQUIRE** GSP (GPU System Processor) firmware:
 - 8K @ 165Hz capability
 - DSC 1.2a (Display Stream Compression)
 
-## nvcontrol Integration (`kernel_driver.rs`)
+## Historical nvcontrol Integration Notes
 
 ### Auto-Detection
-nvcontrol can now detect and report:
+The older integration plan described detection/reporting for:
 - Driver version (580.105.08)
 - Driver type (Open Kernel vs Proprietary)
 - GSP firmware version
@@ -50,9 +52,10 @@ nvcontrol can now detect and report:
 - Supported architectures (Blackwell/GB202)
 - Feature flags (ReBAR, DP 2.1a, MIG, etc.)
 
-**Usage:**
+**Current command family:**
 ```bash
-nvcontrol driver-info
+nvctl driver info
+nvctl driver diagnose-release
 ```
 
 **Output:**
@@ -87,11 +90,11 @@ RTX 50-Series Support: ✅ Yes
 
 ## Optimized Kernel Module Parameters
 
-### Recommended `/etc/modprobe.d/nvidia.conf`
+### Historical `/etc/modprobe.d/nvidia.conf` Example
 
-nvcontrol can generate an optimized config:
+Treat this as an old example, not a current generated output contract:
 ```bash
-nvcontrol driver-optimize --generate > /etc/modprobe.d/nvidia.conf
+nvctl driver diagnose-release
 ```
 
 **Generated Configuration:**
@@ -259,7 +262,7 @@ Exec=/bin/sh -c 'while read -r trg; do case $trg in linux) exit 0; esac; done; /
 
 **Check Support:**
 ```bash
-nvcontrol driver-info | grep "Confidential Compute"
+nvctl driver info
 ```
 
 ### DisplayPort 2.1a (UHBR Modes)
@@ -271,9 +274,10 @@ nvcontrol driver-info | grep "Confidential Compute"
 - UHBR20: 16K @ 60Hz, 8K @ 120Hz, 4K @ 240Hz
 - With DSC: 4K @ 480Hz, 8K @ 165Hz
 
-**Enable in nvcontrol:**
+**Current validation path:**
 ```bash
-nvcontrol display --enable-dp21
+nvctl driver info
+nvctl display ls
 ```
 
 ## Troubleshooting
@@ -303,7 +307,8 @@ cat /sys/module/nvidia/parameters/NVreg_EnableResizableBar
 # Should output: 1
 
 # Verify with nvcontrol
-nvcontrol validate-system
+nvctl setup check
+nvctl driver diagnose-release
 ```
 
 ### Module Load Failures
@@ -327,8 +332,9 @@ cat /sys/module/nvidia/parameters/NVreg_EnableDP21
 # Check monitor capabilities
 xrandr --verbose | grep -A 10 "DP-"
 
-# Test with nvcontrol
-nvcontrol display --test-dp21
+# Inspect display and driver state
+nvctl driver info
+nvctl display ls
 ```
 
 ## Performance Validation
@@ -336,10 +342,10 @@ nvcontrol display --test-dp21
 ### Before RTX 5090 Install
 ```bash
 # Current system check
-nvcontrol validate-system
+nvctl setup check
 
 # Driver info
-nvcontrol driver-info
+nvctl driver info
 
 # Should show:
 # - Driver 580.105.08+
@@ -355,11 +361,12 @@ nvcontrol driver-info
 nvidia-smi
 
 # Check nvcontrol recognition
-nvcontrol gpu-info
+nvctl gpu info
 # Should show: RTX 5090 (ASUS ROG Astral)
 
-# Validate all features
-nvcontrol validate-system --verbose
+# Validate setup
+nvctl setup check
+nvctl driver diagnose-release
 
 # Test DLSS 4
 nvctl dlss status
@@ -383,29 +390,25 @@ nvctl dlss status
 
 ## Summary
 
-### ✅ What's Ready
-- Full Blackwell/GB202 kernel support
+### Historical 580-era Findings
+- Blackwell/GB202 kernel support landed in the 580-era open module source
 - GSP firmware integration
 - Resizable BAR optimization
 - DisplayPort 2.1a support
 - 10x Copy Engines
 - 4x Graphics Engines
 - Confidential Compute
-- nvcontrol kernel driver module
+- nvcontrol driver diagnostics should now be read through the current `nvctl driver` commands
 
-### 🎯 Recommended Actions
+### Current Actions
 1. Verify driver version: `nvidia-smi`
-2. Generate optimized modprobe config: `nvcontrol driver-optimize`
-3. Enable early KMS in initramfs
-4. Set up DKMS for auto-rebuild
-5. Test after 5090 install: `nvcontrol validate-system`
+2. Check current nvcontrol guidance: `nvctl driver info`
+3. Run release diagnostics: `nvctl driver diagnose-release`
+4. Set up DKMS for auto-rebuild if your distro/package path requires it
+5. Use [open-610.md](open-610.md) for current 610+ release guidance
 
 ### 📚 Documentation
 - Driver README: `archive/open-gpu-kernel-modules/README.md`
 - Kernel optimizations: This document
-- System validation: `docs/RTX_50_SERIES_READINESS.md`
+- Current 610+ driver guidance: [open-610.md](open-610.md)
 - ASUS Astral features: [hardware/asus-astral.md](../hardware/asus-astral.md)
-
----
-
-**Your Arch system with open kernel modules 580.105.08 is perfectly optimized for the ASUS ROG Astral RTX 5090! 🚀**
