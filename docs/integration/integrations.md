@@ -68,4 +68,4 @@ nvctl container monitor -c my-container
 ## See Also
 
 - [Backend Architecture](../config/backend-architecture.md) - Internal backend design
-- [API Reference](../api/README.md) - nvcontrol Rust API
+- [API Reference](../api/reference.md) - nvcontrol Rust API

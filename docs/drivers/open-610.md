@@ -100,9 +100,18 @@ pub has_drm_color_pipeline: bool,
 - [x] `nvctl driver info` — shows 610+ features section
 - [x] `nvctl wayland status` — shows FP16 EGL capability
 - [x] `cargo test` — all tests pass (346 total)
-- [x] NVKMS struct sizes verified against 610 headers via C sizeof checker
+- [x] NVKMS struct sizes verified against local `~/open-gpu-kernel-modules` headers at `NVIDIA_VERSION = 610.43.02`
 - [ ] `vulkaninfo --summary` — verify extension detection on live system
 - [ ] `eglinfo` — verify FP16 EGL detection on live system
+
+## Hardware Validation Notes
+
+| GPU Family | 610+ Open Driver Status | nvcontrol Status |
+|------------|--------------------------|------------------|
+| RTX 50 / Blackwell | Primary target, needs broader tester coverage | ABI and capability path implemented; live hardware validation still requested |
+| RTX 40 / Ada | Expected supported path | Needs repeat smoke tests for vibrance, VRR, support bundle, and setup check |
+| RTX 30 / Ampere | Expected supported path | Needs repeat smoke tests for vibrance, VRR, support bundle, and setup check |
+| Older 595/590-era systems | Use compatibility matrix | Prefer older nvcontrol builds where NVKMS layout compatibility matters |
 
 ## References
 
@@ -115,4 +124,5 @@ pub has_drm_color_pipeline: bool,
 
 | Date | Change |
 |------|--------|
+| 2026-06-23 | Added v0.8.9 setup/support-bundle validation notes and local 610.43.02 source verification reference |
 | 2026-05-26 | Initial analysis of 610.43.02 — NVKMS ABI fix, capability flags, runtime detection |

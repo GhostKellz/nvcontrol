@@ -1,13 +1,13 @@
 # Maintainer: Christopher Kelley <ckelley@ghostkellz.sh>
 pkgname=nvcontrol
-pkgver=0.8.7
+pkgver=0.8.9
 pkgrel=1
 pkgdesc="The Ultimate NVIDIA GPU Control Tool for Linux - Advanced overclocking, fan control, and gaming optimization"
 arch=('x86_64')
 url="https://github.com/ghostkellz/nvcontrol"
 license=('MIT')
 depends=(
-    'nvidia-utils'
+    'nvidia-utils>=610'
     'libxnvctrl'
 )
 makedepends=(
@@ -19,7 +19,6 @@ optdepends=(
     'gamescope: Gaming session compositor integration'
     'mangohud: Performance overlay support'
     'gamemode: Automatic performance optimization'
-    'nvibrant-cli: Digital vibrance control on Wayland'
     'docker: Container GPU management'
     'podman: Rootless container GPU support'
     'nvidia-container-toolkit: NVIDIA Container Runtime'

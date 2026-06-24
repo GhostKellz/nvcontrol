@@ -1,7 +1,7 @@
 %global crate nvcontrol
 
 Name:           nvcontrol
-Version:        0.8.8
+Version:        0.8.9
 Release:        1%{?dist}
 Summary:        Modern NVIDIA Settings Manager for Linux + Wayland
 
@@ -118,6 +118,11 @@ cargo test --release --lib -- --skip hardware --skip nvml || true
 %{_userunitdir}/nvcontrol-game-profile-auto.service
 
 %changelog
+* Tue Jun 23 2026 CK Technology LLC <info@cktechx.com> - 0.8.9-1
+- Guided setup check for 610+ open-driver readiness, helper tools, and device access
+- Dependency refresh including memmap2 0.9.11 to clear the current RustSec warning
+- Release metadata and documentation refresh for the next Linux + NVIDIA 610+ release
+
 * Mon May 26 2026 CK Technology LLC <info@cktechx.com> - 0.8.8-1
 - NVIDIA driver 610.43.02 support (NVKMS ABI fix, capability flags, runtime detection)
 - 610+ feature surfacing in CLI output (Vulkan extensions, FP16 EGL, DMABUF, DRM color pipeline)

@@ -11,6 +11,7 @@ Guides for nvcontrol display and GPU features.
 | [vrr-gsync.md](vrr-gsync.md) | Variable Refresh Rate / G-SYNC / FreeSync |
 | [image-sharpening.md](image-sharpening.md) | GPU post-processing sharpening |
 | [overclocking.md](overclocking.md) | GPU/memory clock tuning |
+| [cuda-ai.md](cuda-ai.md) | CUDA, Ollama, and local AI/ML diagnostics |
 
 ## Quick Start
 
@@ -23,6 +24,10 @@ nvctl display hdr status
 
 # View overclock limits
 nvctl overclock info
+
+# Check CUDA/Ollama AI readiness
+nvctl cuda doctor
+nvctl ai workloads
 ```
 
 ## Feature Compatibility
@@ -33,3 +38,4 @@ nvctl overclock info
 | HDR | Yes | Limited | 535+ |
 | VRR/G-SYNC | Yes | Yes | 470+ |
 | Overclocking | Yes | Yes | 535+ |
+| CUDA/AI diagnostics | Yes | Yes | 535+ runtime, 610+ preferred |

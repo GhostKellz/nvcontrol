@@ -159,8 +159,8 @@ env = WLR_DRM_FORCE_HDR,1
 
 ### Driver Requirements
 
-- NVIDIA driver 545+ recommended
-- NVIDIA Open Kernel Modules 580+ for best Wayland HDR
+- NVIDIA driver 610+ recommended for the current nvcontrol path
+- NVIDIA Open Kernel Modules 610+ for best Wayland HDR
 
 ## HDR Standards
 

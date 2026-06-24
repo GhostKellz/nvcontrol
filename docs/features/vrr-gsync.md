@@ -258,8 +258,8 @@ kscreen-doctor output.DP-1.vrrpolicy.0
 ## Related Documentation
 
 - [HDR Control](hdr.md) - High Dynamic Range settings
-- [Display Commands](commands/gpu.md) - Display management
-- [Gaming Profiles](commands/gaming.md) - Game-specific optimizations
+- [Display Commands](../commands/gpu.md) - Display management
+- [Gaming Profiles](../commands/gaming.md) - Game-specific optimizations
 
 ---
 

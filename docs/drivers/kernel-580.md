@@ -362,7 +362,7 @@ nvcontrol gpu-info
 nvcontrol validate-system --verbose
 
 # Test DLSS 4
-nvcontrol dlss-info
+nvctl dlss status
 # Should show: DLSS 4, Multi-Frame Generation, 4x multiplier
 ```
 

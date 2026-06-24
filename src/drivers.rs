@@ -1,5 +1,6 @@
 use crate::arch_integration::ArchIntegration;
 use crate::container_runtime::NvContainerRuntime;
+use crate::cuda;
 use crate::gsp_firmware::GspManager;
 use crate::{NvControlError, NvResult};
 use flate2::{Compression, write::GzEncoder};
@@ -86,6 +87,7 @@ pub struct SupportBundleMetadata {
     pub redact_ids: bool,
     pub log_tail: usize,
     pub release_diagnostics: ReleaseDiagnostics,
+    pub cuda_ai_diagnostics: Option<cuda::CudaDoctorReport>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1048,6 +1050,7 @@ pub fn write_support_bundle_with_options(
     let mut report = String::new();
     let diagnostics = collect_release_diagnostics();
     let gsp_status = GspManager::new().get_deep_status();
+    let cuda_ai_diagnostics = cuda::collect_cuda_doctor().ok();
 
     let _ = writeln!(report, "nvcontrol support bundle");
     let _ = writeln!(report, "=======================");
@@ -1070,6 +1073,51 @@ pub fn write_support_bundle_with_options(
     }
     if let Some(alignment) = diagnostics.release_alignment.as_ref() {
         let _ = writeln!(report, "release_alignment={}", alignment);
+    }
+
+    let caps = diagnostics
+        .userspace_driver_version
+        .as_deref()
+        .map(DriverCapabilities::from_version)
+        .transpose()?;
+    if let Some(caps) = caps {
+        let vulkan_extensions = detect_vulkan_extensions();
+        let fp16_egl = detect_egl_fp16();
+        let kernel_color_pipeline = is_kernel_at_least(6, 19);
+        let _ = writeln!(report);
+        let _ = writeln!(report, "[610 runtime capabilities]");
+        let _ = writeln!(report, "driver_major={}", caps.major_version);
+        let _ = writeln!(
+            report,
+            "vulkan_device_group_driver_ready={}",
+            caps.has_vulkan_device_group
+        );
+        let _ = writeln!(
+            report,
+            "vulkan_extensions_detected={}",
+            if vulkan_extensions.is_empty() {
+                "none".to_string()
+            } else {
+                vulkan_extensions.join(",")
+            }
+        );
+        let _ = writeln!(
+            report,
+            "fp16_egl_driver_ready={}",
+            caps.has_fp16_egl_wayland
+        );
+        let _ = writeln!(report, "fp16_egl_runtime_detected={}", fp16_egl);
+        let _ = writeln!(report, "dmabuf_mmap_driver_ready={}", caps.has_dmabuf_mmap);
+        let _ = writeln!(
+            report,
+            "drm_color_pipeline_driver_ready={}",
+            caps.has_drm_color_pipeline
+        );
+        let _ = writeln!(
+            report,
+            "drm_color_pipeline_kernel_ready={}",
+            kernel_color_pipeline
+        );
     }
 
     let _ = writeln!(report);
@@ -1249,6 +1297,42 @@ pub fn write_support_bundle_with_options(
         }
     }
 
+    let _ = writeln!(report);
+    let _ = writeln!(report, "[cuda ai diagnostics]");
+    if let Some(cuda_report) = &cuda_ai_diagnostics {
+        let _ = writeln!(report, "cuda_toolkit={}", cuda_report.cuda.version);
+        let _ = writeln!(report, "cuda_driver={}", cuda_report.cuda.driver_version);
+        let _ = writeln!(report, "cuda_gpus={}", cuda_report.cuda.devices.len());
+        let _ = writeln!(report, "ollama_cli={}", cuda_report.ollama.cli.available);
+        let _ = writeln!(
+            report,
+            "ollama_service_reachable={}",
+            cuda_report.ollama.service_reachable
+        );
+        let _ = writeln!(
+            report,
+            "docker_gpu_runtime_ready={}",
+            cuda_report.ollama.nvidia_container_runtime_ready
+        );
+        for tool in &cuda_report.tools {
+            let _ = writeln!(
+                report,
+                "tool={} available={} version={}",
+                tool.name,
+                tool.available,
+                tool.version.as_deref().unwrap_or("n/a")
+            );
+        }
+        for issue in &cuda_report.issues {
+            let _ = writeln!(report, "issue={}", issue);
+        }
+        for fix in &cuda_report.fixes {
+            let _ = writeln!(report, "fix={}", fix);
+        }
+    } else {
+        let _ = writeln!(report, "unavailable");
+    }
+
     for (section, pattern) in [
         ("nvidia logs", "nvidia|NVRM"),
         ("gsp logs", "GSP|gsp"),
@@ -1293,6 +1377,7 @@ pub fn write_support_bundle_with_options(
         redact_ids,
         log_tail,
         release_diagnostics: diagnostics,
+        cuda_ai_diagnostics,
     };
     let metadata_path = format!("{}.json", text_path);
     let metadata_json = serde_json::to_string_pretty(&metadata).unwrap_or_default();

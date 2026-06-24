@@ -448,9 +448,9 @@ echo "nvctl overclock apply --gpu-offset 100 --memory-offset 500" >> ~/.config/a
 
 ## Related Documentation
 
-- [Power Management](commands/power.md) - Power limit control
+- [Power Management](../commands/power.md) - Power limit control
 - [Fan Control](../api/fan.md) - Cooling configuration
-- [GPU Commands](commands/gpu.md) - Monitoring
+- [GPU Commands](../commands/gpu.md) - Monitoring
 - [VRR/G-SYNC](vrr-gsync.md) - Display optimization
 
 ---

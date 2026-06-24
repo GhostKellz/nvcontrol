@@ -39,9 +39,64 @@ fn test_nvctl_driver_info() {
 
 #[test]
 fn test_nvctl_driver_validate() {
-    let stdout = common::run_success(&["driver", "validate", "--driver", "590"]);
+    let stdout = common::run_success(&["driver", "validate", "--driver", "610"]);
     assert!(stdout.contains("System Validation for Driver"));
-    assert!(stdout.contains("590"));
+    assert!(stdout.contains("610"));
+}
+
+#[test]
+fn test_nvctl_cuda_doctor_json() {
+    let stdout = common::run_success(&["cuda", "doctor", "--format", "json"]);
+    assert!(stdout.contains("\"cuda\""));
+    assert!(stdout.contains("\"ollama\""));
+    assert!(stdout.contains("\"ai_recommendations\""));
+}
+
+#[test]
+fn test_nvctl_cuda_ollama_human() {
+    let stdout = common::run_success(&["cuda", "ollama"]);
+    assert!(stdout.contains("Ollama CUDA"));
+    assert!(stdout.contains("Docker run"));
+    assert!(stdout.contains("Smoke test"));
+}
+
+#[test]
+fn test_nvctl_ai_alias_workloads() {
+    let stdout = common::run_success(&["ai", "workloads"]);
+    assert!(stdout.contains("AI/ML workload fit"));
+    assert!(stdout.contains("Ollama"));
+}
+
+#[test]
+fn test_nvctl_cuda_env() {
+    let stdout = common::run_success(&["cuda", "env"]);
+    assert!(stdout.contains("CUDA / Ollama environment"));
+    assert!(stdout.contains("OLLAMA_HOST"));
+}
+
+#[test]
+fn test_nvctl_cuda_smoke_dry_run() {
+    let stdout = common::run_success(&["cuda", "smoke", "--dry-run"]);
+    assert!(stdout.contains("CUDA / AI smoke plan"));
+    assert!(stdout.contains("Dry-run only"));
+    assert!(stdout.contains("docker"));
+}
+
+#[test]
+fn test_nvctl_setup_check() {
+    let stdout = common::run_success(&["setup", "check"]);
+    assert!(stdout.contains("nvcontrol setup check"));
+    assert!(stdout.contains("Driver:"));
+    assert!(stdout.contains("CUDA / AI:"));
+    assert!(stdout.contains("Recommended next commands:"));
+}
+
+#[test]
+fn test_nvctl_setup_check_json() {
+    let stdout = common::run_success(&["setup", "check", "--format", "json"]);
+    assert!(stdout.contains("\"release_severity\""));
+    assert!(stdout.contains("\"helper_tools\""));
+    assert!(stdout.contains("\"cuda_ai\""));
 }
 
 #[test]
@@ -91,6 +146,7 @@ fn test_nvctl_driver_support_bundle() {
     assert!(common::wait_for_path(&metadata_path));
     let metadata = std::fs::read_to_string(&metadata_path).unwrap();
     assert!(metadata.contains("release_diagnostics"));
+    assert!(metadata.contains("cuda_ai_diagnostics"));
     let _ = std::fs::remove_file(&output_path);
     let _ = std::fs::remove_file(&metadata_path);
 }

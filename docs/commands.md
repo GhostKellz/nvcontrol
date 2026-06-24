@@ -23,6 +23,7 @@ nvctl [OPTIONS] <COMMAND>
 | `nvctl driver info` | Driver status (version, kernel, GSP, DKMS) |
 | `nvctl driver check` | Driver health checks + legacy GPU warnings |
 | `nvctl dlss status` | DLSS capabilities (2/3/3.5/4/4.5) |
+| `nvctl cuda doctor` | CUDA, Ollama, and AI/ML readiness |
 | `nvctl hdr status` | HDR status across displays |
 | `nvctl wayland explicit-sync status` | Explicit sync support |
 | `nvctl tui` | Interactive TUI menu |
@@ -76,6 +77,17 @@ Run system diagnostics.
 
 ```bash
 nvctl doctor                # Check GPU, drivers, and system health
+```
+
+### nvctl cuda / nvctl ai
+Read-only CUDA, Ollama, and local AI/ML diagnostics.
+
+```bash
+nvctl cuda info             # Driver, toolkit, GPU memory
+nvctl cuda doctor           # CUDA, Ollama, tools, workload fit
+nvctl cuda ollama           # Native/container Ollama CUDA status
+nvctl cuda workloads        # VRAM-based workload guidance
+nvctl ai doctor --format json
 ```
 
 ### nvctl system

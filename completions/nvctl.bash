@@ -37,6 +37,9 @@ _nvctl() {
             nvctl,container)
                 cmd="nvctl__subcmd__container"
                 ;;
+            nvctl,cuda)
+                cmd="nvctl__subcmd__cuda"
+                ;;
             nvctl,display)
                 cmd="nvctl__subcmd__display"
                 ;;
@@ -96,6 +99,9 @@ _nvctl() {
                 ;;
             nvctl,recording)
                 cmd="nvctl__subcmd__recording"
+                ;;
+            nvctl,setup)
+                cmd="nvctl__subcmd__setup"
                 ;;
             nvctl,shaders)
                 cmd="nvctl__subcmd__shaders"
@@ -579,6 +585,54 @@ _nvctl() {
                 ;;
             nvctl__subcmd__container__subcmd__runtime__subcmd__help,test)
                 cmd="nvctl__subcmd__container__subcmd__runtime__subcmd__help__subcmd__test"
+                ;;
+            nvctl__subcmd__cuda,doctor)
+                cmd="nvctl__subcmd__cuda__subcmd__doctor"
+                ;;
+            nvctl__subcmd__cuda,env)
+                cmd="nvctl__subcmd__cuda__subcmd__env"
+                ;;
+            nvctl__subcmd__cuda,help)
+                cmd="nvctl__subcmd__cuda__subcmd__help"
+                ;;
+            nvctl__subcmd__cuda,info)
+                cmd="nvctl__subcmd__cuda__subcmd__info"
+                ;;
+            nvctl__subcmd__cuda,ollama)
+                cmd="nvctl__subcmd__cuda__subcmd__ollama"
+                ;;
+            nvctl__subcmd__cuda,smoke)
+                cmd="nvctl__subcmd__cuda__subcmd__smoke"
+                ;;
+            nvctl__subcmd__cuda,tools)
+                cmd="nvctl__subcmd__cuda__subcmd__tools"
+                ;;
+            nvctl__subcmd__cuda,workloads)
+                cmd="nvctl__subcmd__cuda__subcmd__workloads"
+                ;;
+            nvctl__subcmd__cuda__subcmd__help,doctor)
+                cmd="nvctl__subcmd__cuda__subcmd__help__subcmd__doctor"
+                ;;
+            nvctl__subcmd__cuda__subcmd__help,env)
+                cmd="nvctl__subcmd__cuda__subcmd__help__subcmd__env"
+                ;;
+            nvctl__subcmd__cuda__subcmd__help,help)
+                cmd="nvctl__subcmd__cuda__subcmd__help__subcmd__help"
+                ;;
+            nvctl__subcmd__cuda__subcmd__help,info)
+                cmd="nvctl__subcmd__cuda__subcmd__help__subcmd__info"
+                ;;
+            nvctl__subcmd__cuda__subcmd__help,ollama)
+                cmd="nvctl__subcmd__cuda__subcmd__help__subcmd__ollama"
+                ;;
+            nvctl__subcmd__cuda__subcmd__help,smoke)
+                cmd="nvctl__subcmd__cuda__subcmd__help__subcmd__smoke"
+                ;;
+            nvctl__subcmd__cuda__subcmd__help,tools)
+                cmd="nvctl__subcmd__cuda__subcmd__help__subcmd__tools"
+                ;;
+            nvctl__subcmd__cuda__subcmd__help,workloads)
+                cmd="nvctl__subcmd__cuda__subcmd__help__subcmd__workloads"
                 ;;
             nvctl__subcmd__display,color-range)
                 cmd="nvctl__subcmd__display__subcmd__color__subcmd__range"
@@ -1732,6 +1786,9 @@ _nvctl() {
             nvctl__subcmd__help,container)
                 cmd="nvctl__subcmd__help__subcmd__container"
                 ;;
+            nvctl__subcmd__help,cuda)
+                cmd="nvctl__subcmd__help__subcmd__cuda"
+                ;;
             nvctl__subcmd__help,display)
                 cmd="nvctl__subcmd__help__subcmd__display"
                 ;;
@@ -1791,6 +1848,9 @@ _nvctl() {
                 ;;
             nvctl__subcmd__help,recording)
                 cmd="nvctl__subcmd__help__subcmd__recording"
+                ;;
+            nvctl__subcmd__help,setup)
+                cmd="nvctl__subcmd__help__subcmd__setup"
                 ;;
             nvctl__subcmd__help,shaders)
                 cmd="nvctl__subcmd__help__subcmd__shaders"
@@ -1980,6 +2040,27 @@ _nvctl() {
                 ;;
             nvctl__subcmd__help__subcmd__container__subcmd__runtime,test)
                 cmd="nvctl__subcmd__help__subcmd__container__subcmd__runtime__subcmd__test"
+                ;;
+            nvctl__subcmd__help__subcmd__cuda,doctor)
+                cmd="nvctl__subcmd__help__subcmd__cuda__subcmd__doctor"
+                ;;
+            nvctl__subcmd__help__subcmd__cuda,env)
+                cmd="nvctl__subcmd__help__subcmd__cuda__subcmd__env"
+                ;;
+            nvctl__subcmd__help__subcmd__cuda,info)
+                cmd="nvctl__subcmd__help__subcmd__cuda__subcmd__info"
+                ;;
+            nvctl__subcmd__help__subcmd__cuda,ollama)
+                cmd="nvctl__subcmd__help__subcmd__cuda__subcmd__ollama"
+                ;;
+            nvctl__subcmd__help__subcmd__cuda,smoke)
+                cmd="nvctl__subcmd__help__subcmd__cuda__subcmd__smoke"
+                ;;
+            nvctl__subcmd__help__subcmd__cuda,tools)
+                cmd="nvctl__subcmd__help__subcmd__cuda__subcmd__tools"
+                ;;
+            nvctl__subcmd__help__subcmd__cuda,workloads)
+                cmd="nvctl__subcmd__help__subcmd__cuda__subcmd__workloads"
                 ;;
             nvctl__subcmd__help__subcmd__display,color-range)
                 cmd="nvctl__subcmd__help__subcmd__display__subcmd__color__subcmd__range"
@@ -2616,6 +2697,18 @@ _nvctl() {
                 ;;
             nvctl__subcmd__help__subcmd__recording,stop)
                 cmd="nvctl__subcmd__help__subcmd__recording__subcmd__stop"
+                ;;
+            nvctl__subcmd__help__subcmd__setup,check)
+                cmd="nvctl__subcmd__help__subcmd__setup__subcmd__check"
+                ;;
+            nvctl__subcmd__help__subcmd__setup,permissions)
+                cmd="nvctl__subcmd__help__subcmd__setup__subcmd__permissions"
+                ;;
+            nvctl__subcmd__help__subcmd__setup,remove)
+                cmd="nvctl__subcmd__help__subcmd__setup__subcmd__remove"
+                ;;
+            nvctl__subcmd__help__subcmd__setup,status)
+                cmd="nvctl__subcmd__help__subcmd__setup__subcmd__status"
                 ;;
             nvctl__subcmd__help__subcmd__shaders,clear)
                 cmd="nvctl__subcmd__help__subcmd__shaders__subcmd__clear"
@@ -3280,6 +3373,36 @@ _nvctl() {
             nvctl__subcmd__recording__subcmd__help,stop)
                 cmd="nvctl__subcmd__recording__subcmd__help__subcmd__stop"
                 ;;
+            nvctl__subcmd__setup,check)
+                cmd="nvctl__subcmd__setup__subcmd__check"
+                ;;
+            nvctl__subcmd__setup,help)
+                cmd="nvctl__subcmd__setup__subcmd__help"
+                ;;
+            nvctl__subcmd__setup,permissions)
+                cmd="nvctl__subcmd__setup__subcmd__permissions"
+                ;;
+            nvctl__subcmd__setup,remove)
+                cmd="nvctl__subcmd__setup__subcmd__remove"
+                ;;
+            nvctl__subcmd__setup,status)
+                cmd="nvctl__subcmd__setup__subcmd__status"
+                ;;
+            nvctl__subcmd__setup__subcmd__help,check)
+                cmd="nvctl__subcmd__setup__subcmd__help__subcmd__check"
+                ;;
+            nvctl__subcmd__setup__subcmd__help,help)
+                cmd="nvctl__subcmd__setup__subcmd__help__subcmd__help"
+                ;;
+            nvctl__subcmd__setup__subcmd__help,permissions)
+                cmd="nvctl__subcmd__setup__subcmd__help__subcmd__permissions"
+                ;;
+            nvctl__subcmd__setup__subcmd__help,remove)
+                cmd="nvctl__subcmd__setup__subcmd__help__subcmd__remove"
+                ;;
+            nvctl__subcmd__setup__subcmd__help,status)
+                cmd="nvctl__subcmd__setup__subcmd__help__subcmd__status"
+                ;;
             nvctl__subcmd__shaders,clear)
                 cmd="nvctl__subcmd__shaders__subcmd__clear"
                 ;;
@@ -3479,7 +3602,7 @@ _nvctl() {
 
     case "${cmd}" in
         nvctl)
-            opts="-v -h -V --verbose --format --no-color --help --version gpu display vibrance fan overclock vrr monitor tui nvtop gaming recording container driver power color config upscaling dlss shaders passthrough wayland kde hdr power-profile arch monitors osd interactive system doctor completion version asus companion help"
+            opts="-v -h -V --verbose --format --no-color --help --version gpu display vibrance fan overclock vrr monitor tui nvtop gaming recording container driver power color config upscaling cuda dlss shaders passthrough wayland kde hdr power-profile arch monitors osd interactive system doctor setup completion version asus companion help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -6270,6 +6393,304 @@ _nvctl() {
                     return 0
                     ;;
                 --format)
+                    COMPREPLY=($(compgen -W "human json yaml table" -- "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__cuda)
+            opts="-v -h --verbose --format --no-color --help info doctor ollama workloads tools env smoke help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --format)
+                    COMPREPLY=($(compgen -W "human json yaml table" -- "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__cuda__subcmd__doctor)
+            opts="-f -v -h --format --verbose --no-color --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --format)
+                    COMPREPLY=($(compgen -W "human json yaml table" -- "${cur}"))
+                    return 0
+                    ;;
+                -f)
+                    COMPREPLY=($(compgen -W "human json yaml table" -- "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__cuda__subcmd__env)
+            opts="-f -v -h --format --verbose --no-color --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --format)
+                    COMPREPLY=($(compgen -W "human json yaml table" -- "${cur}"))
+                    return 0
+                    ;;
+                -f)
+                    COMPREPLY=($(compgen -W "human json yaml table" -- "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__cuda__subcmd__help)
+            opts="info doctor ollama workloads tools env smoke help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__cuda__subcmd__help__subcmd__doctor)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__cuda__subcmd__help__subcmd__env)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__cuda__subcmd__help__subcmd__help)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__cuda__subcmd__help__subcmd__info)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__cuda__subcmd__help__subcmd__ollama)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__cuda__subcmd__help__subcmd__smoke)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__cuda__subcmd__help__subcmd__tools)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__cuda__subcmd__help__subcmd__workloads)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__cuda__subcmd__info)
+            opts="-f -v -h --format --verbose --no-color --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --format)
+                    COMPREPLY=($(compgen -W "human json yaml table" -- "${cur}"))
+                    return 0
+                    ;;
+                -f)
+                    COMPREPLY=($(compgen -W "human json yaml table" -- "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__cuda__subcmd__ollama)
+            opts="-f -v -h --format --verbose --no-color --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --format)
+                    COMPREPLY=($(compgen -W "human json yaml table" -- "${cur}"))
+                    return 0
+                    ;;
+                -f)
+                    COMPREPLY=($(compgen -W "human json yaml table" -- "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__cuda__subcmd__smoke)
+            opts="-f -v -h --dry-run --format --verbose --no-color --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --format)
+                    COMPREPLY=($(compgen -W "human json yaml table" -- "${cur}"))
+                    return 0
+                    ;;
+                -f)
+                    COMPREPLY=($(compgen -W "human json yaml table" -- "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__cuda__subcmd__tools)
+            opts="-f -v -h --format --verbose --no-color --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --format)
+                    COMPREPLY=($(compgen -W "human json yaml table" -- "${cur}"))
+                    return 0
+                    ;;
+                -f)
+                    COMPREPLY=($(compgen -W "human json yaml table" -- "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__cuda__subcmd__workloads)
+            opts="-f -v -h --format --verbose --no-color --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --format)
+                    COMPREPLY=($(compgen -W "human json yaml table" -- "${cur}"))
+                    return 0
+                    ;;
+                -f)
                     COMPREPLY=($(compgen -W "human json yaml table" -- "${cur}"))
                     return 0
                     ;;
@@ -12555,7 +12976,7 @@ _nvctl() {
             return 0
             ;;
         nvctl__subcmd__help)
-            opts="gpu display vibrance fan overclock vrr monitor tui nvtop gaming recording container driver power color config upscaling dlss shaders passthrough wayland kde hdr power-profile arch monitors osd interactive system doctor completion version asus companion help"
+            opts="gpu display vibrance fan overclock vrr monitor tui nvtop gaming recording container driver power color config upscaling cuda dlss shaders passthrough wayland kde hdr power-profile arch monitors osd interactive system doctor setup completion version asus companion help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -13423,6 +13844,118 @@ _nvctl() {
             return 0
             ;;
         nvctl__subcmd__help__subcmd__container__subcmd__status)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__help__subcmd__cuda)
+            opts="info doctor ollama workloads tools env smoke"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__help__subcmd__cuda__subcmd__doctor)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__help__subcmd__cuda__subcmd__env)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__help__subcmd__cuda__subcmd__info)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__help__subcmd__cuda__subcmd__ollama)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__help__subcmd__cuda__subcmd__smoke)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__help__subcmd__cuda__subcmd__tools)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__help__subcmd__cuda__subcmd__workloads)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -16671,6 +17204,76 @@ _nvctl() {
             return 0
             ;;
         nvctl__subcmd__help__subcmd__recording__subcmd__stop)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__help__subcmd__setup)
+            opts="check permissions status remove"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__help__subcmd__setup__subcmd__check)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__help__subcmd__setup__subcmd__permissions)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__help__subcmd__setup__subcmd__remove)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__help__subcmd__setup__subcmd__status)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -20583,6 +21186,184 @@ _nvctl() {
             return 0
             ;;
         nvctl__subcmd__recording__subcmd__stop)
+            opts="-v -h --verbose --format --no-color --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --format)
+                    COMPREPLY=($(compgen -W "human json yaml table" -- "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__setup)
+            opts="-v -h --verbose --format --no-color --help check permissions status remove help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --format)
+                    COMPREPLY=($(compgen -W "human json yaml table" -- "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__setup__subcmd__check)
+            opts="-f -v -h --format --verbose --no-color --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --format)
+                    COMPREPLY=($(compgen -W "human json yaml table" -- "${cur}"))
+                    return 0
+                    ;;
+                -f)
+                    COMPREPLY=($(compgen -W "human json yaml table" -- "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__setup__subcmd__help)
+            opts="check permissions status remove help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__setup__subcmd__help__subcmd__check)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__setup__subcmd__help__subcmd__help)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__setup__subcmd__help__subcmd__permissions)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__setup__subcmd__help__subcmd__remove)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__setup__subcmd__help__subcmd__status)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__setup__subcmd__permissions)
+            opts="-v -h --verbose --format --no-color --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --format)
+                    COMPREPLY=($(compgen -W "human json yaml table" -- "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__setup__subcmd__remove)
+            opts="-v -h --verbose --format --no-color --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --format)
+                    COMPREPLY=($(compgen -W "human json yaml table" -- "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        nvctl__subcmd__setup__subcmd__status)
             opts="-v -h --verbose --format --no-color --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )

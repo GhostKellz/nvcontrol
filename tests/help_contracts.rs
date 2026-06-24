@@ -9,8 +9,10 @@ fn top_level_help_mentions_core_release_surfaces() {
     let stdout = help_output(&["--help"]);
     assert!(stdout.contains("driver"));
     assert!(stdout.contains("doctor"));
+    assert!(stdout.contains("setup"));
     assert!(stdout.contains("completion"));
     assert!(stdout.contains("vibrance"));
+    assert!(stdout.contains("cuda"));
 }
 
 #[test]
@@ -31,6 +33,15 @@ fn completion_help_mentions_supported_shells() {
 }
 
 #[test]
+fn setup_help_mentions_readiness_and_permissions() {
+    let stdout = help_output(&["setup", "--help"]);
+    assert!(stdout.contains("check"));
+    assert!(stdout.contains("permissions"));
+    assert!(stdout.contains("status"));
+    assert!(stdout.contains("remove"));
+}
+
+#[test]
 fn config_help_mentions_capture_preview_and_apply() {
     let stdout = help_output(&["config", "--help"]);
     assert!(stdout.contains("capture"));
@@ -46,4 +57,24 @@ fn gaming_auto_help_mentions_daemon_and_service_flow() {
     assert!(stdout.contains("status"));
     assert!(stdout.contains("install-service"));
     assert!(stdout.contains("enable-service"));
+}
+
+#[test]
+fn cuda_help_mentions_ollama_and_workloads() {
+    let stdout = help_output(&["cuda", "--help"]);
+    assert!(stdout.contains("ollama"));
+    assert!(stdout.contains("workloads"));
+    assert!(stdout.contains("tools"));
+    assert!(stdout.contains("env"));
+    assert!(stdout.contains("smoke"));
+}
+
+#[test]
+fn ai_alias_exposes_cuda_workflows() {
+    let stdout = help_output(&["ai", "--help"]);
+    assert!(stdout.contains("doctor"));
+    assert!(stdout.contains("ollama"));
+    assert!(stdout.contains("workloads"));
+    assert!(stdout.contains("env"));
+    assert!(stdout.contains("smoke"));
 }

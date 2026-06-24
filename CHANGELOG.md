@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.9] - 2026-06-23
+
+### Added
+- **Guided Setup Check**: Added `nvctl setup check` for first-run readiness review across driver status, release diagnostics, Wayland session, NVIDIA device access, and optional helper tools.
+- **Setup Permission Commands**: Exposed existing setup helpers through `nvctl setup permissions`, `nvctl setup status`, and `nvctl setup remove`.
+- **Support Bundle 610 Runtime Capabilities**: Support bundles now include a dedicated 610 runtime capability section for Vulkan extension detection, FP16 EGL detection, DMABUF mmap readiness, and DRM color pipeline readiness.
+- **CUDA And AI Diagnostics**: Added `nvctl cuda` with `nvctl ai` alias for read-only CUDA, Ollama, container GPU runtime, helper tool, and VRAM-based AI/ML workload checks.
+- **Ollama CUDA Guidance**: Added `nvctl cuda ollama` for native Ollama service detection, GPU visibility, recommended environment variables, and official GPU container command hints.
+- **CUDA Env And Smoke Plans**: Added `nvctl cuda env` and dry-run `nvctl cuda smoke --dry-run` for shell-ready CUDA/Ollama exports and non-mutating native/container validation plans.
+- **CUDA In Support Bundles**: Support bundles now include CUDA/AI diagnostics in text reports and JSON metadata under `cuda_ai_diagnostics`.
+- **Structured Setup Check**: `nvctl setup check` now supports JSON/YAML output and includes CUDA/Ollama readiness when available.
+- **TUI CUDA/AI Tab**: Added a dashboard tab with cached read-only CUDA, Ollama, container runtime, and AI workload-fit status, plus clearer help/footer cues for support workflows.
+- **Professional Docs Structure**: Added foldered CUDA/AI command and feature docs plus Mermaid architecture diagrams under `docs/commands/`, `docs/features/`, and `docs/internals/`.
+
+### Changed
+- **Release Target**: Standardized the next release target on `0.8.9` after confirming no `v0.8.9` tag exists locally or on `origin`.
+- **Dependency Refresh**: Refreshed compatible Rust dependencies, including `memmap2` 0.9.11, `notify-rust` 4.18, `ratatui` 0.30.2, `time` 0.3.51, `bytes` 1.12, and related transitive crates.
+- **Packaging Metadata**: Updated Cargo, root Arch PKGBUILD, release Arch PKGBUILD, Fedora spec, Debian changelog, AppImage, and Flatpak release metadata to `0.8.9`; Debian/Pop dependency floors remain distro-realistic while runtime docs and diagnostics prefer 610+.
+- **Release Checklist**: Updated release validation commands for the 610+ open-driver path and added `nvctl setup check` to the required smoke-test flow.
+
+### Fixed
+- **Security Audit Warning**: Cleared the current RustSec warning for transitive `memmap2` by updating to `0.9.11`.
+- **Documentation Drift**: Refreshed stale 580-era TUI driver guidance to the current 610+ open-driver baseline.
+
 ## [0.8.8] - 2026-05-26
 
 ### Added

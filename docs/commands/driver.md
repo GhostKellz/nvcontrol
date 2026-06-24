@@ -114,6 +114,7 @@ Use `nvctl driver support-bundle` before filing an issue when you suspect:
 - DKMS rebuild issues
 - source tree/version drift
 - container runtime / toolkit issues on GPU container setups
+- CUDA, Ollama, or local AI/ML readiness issues
 - Xid or GSP log failures
 
 Optional flags:
@@ -127,6 +128,8 @@ Optional flags:
 - plain text output writes a machine-readable sidecar metadata file at `<bundle>.json`
 - gzip output is self-contained and appends the metadata JSON inside the compressed report
 - tarball output is self-contained and stores `support.txt` plus `support.json` inside the archive
+- CUDA/AI diagnostics are included as `cuda_ai_diagnostics` in metadata and as a
+  `[cuda ai diagnostics]` section in the text report
 
 Support bundles now also capture:
 

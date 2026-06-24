@@ -32,6 +32,7 @@ nvcontrol is a comprehensive NVIDIA GPU control tool for Linux, designed from th
 - RTX 50-series (Blackwell) and RTX 40/30-series support
 - TUI dashboard + GUI application
 - Container GPU passthrough
+- CUDA, Ollama, and local AI/ML readiness diagnostics
 
 ## Quick Start
 
@@ -57,6 +58,13 @@ nvctl driver info
 # Release diagnostics and support bundle
 nvctl driver diagnose-release
 nvctl doctor --support
+
+# CUDA, Ollama, and local AI/ML diagnostics
+nvctl cuda doctor
+nvctl cuda ollama
+nvctl ai workloads
+nvctl cuda env
+nvctl cuda smoke --dry-run
 
 # Validate a 610 open-driver setup
 nvctl driver validate --driver 610
@@ -183,6 +191,21 @@ nvctl doctor --support                              # Run diagnostics + create s
 
 Use [docs/drivers/nvidia-driver.md](docs/drivers/nvidia-driver.md) for the nvcontrol-to-driver compatibility matrix.
 
+### CUDA, Ollama, And AI/ML
+Read-only diagnostics for local inference and CUDA development workflows.
+
+```bash
+nvctl cuda info                     # CUDA driver/toolkit/GPU memory summary
+nvctl cuda doctor                   # CUDA, Ollama, tools, and workload readiness
+nvctl cuda ollama                   # Native/container Ollama CUDA status
+nvctl cuda workloads                # VRAM-based AI/ML workload fit
+nvctl cuda env                      # Shell exports for CUDA/Ollama
+nvctl cuda smoke --dry-run          # Print validation commands without executing them
+nvctl ai doctor --format json       # Alias with structured output
+```
+
+See [docs/commands/cuda.md](docs/commands/cuda.md) and [docs/features/cuda-ai.md](docs/features/cuda-ai.md).
+
 ### Overclocking
 
 > **Caution**: Overclocking is experimental. Improper settings can cause instability or hardware damage. Use at your own risk.
@@ -293,7 +316,7 @@ Launch with `nvctl gpu stat`:
 └────────────────────────────────────────────────────────────┘
 ```
 
-Tabs: Overview, Performance, Memory, Temperature, Power, Processes, Overclock, Fan Control, Profiles, Tuner, Profiler, OSD, Settings
+Tabs: Overview, Performance, Memory, Temperature, Power, Processes, Overclock, Fan Control, Profiles, Tuner, Profiler, OSD, Drivers, DLSS, CUDA/AI, Settings
 
 ## Themes
 
@@ -311,11 +334,13 @@ Change theme with `t` in TUI or via Settings in GUI.
 
 - [docs/](docs/) - Complete documentation hub
   - [docs/commands.md](docs/commands.md) - CLI reference
+  - [docs/commands/reference.md](docs/commands/reference.md) - Foldered command guide index
   - [docs/building.md](docs/building.md) - Build instructions
   - [docs/tui-user-guide.md](docs/tui-user-guide.md) - TUI dashboard guide
-  - [docs/features/](docs/features/) - Feature guides (vibrance, HDR, VRR, etc.)
-  - [docs/hardware/](docs/hardware/) - Hardware-specific guides
-  - [docs/drivers/](docs/drivers/) - Driver compatibility
+  - [docs/features/feature-guides.md](docs/features/feature-guides.md) - Feature guides
+  - [docs/hardware/hardware-guides.md](docs/hardware/hardware-guides.md) - Hardware-specific guides
+  - [docs/drivers/driver-guides.md](docs/drivers/driver-guides.md) - Driver compatibility
+  - [docs/internals/architecture.md](docs/internals/architecture.md) - Architecture and diagnostic flow diagrams
 - [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
 
 ## Platform Support

@@ -2,7 +2,7 @@
 
 This document tracks remaining `unsafe` blocks in nvcontrol and plans for reducing them.
 
-## Current Status (v0.8.5)
+## Current Status (v0.8.9)
 
 | Category | Count | Status |
 |----------|-------|--------|
@@ -121,4 +121,4 @@ These will remain unsafe as they're fundamental to the architecture:
 
 ---
 
-*Last updated: v0.8.5 (2026-02-12)*
+*Last updated: v0.8.9 (2026-06-23)*

@@ -28,7 +28,7 @@ nvctl monitor
 ```
 
 ### System Requirements
-- **NVIDIA Open Kernel Modules 580+** (580.105.08 recommended)
+- **NVIDIA Open Kernel Modules 610+** (610.43.02 or newer recommended)
 - **RTX 50/40/30 Series GPU** (Blackwell/Ada/Ampere)
 - **Arch Linux** with Wayland compositor (KDE/GNOME/Hyprland)
 - **Nerd Font** for proper icon display (JetBrainsMono Nerd Font recommended)
@@ -57,6 +57,8 @@ The TUI starts with default safe settings:
 - **s** - Settings panel
 - **Space/p** - Pause/Resume live updates
 - **t** - Cycle themes
+- **b / x** - Driver support bundle / workflow hint on the Drivers tab
+- **r** - Refresh CUDA/AI diagnostics on the CUDA/AI tab
 - **q/Ctrl+C** - Quit
 
 ---
@@ -327,6 +329,32 @@ Shows current configuration:
 
 ---
 
+### CUDA/AI
+**Read-Only Local AI Diagnostics**
+
+The CUDA/AI dashboard tab summarizes the same diagnostic path as `nvctl cuda doctor`
+without applying settings or starting services.
+
+It shows:
+- CUDA driver/toolkit facts
+- detected NVIDIA GPU count and VRAM
+- Ollama CLI and `127.0.0.1:11434` service reachability
+- Docker plus NVIDIA Container Toolkit readiness
+- VRAM-based fit for common local AI/ML workloads
+- manual refresh with `r`; refresh failures are shown in the tab/status line
+
+Useful companion commands:
+
+```bash
+nvctl cuda doctor
+nvctl cuda ollama
+nvctl ai workloads
+```
+
+**Perfect for:** Ollama CUDA setup, local inference checks, and quick VRAM fit review
+
+---
+
 ## Themes
 
 ### Available Themes (Press 't' to cycle)
@@ -592,7 +620,7 @@ yay -S ttf-jetbrains-mono-nerd
 - Ensure nvidia-settings is not conflicting
 - Check kernel module parameters
 - Reboot may be required
-- Verify open drivers 580+
+- Verify open drivers 610+
 
 ### Fan Control Not Working
 **Problem:** Fan speeds don't change
@@ -660,6 +688,10 @@ nvctl gpu stat
 nvctl driver dkms doctor
 nvctl container runtime doctor --runtime docker
 
+# Check Ollama/CUDA readiness, then inspect CUDA/AI tab in TUI
+nvctl cuda doctor
+nvctl cuda ollama
+
 # Fan curves work together
 nvctl fan curve apply gaming
 ```
@@ -668,8 +700,8 @@ nvctl fan curve apply gaming
 
 ## Future Features (Planned)
 
-- [ ] DLSS/FSR toggle tab
-- [ ] CUDA toolkit info tab
+- [x] DLSS diagnostics tab
+- [x] CUDA/Ollama/AI diagnostics tab
 - [ ] Container management tab
 - [ ] Display/HDR management tab
 - [ ] Per-game auto-profiles
@@ -685,10 +717,10 @@ nvctl fan curve apply gaming
 
 **GitHub:** https://github.com/ghostkellz/nvcontrol
 **Issues:** Report bugs and request features
-**Docs:** See [README.md](README.md) and [commands.md](commands.md)
+**Docs:** See [README.md](README.md), [commands.md](commands.md), and [commands/cuda.md](commands/cuda.md)
 
 ---
 
-**Made with ❤️ for the Arch Linux + NVIDIA + Wayland community**
+**Made for the Arch Linux + NVIDIA + Wayland community**
 
-*Last Updated: 2025-11-23 - RTX 5090 Ready!*
+*Last Updated: 2026-06-23 - v0.8.9 / 610+ open-driver path*

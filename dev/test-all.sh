@@ -17,7 +17,7 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 echo "╔══════════════════════════════════════════════════════════════════╗"
-echo "║           nvcontrol Comprehensive Test Suite v0.8.7              ║"
+echo "║           nvcontrol Comprehensive Test Suite v0.8.9              ║"
 echo "║           KDE/Wayland Stability Testing                          ║"
 echo "╚══════════════════════════════════════════════════════════════════╝"
 echo ""
@@ -201,5 +201,5 @@ echo "  $NVCTL doctor"
 echo ""
 
 echo "╔══════════════════════════════════════════════════════════════════╗"
-echo "║           Test Suite Complete - v0.8.7                           ║"
+echo "║           Test Suite Complete - v0.8.9                           ║"
 echo "╚══════════════════════════════════════════════════════════════════╝"

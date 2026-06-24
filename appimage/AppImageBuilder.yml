@@ -7,7 +7,7 @@ AppDir:
     id: com.github.nvcontrol
     name: nvcontrol
     icon: nvcontrol
-    version: 0.8.8
+    version: 0.8.9
     exec: usr/bin/nvcontrol
     exec_args: $@
 

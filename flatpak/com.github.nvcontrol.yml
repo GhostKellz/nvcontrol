@@ -46,5 +46,5 @@ modules:
     sources:
       - type: git
         url: https://github.com/GhostKellz/nvcontrol.git
-        tag: v0.8.8
+        tag: v0.8.9
       - cargo-sources.json

@@ -112,7 +112,11 @@ test_command "overclock info" "overclock info"
 echo ""
 echo -e "${BLUE}=== Vibrance ===${NC}"
 test_command "vibrance help" "vibrance --help"
-test_command "vibrance 100" "vibrance 100"
+if [ "${NVCONTROL_RUN_HARDWARE_TESTS:-0}" = "1" ]; then
+    test_command "vibrance 100" "vibrance 100"
+else
+    echo -e "${BLUE}Skipping vibrance mutation test (set NVCONTROL_RUN_HARDWARE_TESTS=1 to enable)${NC}"
+fi
 
 echo ""
 echo -e "${BLUE}=== Gaming ===${NC}"

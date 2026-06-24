@@ -1,6 +1,8 @@
 // Setup and configuration helper - udev rules, permissions, etc.
-use crate::{NvControlError, NvResult};
+use crate::{NvControlError, NvResult, cuda, drivers};
+use serde::{Deserialize, Serialize};
 use std::fs;
+use std::path::Path;
 use std::process::Command;
 
 const UDEV_RULES_PATH: &str = "/etc/udev/rules.d/99-nvidia-nvcontrol.rules";
@@ -18,6 +20,47 @@ KERNEL=="nvidiactl", MODE="0666"
 KERNEL=="nvidia-uvm", MODE="0666"
 KERNEL=="nvidia-uvm-tools", MODE="0666"
 "#;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetupReadinessReport {
+    pub driver_version: Option<String>,
+    pub driver_module: String,
+    pub driver_target_610: bool,
+    pub release_severity: String,
+    pub release_messages: Vec<String>,
+    pub session_type: String,
+    pub desktop: String,
+    pub device_access: Vec<DeviceAccessReport>,
+    pub helper_tools: Vec<HelperToolReport>,
+    pub cuda_ai: Option<SetupCudaAiReport>,
+    pub recommended_commands: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeviceAccessReport {
+    pub path: String,
+    pub purpose: String,
+    pub status: String,
+    pub mode: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HelperToolReport {
+    pub name: String,
+    pub purpose: String,
+    pub found: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetupCudaAiReport {
+    pub cuda_toolkit_version: String,
+    pub cuda_driver_version: String,
+    pub gpu_devices: usize,
+    pub ollama_cli: bool,
+    pub ollama_service_reachable: bool,
+    pub docker_gpu_runtime_ready: bool,
+    pub issues: Vec<String>,
+}
 
 pub fn setup_permissions() -> NvResult<()> {
     println!("🔧 Setting up nvcontrol permissions...\n");
@@ -122,6 +165,231 @@ pub fn show_permissions_info() -> NvResult<()> {
     println!("   sudo nvctl setup permissions");
 
     Ok(())
+}
+
+pub fn collect_readiness_report() -> SetupReadinessReport {
+    let (driver_version, driver_module, driver_target_610) = match drivers::get_driver_status() {
+        Ok(status) => {
+            let module = if status.driver_type.to_lowercase().contains("open") {
+                "open kernel modules"
+            } else if status.kernel_modules.is_empty() {
+                "no loaded NVIDIA modules detected"
+            } else {
+                "proprietary or unknown module path"
+            };
+            let target = status.current_version.starts_with("610.")
+                || status.current_version.starts_with("61");
+            (Some(status.current_version), module.to_string(), target)
+        }
+        Err(_) => (
+            None,
+            "unable to read NVIDIA driver status".to_string(),
+            false,
+        ),
+    };
+
+    let diagnostics = drivers::collect_release_diagnostics();
+    let summary = drivers::summarize_release_diagnostics(&diagnostics);
+    let session_type = std::env::var("XDG_SESSION_TYPE").unwrap_or_else(|_| "unknown".to_string());
+    let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_else(|_| "unknown".to_string());
+
+    let helper_tools = [
+        ("nvidia-smi", "driver/GPU status"),
+        ("vulkaninfo", "610+ Vulkan extension detection"),
+        ("eglinfo", "FP16 EGL detection"),
+        ("kscreen-doctor", "KDE display/VRR control"),
+        ("hyprctl", "Hyprland display control"),
+        ("gamescope", "gaming compositor profiles"),
+        ("mangohud", "OSD/performance overlay"),
+        ("nvidia-ctk", "container runtime/CDI setup"),
+        ("ollama", "local AI model serving"),
+        ("docker", "GPU container runtime"),
+    ]
+    .into_iter()
+    .map(|(name, purpose)| HelperToolReport {
+        name: name.to_string(),
+        purpose: purpose.to_string(),
+        found: command_exists(name),
+    })
+    .collect();
+
+    let cuda_ai = cuda::collect_cuda_doctor()
+        .ok()
+        .map(|report| SetupCudaAiReport {
+            cuda_toolkit_version: report.cuda.version,
+            cuda_driver_version: report.cuda.driver_version,
+            gpu_devices: report.cuda.devices.len(),
+            ollama_cli: report.ollama.cli.available,
+            ollama_service_reachable: report.ollama.service_reachable,
+            docker_gpu_runtime_ready: report.ollama.nvidia_container_runtime_ready,
+            issues: report.issues,
+        });
+
+    SetupReadinessReport {
+        driver_version,
+        driver_module,
+        driver_target_610,
+        release_severity: format!("{:?}", summary.severity),
+        release_messages: summary.messages,
+        session_type,
+        desktop,
+        device_access: vec![
+            collect_device_access("/dev/nvidia-modeset", "NVKMS vibrance/display control"),
+            collect_device_access("/dev/nvidiactl", "NVIDIA control device"),
+            collect_device_access("/dev/nvidia0", "Primary GPU device"),
+        ],
+        helper_tools,
+        cuda_ai,
+        recommended_commands: vec![
+            "nvctl driver diagnose-release".to_string(),
+            "nvctl driver validate --driver 610".to_string(),
+            "nvctl cuda doctor".to_string(),
+            "nvctl doctor --support".to_string(),
+            "nvctl display vibrance list".to_string(),
+        ],
+    }
+}
+
+pub fn run_readiness_check() -> NvResult<()> {
+    let report = collect_readiness_report();
+
+    println!("nvcontrol setup check");
+    println!("=====================");
+    println!();
+
+    println!("Driver:");
+    if let Some(version) = &report.driver_version {
+        println!("  Version: {}", version);
+        println!("  Module: {}", report.driver_module);
+        if report.driver_target_610 {
+            println!("  610+ target: ok");
+        } else {
+            println!("  610+ target: review docs/drivers/nvidia-driver.md");
+        }
+    } else {
+        println!("  Unable to read NVIDIA driver status");
+        println!("  Try: nvctl driver diagnose-release");
+    }
+
+    println!();
+    println!("Release diagnostics:");
+    println!("  Severity: {}", report.release_severity);
+    for message in report.release_messages.iter().take(5) {
+        println!("  - {}", message);
+    }
+    if report.release_messages.len() > 5 {
+        println!(
+            "  - ... {} more finding(s)",
+            report.release_messages.len() - 5
+        );
+    }
+
+    println!();
+    println!("Wayland session:");
+    println!("  Session: {}", report.session_type);
+    println!("  Desktop: {}", report.desktop);
+
+    println!();
+    println!("Device access:");
+    for device in &report.device_access {
+        println!(
+            "  {}: {}{} ({})",
+            device.path,
+            device.status,
+            device
+                .mode
+                .as_ref()
+                .map(|mode| format!(" mode {mode}"))
+                .unwrap_or_default(),
+            device.purpose
+        );
+    }
+
+    println!();
+    println!("Optional helper tools:");
+    for tool in &report.helper_tools {
+        let status = if tool.found { "found" } else { "missing" };
+        println!("  {}: {} ({})", tool.name, status, tool.purpose);
+    }
+
+    if let Some(cuda_ai) = &report.cuda_ai {
+        println!();
+        println!("CUDA / AI:");
+        println!("  CUDA toolkit: {}", cuda_ai.cuda_toolkit_version);
+        println!("  CUDA driver: {}", cuda_ai.cuda_driver_version);
+        println!("  NVIDIA GPUs visible: {}", cuda_ai.gpu_devices);
+        println!(
+            "  Ollama CLI: {}",
+            if cuda_ai.ollama_cli {
+                "found"
+            } else {
+                "missing"
+            }
+        );
+        println!(
+            "  Ollama service: {}",
+            if cuda_ai.ollama_service_reachable {
+                "reachable"
+            } else {
+                "not reachable"
+            }
+        );
+        println!(
+            "  Docker GPU runtime: {}",
+            if cuda_ai.docker_gpu_runtime_ready {
+                "ready"
+            } else {
+                "not ready"
+            }
+        );
+        for issue in cuda_ai.issues.iter().take(3) {
+            println!("  - {issue}");
+        }
+    }
+
+    println!();
+    println!("Recommended next commands:");
+    for command in &report.recommended_commands {
+        println!("  {command}");
+    }
+
+    Ok(())
+}
+
+fn command_exists(command: &str) -> bool {
+    std::env::var_os("PATH")
+        .map(|paths| std::env::split_paths(&paths).any(|path| path.join(command).is_file()))
+        .unwrap_or(false)
+}
+
+fn collect_device_access(device: &str, purpose: &str) -> DeviceAccessReport {
+    let path = Path::new(device);
+    match fs::metadata(path) {
+        Ok(metadata) => {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = metadata.permissions().mode() & 0o777;
+            let readable = mode & 0o444 != 0;
+            let writable = mode & 0o222 != 0;
+            let status = match (readable, writable) {
+                (true, true) => "read/write",
+                (true, false) => "read-only",
+                (false, true) => "write-only",
+                (false, false) => "no user access",
+            };
+            DeviceAccessReport {
+                path: device.to_string(),
+                purpose: purpose.to_string(),
+                status: status.to_string(),
+                mode: Some(format!("{mode:o}")),
+            }
+        }
+        Err(_) => DeviceAccessReport {
+            path: device.to_string(),
+            purpose: purpose.to_string(),
+            status: "missing".to_string(),
+            mode: None,
+        },
+    }
 }
 
 fn check_device_perms(device: &str, name: &str) {

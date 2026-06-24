@@ -1046,7 +1046,7 @@ nvidia-smi -q -d POWER
 nvctl config apply --input quiet
 
 # 4. Set conservative fan curve
-nvcontrol fan --curve 30:20 50:35 70:60 90:90
+nvctl fan curve apply quiet
 
 # 5. Rebuild initramfs and reboot
 sudo mkinitcpio -P
@@ -1062,8 +1062,8 @@ sudo reboot
 **Solutions:**
 
 ```bash
-# 1. Verify DLSS 4 support
-nvcontrol dlss-info
+# 1. Verify DLSS support
+nvctl dlss status
 
 # 2. Update Proton (for Steam games)
 # In Steam: Settings > Compatibility > Enable Steam Play
@@ -1071,7 +1071,7 @@ nvcontrol dlss-info
 
 # 3. Set environment variables for Proton
 # Add to game launch options:
-PROTON_ENABLE_NVAPI=1 DXVK_NVAPI_DRIVER_VERSION=58010508 %command%
+PROTON_ENABLE_NVAPI=1 %command%
 
 # 4. For native Linux games, update game to latest version
 

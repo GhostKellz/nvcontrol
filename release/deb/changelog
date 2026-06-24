@@ -1,3 +1,11 @@
+nvcontrol (0.8.9-1) unstable; urgency=medium
+
+  * Guided setup check for 610+ open-driver readiness, helper tools, and device access
+  * Dependency refresh including memmap2 0.9.11 to clear the current RustSec warning
+  * Release metadata and documentation refresh for the next Linux + NVIDIA 610+ release
+
+ -- CK Technology LLC <info@cktechx.com>  Tue, 23 Jun 2026 20:00:00 +0000
+
 nvcontrol (0.8.8-1) unstable; urgency=medium
 
   * NVIDIA driver 610.43.02 support (NVKMS ABI fix, capability flags, runtime detection)

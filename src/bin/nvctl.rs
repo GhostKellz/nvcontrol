@@ -3,11 +3,12 @@ use clap_complete::{Generator, Shell, generate};
 use console::{Key, Term, style};
 use indicatif::{ProgressBar, ProgressStyle};
 use nvcontrol::{
-    arch_integration, asus_power_detector, companion, config, display, drivers, fan, gamescope,
+    arch_integration, asus_power_detector, companion, config, cuda, display, drivers, fan,
+    gamescope,
     gpu::{self, OutputFormat},
     gsp_firmware, hdr, kde_optimizer, latency, monitoring, multimonitor,
     notifications::NotificationManager,
-    overclocking, power, power_profiles_daemon, recording, upscaling, vrr, wayland_nvidia,
+    overclocking, power, power_profiles_daemon, recording, setup, upscaling, vrr, wayland_nvidia,
 };
 use std::time::Duration;
 
@@ -134,6 +135,12 @@ enum Command {
         #[command(subcommand)]
         subcommand: UpscalingSubcommand,
     },
+    /// 🧪 CUDA, Ollama, and local AI/ML diagnostics
+    #[command(alias = "ai")]
+    Cuda {
+        #[command(subcommand)]
+        subcommand: CudaSubcommand,
+    },
     /// 🚀 DLSS and related features
     Dlss {
         #[command(subcommand)]
@@ -208,6 +215,11 @@ enum Command {
         )]
         output: String,
     },
+    /// 🧭 Guided first-run setup and readiness checks
+    Setup {
+        #[command(subcommand)]
+        subcommand: SetupSubcommand,
+    },
     /// 🧩 Generate shell completions
     Completion {
         /// Shell type: bash, zsh, fish
@@ -226,6 +238,22 @@ enum Command {
         #[command(subcommand)]
         subcommand: CompanionSubcommand,
     },
+}
+
+#[derive(Subcommand)]
+enum SetupSubcommand {
+    /// Check driver, compositor, permissions, services, and helper tools
+    Check {
+        /// Output format: json, yaml, table
+        #[arg(short, long, value_enum, default_value = "table")]
+        format: OutputFormat,
+    },
+    /// Install udev permissions for NVIDIA device access
+    Permissions,
+    /// Show current NVIDIA device permission status
+    Status,
+    /// Remove nvcontrol udev permission setup
+    Remove,
 }
 
 #[derive(Subcommand)]
@@ -647,6 +675,55 @@ enum UpscalingSubcommand {
     },
     Profiles,
     AutoDetect,
+}
+
+#[derive(Subcommand)]
+enum CudaSubcommand {
+    /// Show CUDA driver, toolkit, and detected GPU memory
+    Info {
+        /// Output format: json, yaml, table
+        #[arg(short, long, value_enum, default_value = "table")]
+        format: OutputFormat,
+    },
+    /// Check CUDA, developer tools, Ollama, and container GPU readiness
+    Doctor {
+        /// Output format: json, yaml, table
+        #[arg(short, long, value_enum, default_value = "table")]
+        format: OutputFormat,
+    },
+    /// Show Ollama CUDA/native/container status and smoke-test commands
+    Ollama {
+        /// Output format: json, yaml, table
+        #[arg(short, long, value_enum, default_value = "table")]
+        format: OutputFormat,
+    },
+    /// Recommend local AI/ML workloads from detected VRAM
+    Workloads {
+        /// Output format: json, yaml, table
+        #[arg(short, long, value_enum, default_value = "table")]
+        format: OutputFormat,
+    },
+    /// Show CUDA and AI helper tool availability
+    Tools {
+        /// Output format: json, yaml, table
+        #[arg(short, long, value_enum, default_value = "table")]
+        format: OutputFormat,
+    },
+    /// Emit shell exports for CUDA and Ollama workflows
+    Env {
+        /// Output format: json, yaml, table
+        #[arg(short, long, value_enum, default_value = "table")]
+        format: OutputFormat,
+    },
+    /// Print a dry-run CUDA/Ollama validation plan
+    Smoke {
+        /// Keep this command non-mutating; currently required and always true
+        #[arg(long, default_value_t = true)]
+        dry_run: bool,
+        /// Output format: json, yaml, table
+        #[arg(short, long, value_enum, default_value = "table")]
+        format: OutputFormat,
+    },
 }
 
 #[derive(Subcommand)]
@@ -2759,6 +2836,77 @@ fn main() {
                 }
                 Err(e) => eprintln!("Failed to detect running games: {e}"),
             },
+        },
+        Command::Cuda { subcommand } => match subcommand {
+            CudaSubcommand::Info { format } => match cuda::get_cuda_info() {
+                Ok(info) => print_cuda_command_output(&info, &format, || {
+                    cuda::print_cuda_info_summary(&info);
+                }),
+                Err(e) => eprintln!("Failed to inspect CUDA: {e}"),
+            },
+            CudaSubcommand::Doctor { format } => match cuda::collect_cuda_doctor() {
+                Ok(report) => print_cuda_command_output(&report, &format, || {
+                    if let Err(e) = cuda::print_cuda_doctor() {
+                        eprintln!("Failed to run CUDA doctor: {e}");
+                    }
+                }),
+                Err(e) => eprintln!("Failed to run CUDA doctor: {e}"),
+            },
+            CudaSubcommand::Ollama { format } => match cuda::get_cuda_info() {
+                Ok(info) => {
+                    let status = cuda::collect_ollama_cuda_status(&info);
+                    print_cuda_command_output(&status, &format, || {
+                        cuda::print_ollama_status(&status);
+                    });
+                }
+                Err(e) => eprintln!("Failed to inspect Ollama CUDA status: {e}"),
+            },
+            CudaSubcommand::Workloads { format } => match cuda::get_cuda_info() {
+                Ok(info) => {
+                    let recommendations = cuda::recommend_ai_workloads(&info);
+                    print_cuda_command_output(&recommendations, &format, || {
+                        cuda::print_ai_recommendations(&recommendations);
+                    });
+                }
+                Err(e) => eprintln!("Failed to inspect AI workload fit: {e}"),
+            },
+            CudaSubcommand::Tools { format } => match cuda::collect_cuda_doctor() {
+                Ok(report) => print_cuda_command_output(&report.tools, &format, || {
+                    println!("CUDA / AI tools:");
+                    for tool in &report.tools {
+                        println!(
+                            "  {}: {}{}",
+                            tool.name,
+                            if tool.available { "found" } else { "missing" },
+                            tool.version
+                                .as_ref()
+                                .map(|version| format!(" ({version})"))
+                                .unwrap_or_default()
+                        );
+                    }
+                }),
+                Err(e) => eprintln!("Failed to inspect CUDA tools: {e}"),
+            },
+            CudaSubcommand::Env { format } => match cuda::collect_cuda_env() {
+                Ok(report) => print_cuda_command_output(&report, &format, || {
+                    cuda::print_cuda_env(&report);
+                }),
+                Err(e) => eprintln!("Failed to collect CUDA/Ollama environment: {e}"),
+            },
+            CudaSubcommand::Smoke { dry_run, format } => {
+                if !dry_run {
+                    eprintln!(
+                        "CUDA smoke is dry-run only in this release; omit --dry-run or set it true"
+                    );
+                    std::process::exit(2);
+                }
+                match cuda::collect_cuda_smoke_plan() {
+                    Ok(plan) => print_cuda_command_output(&plan, &format, || {
+                        cuda::print_cuda_smoke_plan(&plan);
+                    }),
+                    Err(e) => eprintln!("Failed to build CUDA smoke plan: {e}"),
+                }
+            }
         },
         Command::Dlss { subcommand } => {
             use nvcontrol::dlss;
@@ -6223,6 +6371,45 @@ fn main() {
                 }
             }
         }
+        Command::Setup { subcommand } => match subcommand {
+            SetupSubcommand::Check { format } => match format {
+                OutputFormat::Json => {
+                    let report = setup::collect_readiness_report();
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&report).unwrap_or_default()
+                    );
+                }
+                OutputFormat::Yaml => {
+                    let report = setup::collect_readiness_report();
+                    println!("{}", serde_yaml::to_string(&report).unwrap_or_default());
+                }
+                OutputFormat::Table | OutputFormat::Human => {
+                    if let Err(e) = setup::run_readiness_check() {
+                        eprintln!("Setup check failed: {e}");
+                        std::process::exit(1);
+                    }
+                }
+            },
+            SetupSubcommand::Permissions => {
+                if let Err(e) = setup::setup_permissions() {
+                    eprintln!("Failed to set up permissions: {e}");
+                    std::process::exit(1);
+                }
+            }
+            SetupSubcommand::Status => {
+                if let Err(e) = setup::show_permissions_info() {
+                    eprintln!("Failed to inspect permissions: {e}");
+                    std::process::exit(1);
+                }
+            }
+            SetupSubcommand::Remove => {
+                if let Err(e) = setup::remove_setup() {
+                    eprintln!("Failed to remove setup: {e}");
+                    std::process::exit(1);
+                }
+            }
+        },
         Command::Completion { shell } => match print_shell_completions(&shell) {
             Ok(()) => {}
             Err(e) => eprintln!("Failed to generate completions: {e}"),
@@ -6578,6 +6765,22 @@ fn main() {
 }
 
 /// Enhanced output formatting
+fn print_cuda_command_output<T, F>(data: &T, format: &OutputFormat, print_table: F)
+where
+    T: serde::Serialize,
+    F: FnOnce(),
+{
+    match format {
+        OutputFormat::Json => {
+            println!("{}", serde_json::to_string_pretty(data).unwrap_or_default());
+        }
+        OutputFormat::Yaml => {
+            println!("{}", serde_yaml::to_string(data).unwrap_or_default());
+        }
+        OutputFormat::Table | OutputFormat::Human => print_table(),
+    }
+}
+
 fn print_formatted_output<T: serde::Serialize>(
     data: &T,
     format: &Option<OutputFormat>,

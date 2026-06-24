@@ -61,33 +61,19 @@ cargo install cargo-audit
 cargo audit
 ```
 
-### v0.8.7 Advisory Status
+### v0.8.9 Advisory Status
 
-Audit performed: 2026-04-22
+Audit performed: 2026-06-23
 Tool version: cargo-audit 0.21.x
-Result: **0 known vulnerabilities on Linux**, with the GTK3 tray surface removed and the advisory set reduced accordingly
+Result: **0 known vulnerabilities or warnings** after refreshing compatible Rust dependencies, including `memmap2` 0.9.11.
 
 #### Accepted Warnings
 
-The following advisory warnings are accepted for v0.8.7. They are transitive dependencies with low practical risk:
-
-| Advisory | Crate | Severity | Source | Disposition |
-|----------|-------|----------|--------|-------------|
-| RUSTSEC-2026-0009 | `time` | Medium (DoS) | `mac-notification-sys` | macOS-only, not compiled on Linux |
-| RUSTSEC-2026-0002 | `lru` | Warning (unsound) | `ratatui` | IterMut not in code path |
-| RUSTSEC-2025-0119 | `number_prefix` | Warning (unmaintained) | `indicatif` | Progress bars only |
-
-#### Rationale
-
-- **time DoS**: Only affects macOS via `mac-notification-sys`. nvcontrol is Linux-only.
-- **lru unsoundness**: The affected iterator API is not used in nvcontrol paths.
-- **number_prefix**: Used only for progress display.
+None for `v0.8.9`.
 
 #### Remediation Plan
 
-These warnings will be addressed when:
-1. `ratatui` updates `lru` dependency
-2. `indicatif` replaces `number_prefix`
+Continue running `cargo audit` before each release and refresh compatible dependencies when advisories land in transitive GUI/TUI stacks.
 
 ## Security Hardening Checklist
 

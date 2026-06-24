@@ -68,6 +68,7 @@ pub enum Tab {
     Osd,
     Drivers,
     Dlss,
+    CudaAi,
     Settings,
 }
 
@@ -88,6 +89,7 @@ impl Tab {
             "OSD",
             "Drivers",
             "DLSS",
+            "CUDA/AI",
             "Settings",
         ]
     }
@@ -108,12 +110,13 @@ impl Tab {
             11 => Tab::Osd,
             12 => Tab::Drivers,
             13 => Tab::Dlss,
+            14 => Tab::CudaAi,
             _ => Tab::Settings,
         }
     }
 
     fn count() -> usize {
-        15
+        16
     }
 }
 
@@ -324,6 +327,13 @@ pub struct TuiApp {
     dlss_doctor_result: Option<dlss::DlssDoctorResult>,
     /// Last DLSS cache update
     dlss_last_update: Instant,
+    // === CUDA/AI cache (read-only diagnostics) ===
+    /// Cached CUDA/Ollama/AI doctor report
+    cuda_doctor_report: Option<crate::cuda::CudaDoctorReport>,
+    /// Last CUDA/AI cache update
+    cuda_last_update: Instant,
+    /// Last CUDA/AI refresh error
+    cuda_last_error: Option<String>,
     // === ASUS Power Monitor+ ===
     /// ASUS Power Detector (for ROG Astral/Matrix cards)
     asus_power_detector: Option<crate::asus_power_detector::AsusPowerDetector>,
@@ -425,6 +435,11 @@ impl TuiApp {
             dlss_last_update: Instant::now()
                 .checked_sub(Duration::from_secs(120))
                 .unwrap_or_else(Instant::now), // Force initial refresh
+            cuda_doctor_report: None,
+            cuda_last_update: Instant::now()
+                .checked_sub(Duration::from_secs(120))
+                .unwrap_or_else(Instant::now), // Force initial refresh
+            cuda_last_error: None,
             // ASUS Power Monitor+ - initialized in ensure_initialized
             asus_power_detector: None,
             asus_power_status: None,
@@ -812,6 +827,7 @@ impl TuiApp {
         // Check if we're on Processes tab (index 5)
         let on_processes_tab = self.current_tab == 5;
         let on_drivers_tab = self.current_tab == 12;
+        let on_cuda_ai_tab = self.current_tab == 14;
 
         match code {
             KeyCode::Tab => self.next_tab(),
@@ -873,6 +889,14 @@ impl TuiApp {
                     "Workflow: diagnose-release -> driver check -> support-bundle --tarball"
                         .to_string(),
                 );
+            }
+            KeyCode::Char('r') if on_cuda_ai_tab => {
+                self.refresh_cuda_ai_cache_now();
+                if let Some(error) = &self.cuda_last_error {
+                    self.set_status_message(format!("CUDA/AI refresh failed: {error}"));
+                } else {
+                    self.set_status_message("CUDA/AI diagnostics refreshed".to_string());
+                }
             }
             _ => {}
         }
@@ -938,6 +962,10 @@ impl TuiApp {
     fn update_metrics(&mut self) {
         // Lazy initialization on first tick
         self.ensure_initialized();
+
+        // Refresh CUDA/AI cache early so the tab still has useful diagnostics
+        // when NVML-backed live metrics are unavailable.
+        self.refresh_cuda_ai_cache();
 
         let backend_ctx = match &self.backend_ctx {
             Some(ctx) => ctx,
@@ -1008,6 +1036,27 @@ impl TuiApp {
 
         // Refresh doctor result
         self.dlss_doctor_result = DlssController::doctor().ok();
+    }
+
+    /// Refresh CUDA/Ollama/AI diagnostics (rate-limited to avoid shelling every frame)
+    fn refresh_cuda_ai_cache(&mut self) {
+        if self.cuda_last_update.elapsed().as_secs() < 60 {
+            return;
+        }
+        self.refresh_cuda_ai_cache_now();
+    }
+
+    fn refresh_cuda_ai_cache_now(&mut self) {
+        self.cuda_last_update = Instant::now();
+        match crate::cuda::collect_cuda_doctor() {
+            Ok(report) => {
+                self.cuda_doctor_report = Some(report);
+                self.cuda_last_error = None;
+            }
+            Err(error) => {
+                self.cuda_last_error = Some(error.to_string());
+            }
+        }
     }
 
     fn save_session_state(&self) {
@@ -1548,8 +1597,10 @@ impl TuiApp {
         self.draw_tab_content(f, chunks[1], current_tab);
 
         // Footer
-        let footer = Paragraph::new(" tab:next · 1-9:jump · n:nvtop · m:menu · q:quit · ?:help ")
-            .style(Style::default().fg(comment));
+        let footer = Paragraph::new(
+            " tab/backtab:navigate · 1-9:jump · n:nvtop · m:menu · drivers:b/x · q:quit · ?:help ",
+        )
+        .style(Style::default().fg(comment));
         f.render_widget(footer, chunks[2]);
 
         // Settings overlay
@@ -1580,6 +1631,7 @@ impl TuiApp {
             Tab::Osd => self.draw_osd_tab(f, inner),
             Tab::Drivers => self.draw_drivers_tab(f, inner),
             Tab::Dlss => self.draw_dlss_tab(f, inner),
+            Tab::CudaAi => self.draw_cuda_ai_tab(f, inner),
             Tab::Settings => self.draw_settings_tab(f, inner),
             _ => self.draw_generic_tab(f, inner, tab),
         }
@@ -2876,6 +2928,229 @@ impl TuiApp {
         f.render_widget(tips_para, chunks[2]);
     }
 
+    fn draw_cuda_ai_tab(&self, f: &mut Frame, area: Rect) {
+        let accent = self.theme.teal.to_ratatui();
+        let green = self.theme.green.to_ratatui();
+        let yellow = self.theme.yellow.to_ratatui();
+        let red = self.theme.red.to_ratatui();
+        let fg = self.theme.fg.to_ratatui();
+        let comment = self.theme.comment.to_ratatui();
+
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(9),  // CUDA + GPU facts
+                Constraint::Length(10), // Ollama status
+                Constraint::Min(7),     // Workload fit + commands
+            ])
+            .split(area);
+
+        let Some(report) = &self.cuda_doctor_report else {
+            let text = if let Some(error) = &self.cuda_last_error {
+                format!(
+                    "CUDA/AI diagnostics failed to refresh.\n\nError: {error}\n\nPress r to retry.\nCLI: nvctl cuda doctor"
+                )
+            } else {
+                "CUDA/AI diagnostics will populate after the next refresh.\nPress r to refresh now.\nCLI: nvctl cuda doctor".to_string()
+            };
+            let loading = Paragraph::new(text)
+                .block(
+                    Block::default()
+                        .title(" CUDA / AI ")
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(accent)),
+                )
+                .style(Style::default().fg(comment));
+            f.render_widget(loading, area);
+            return;
+        };
+
+        let mut cuda_lines = vec![
+            Line::from(vec![
+                Span::raw("Updated: "),
+                Span::styled(
+                    format!("{}s ago", self.cuda_last_update.elapsed().as_secs()),
+                    Style::default().fg(comment),
+                ),
+                Span::styled(" | r:refresh", Style::default().fg(accent)),
+            ]),
+            Line::from(vec![
+                Span::raw("Driver:  "),
+                Span::styled(
+                    report.cuda.driver_version.as_str(),
+                    Style::default().fg(if report.cuda.driver_version == "Unknown" {
+                        yellow
+                    } else {
+                        green
+                    }),
+                ),
+            ]),
+            Line::from(vec![
+                Span::raw("Toolkit: "),
+                Span::styled(
+                    report.cuda.version.as_str(),
+                    Style::default().fg(if report.cuda.version == "Unknown" {
+                        yellow
+                    } else {
+                        green
+                    }),
+                ),
+            ]),
+            Line::from(vec![
+                Span::raw("Path:    "),
+                Span::styled(
+                    report
+                        .cuda
+                        .toolkit_path
+                        .as_ref()
+                        .map(|path| path.display().to_string())
+                        .unwrap_or_else(|| "not found".to_string()),
+                    Style::default().fg(comment),
+                ),
+            ]),
+            Line::from(vec![
+                Span::raw("GPUs:    "),
+                Span::styled(
+                    report.cuda.devices.len().to_string(),
+                    Style::default().fg(if report.cuda.devices.is_empty() {
+                        yellow
+                    } else {
+                        green
+                    }),
+                ),
+            ]),
+        ];
+        for device in report.cuda.devices.iter().take(3) {
+            cuda_lines.push(Line::from(vec![
+                Span::raw(format!("GPU {}:   ", device.id)),
+                Span::styled(device.name.as_str(), Style::default().fg(fg)),
+                Span::styled(
+                    format!(
+                        " | {:.1} GiB free / {:.1} GiB total",
+                        device.memory_free as f64 / (1024.0 * 1024.0 * 1024.0),
+                        device.memory_total as f64 / (1024.0 * 1024.0 * 1024.0)
+                    ),
+                    Style::default().fg(comment),
+                ),
+            ]));
+        }
+
+        let cuda_para = Paragraph::new(cuda_lines).block(
+            Block::default()
+                .title(" CUDA Runtime ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(accent)),
+        );
+        f.render_widget(cuda_para, chunks[0]);
+
+        let ollama = &report.ollama;
+        let ollama_lines = vec![
+            Line::from(vec![
+                Span::raw("CLI:       "),
+                Span::styled(
+                    if ollama.cli.available {
+                        "found"
+                    } else {
+                        "missing"
+                    },
+                    Style::default().fg(if ollama.cli.available { green } else { red }),
+                ),
+            ]),
+            Line::from(vec![
+                Span::raw("Service:   "),
+                Span::styled(
+                    if ollama.service_reachable {
+                        "reachable on 127.0.0.1:11434"
+                    } else {
+                        "not reachable on 127.0.0.1:11434"
+                    },
+                    Style::default().fg(if ollama.service_reachable {
+                        green
+                    } else {
+                        yellow
+                    }),
+                ),
+            ]),
+            Line::from(vec![
+                Span::raw("GPU VRAM:  "),
+                Span::styled(
+                    format!("{:.1} GiB detected", ollama.gpu_memory_total_gb),
+                    Style::default().fg(if ollama.gpu_devices > 0 {
+                        green
+                    } else {
+                        yellow
+                    }),
+                ),
+            ]),
+            Line::from(vec![
+                Span::raw("Docker:    "),
+                Span::styled(
+                    if ollama.nvidia_container_runtime_ready {
+                        "docker + nvidia-ctk found"
+                    } else {
+                        "docker or nvidia-ctk missing"
+                    },
+                    Style::default().fg(if ollama.nvidia_container_runtime_ready {
+                        green
+                    } else {
+                        yellow
+                    }),
+                ),
+            ]),
+            Line::raw(""),
+            Line::styled("Commands:", Style::default().fg(accent)),
+            Line::raw("  nvctl cuda ollama"),
+            Line::raw("  nvctl ai workloads"),
+            Line::raw("  nvctl cuda doctor --format json"),
+        ];
+
+        let ollama_para = Paragraph::new(ollama_lines).block(
+            Block::default()
+                .title(" Ollama CUDA ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(accent)),
+        );
+        f.render_widget(ollama_para, chunks[1]);
+
+        let mut workload_lines: Vec<Line> = Vec::new();
+        for item in report.ai_recommendations.iter().take(4) {
+            let fit_color = match item.fit.as_str() {
+                "good fit" => green,
+                "possible with smaller models/quantization" => yellow,
+                _ => comment,
+            };
+            workload_lines.push(Line::from(vec![
+                Span::styled(format!("{}: ", item.workload), Style::default().fg(fg)),
+                Span::styled(item.fit.as_str(), Style::default().fg(fit_color)),
+            ]));
+        }
+        if !report.issues.is_empty() {
+            workload_lines.push(Line::raw(""));
+            workload_lines.push(Line::styled("Top issues:", Style::default().fg(yellow)));
+            for issue in report.issues.iter().take(2) {
+                workload_lines.push(Line::styled(
+                    format!("- {}", issue),
+                    Style::default().fg(comment),
+                ));
+            }
+        }
+        if let Some(error) = &self.cuda_last_error {
+            workload_lines.push(Line::raw(""));
+            workload_lines.push(Line::styled(
+                format!("Last refresh error: {error}"),
+                Style::default().fg(red),
+            ));
+        }
+
+        let workload_para = Paragraph::new(workload_lines).block(
+            Block::default()
+                .title(" AI/ML Workload Fit ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(accent)),
+        );
+        f.render_widget(workload_para, chunks[2]);
+    }
+
     fn draw_settings_tab(&self, f: &mut Frame, area: Rect) {
         let lines = [
             format!("Theme: {}", self.current_theme.name()),
@@ -3002,6 +3277,11 @@ impl TuiApp {
    x            Show support workflow hint
     doctors      nvctl driver dkms doctor | nvctl driver source doctor
     runtime      nvctl container runtime doctor --runtime docker
+
+  CUDA/AI tab:
+   r            Refresh CUDA/Ollama diagnostics now
+   read-only    CUDA, Ollama, container runtime, and VRAM fit
+   commands     nvctl cuda doctor | nvctl cuda ollama | nvctl ai workloads
 
   Process Table (nvtop/Processes tab):
    j/↓          Select next process

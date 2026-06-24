@@ -11,6 +11,7 @@ Complete command-line reference for nvcontrol.
 - [Configuration](config.md) - Settings, profiles, import/export
 - [Containers](container.md) - Docker GPU management
 - [Driver Commands](driver.md) - Driver info, release diagnostics, GSP, DKMS
+- [CUDA / AI](cuda.md) - CUDA, Ollama, and local AI/ML diagnostics
 
 ## Command Categories
 
@@ -75,6 +76,17 @@ nvctl config profiles       # List profiles
 nvctl container list        # Docker containers
 nvctl container runtime doctor --runtime docker
 nvctl container runtime test --runtime docker
+```
+
+### CUDA / AI
+```bash
+nvctl cuda info             # CUDA driver/toolkit/GPU memory summary
+nvctl cuda doctor           # CUDA, Ollama, tools, and workload readiness
+nvctl cuda ollama           # Native/container Ollama CUDA status
+nvctl cuda workloads        # VRAM-based AI/ML workload fit
+nvctl cuda env              # Shell exports for CUDA/Ollama
+nvctl cuda smoke --dry-run  # Print validation commands without executing them
+nvctl ai doctor --format json
 ```
 
 ### Display & Vibrance
@@ -195,7 +207,7 @@ Location: `~/.config/nvcontrol/`
 - `game_profile_auto.toml` - Game auto-profiles
 - `profiles/` - Saved profiles directory
 
-See [Configuration Guide](../config/README.md) for details.
+See [Configuration Guide](../config/configuration.md) for details.
 
 ## Getting Help
 
