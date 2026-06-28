@@ -30,7 +30,7 @@ path = "src/bin/nvctl.rs"
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 eframe = { version = "0.34", optional = true, default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
-egui_plot = { version = "0.35", optional = true }
+egui_plot = { version = "0.36", optional = true }
 egui-phosphor = { version = "0.12", optional = true, default-features = false, features = ["regular", "bold", "fill"] }
 anyhow = "1"
 thiserror = "2"
