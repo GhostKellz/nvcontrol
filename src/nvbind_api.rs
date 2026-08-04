@@ -181,8 +181,10 @@ impl UnifiedGpuApi {
     }
 
     fn detect_nspawn_containers(&self) -> NvResult<Vec<ContainerInfo>> {
+        // --no-ask-password: inspect-machines is polkit-gated on some systems.
+        // Probing must never block on an interactive auth prompt.
         let output = Command::new("machinectl")
-            .args(&["list", "--no-legend"])
+            .args(&["list", "--no-legend", "--no-ask-password"])
             .output();
 
         if output.is_err() {
@@ -330,7 +332,7 @@ impl UnifiedGpuApi {
                 .args(&["top", container_id, "-eo", "pid"])
                 .output(),
             ContainerRuntime::SystemdNspawn => Command::new("machinectl")
-                .args(&["status", container_id])
+                .args(&["status", container_id, "--no-ask-password"])
                 .output(),
             _ => return Ok(Vec::new()),
         };
