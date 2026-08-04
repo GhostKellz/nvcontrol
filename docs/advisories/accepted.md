@@ -1,12 +1,12 @@
 # Accepted Advisories
 
-No RustSec security advisories are knowingly accepted for `nvcontrol v0.8.10`.
+No RustSec security advisories are knowingly accepted for `nvcontrol v0.8.11`.
 
 ## Accepted Non-Advisory Dependency Risk
 
-| Item | Status | Reason | Removal Path |
-|------|--------|--------|--------------|
-| `serde_yaml` 0.9.x | Accepted compatibility risk | Upstream crate is deprecated, but `cargo audit` does not currently report a RustSec vulnerability for it. nvcontrol still uses YAML-compatible config/profile surfaces. | Replace with a maintained YAML parser or migrate YAML support behind an explicit compatibility path after profile/config compatibility tests are in place. |
+None. The previously accepted `serde_yaml` 0.9.x deprecation risk was retired in
+v0.8.11 by migrating to the maintained `serde_norway` fork, which is API-compatible
+and keeps the existing YAML config/profile surfaces working unchanged.
 
 ## Recording Rule
 

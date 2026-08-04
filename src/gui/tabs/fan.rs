@@ -142,7 +142,7 @@ fn render_fan_status(
                     .on_hover_text("30% - Quiet operation")
                     .clicked()
                 {
-                    for (_, speed) in state.fan_speeds.iter_mut() {
+                    for speed in state.fan_speeds.values_mut() {
                         *speed = 30;
                     }
                     if let Err(e) = fan::set_fan_speed(0, 30) {
@@ -156,7 +156,7 @@ fn render_fan_status(
                     .on_hover_text("50% - Default cooling")
                     .clicked()
                 {
-                    for (_, speed) in state.fan_speeds.iter_mut() {
+                    for speed in state.fan_speeds.values_mut() {
                         *speed = 50;
                     }
                     if let Err(e) = fan::set_fan_speed(0, 50) {
@@ -170,7 +170,7 @@ fn render_fan_status(
                     .on_hover_text("70% - Better cooling")
                     .clicked()
                 {
-                    for (_, speed) in state.fan_speeds.iter_mut() {
+                    for speed in state.fan_speeds.values_mut() {
                         *speed = 70;
                     }
                     if let Err(e) = fan::set_fan_speed(0, 70) {
@@ -184,7 +184,7 @@ fn render_fan_status(
                     .on_hover_text("100% - Maximum cooling")
                     .clicked()
                 {
-                    for (_, speed) in state.fan_speeds.iter_mut() {
+                    for speed in state.fan_speeds.values_mut() {
                         *speed = 100;
                     }
                     if let Err(e) = fan::set_fan_speed(0, 100) {

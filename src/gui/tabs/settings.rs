@@ -128,7 +128,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, ctx: &egui::Context) {
 
                             ui.label("Architecture:");
                             ui.label(
-                                egui::RichText::new(format!("{} ({})", &stats.architecture, &stats.compute_capability))
+                                egui::RichText::new(format!("{} ({})", stats.architecture, stats.compute_capability))
                                     .color(colors.yellow.to_egui()),
                             );
                             ui.end_row();

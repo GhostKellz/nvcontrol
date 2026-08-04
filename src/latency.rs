@@ -394,7 +394,7 @@ fn reset_cpu_scheduler() -> NvResult<bool> {
 
 fn set_cpu_governor(governor: &str) -> NvResult<bool> {
     // Set CPU frequency governor
-    let cpu_count = num_cpus::get();
+    let cpu_count = std::thread::available_parallelism().map_or(1, |n| n.get());
     let mut success_count = 0;
 
     for cpu in 0..cpu_count {

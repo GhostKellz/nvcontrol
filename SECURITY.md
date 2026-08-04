@@ -61,19 +61,35 @@ cargo install cargo-audit
 cargo audit
 ```
 
-### v0.8.10 Advisory Status
+### v0.8.11 Advisory Status
 
-Audit performed: 2026-06-23
-Tool version: cargo-audit 0.21.x
-Result: **0 known RustSec vulnerabilities reported by `cargo audit`** after refreshing compatible Rust dependencies, including `memmap2` 0.9.11.
+Audit performed: 2026-08-04
+Tool version: cargo-audit 0.22.x
+Result: **0 known RustSec vulnerabilities and 0 warnings reported by `cargo audit`.**
+
+This release cleared four advisories and two unsoundness warnings that were
+reachable on v0.8.10:
+
+| Advisory | Crate | Resolution |
+|----------|-------|------------|
+| RUSTSEC-2026-0194 / RUSTSEC-2026-0195 | `quick-xml` 0.37.5, 0.39.4 | Both trees collapsed onto `quick-xml` 0.41.0 |
+| RUSTSEC-2026-0190 (unsound) | `anyhow` 1.0.102 | Updated to 1.0.104 |
+| RUSTSEC-2026-0221 (unsound) | `event-listener` 5.4.1 | Updated to 5.4.2 |
+
+These fixes were gated behind the toolchain: the MSRV-aware resolver held every
+patched release back while `rust-toolchain.toml` pinned 1.95.0. Raising the pin to
+1.97.1 (MSRV 1.97) made all of them reachable.
 
 #### Accepted Warnings
 
-`serde_yaml` remains present as a direct compatibility dependency. It is deprecated upstream but is not currently reported as a RustSec vulnerability by `cargo audit`.
+None. The deprecated `serde_yaml` dependency was replaced with the maintained
+`serde_norway` fork.
 
 #### Remediation Plan
 
-Continue running `cargo audit` before each release, refresh compatible dependencies when advisories land in transitive GUI/TUI stacks, and plan a YAML parser migration when it can be done without breaking existing profile/config workflows.
+Continue running `cargo audit` before each release. When advisories land in
+transitive GUI/TUI stacks, check whether the MSRV pin is masking available fixes
+before assuming no patch exists.
 
 ## Security Hardening Checklist
 

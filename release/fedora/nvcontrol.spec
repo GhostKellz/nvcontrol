@@ -1,7 +1,7 @@
 %global crate nvcontrol
 
 Name:           nvcontrol
-Version:        0.8.10
+Version:        0.8.11
 Release:        1%{?dist}
 Summary:        Modern NVIDIA Settings Manager for Linux + Wayland
 
@@ -10,7 +10,7 @@ URL:            https://github.com/GhostKellz/nvcontrol
 Source0:        %{url}/archive/v%{version}/%{crate}-%{version}.tar.gz
 
 # Rust requirements
-BuildRequires:  rust >= 1.95
+BuildRequires:  rust >= 1.97
 BuildRequires:  cargo
 BuildRequires:  clang-devel
 BuildRequires:  pkgconfig
@@ -122,6 +122,13 @@ cargo test --release --lib -- --skip hardware --skip nvml || true
 %{_mandir}/man1/nvctl.1*
 
 %changelog
+* Tue Aug 04 2026 CK Technology LLC <info@cktechx.com> - 0.8.11-1
+- Clear RUSTSEC-2026-0194/0195 (quick-xml), RUSTSEC-2026-0190 (anyhow), and
+  RUSTSEC-2026-0221 (event-listener); cargo audit is clean
+- Raise Rust toolchain to 1.97.1 (MSRV 1.97) to unblock patched dependencies
+- Replace deprecated serde_yaml with the maintained serde_norway fork
+- Update egui/eframe stack to 0.35 and drop unused sys-info and num_cpus
+
 * Tue Jun 23 2026 CK Technology LLC <info@cktechx.com> - 0.8.10-1
 - Hotfix release metadata for v0.8.10 across packaging surfaces
 - Fan CLI contract wired for auto control and curve show/apply/set workflows

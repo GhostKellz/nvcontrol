@@ -6,7 +6,7 @@ This guide covers building nvcontrol from source for all supported platforms.
 
 ### Required
 
-- **Rust 1.95+** (edition 2024)
+- **Rust 1.97+** (edition 2024)
 - **Cargo** (comes with Rust)
 - **NVIDIA Driver** compatible with your target nvcontrol build
 - **Linux kernel 6.0+** (6.6+ recommended)

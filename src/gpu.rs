@@ -345,7 +345,7 @@ pub fn get_gpu_info_with_format(format: OutputFormat, backend: &SharedNvmlBacken
             println!("{}", serde_json::to_string_pretty(&gpu_info).unwrap());
         }
         OutputFormat::Yaml => {
-            println!("{}", serde_yaml::to_string(&gpu_info).unwrap());
+            println!("{}", serde_norway::to_string(&gpu_info).unwrap());
         }
         OutputFormat::Table => {
             println!("┌──────────────────────┬──────────────────────────────┐");

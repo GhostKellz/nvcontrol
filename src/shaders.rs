@@ -355,11 +355,10 @@ fn extract_steam_app_id(game_path: &str) -> Option<String> {
     // Check if path contains steamapps structure
     if game_path.contains("steamapps") {
         // Look for appmanifest files
-        let steamapps_path = if let Some(pos) = game_path.find("steamapps") {
+        let steamapps_path = {
+            let pos = game_path.find("steamapps")?;
             let steamapps_end = pos + "steamapps".len();
             &game_path[..steamapps_end]
-        } else {
-            return None;
         };
 
         // Read appmanifest files to find the app ID

@@ -1,6 +1,6 @@
 # Maintainer: Christopher Kelley <ckelley@ghostkellz.sh>
 pkgname=nvcontrol
-pkgver=0.8.10
+pkgver=0.8.11
 pkgrel=1
 pkgdesc="The Ultimate NVIDIA GPU Control Tool for Linux - Advanced overclocking, fan control, and gaming optimization"
 arch=('x86_64')

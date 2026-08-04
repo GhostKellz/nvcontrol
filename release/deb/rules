@@ -3,7 +3,7 @@
 
 export DH_VERBOSE = 1
 export CARGO_HOME = $(CURDIR)/debian/.cargo
-export RUSTUP_TOOLCHAIN = 1.95.0
+export RUSTUP_TOOLCHAIN = 1.97.1
 export CARGO_TARGET_DIR = $(CURDIR)/target
 
 %:

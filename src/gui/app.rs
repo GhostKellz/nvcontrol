@@ -235,18 +235,18 @@ impl eframe::App for NvControlApp {
         // Handle keyboard shortcuts
         self.handle_keyboard(&ctx);
 
-        egui::Panel::top("header").show_inside(ui, |ui| {
+        egui::Panel::top("header").show(ui, |ui| {
             self.render_header(ui);
         });
 
         egui::Panel::left("sidebar")
             .resizable(false)
             .default_size(180.0)
-            .show_inside(ui, |ui| {
+            .show(ui, |ui| {
                 self.render_sidebar(ui);
             });
 
-        egui::CentralPanel::default().show_inside(ui, |ui| match self.state.tab {
+        egui::CentralPanel::default().show(ui, |ui| match self.state.tab {
             Tab::Gpu => super::tabs::gpu::render(ui, &mut self.state, &ctx),
             Tab::Fan => super::tabs::fan::render(ui, &mut self.state, &ctx),
             Tab::Display => super::tabs::display::render(ui, &mut self.state, &ctx),
@@ -273,18 +273,5 @@ impl eframe::App for NvControlApp {
         }
 
         let _ = frame;
-    }
-
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let mut root_ui = egui::Ui::new(
-            ctx.clone(),
-            egui::Id::new((ctx.viewport_id(), "nvcontrol_root_ui")),
-            egui::UiBuilder::new()
-                .layer_id(egui::LayerId::background())
-                .max_rect(ctx.content_rect()),
-        );
-        root_ui.set_clip_rect(ctx.content_rect());
-
-        egui::CentralPanel::default().show_inside(&mut root_ui, |ui| self.ui(ui, _frame));
     }
 }

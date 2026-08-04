@@ -209,13 +209,13 @@ fn rust_version_is_consistent_across_core_release_metadata() {
     let deb_control = read_repo_file("release/deb/control");
     let pop_control = read_repo_file("release/popos-cosmic/control");
 
-    assert!(cargo_toml.contains("rust-version = \"1.95\""));
-    assert!(toolchain.contains("channel = \"1.95.0\""));
-    assert!(ci_doc.contains("Rust 1.95 stable toolchain"));
-    assert!(building_doc.contains("Rust 1.95+"));
-    assert!(fedora_spec.contains("BuildRequires:  rust >= 1.95"));
-    assert!(deb_control.contains("rustc (>= 1.95)"));
-    assert!(pop_control.contains("rustc (>= 1.95)"));
+    assert!(cargo_toml.contains("rust-version = \"1.97\""));
+    assert!(toolchain.contains("channel = \"1.97.1\""));
+    assert!(ci_doc.contains("Rust 1.97 stable toolchain"));
+    assert!(building_doc.contains("Rust 1.97+"));
+    assert!(fedora_spec.contains("BuildRequires:  rust >= 1.97"));
+    assert!(deb_control.contains("rustc (>= 1.97)"));
+    assert!(pop_control.contains("rustc (>= 1.97)"));
 }
 
 #[test]
@@ -232,7 +232,7 @@ fn packaging_references_current_service_name() {
 }
 
 #[test]
-fn release_metadata_targets_0_8_10() {
+fn release_metadata_targets_0_8_11() {
     let cargo_toml = read_repo_file("Cargo.toml");
     let root_pkgbuild = read_repo_file("PKGBUILD");
     let arch_pkgbuild = read_repo_file("release/arch/PKGBUILD");
@@ -241,13 +241,13 @@ fn release_metadata_targets_0_8_10() {
     let appimage = read_repo_file("appimage/AppImageBuilder.yml");
     let flatpak = read_repo_file("flatpak/com.github.nvcontrol.yml");
 
-    assert!(cargo_toml.contains("version = \"0.8.10\""));
-    assert!(root_pkgbuild.contains("pkgver=0.8.10"));
-    assert!(arch_pkgbuild.contains("pkgver=0.8.10"));
-    assert!(fedora_spec.contains("Version:        0.8.10"));
-    assert!(deb_changelog.starts_with("nvcontrol (0.8.10-1)"));
-    assert!(appimage.contains("version: 0.8.10"));
-    assert!(flatpak.contains("tag: v0.8.10"));
+    assert!(cargo_toml.contains("version = \"0.8.11\""));
+    assert!(root_pkgbuild.contains("pkgver=0.8.11"));
+    assert!(arch_pkgbuild.contains("pkgver=0.8.11"));
+    assert!(fedora_spec.contains("Version:        0.8.11"));
+    assert!(deb_changelog.starts_with("nvcontrol (0.8.11-1)"));
+    assert!(appimage.contains("version: 0.8.11"));
+    assert!(flatpak.contains("tag: v0.8.11"));
 }
 
 #[test]

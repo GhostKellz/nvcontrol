@@ -1,8 +1,8 @@
 [package]
 name = "nvcontrol"
-version = "0.8.10"
+version = "0.8.11"
 edition = "2024"
-rust-version = "1.95"
+rust-version = "1.97"
 authors = ["Christopher Kelley <ckelley@ghostkellz.sh>"]
 license = "MIT"
 description = "Modern NVIDIA Settings Manager for Linux + Wayland"
@@ -29,9 +29,9 @@ path = "src/bin/nvctl.rs"
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
-eframe = { version = "0.34", optional = true, default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
-egui_plot = { version = "0.35", optional = true }
-egui-phosphor = { version = "0.12", optional = true, default-features = false, features = ["regular", "bold", "fill"] }
+eframe = { version = "0.35", optional = true, default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
+egui_plot = { version = "0.36", optional = true }
+egui-phosphor = { version = "0.13", optional = true, default-features = false, features = ["regular", "bold", "fill"] }
 anyhow = "1"
 thiserror = "2"
 serde = { version = "1", features = ["derive"] }
@@ -47,10 +47,8 @@ chrono = { version = "0.4", features = ["serde"] }
 sysinfo = "0.39"
 notify = "8.2"
 notify-rust = "4.12"
-num_cpus = "1.16"
-sys-info = "0.9"
 serde_json = "1.0"
-serde_yaml = "0.9"
+serde_norway = "0.9"
 dirs = "6.0"
 console = "0.16"
 indicatif = "0.18"

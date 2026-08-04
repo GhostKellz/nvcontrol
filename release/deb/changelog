@@ -1,3 +1,14 @@
+nvcontrol (0.8.11-1) unstable; urgency=medium
+
+  * Security: clear RUSTSEC-2026-0194/0195 (quick-xml), RUSTSEC-2026-0190
+    (anyhow), and RUSTSEC-2026-0221 (event-listener); cargo audit is clean
+  * Raise Rust toolchain to 1.97.1 (MSRV 1.97), which unblocked the patched
+    dependency releases held back by the previous 1.95 pin
+  * Replace deprecated serde_yaml with the maintained serde_norway fork
+  * Update egui/eframe stack to 0.35 and drop unused sys-info and num_cpus
+
+ -- CK Technology LLC <info@cktechx.com>  Tue, 04 Aug 2026 12:00:00 +0000
+
 nvcontrol (0.8.10-1) unstable; urgency=medium
 
   * Hotfix release metadata across Cargo and packaging surfaces

@@ -1991,7 +1991,7 @@ fn main() {
                         println!("{}", serde_json::to_string_pretty(&gpus).unwrap());
                     }
                     OutputFormat::Yaml => {
-                        println!("{}", serde_yaml::to_string(&gpus).unwrap());
+                        println!("{}", serde_norway::to_string(&gpus).unwrap());
                     }
                     OutputFormat::Table => {
                         println!(
@@ -4163,7 +4163,7 @@ fn main() {
                         Some(OutputFormat::Yaml) => {
                             println!(
                                 "{}",
-                                serde_yaml::to_string(&diagnostics).unwrap_or_default()
+                                serde_norway::to_string(&diagnostics).unwrap_or_default()
                             );
                         }
                         _ => {}
@@ -6449,7 +6449,7 @@ fn main() {
                             );
                         }
                         Some(OutputFormat::Yaml) => {
-                            println!("{}", serde_yaml::to_string(&summary).unwrap_or_default());
+                            println!("{}", serde_norway::to_string(&summary).unwrap_or_default());
                         }
                         _ => {}
                     }
@@ -6486,7 +6486,7 @@ fn main() {
                 }
                 OutputFormat::Yaml => {
                     let report = setup::collect_readiness_report();
-                    println!("{}", serde_yaml::to_string(&report).unwrap_or_default());
+                    println!("{}", serde_norway::to_string(&report).unwrap_or_default());
                 }
                 OutputFormat::Table | OutputFormat::Human => {
                     if let Err(e) = setup::run_readiness_check() {
@@ -6879,7 +6879,7 @@ where
             println!("{}", serde_json::to_string_pretty(data).unwrap_or_default());
         }
         OutputFormat::Yaml => {
-            println!("{}", serde_yaml::to_string(data).unwrap_or_default());
+            println!("{}", serde_norway::to_string(data).unwrap_or_default());
         }
         OutputFormat::Table | OutputFormat::Human => print_table(),
     }
@@ -6895,7 +6895,7 @@ fn print_formatted_output<T: serde::Serialize>(
             println!("{}", serde_json::to_string_pretty(data).unwrap_or_default());
         }
         Some(OutputFormat::Yaml) => {
-            println!("{}", serde_yaml::to_string(data).unwrap_or_default());
+            println!("{}", serde_norway::to_string(data).unwrap_or_default());
         }
         Some(OutputFormat::Human) => {
             // Human-readable output with optional colors

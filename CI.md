@@ -136,7 +136,7 @@ jobs:
 
 ### Prerequisites
 - NVIDIA GPU with driver 535+
-- Rust 1.95 stable toolchain
+- Rust 1.97 stable toolchain
 - `nvidia-smi` accessible
 
 ### Commands
@@ -183,7 +183,7 @@ cargo clippy --all-targets --all-features -- -D warnings
 - Linux x86_64
 - NVIDIA driver 535+ (550+ recommended)
 - nvidia-open preferred for GSP testing
-- Rust stable (1.95.0 pinned in `rust-toolchain.toml`)
+- Rust stable (1.97.1 pinned in `rust-toolchain.toml`)
 - 8GB+ RAM
 - SSD recommended for fast builds
 

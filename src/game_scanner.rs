@@ -167,7 +167,7 @@ impl GameLibraryScanner {
             NvControlError::ConfigError(format!("Failed to read Lutris config: {}", e))
         })?;
 
-        let config: serde_yaml::Value = serde_yaml::from_str(&content).map_err(|e| {
+        let config: serde_norway::Value = serde_norway::from_str(&content).map_err(|e| {
             NvControlError::ConfigError(format!("Failed to parse Lutris YAML: {}", e))
         })?;
 

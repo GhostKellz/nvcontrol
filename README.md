@@ -5,7 +5,7 @@
 
   **Modern NVIDIA Settings Manager for Linux + Wayland**
 
-  [![Rust](https://img.shields.io/badge/Rust-1.95+-orange.svg?style=for-the-badge)](https://www.rust-lang.org)
+  [![Rust](https://img.shields.io/badge/Rust-1.97+-orange.svg?style=for-the-badge)](https://www.rust-lang.org)
   [![NVIDIA](https://img.shields.io/badge/NVIDIA-Driver%20610+-green.svg?style=for-the-badge)](https://github.com/NVIDIA/open-gpu-kernel-modules)
   [![Wayland](https://img.shields.io/badge/Wayland-Native-brightgreen.svg?style=for-the-badge)](https://wayland.freedesktop.org/)
   [![TUI](https://img.shields.io/badge/TUI-ratatui-orange.svg?style=for-the-badge)](https://github.com/ratatui/ratatui)
@@ -356,7 +356,7 @@ Change theme with `t` in TUI or via Settings in GUI.
 
 - **NVIDIA Driver**: 610+ (NVIDIA open kernel modules required)
 - **Linux Kernel**: 6.6+ (7.0+ recommended)
-- **Rust**: 1.95+ (for building from source)
+- **Rust**: 1.97+ (for building from source)
 
 ## Contributing
 

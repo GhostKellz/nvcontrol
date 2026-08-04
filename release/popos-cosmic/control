@@ -4,7 +4,7 @@ Priority: optional
 Maintainer: CK Technology LLC <info@cktechx.com>
 Build-Depends: debhelper-compat (= 13),
                cargo,
-               rustc (>= 1.95),
+               rustc (>= 1.97),
                libclang-dev,
                pkg-config,
                libwayland-dev,
