@@ -7,6 +7,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+PROJECT_VERSION="$(awk -F'"' '/^version = / { print $2; exit }' "$PROJECT_DIR/Cargo.toml")"
 
 # Colors
 RED='\033[0;31m'
@@ -17,7 +18,7 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 echo "╔══════════════════════════════════════════════════════════════════╗"
-echo "║           nvcontrol Comprehensive Test Suite v0.8.9              ║"
+printf "║           nvcontrol Comprehensive Test Suite v%-18s║\n" "$PROJECT_VERSION"
 echo "║           KDE/Wayland Stability Testing                          ║"
 echo "╚══════════════════════════════════════════════════════════════════╝"
 echo ""
@@ -201,5 +202,5 @@ echo "  $NVCTL doctor"
 echo ""
 
 echo "╔══════════════════════════════════════════════════════════════════╗"
-echo "║           Test Suite Complete - v0.8.9                           ║"
+printf "║           Test Suite Complete - v%-31s║\n" "$PROJECT_VERSION"
 echo "╚══════════════════════════════════════════════════════════════════╝"

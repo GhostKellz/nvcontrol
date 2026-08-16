@@ -2,6 +2,16 @@
 
 This file tracks dependency and code-level security or stability issues resolved by release work.
 
+## v0.8.12
+
+| Item | Affected Area | Resolution | Verification |
+|------|---------------|------------|--------------|
+| Incorrect guessed Astral register scaling | ASUS Power Monitor+ | Decode the documented 24-byte IT8915 frame, prefer standard hwmon, and retain a read-only native SMBus fallback. | decoder tests and live six-pin RTX 5090 telemetry |
+| Single-branch NVKMS allocation ABI | Native vibrance on 595/610 | Select the known allocation size by driver branch and retry only the alternate known layout on `EPERM`. | unit policy tests plus Arch 610 and Pop 595 hardware checks |
+| Inferred VRR certification and ranges | CLI and GUI VRR status | Represent compositor-unknown VRR, G-SYNC, FreeSync, LFC, and ranges as unreported while retaining known policy and maximum mode data. | parser tests and live KDE/COSMIC checks |
+| Package checks masked failures | Arch, Debian, Fedora | Remove failure masking and add repository tests enforcing the package check contract. | packaging sanity tests and package parser checks |
+| Missing Flatpak offline sources | Flatpak | Generate Cargo sources from the lockfile and update to Freedesktop 25.08 with offline Cargo mode. | manifest/source validation |
+
 ## v0.8.10
 
 | Item | Affected Area | Resolution | Verification |

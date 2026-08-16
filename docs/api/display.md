@@ -1,212 +1,59 @@
-# Display Management API
+# Display API
 
-Display detection, color management, and digital vibrance control.
+Display support combines the native NVIDIA NVKMS vibrance controller with
+compositor command backends for layout, HDR, and VRR policy.
 
-## Functions
+## Native vibrance
 
-### `list_displays() -> Result<Vec<DisplayInfo>>`
-
-List all connected displays.
-
-**Returns**: Vector of `DisplayInfo`
-
-**Example**:
 ```rust
-use nvcontrol::display;
+use nvcontrol::vibrance_native::NativeVibranceController;
 
-let displays = display::list_displays()?;
-for d in displays {
-    println!("{}: {} ({})", d.id, d.model, d.resolution);
+let mut controller = NativeVibranceController::new()?;
+for connector in controller.list_displays() {
+    println!("{connector:?}");
 }
+controller.set_vibrance_all(150)?;
 ```
 
-### `set_digital_vibrance(display_id: &str, value: i32) -> Result<()>`
+Percentages are `0..=200`, with 100 as the neutral raw NVKMS value. v0.8.12
+queries the live attribute and driver-advertised range, filters disconnected
+NVKMS slots, and selects the known NVIDIA 595 or 610 allocation ABI at runtime.
 
-Set digital vibrance (color saturation).
+Public helpers include:
 
-**Parameters**:
-- `display_id`: Display identifier (e.g., "DP-1")
-- `value`: Vibrance level (-1024 to 1023, default 0)
-
-**Example**:
-```rust
-// Boost colors for gaming
-display::set_digital_vibrance("DP-1", 512)?;
-
-// Natural colors for photo editing
-display::set_digital_vibrance("DP-1", 0)?;
-```
-
-### `get_digital_vibrance(display_id: &str) -> Result<i32>`
-
-Get current digital vibrance value.
-
-**Example**:
-```rust
-let vibrance = display::get_digital_vibrance("DP-1")?;
-println!("Current vibrance: {}", vibrance);
-```
-
-## Structs
-
-### `DisplayInfo`
-
-```rust
-pub struct DisplayInfo {
-    pub id: String,              // e.g., "DP-1", "HDMI-1"
-    pub model: String,           // Monitor model name
-    pub manufacturer: String,    // Manufacturer
-    pub resolution: String,      // e.g., "3840x2160"
-    pub refresh_rate: u32,       // Hz
-    pub connected: bool,         // Connection status
-    pub primary: bool,           // Primary display
-    pub hdr_capable: bool,       // HDR support
-    pub vrr_capable: bool,       // VRR/G-SYNC/FreeSync
-}
-```
-
-### `ColorProfile`
-
-```rust
-pub struct ColorProfile {
-    pub name: String,
-    pub digital_vibrance: i32,
-    pub gamma: f32,
-    pub brightness: f32,
-    pub contrast: f32,
-}
-```
-
-## CLI Commands
-
-### `nvctl display ls`
-
-List displays.
+- `get_vibrance_connectors_native()` for typed connector/readback data;
+- `get_vibrance_status_native()` for structured status;
+- `set_display_vibrance_native()` and `set_vibrance_all_native()`;
+- `reset_vibrance_native()`;
+- percentage/raw conversion helpers with rounded readback.
 
 ```bash
-nvctl display ls
-
-# Output:
-# DP-1: ASUS ROG PG27AQN (2560x1440@360Hz) ✓ Primary
-# HDMI-1: LG 27UK650 (3840x2160@60Hz)
-```
-
-### `nvctl display vibrance <display> <value>`
-
-Set digital vibrance.
-
-```bash
-# Boost vibrance for gaming
-nvctl display vibrance DP-1 750
-
-# Reset to default
-nvctl display vibrance DP-1 0
-```
-
-### `nvctl display info <display>`
-
-Show display details.
-
-```bash
-nvctl display info DP-1
-
-# Output:
-# Display: DP-1
-# Model: ASUS ROG PG27AQN
-# Resolution: 2560x1440
-# Refresh: 360 Hz
-# Digital Vibrance: 750
-# HDR: Supported
-# VRR: Enabled (G-SYNC)
-```
-
-## Profiles
-
-### Gaming Profile
-```toml
-# ~/.config/nvcontrol/profiles/gaming.toml
-[display.DP-1]
-digital_vibrance = 750
-vrr_enabled = true
-
-[display.HDMI-1]
-digital_vibrance = 500
-```
-
-### Content Creation Profile
-```toml
-# ~/.config/nvcontrol/profiles/photo-editing.toml
-[display.DP-1]
-digital_vibrance = 0      # Natural colors
-gamma = 2.2
-color_profile = "sRGB"
-```
-
-## Advanced Features
-
-### Per-Application Vibrance
-
-```rust
-use nvcontrol::display;
-
-fn auto_apply_vibrance(app_name: &str, display: &str) -> Result<()> {
-    let vibrance = match app_name {
-        "cs2" | "valorant" => 900,        // Competitive gaming
-        "cyberpunk2077" => 750,           // Single-player
-        "gimp" | "krita" => 0,            // Photo editing
-        "blender" => 300,                 // 3D work
-        _ => 500,                         // Default
-    };
-
-    display::set_digital_vibrance(display, vibrance)?;
-    Ok(())
-}
-```
-
-### Multi-Display Management
-
-```rust
-fn optimize_multi_display() -> Result<()> {
-    let displays = display::list_displays()?;
-
-    for d in displays {
-        if d.primary {
-            // Primary for gaming
-            display::set_digital_vibrance(&d.id, 800)?;
-        } else {
-            // Secondary for monitoring
-            display::set_digital_vibrance(&d.id, 400)?;
-        }
-    }
-
-    Ok(())
-}
-```
-
-## Wayland Support
-
-nvcontrol's current vibrance path uses the native NVIDIA display backend and NVKMS ioctl support where the loaded driver exposes the required interfaces. It does not require `nvidia-settings` for the primary Wayland vibrance workflow.
-
-```bash
-# Inspect displays first
+nvctl display vibrance get
 nvctl display vibrance list
-
-# Apply vibrance on the selected display
+nvctl display vibrance set 150
 nvctl display vibrance set-display 1 150
+nvctl display vibrance reset
 ```
 
-## HDR Control
+## VRR
+
+`vrr::DisplayVrrCapability` uses `Option` for VRR, G-SYNC, FreeSync, and range
+facts. `None` means the compositor did not report the fact; callers must not infer
+support from DisplayPort or maximum refresh rate.
 
 ```rust
-// Enable HDR (requires KDE Plasma 6+ or supported compositor)
-display::set_hdr_enabled("DP-1", true)?;
-
-// Check HDR status
-let hdr_enabled = display::is_hdr_enabled("DP-1")?;
+let displays = nvcontrol::vrr::detect_vrr_displays()?;
+for display in displays {
+    println!("{}: {:?}", display.display_name, display.supports_vrr);
+}
 ```
 
-CLI:
-```bash
-nvctl display hdr on DP-1
-nvctl display hdr off DP-1
-```
+See [VRR/G-SYNC](../features/vrr-gsync.md) for compositor-specific apply routes,
+including the separate tested COSMIC `nvctl monitors set-vrr` path.
+
+## HDR and color controls
+
+HDR, gamma, color range, color space, and dithering are routed through the active
+display/compositor backend. Use `nvctl display --help` for the exact current CLI;
+support varies by compositor and missing capability must fail closed rather than
+being reported from connector-type guesses.

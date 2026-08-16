@@ -119,9 +119,13 @@ pub enum NvKmsDpyAttribute {
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum NvKmsAttributeType {
-    Range = 0,
-    IntBits = 1,
-    Bool = 2,
+    Integer = 0,
+    Boolean = 1,
+    IntBits = 2,
+    Range = 3,
+    Bitmask = 4,
+    DpyId = 5,
+    DpyIdList = 6,
 }
 
 // ===== Color Range Values =====
@@ -423,7 +427,8 @@ pub enum NvKmsAllocDeviceStatus {
     CoreChannelAllocFailed = 5,
 }
 
-// AllocDeviceReply: 816 bytes total (verified from driver 610.43.02 headers)
+// Backing storage uses the larger 595 reply. The 610 ioctl copies only its
+// smaller paramSize, while the fields nvcontrol reads retain identical offsets.
 // Key fields: status (offset 0), deviceHandle (offset 4), numDisps (offset 16), dispHandles (offset 20)
 // NOTE: align(8) required because Reply contains NvU64 fields (vtFbBaseAddress, vtFbSize)
 // History: 888 bytes in 595.45.04, reduced to 816 in 610.43.02
@@ -437,7 +442,7 @@ pub struct NvKmsAllocDeviceReply {
     pub num_disps: NvU32,                 // offset 16
     pub disp_handles: [NvKmsDispHandle; NVKMS_MAX_SUBDEVICES], // offset 20
     // Remaining fields (caps, layer info, etc.)
-    pub _padding: [u8; 816 - 20 - (NVKMS_MAX_SUBDEVICES * 4)], // 816 - 52 = 764
+    pub _padding: [u8; 888 - 20 - (NVKMS_MAX_SUBDEVICES * 4)], // 888 - 52 = 836
 }
 
 #[repr(C)]
@@ -446,6 +451,17 @@ pub struct NvKmsAllocDeviceParams {
     pub request: NvKmsAllocDeviceRequest,
     pub reply: NvKmsAllocDeviceReply,
 }
+
+pub const ALLOC_DEVICE_PARAM_SIZE_610: NvU32 = 1440;
+pub const ALLOC_DEVICE_PARAM_SIZE_595: NvU32 = 1512;
+
+const _: () = assert!(std::mem::size_of::<NvKmsAllocDeviceReply>() == 888);
+const _: () = assert!(std::mem::size_of::<NvKmsAllocDeviceParams>() == 1512);
+const _: () = assert!(std::mem::offset_of!(NvKmsAllocDeviceParams, reply) == 624);
+const _: () = assert!(std::mem::offset_of!(NvKmsAllocDeviceReply, status) == 0);
+const _: () = assert!(std::mem::offset_of!(NvKmsAllocDeviceReply, device_handle) == 4);
+const _: () = assert!(std::mem::offset_of!(NvKmsAllocDeviceReply, num_disps) == 16);
+const _: () = assert!(std::mem::offset_of!(NvKmsAllocDeviceReply, disp_handles) == 20);
 
 // ===== Free Device Structures =====
 #[repr(C)]
@@ -471,9 +487,23 @@ pub struct NvKmsFreeDeviceParams {
 
 /// Helper to create an ioctl params structure
 pub fn create_ioctl_params<T>(cmd: NvKmsIoctlCommand, params: &T) -> NvKmsIoctlParams {
+    create_ioctl_params_sized(cmd, params, std::mem::size_of::<T>() as NvU32)
+}
+
+/// Create an indirect ioctl descriptor for a known ABI size backed by a buffer
+/// at least that large.
+pub fn create_ioctl_params_sized<T>(
+    cmd: NvKmsIoctlCommand,
+    params: &T,
+    size: NvU32,
+) -> NvKmsIoctlParams {
+    assert!(
+        size as usize <= std::mem::size_of::<T>(),
+        "NVKMS paramSize exceeds its Rust backing buffer"
+    );
     NvKmsIoctlParams {
         cmd: cmd as NvU32,
-        size: std::mem::size_of::<T>() as NvU32,
+        size,
         address: params as *const T as NvU64,
     }
 }
@@ -489,7 +519,21 @@ pub unsafe fn nvkms_ioctl<T>(
     cmd: NvKmsIoctlCommand,
     params: &mut T,
 ) -> Result<i32, nix::Error> {
-    let ioctl_params = create_ioctl_params(cmd, params);
+    unsafe { nvkms_ioctl_sized(fd, cmd, params, std::mem::size_of::<T>() as NvU32) }
+}
+
+/// Perform an NVKMS ioctl with an ABI-selected parameter size.
+///
+/// # Safety
+/// The requirements of [`nvkms_ioctl`] apply, and `size` must describe the
+/// selected command ABI. The backing Rust value is checked to be large enough.
+pub unsafe fn nvkms_ioctl_sized<T>(
+    fd: std::os::unix::io::RawFd,
+    cmd: NvKmsIoctlCommand,
+    params: &mut T,
+    size: NvU32,
+) -> Result<i32, nix::Error> {
+    let ioctl_params = create_ioctl_params_sized(cmd, params, size);
 
     // SAFETY: Caller guarantees fd is valid and params matches the ioctl command.
     // NVKMS uses indirect parameter passing: ioctl_params contains a pointer to params.
@@ -511,3 +555,41 @@ unsafe impl Zeroable for NvKmsAttributeValidValuesUnion {}
 unsafe impl Zeroable for NvKmsAttributeValidValuesCommonReply {}
 unsafe impl Zeroable for NvKmsAllocDeviceReply {}
 unsafe impl Zeroable for NvKmsQueryConnectorStaticDataReply {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sized_ioctl_descriptor_uses_selected_abi_size() {
+        let params = [0u8; ALLOC_DEVICE_PARAM_SIZE_595 as usize];
+        let descriptor = create_ioctl_params_sized(
+            NvKmsIoctlCommand::AllocDevice,
+            &params,
+            ALLOC_DEVICE_PARAM_SIZE_610,
+        );
+
+        assert_eq!(descriptor.cmd, NvKmsIoctlCommand::AllocDevice as NvU32);
+        assert_eq!(descriptor.size, ALLOC_DEVICE_PARAM_SIZE_610);
+        assert_eq!(descriptor.address, &params as *const _ as NvU64);
+    }
+
+    #[test]
+    #[should_panic(expected = "NVKMS paramSize exceeds its Rust backing buffer")]
+    fn sized_ioctl_descriptor_rejects_an_undersized_backing_buffer() {
+        let params = [0u8; ALLOC_DEVICE_PARAM_SIZE_595 as usize];
+        let oversized = params.len() as NvU32 + 1;
+        let _ = create_ioctl_params_sized(NvKmsIoctlCommand::AllocDevice, &params, oversized);
+    }
+
+    #[test]
+    fn attribute_type_discriminants_match_the_nvkms_abi() {
+        assert_eq!(NvKmsAttributeType::Integer as NvU32, 0);
+        assert_eq!(NvKmsAttributeType::Boolean as NvU32, 1);
+        assert_eq!(NvKmsAttributeType::IntBits as NvU32, 2);
+        assert_eq!(NvKmsAttributeType::Range as NvU32, 3);
+        assert_eq!(NvKmsAttributeType::Bitmask as NvU32, 4);
+        assert_eq!(NvKmsAttributeType::DpyId as NvU32, 5);
+        assert_eq!(NvKmsAttributeType::DpyIdList as NvU32, 6);
+    }
+}

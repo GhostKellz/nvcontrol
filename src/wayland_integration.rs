@@ -4,6 +4,62 @@
 use crate::{NvControlError, NvResult};
 use std::process::Command;
 
+#[derive(Debug, PartialEq)]
+struct CosmicCurrentMode {
+    width: u32,
+    height: u32,
+    refresh: String,
+}
+
+fn strip_ansi(input: &str) -> String {
+    let mut output = String::with_capacity(input.len());
+    let mut chars = input.chars();
+    while let Some(character) = chars.next() {
+        if character == '\u{1b}' && chars.next() == Some('[') {
+            for sequence in chars.by_ref() {
+                if sequence.is_ascii_alphabetic() {
+                    break;
+                }
+            }
+        } else {
+            output.push(character);
+        }
+    }
+    output
+}
+
+fn parse_cosmic_current_mode(output: &str, display: &str) -> Option<CosmicCurrentMode> {
+    let clean = strip_ansi(output);
+    let mut in_display = false;
+
+    for line in clean.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if !line.starts_with(char::is_whitespace) {
+            in_display = trimmed
+                .strip_prefix(display)
+                .is_some_and(|suffix| suffix.starts_with(char::is_whitespace));
+            continue;
+        }
+        if !in_display || !trimmed.contains("(current)") {
+            continue;
+        }
+
+        let (dimensions, remainder) = trimmed.split_once('@')?;
+        let (width, height) = dimensions.trim().split_once('x')?;
+        let refresh = remainder.split_whitespace().next()?.to_string();
+        return Some(CosmicCurrentMode {
+            width: width.trim().parse().ok()?,
+            height: height.trim().parse().ok()?,
+            refresh,
+        });
+    }
+
+    None
+}
+
 /// Supported Wayland compositors
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WaylandCompositor {
@@ -317,6 +373,18 @@ impl VrrController {
         }
     }
 
+    /// Set VRR for a display when the compositor exposes a symmetric control.
+    pub fn set_vrr(&self, display: &str, enabled: bool) -> NvResult<()> {
+        match self.compositor {
+            WaylandCompositor::Cosmic => self.set_vrr_cosmic(display, enabled),
+            _ if enabled => self.enable_vrr(display),
+            _ => Err(NvControlError::UnsupportedFeature(format!(
+                "Disabling VRR is not implemented for {}",
+                self.compositor.name()
+            ))),
+        }
+    }
+
     fn enable_vrr_kde(&self, display: &str) -> NvResult<()> {
         // KDE Plasma 6+ has native VRR support
         let output = Command::new("kscreen-doctor")
@@ -390,25 +458,57 @@ impl VrrController {
 
     /// COSMIC (Pop!_OS) VRR control via cosmic-randr
     fn enable_vrr_cosmic(&self, display: &str) -> NvResult<()> {
-        // Try cosmic-randr first (Pop!_OS COSMIC desktop)
+        self.set_vrr_cosmic(display, true)
+    }
+
+    fn set_vrr_cosmic(&self, display: &str, enabled: bool) -> NvResult<()> {
+        let list = Command::new("cosmic-randr")
+            .arg("list")
+            .output()
+            .map_err(|error| {
+                NvControlError::RuntimeError(format!(
+                    "Failed to query COSMIC outputs with cosmic-randr: {error}"
+                ))
+            })?;
+        if !list.status.success() {
+            return Err(NvControlError::RuntimeError(
+                "cosmic-randr could not query the current output mode".to_string(),
+            ));
+        }
+
+        let mode = parse_cosmic_current_mode(&String::from_utf8_lossy(&list.stdout), display)
+            .ok_or_else(|| {
+                NvControlError::RuntimeError(format!(
+                    "Could not find the current COSMIC mode for {display}"
+                ))
+            })?;
+
         let output = Command::new("cosmic-randr")
-            .args(&["output", display, "vrr", "on"])
+            .args([
+                "mode",
+                display,
+                &mode.width.to_string(),
+                &mode.height.to_string(),
+                "--refresh",
+                &mode.refresh,
+                "--adaptive-sync",
+                if enabled { "automatic" } else { "false" },
+            ])
             .output();
 
         match output {
             Ok(out) if out.status.success() => {
-                println!("✓ VRR enabled for {} (COSMIC)", display);
+                println!(
+                    "✓ VRR {} for {} (COSMIC)",
+                    if enabled { "enabled" } else { "disabled" },
+                    display
+                );
                 Ok(())
             }
-            _ => {
-                // Fall back to DRM/kernel-level VRR if cosmic-randr unavailable
-                // This uses /sys/class/drm for direct control
-                println!("⚠ cosmic-randr not available, trying DRM interface");
-                Err(NvControlError::RuntimeError(
-                    "COSMIC VRR requires cosmic-randr. Install it or use cosmic-settings."
-                        .to_string(),
-                ))
-            }
+            _ => Err(NvControlError::RuntimeError(
+                "cosmic-randr failed to set adaptive sync while preserving the current mode"
+                    .to_string(),
+            )),
         }
     }
 }
@@ -530,5 +630,31 @@ mod tests {
     fn test_wayland_info() {
         let info = WaylandInfo::detect();
         info.print_info();
+    }
+
+    #[test]
+    fn parses_current_cosmic_mode_for_the_requested_output() {
+        let output = "Virtual-1 (enabled)\n  Modes:\n    1280x800 @ 74.994 Hz (current) (preferred)\nDP-2 (enabled)\n  Modes:\n    2560x1440 @ 59.951 Hz (current)\n";
+        assert_eq!(
+            parse_cosmic_current_mode(output, "DP-2"),
+            Some(CosmicCurrentMode {
+                width: 2560,
+                height: 1440,
+                refresh: "59.951".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn cosmic_mode_parser_handles_ansi_output() {
+        let output = "\u{1b}[1mDP-2\u{1b}[0m \u{1b}[32m(enabled)\u{1b}[0m\n  Adaptive Sync: \u{1b}[32mautomatic\u{1b}[0m\n\n  Modes:\n    \u{1b}[35m2560x1440\u{1b}[0m @ \u{1b}[36m 59.951 Hz\u{1b}[0m\u{1b}[35m (current)\u{1b}[0m\u{1b}[32m (preferred)\u{1b}[0m\n";
+        assert_eq!(
+            parse_cosmic_current_mode(output, "DP-2"),
+            Some(CosmicCurrentMode {
+                width: 2560,
+                height: 1440,
+                refresh: "59.951".to_string(),
+            })
+        );
     }
 }

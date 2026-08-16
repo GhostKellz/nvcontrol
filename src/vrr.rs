@@ -27,11 +27,12 @@ impl Default for VrrSettings {
 #[derive(Debug, Clone)]
 pub struct DisplayVrrCapability {
     pub display_name: String,
-    pub supports_vrr: bool,
-    pub supports_gsync: bool,
-    pub supports_freesync: bool,
-    pub min_refresh: u32,
-    pub max_refresh: u32,
+    pub supports_vrr: Option<bool>,
+    pub supports_gsync: Option<bool>,
+    pub supports_freesync: Option<bool>,
+    pub min_refresh: Option<u32>,
+    pub max_refresh: Option<u32>,
+    pub max_mode_refresh: Option<u32>,
     pub current_settings: VrrSettings,
 }
 
@@ -94,11 +95,12 @@ pub fn detect_vrr_displays_with_backend(
                     if let Some(name) = line.split_whitespace().next() {
                         displays.push(DisplayVrrCapability {
                             display_name: name.to_string(),
-                            supports_vrr: true,
-                            supports_gsync: name.starts_with("DP-"),
-                            supports_freesync: true,
-                            min_refresh: 48,
-                            max_refresh: 144,
+                            supports_vrr: None,
+                            supports_gsync: None,
+                            supports_freesync: None,
+                            min_refresh: None,
+                            max_refresh: None,
+                            max_mode_refresh: None,
                             current_settings: VrrSettings::default(),
                         });
                     }
@@ -156,27 +158,25 @@ fn parse_kscreen_vrr_info(json_str: &str) -> NvResult<Vec<DisplayVrrCapability>>
                 if let Some(modes) = output.get("modes").and_then(|m| m.as_array()) {
                     for mode in modes {
                         if let Some(rate) = mode.get("refreshRate").and_then(|r| r.as_f64()) {
-                            max_refresh = max_refresh.max(rate as u32);
+                            max_refresh = max_refresh.max(rate.round() as u32);
                         }
                     }
                 }
 
-                // G-Sync compatible displays support VRR via NVIDIA
-                let supports_gsync = display_name.starts_with("DP-"); // DP typically supports G-Sync
-
                 displays.push(DisplayVrrCapability {
                     display_name,
-                    supports_vrr: true, // If connected via DP/HDMI 2.1, assume VRR capable
-                    supports_gsync,
-                    supports_freesync: true, // Most modern displays support FreeSync
-                    min_refresh: 48,
-                    max_refresh,
+                    supports_vrr: output.get("vrrPolicy").map(|_| true),
+                    supports_gsync: None,
+                    supports_freesync: None,
+                    min_refresh: None,
+                    max_refresh: None,
+                    max_mode_refresh: Some(max_refresh),
                     current_settings: VrrSettings {
                         enabled: vrr_enabled,
                         min_refresh_rate: 48,
                         max_refresh_rate: max_refresh,
-                        adaptive_sync: vrr_enabled,
-                        low_framerate_compensation: true,
+                        adaptive_sync: vrr_policy == 2,
+                        low_framerate_compensation: false,
                     },
                 });
             }
@@ -201,11 +201,12 @@ fn detect_vrr_gnome_with_backend(
 
     Ok(vec![DisplayVrrCapability {
         display_name: "Primary".to_string(),
-        supports_vrr: vrr_enabled,
-        supports_gsync: false,
-        supports_freesync: vrr_enabled,
-        min_refresh: 48,
-        max_refresh: 144,
+        supports_vrr: None,
+        supports_gsync: None,
+        supports_freesync: None,
+        min_refresh: None,
+        max_refresh: None,
+        max_mode_refresh: None,
         current_settings: VrrSettings {
             enabled: vrr_enabled,
             ..VrrSettings::default()
@@ -256,7 +257,8 @@ fn parse_hyprland_vrr_info(json_str: &str) -> NvResult<Vec<DisplayVrrCapability>
             let refresh_rate = monitor
                 .get("refreshRate")
                 .and_then(|r| r.as_f64())
-                .unwrap_or(60.0) as u32;
+                .unwrap_or(60.0)
+                .round() as u32;
 
             // Get available modes for max refresh
             let mut max_refresh = refresh_rate;
@@ -266,29 +268,27 @@ fn parse_hyprland_vrr_info(json_str: &str) -> NvResult<Vec<DisplayVrrCapability>
                         // Format: "2560x1440@165.00Hz"
                         if let Some(hz_part) = mode_str.split('@').nth(1) {
                             if let Ok(hz) = hz_part.trim_end_matches("Hz").parse::<f64>() {
-                                max_refresh = max_refresh.max(hz as u32);
+                                max_refresh = max_refresh.max(hz.round() as u32);
                             }
                         }
                     }
                 }
             }
 
-            // G-Sync typically on DisplayPort
-            let supports_gsync = display_name.starts_with("DP-");
-
             displays.push(DisplayVrrCapability {
                 display_name,
-                supports_vrr: true, // If Hyprland reports it, assume capable
-                supports_gsync,
-                supports_freesync: true,
-                min_refresh: 48,
-                max_refresh,
+                supports_vrr: monitor.get("vrr").map(|_| true),
+                supports_gsync: None,
+                supports_freesync: None,
+                min_refresh: None,
+                max_refresh: None,
+                max_mode_refresh: Some(max_refresh),
                 current_settings: VrrSettings {
                     enabled: vrr_enabled,
                     min_refresh_rate: 48,
                     max_refresh_rate: max_refresh,
                     adaptive_sync: vrr_enabled,
-                    low_framerate_compensation: true,
+                    low_framerate_compensation: false,
                 },
             });
         }
@@ -309,14 +309,22 @@ fn detect_vrr_sway_with_backend(
 
 fn parse_sway_vrr_info(json_str: &str) -> NvResult<Vec<DisplayVrrCapability>> {
     // Parse Sway output JSON for VRR capabilities
+    let adaptive_sync_reported = json_str.contains("\"adaptive_sync_status\"");
+    let adaptive_sync_enabled = json_str.contains("\"adaptive_sync_status\":\"enabled\"");
     Ok(vec![DisplayVrrCapability {
         display_name: "DP-1".to_string(),
-        supports_vrr: json_str.contains("\"adaptive_sync_status\":\"enabled\""),
-        supports_gsync: false,
-        supports_freesync: true,
-        min_refresh: 48,
-        max_refresh: 144,
-        current_settings: VrrSettings::default(),
+        supports_vrr: adaptive_sync_reported.then_some(true),
+        supports_gsync: None,
+        supports_freesync: None,
+        min_refresh: None,
+        max_refresh: None,
+        max_mode_refresh: None,
+        current_settings: VrrSettings {
+            enabled: adaptive_sync_enabled,
+            adaptive_sync: adaptive_sync_enabled,
+            low_framerate_compensation: false,
+            ..VrrSettings::default()
+        },
     }])
 }
 
@@ -347,11 +355,12 @@ fn parse_xrandr_vrr_info(xrandr_output: &str) -> NvResult<Vec<DisplayVrrCapabili
             if let Some(name) = &current_display {
                 displays.push(DisplayVrrCapability {
                     display_name: name.clone(),
-                    supports_vrr: true,
-                    supports_gsync: line.contains("G-SYNC"),
-                    supports_freesync: line.contains("FreeSync"),
-                    min_refresh: 48,
-                    max_refresh: 144,
+                    supports_vrr: Some(true),
+                    supports_gsync: line.contains("G-SYNC").then_some(true),
+                    supports_freesync: line.contains("FreeSync").then_some(true),
+                    min_refresh: None,
+                    max_refresh: None,
+                    max_mode_refresh: None,
                     current_settings: VrrSettings::default(),
                 });
             }
@@ -662,6 +671,35 @@ mod tests {
         assert!(!settings.enabled);
         assert_eq!(settings.min_refresh_rate, 48);
         assert_eq!(settings.max_refresh_rate, 144);
+    }
+
+    #[test]
+    fn kscreen_reports_policy_and_modes_without_inventing_panel_capabilities() {
+        let json = r#"{
+            "outputs": [{
+                "name": "DP-3",
+                "connected": true,
+                "vrrPolicy": 2,
+                "modes": [
+                    {"refreshRate": 59.95},
+                    {"refreshRate": 359.98}
+                ]
+            }]
+        }"#;
+
+        let displays = parse_kscreen_vrr_info(json).unwrap();
+        assert_eq!(displays.len(), 1);
+        let display = &displays[0];
+        assert_eq!(display.display_name, "DP-3");
+        assert_eq!(display.supports_vrr, Some(true));
+        assert_eq!(display.supports_gsync, None);
+        assert_eq!(display.supports_freesync, None);
+        assert_eq!(display.min_refresh, None);
+        assert_eq!(display.max_refresh, None);
+        assert_eq!(display.max_mode_refresh, Some(360));
+        assert!(display.current_settings.enabled);
+        assert!(display.current_settings.adaptive_sync);
+        assert!(!display.current_settings.low_framerate_compensation);
     }
 
     #[test]

@@ -1,264 +1,79 @@
 # VRR / G-SYNC Control
 
-Variable Refresh Rate (VRR) and G-SYNC control for smooth, tear-free gaming on Linux.
-
-## Overview
-
-nvcontrol provides unified VRR/G-SYNC management across all major Wayland compositors and X11. This includes:
-
-- **G-SYNC**: NVIDIA's proprietary VRR technology (DisplayPort)
-- **G-SYNC Compatible**: FreeSync monitors certified by NVIDIA
-- **FreeSync/Adaptive Sync**: AMD's open VRR standard (works with NVIDIA 10xx+)
-
-## Quick Start
-
-```bash
-# Check VRR status for all displays
-nvctl vrr status
-
-# Enable VRR on your primary display
-nvctl vrr enable DP-1
-
-# Disable VRR
-nvctl vrr disable DP-1
-
-# Configure custom refresh range
-nvctl vrr configure DP-1 --min-refresh 48 --max-refresh 165
-```
+nvcontrol reads and changes compositor variable-refresh policy where the active
+desktop exposes a supported command. It deliberately separates observed state
+from assumptions about the monitor.
 
 ## Commands
 
-### `nvctl vrr status`
-
-Show comprehensive VRR status for all connected displays.
-
-**Output includes:**
-- Display name and connection type
-- VRR/G-SYNC/FreeSync support
-- Current enabled state
-- Refresh rate range (min/max Hz)
-- Compositor-specific VRR policy
-
-**Example output:**
-```
-VRR Status:
-══════════════════════════════════════════════════════════════
-  Display      │ VRR     │ G-SYNC  │ Range     │ Status
-───────────────┼─────────┼─────────┼───────────┼────────────
-  DP-1         │ ✅      │ ✅      │ 48-165Hz  │ Enabled (Auto)
-  HDMI-A-1     │ ✅      │ ❌      │ 48-120Hz  │ Disabled
-══════════════════════════════════════════════════════════════
-```
-
-### `nvctl vrr enable <display>`
-
-Enable VRR for a specific display.
-
 ```bash
-nvctl vrr enable DP-1        # DisplayPort 1
-nvctl vrr enable HDMI-A-1    # HDMI port 1
-nvctl vrr enable DP-2        # DisplayPort 2
-```
-
-### `nvctl vrr disable <display>`
-
-Disable VRR and use fixed refresh rate.
-
-```bash
+nvctl vrr status
+nvctl vrr enable DP-1
 nvctl vrr disable DP-1
+nvctl vrr configure DP-1 --min-refresh 48 --max-refresh 240
 ```
 
-### `nvctl vrr configure <display> [OPTIONS]`
+`status` can report:
 
-Advanced VRR configuration with custom settings.
+- the compositor's current enabled/disabled policy;
+- VRR capability when the compositor explicitly exposes it;
+- the highest advertised display mode;
+- G-SYNC, FreeSync, and VRR range only when a backend actually reports them.
 
-**Options:**
-- `--min-refresh <hz>` - Minimum refresh rate (default: 48)
-- `--max-refresh <hz>` - Maximum refresh rate (display max)
-- `--adaptive-sync` - Enable adaptive sync mode
-- `--lfc` - Enable Low Framerate Compensation
+DisplayPort, a high refresh mode, or an enabled policy is not proof of G-SYNC
+certification, FreeSync support, Low Framerate Compensation, or a 48 Hz minimum.
+Unknown values are shown as `not reported`.
 
-**Examples:**
-```bash
-# Competitive gaming (high refresh, disable LFC for lowest latency)
-nvctl vrr configure DP-1 --min-refresh 120 --max-refresh 240
+The `configure` minimum and maximum are nvcontrol settings; current compositor
+helpers generally toggle adaptive-sync policy rather than rewriting a monitor's
+EDID range. There are no `--adaptive-sync` or `--lfc` flags on this command.
 
-# Cinematic gaming (wide range with LFC)
-nvctl vrr configure DP-1 --min-refresh 24 --max-refresh 165 --lfc
+## Compositor routes
 
-# Balance (typical gaming setup)
-nvctl vrr configure DP-1 --min-refresh 48 --max-refresh 144
-```
+| Desktop | Query/apply route | Notes |
+|---|---|---|
+| KDE Plasma | `kscreen-doctor` | Policy 0 never, 1 always, 2 automatic |
+| GNOME | Mutter experimental feature | Session-wide toggle; per-output facts may remain unreported |
+| Hyprland | `hyprctl` | Uses compositor monitor state |
+| Sway | `swaymsg` | Uses output adaptive-sync control |
+| COSMIC | `cosmic-randr` through `nvctl monitors set-vrr` | Preserves current mode and changes adaptive-sync only |
+| X11 | `xrandr`/`nvidia-settings` fallback | Legacy session path |
 
-## Compositor Support
-
-nvcontrol automatically detects and configures VRR for your compositor:
-
-### KDE Plasma 6+
-
-Uses `kscreen-doctor` for VRR policy management.
-
-**VRR Policies:**
-- `0` = Never (VRR disabled)
-- `1` = Always (VRR always active)
-- `2` = Automatic (VRR in fullscreen apps)
+### KDE
 
 ```bash
-# Check KDE VRR settings
-kscreen-doctor -j | grep vrrPolicy
-
-# nvcontrol handles this automatically
-nvctl vrr enable DP-1  # Sets policy to Automatic (2)
+kscreen-doctor -j
+nvctl vrr enable DP-2
 ```
 
-### GNOME 45+
+KDE's automatic policy enables VRR when compositor conditions are met; it does
+not mean VRR is active for every frame at the instant status is queried.
 
-Uses mutter experimental features.
+### COSMIC
+
+Use the multi-monitor command for the tested COSMIC path:
 
 ```bash
-# Enable VRR in GNOME
-nvctl vrr enable DP-1
-
-# Equivalent gsettings command
-gsettings set org.gnome.mutter experimental-features "['variable-refresh-rate']"
+cosmic-randr
+nvctl monitors set-vrr DP-2 --enabled
 ```
 
-### Hyprland
-
-Direct `hyprctl` integration with monitor configuration.
-
-```bash
-# Enable VRR
-nvctl vrr enable DP-1
-
-# Or configure in hyprland.conf:
-# monitor=DP-1,2560x1440@165,auto,1,vrr,1
-```
-
-**Hyprland VRR values:**
-- `0` = Off
-- `1` = On
-- `2` = Fullscreen only
-
-### Sway
-
-Uses `swaymsg` for adaptive sync control.
-
-```bash
-# Enable adaptive sync
-nvctl vrr enable DP-1
-
-# Equivalent swaymsg command
-swaymsg output DP-1 adaptive_sync enable
-```
-
-### X11 (Legacy)
-
-Falls back to `xrandr` and `nvidia-settings` for G-SYNC.
-
-```bash
-# Enable G-SYNC via nvidia-settings
-nvidia-settings -a "[gpu:0]/GPUGSyncAllowed=1"
-```
-
-## Hardware Requirements
-
-### G-SYNC Displays
-
-- Native G-SYNC module (premium monitors)
-- DisplayPort connection required
-- NVIDIA GPU GTX 650 Ti or newer
-
-### G-SYNC Compatible (FreeSync)
-
-- FreeSync/Adaptive Sync certified monitor
-- DisplayPort 1.2a+ or HDMI 2.1
-- NVIDIA GPU GTX 10xx series or newer
-- Driver 417.71 or newer
-
-### Refresh Rate Ranges
-
-| Monitor Type | Typical Range |
-|--------------|---------------|
-| Budget 1080p | 48-144Hz |
-| Gaming 1440p | 48-165Hz |
-| High-end 4K | 48-144Hz |
-| Esports | 48-240Hz+ |
-
-## Per-Application Settings
-
-nvcontrol supports per-application VRR profiles:
-
-```bash
-# Steam games - full VRR support
-# CS2 - high refresh, no LFC for competitive
-# Firefox - VRR disabled (power saving)
-```
-
-Configure in `~/.config/nvcontrol/vrr_profiles.toml`:
-
-```toml
-[steam]
-enabled = true
-min_refresh_rate = 48
-max_refresh_rate = 165
-adaptive_sync = true
-lfc = true
-
-[cs2]
-enabled = true
-min_refresh_rate = 60
-max_refresh_rate = 240
-adaptive_sync = true
-lfc = false  # Competitive preference
-
-[firefox]
-enabled = false  # Save power during browsing
-```
+The controller parses the current COSMIC resolution and refresh rate and repeats
+them when applying `--adaptive-sync automatic`. Calling the same command without
+`--enabled` selects the disabled state. v0.8.12 validated that a no-change apply
+keeps the active mode intact on Pop!_OS 24.04.
 
 ## Troubleshooting
 
-### VRR Not Working
+1. Run `nvctl vrr status` and the compositor's native query command.
+2. Confirm the connector name from the active session; names vary by compositor
+   and passthrough guests do not describe host monitor ownership.
+3. Treat `not reported` as missing evidence, not as unsupported hardware.
+4. If VRR causes flicker or TTY-switch crashes, disable it through nvcontrol or
+   the compositor before changing driver/module settings.
 
-1. **Check monitor support:**
-   ```bash
-   nvctl vrr status
-   ```
+## Related documentation
 
-2. **Verify DisplayPort connection:**
-   - G-SYNC requires DisplayPort
-   - HDMI 2.1 supports VRR on newer cards
-
-3. **Check NVIDIA driver settings:**
-   ```bash
-   nvidia-settings -q GPUGSyncAllowed
-   ```
-
-4. **Enable G-SYNC Compatible in nvidia-settings:**
-   - Open nvidia-settings
-   - X Server Display Configuration
-   - Enable "Allow G-SYNC Compatible" for your monitor
-
-### Flickering Issues
-
-- Try adjusting min refresh rate higher
-- Disable Low Framerate Compensation
-- Check for driver updates
-
-### Black Screen After Enable
-
-```bash
-# Reset VRR settings
-nvctl vrr disable DP-1
-
-# Or reset via compositor settings
-kscreen-doctor output.DP-1.vrrpolicy.0
-```
-
-## Related Documentation
-
-- [HDR Control](hdr.md) - High Dynamic Range settings
-- [Display Commands](../commands/gpu.md) - Display management
-- [Gaming Profiles](../commands/gaming.md) - Game-specific optimizations
-
----
+- [Display API](../api/display.md)
+- [Pop!_OS COSMIC](../distros/popos-cosmic.md)
+- [NVIDIA driver compatibility](../drivers/nvidia-driver.md)

@@ -47,7 +47,7 @@ nvcontrol uses a capability-based approach:
 | 0%         | -1024     | Grayscale |
 | 50%        | -512      | Desaturated |
 | 100%       | 0         | Default (no effect) |
-| 150%       | 512       | Enhanced colors (+50%) |
+| 150%       | 511       | Enhanced colors (+50%) |
 | 200%       | 1023      | Maximum saturation |
 
 **Formula:**
@@ -80,7 +80,7 @@ nvctl display vibrance info
 ```
 🌈 Pure Rust Digital Vibrance Information:
 ══════════════════════════════════════════════════
-  Driver Version: "610.43.02"
+  Driver Version: "610.57.04"
   NVIDIA Open Drivers: ✅ Yes
 
 💡 Features:
@@ -92,7 +92,7 @@ nvctl display vibrance info
 🖥️ Supported Displays: 2
 
 🔧 Requirements:
-  • NVIDIA Open Drivers 610+ recommended
+  • NVIDIA Open Drivers 595+ (610+ recommended)
   • nvidia_drm.modeset=1 kernel parameter
   • /dev/nvidia-modeset access (or run as root)
 ```
@@ -139,6 +139,7 @@ alias vibe-gaming='nvctl vibrance 150'
 For the exact nvcontrol build to use with each NVIDIA driver branch, see [`../drivers/nvidia-driver.md`](../drivers/nvidia-driver.md).
 
 - NVIDIA Open 610+ is the current recommended path
+- NVIDIA Open 595 is supported by runtime selection of its older allocation layout
 - Proprietary driver support depends on whether the loaded stack exposes the required interfaces
 - Legacy branches should be checked against [`../drivers/nvidia-driver.md`](../drivers/nvidia-driver.md)
 - Nouveau is not supported because it lacks the NVIDIA vibrance API

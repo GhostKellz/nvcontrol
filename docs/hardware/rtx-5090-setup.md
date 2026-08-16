@@ -623,25 +623,24 @@ sudo reboot
 
 ### Power Detector+
 
-The ROG Astral RTX 5090 Power Detector+ path is implemented and tested in nvcontrol. It is read-only and safe: nvcontrol uses I2C reads to inspect the 12V-2x6 rail monitor and never writes to the device.
+The ROG Astral RTX 5090 Power Detector+ path is implemented and tested in nvcontrol. It prefers standard hwmon sensors and otherwise performs the documented read-only SMBus transaction for the 12V-2x6 monitor.
 
 ```mermaid
 sequenceDiagram
     participant User
     participant Nvctl as nvctl asus power
     participant Sysfs as /sys/bus/pci/devices
-    participant I2C as i2cget
+    participant Source as hwmon or native SMBus
     participant Monitor as Astral power monitor 0x2b
 
     User->>Nvctl: run power check
     Nvctl->>Sysfs: find NVIDIA ASUS subsystem 1043:89e3
-    Nvctl->>Sysfs: enumerate GPU i2c-* buses
-    Nvctl->>I2C: probe 0x2b register 0x60
-    I2C->>Monitor: read word
-    Monitor-->>I2C: raw rail value
-    Nvctl->>I2C: read 0x60,0x62,0x64,0x66,0x68,0x6A
-    I2C-->>Nvctl: six raw rail values
-    Nvctl-->>User: health, rail amps, connector watts
+    Nvctl->>Sysfs: find astral12vhpwr or NVIDIA adapter index 1
+    Nvctl->>Source: read six voltage/current pairs
+    Source->>Monitor: SMBus block read at 0x80 when hwmon is absent
+    Monitor-->>Source: 24-byte frame
+    Source-->>Nvctl: measured pin millivolts and milliamps
+    Nvctl-->>User: health, pin volts/amps, connector watts
 ```
 
 ```bash

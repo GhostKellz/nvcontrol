@@ -3,7 +3,7 @@
 # Premier platform: Arch Linux
 
 pkgname=nvcontrol
-pkgver=0.8.11
+pkgver=0.8.12
 pkgrel=1
 pkgdesc="Modern NVIDIA Settings Manager for Linux + Wayland - Digital Vibrance, VRR, HDR, Overclocking"
 arch=('x86_64')
@@ -17,6 +17,7 @@ depends=(
     'freetype2'             # Font rendering
 )
 makedepends=(
+    'rust'                  # Includes cargo, rustc, and rustfmt on Arch
     'git'                   # Version control
     'clang'                 # For bindgen
     'pkg-config'            # Build configuration
@@ -67,7 +68,7 @@ check() {
     export RUSTUP_TOOLCHAIN=stable
 
     # Run library tests (skip hardware-dependent tests)
-    cargo test --release --lib -- --skip hardware --skip nvml || true
+    cargo test --release --lib -- --skip hardware --skip nvml
 }
 
 package() {
@@ -88,7 +89,7 @@ Exec=nvcontrol
 Icon=nvcontrol
 Terminal=false
 Type=Application
-Categories=Settings;HardwareSettings;System;
+Categories=Settings;HardwareSettings;
 Keywords=nvidia;gpu;graphics;gaming;vibrance;vrr;hdr;
 StartupWMClass=nvcontrol
 EOF

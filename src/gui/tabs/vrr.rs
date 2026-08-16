@@ -54,6 +54,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                             d.current_settings.enabled,
                             d.min_refresh,
                             d.max_refresh,
+                            d.max_mode_refresh,
                             d.supports_gsync,
                             d.supports_freesync,
                         )
@@ -68,6 +69,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                     vrr_enabled,
                     min_refresh,
                     max_refresh,
+                    max_mode_refresh,
                     supports_gsync,
                     supports_freesync,
                 ) in &display_info
@@ -82,30 +84,39 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                                     egui::RichText::new(format!("📺 {}", display_name)).strong(),
                                 );
 
-                                if *supports_vrr {
+                                if *supports_vrr == Some(true) {
                                     let mut enabled = *vrr_enabled;
                                     if ui.checkbox(&mut enabled, "VRR Enabled").changed() {
                                         vrr_changes.push((display_name.clone(), enabled));
                                     }
-                                } else {
+                                } else if *supports_vrr == Some(false) {
                                     ui.colored_label(colors.red.to_egui(), "❌ VRR Not Supported");
+                                } else {
+                                    ui.label(
+                                        egui::RichText::new("VRR capability not reported").weak(),
+                                    );
                                 }
                             });
 
                             ui.horizontal(|ui| {
-                                ui.label("Refresh Range:");
-                                ui.label(
-                                    egui::RichText::new(format!(
-                                        "{}-{}Hz",
-                                        min_refresh, max_refresh
-                                    ))
-                                    .color(colors.cyan.to_egui()),
-                                );
+                                if let (Some(min), Some(max)) = (min_refresh, max_refresh) {
+                                    ui.label("Reported VRR range:");
+                                    ui.label(
+                                        egui::RichText::new(format!("{}-{}Hz", min, max))
+                                            .color(colors.cyan.to_egui()),
+                                    );
+                                } else {
+                                    ui.label("VRR range: not reported by compositor");
+                                }
 
-                                if *supports_gsync {
+                                if let Some(max_mode) = max_mode_refresh {
+                                    ui.label(format!("Maximum mode: {}Hz", max_mode));
+                                }
+
+                                if *supports_gsync == Some(true) {
                                     ui.colored_label(colors.green.to_egui(), "✅ G-Sync");
                                 }
-                                if *supports_freesync {
+                                if *supports_freesync == Some(true) {
                                     ui.colored_label(colors.green.to_egui(), "✅ FreeSync");
                                 }
                             });
@@ -128,16 +139,14 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
         .title("Advanced VRR Settings")
         .icon(icons::SETTINGS)
         .show(ui, |ui| {
-            // These are display-wide settings
-            ui.horizontal(|ui| {
-                ui.label("Low Framerate Compensation (LFC):");
-                ui.label(egui::RichText::new("Enabled").color(colors.green.to_egui()));
-            });
-
-            ui.horizontal(|ui| {
-                ui.label("Adaptive Sync Mode:");
-                ui.label(egui::RichText::new("Active").color(colors.green.to_egui()));
-            });
+            ui.label("VRR policy is reported and configured per output above.");
+            ui.label(
+                egui::RichText::new(
+                    "Panel VRR range, G-SYNC/FreeSync certification, and LFC state are not reported by this compositor.",
+                )
+                .small()
+                .weak(),
+            );
 
             ui.add_space(8.0);
 
@@ -147,7 +156,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                     let displays: Vec<_> = state
                         .vrr_displays
                         .iter()
-                        .filter(|d| d.supports_vrr)
+                        .filter(|d| d.supports_vrr == Some(true))
                         .map(|d| d.display_name.clone())
                         .collect();
                     for display_name in displays {
@@ -159,7 +168,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                     let displays: Vec<_> = state
                         .vrr_displays
                         .iter()
-                        .filter(|d| d.supports_vrr)
+                        .filter(|d| d.supports_vrr == Some(true))
                         .map(|d| d.display_name.clone())
                         .collect();
                     for display_name in displays {

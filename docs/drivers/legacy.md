@@ -1,11 +1,12 @@
-# Legacy And Transitional Driver Support (595 and Earlier)
+# Legacy Driver Support (590 And Earlier)
 
-If you're running NVIDIA driver **595 or earlier**, do not assume the current `main` branch is the right build.
+Current nvcontrol supports the known 595 and 610 `AllocDevice` layouts at
+runtime. This legacy guidance applies to driver 590 and earlier.
 
 Use [nvidia-driver.md](nvidia-driver.md) as the source of truth for branch-to-version mapping. This document only expands on the older-build path.
 
 - **590 and earlier**: use an older vibrance-compatible commit path. The documented fallback here is `v0.8.5`.
-- **595**: use the transitional compatibility builds, typically `v0.8.4` or `v0.8.5`.
+- **595**: use current nvcontrol with runtime NVKMS ABI selection.
 - **610+ open driver**: use the current `main` branch.
 
 ## Why?
@@ -15,14 +16,15 @@ Driver 595 introduced breaking changes to the NVKMS ioctl API:
 - SLI/Mosaic fields removed from NvKmsAllocDeviceRequest
 - ImageSharpening attributes removed
 
-These changes are **not backwards compatible**. The modern 610-targeted build should not be treated as the default choice for 595-and-earlier stacks.
+These changes are not ABI-compatible, so nvcontrol sends the branch-appropriate
+parameter size. Pre-595 support still requires an older layout and attribute table.
 
 ## Quick Reference
 
 | Driver Version | nvcontrol Version | Git Reference |
 |----------------|-------------------|---------------|
 | 610+ open driver | current `main` branch | latest |
-| 595 | `v0.8.4` or `v0.8.5` | transitional compatibility path |
+| 595 | current multi-ABI nvcontrol | runtime-selected 595 layout |
 | 560-590 | older vibrance-compatible build, commonly `v0.8.5` | `v0.8.5` tag or commit `2235bb3` |
 | < 560 | v0.8.5 | Same as above (untested) |
 
@@ -65,7 +67,7 @@ nvctl gpu info
 
 For older stacks, `v0.8.5` is the documented fallback build:
 - Digital vibrance works on 590 and earlier with the older compatible build path
-- 595 is a transitional branch; if one tag does not behave correctly on your system, test `v0.8.4` and `v0.8.5`
+- 595 native vibrance is supported by the current multi-ABI path
 - Image sharpening was available on 590-era drivers and removed in 595
 - All other features identical
 
@@ -83,9 +85,9 @@ When you upgrade to driver 610+ open:
 - `v0.8.5` is the first fallback to try
 
 **595 compatibility issues:**
-- Test `v0.8.4` and `v0.8.5`
-- Treat 595 as a transitional branch rather than the current baseline
+- Confirm `nvctl display vibrance get` reports the live value and driver range
+- Capture the exact driver version and `EPERM` stage in a support bundle
 
 **EPERM errors:**
-- Version mismatch between nvctl and driver
-- Use the correct version per the table above
+- Often an NVKMS parameter-size mismatch rather than a Unix permission error
+- Use current nvcontrol for 595/610; use the legacy build only for 590 and earlier

@@ -5,7 +5,7 @@
 use crate::NvResult;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Global application state
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -226,12 +226,16 @@ impl AppState {
     pub fn load() -> NvResult<Self> {
         let path = Self::state_file_path();
 
+        Self::load_from(&path)
+    }
+
+    fn load_from(path: &Path) -> NvResult<Self> {
         if !path.exists() {
             println!("📁 No state file found, using defaults");
             return Ok(Self::default());
         }
 
-        let contents = fs::read_to_string(&path).map_err(|e| {
+        let contents = fs::read_to_string(path).map_err(|e| {
             crate::NvControlError::ConfigError(format!("Failed to read state file: {}", e))
         })?;
 
@@ -247,11 +251,15 @@ impl AppState {
     pub fn save(&self) -> NvResult<()> {
         let path = Self::state_file_path();
 
+        self.save_to(&path)
+    }
+
+    fn save_to(&self, path: &Path) -> NvResult<()> {
         let json = serde_json::to_string_pretty(self).map_err(|e| {
             crate::NvControlError::ConfigError(format!("Failed to serialize state: {}", e))
         })?;
 
-        fs::write(&path, json).map_err(|e| {
+        fs::write(path, json).map_err(|e| {
             crate::NvControlError::ConfigError(format!("Failed to write state file: {}", e))
         })?;
 
@@ -379,12 +387,14 @@ mod tests {
     #[test]
     fn test_state_persistence() {
         let state = AppState::default();
+        let scratch = Path::new(env!("CARGO_MANIFEST_DIR")).join(".scratch");
+        fs::create_dir_all(&scratch).unwrap();
+        let directory = tempfile::tempdir_in(scratch).unwrap();
+        let path = directory.path().join("state.json");
 
-        // Save
-        assert!(state.save().is_ok());
+        assert!(state.save_to(&path).is_ok());
 
-        // Load
-        let loaded = AppState::load().unwrap();
+        let loaded = AppState::load_from(&path).unwrap();
         assert_eq!(loaded.version, state.version);
     }
 }

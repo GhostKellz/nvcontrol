@@ -82,10 +82,8 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                         ui.label(egui::RichText::new(format!("Error: {}", e)).small().weak());
                         ui.add_space(4.0);
                         ui.label("Requirements:");
-                        ui.label(egui::RichText::new("• NVIDIA open drivers 610+").small());
-                        ui.label(
-                            egui::RichText::new("• nvidia_drm.modeset=1 in kernel params").small(),
-                        );
+                        ui.label(egui::RichText::new("• Supported NVIDIA open driver").small());
+                        ui.label(egui::RichText::new("• /dev/nvidia-modeset access").small());
                         ui.label(
                             egui::RichText::new("• User in 'video' group or run as root").small(),
                         );
@@ -122,9 +120,10 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                                     let current_pct: i32 = controller
                                         .connectors
                                         .get(*connector_idx as usize)
-                                        .map(|c| {
-                                            controller.vibrance_to_percentage(c.current_vibrance)
-                                                as i32
+                                        .and_then(|c| {
+                                            c.current_vibrance.map(|value| {
+                                                controller.vibrance_to_percentage(value) as i32
+                                            })
                                         })
                                         .unwrap_or(100);
 

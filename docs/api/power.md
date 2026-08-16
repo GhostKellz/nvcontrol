@@ -1,131 +1,54 @@
-# Power Management API
+# Power API
 
-GPU power limit and profile management.
+nvcontrol has two separate power surfaces:
 
-## Functions
+- `power` changes NVML-backed board power policy;
+- `asus_power_detector` reads supported Astral/Matrix connector telemetry.
 
-### `set_power_limit(gpu_id: u32, watts: u32) -> Result<()>`
+Connector telemetry never changes the power limit or shuts down the host.
 
-Set GPU power limit.
+## Board power
 
-**Parameters**:
-- `gpu_id`: GPU index
-- `watts`: Power limit in watts
-
-**Example**:
 ```rust
 use nvcontrol::power;
 
-// Set 350W power limit
-power::set_power_limit(0, 350)?;
+let gpus = power::get_power_info()?;
+power::set_power_limit_percentage(90)?;
+power::set_power_profile("balanced")?;
 ```
 
-### `get_power_limit(gpu_id: u32) -> Result<PowerLimits>`
-
-Get current and maximum power limits.
-
-**Returns**: `PowerLimits` struct
-
-**Example**:
-```rust
-let limits = power::get_power_limit(0)?;
-println!("Current: {}W", limits.current);
-println!("Default: {}W", limits.default);
-println!("Max: {}W", limits.max);
-```
-
-### `set_power_mode(gpu_id: u32, mode: PowerMode) -> Result<()>`
-
-Set power management mode.
-
-**Modes**:
-- `PowerMode::MaxPerformance` - 115% power limit
-- `PowerMode::Balanced` - 100% power limit
-- `PowerMode::Quiet` - 85% power limit
-- `PowerMode::PowerSaver` - 70% power limit
-
-**Example**:
-```rust
-use nvcontrol::power::PowerMode;
-
-power::set_power_mode(0, PowerMode::Balanced)?;
-```
-
-## Structs
-
-### `PowerLimits`
-
-```rust
-pub struct PowerLimits {
-    pub current: u32,    // Current power limit in watts
-    pub default: u32,    // Default power limit
-    pub min: u32,        // Minimum power limit
-    pub max: u32,        // Maximum power limit
-}
-```
-
-### `PowerMode`
-
-```rust
-pub enum PowerMode {
-    MaxPerformance,   // 115% TDP
-    Balanced,         // 100% TDP
-    Quiet,            // 85% TDP
-    PowerSaver,       // 70% TDP
-    Custom(u32),      // Custom wattage
-}
-```
-
-## CLI Commands
-
-### `nvctl power limit --percentage <value>`
-
-Set power limit.
-
-```bash
-nvctl power limit --percentage 90
-
-# Output:
-# Power limit set to 90%
-```
-
-### `nvctl power profile --profile <mode>`
-
-Set power mode.
-
-```bash
-nvctl power profile --profile balanced
-nvctl power profile --profile quiet
-nvctl power profile --profile performance
-```
-
-### `nvctl power status`
-
-Display power information.
+The public module also provides persistence mode, clock-boost, power-saving,
+adaptive-management, custom-profile, monitoring, and automation helpers. These
+are mutating operations unless their documentation explicitly says otherwise;
+inspect current state and capture a profile before applying them.
 
 ```bash
 nvctl power status
-
-# Output:
-# Current: 350W
-# Default: 450W
-# Max: 600W
-# Mode: Balanced
+nvctl power limit --percentage 90
+nvctl power profile --profile balanced
 ```
 
-## Profiles
+## Astral 12V-2x6 telemetry
 
-```toml
-# ~/.config/nvcontrol/profiles/gaming.toml
-[power]
-mode = "MaxPerformance"
-limit = 450  # Watts
+```rust
+use nvcontrol::asus_power_detector::{AsusPowerDetector, PowerHistory};
 
-[thermal]
-target_temp = 75
+let detector = AsusPowerDetector::new("0000:01:00.0")?;
+let mut history = PowerHistory::new();
+let connector = detector.read_and_record(&mut history)?;
+println!("{:?} W via {}", connector.total_power_w, connector.source);
 ```
 
-Apply profile:
+`PowerConnectorStatus` contains the detected model, I2C bus, backend source,
+six `PowerRailReading` values, connector total, optional load-gated balance,
+warning state, health, and timestamp.
+
 ```bash
-nvctl config apply --input gaming
+nvctl asus detect
+nvctl asus power
+nvctl asus power --json
+nvctl asus power --watch --interval 1
 ```
+
+See [ASUS Power Monitor API](asus-power-monitor.md) and
+[Power Detector+](../hardware/power-detection.md).

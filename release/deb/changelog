@@ -1,3 +1,14 @@
+nvcontrol (0.8.12-1) unstable; urgency=medium
+
+  * Correct ASUS Astral 12V-2x6 telemetry and add hwmon integration
+  * Add per-pin voltage, current, power, balance, history, and health reporting
+  * Support native vibrance across the NVIDIA 595 and 610 NVKMS allocation ABIs
+  * Report descriptor-heap, H.265 decode, DRM color, and GeForce NOW capabilities
+  * Correct COSMIC VRR routing and remove inferred VRR certification/range claims
+  * Refresh v0.8.12 packaging, documentation, and compatible dependencies
+
+ -- CK Technology LLC <info@cktechx.com>  Sun, 16 Aug 2026 12:00:00 +0000
+
 nvcontrol (0.8.11-1) unstable; urgency=medium
 
   * Security: clear RUSTSEC-2026-0194/0195 (quick-xml), RUSTSEC-2026-0190

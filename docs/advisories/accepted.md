@@ -1,6 +1,6 @@
 # Accepted Advisories
 
-No RustSec security advisories are knowingly accepted for `nvcontrol v0.8.11`.
+No RustSec security advisories are knowingly accepted for `nvcontrol v0.8.12`.
 
 ## Accepted Non-Advisory Dependency Risk
 

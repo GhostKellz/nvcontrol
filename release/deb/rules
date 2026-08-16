@@ -33,7 +33,7 @@ override_dh_auto_install:
 
 override_dh_auto_test:
 	# Skip tests that require GPU hardware
-	cargo test --release --lib -- --skip hardware --skip nvml || true
+	cargo test --release --lib -- --skip hardware --skip nvml
 
 override_dh_auto_clean:
 	cargo clean || true

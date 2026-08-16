@@ -160,7 +160,7 @@ RGB: ASUS Aura ARGB
 
 ### Power Detector+ Implementation
 
-ROG Astral RTX 5090 Power Detector+ is supported and tested in nvcontrol. The implementation is read-only: it discovers the ASUS/NVIDIA PCI device, finds the GPU I2C bus, probes the Astral power monitor at `0x2b`, reads six 12V-2x6 rail registers, computes per-rail current and connector wattage, and reports health without writing to hardware.
+ROG Astral RTX 5090 Power Detector+ is supported and tested in nvcontrol. The implementation is read-only: it prefers the standard `astral12vhpwr` hwmon interface, then falls back to a native 24-byte SMBus read from `0x80` at address `0x2b`. It reports measured per-pin voltage, current and power without writing configuration data to the device.
 
 ```mermaid
 flowchart TD
@@ -168,27 +168,22 @@ flowchart TD
     pci --> ids["read subsystem IDs"]
     ids --> astral{"ASUS 1043:89e3?"}
     astral -->|no| unsupported["report unsupported or unknown ASUS model"]
-    astral -->|yes| i2c["find GPU i2c-* bus"]
-    i2c --> probe["probe 0x2b power monitor"]
-    probe --> rails["read six rail registers"]
-    rails --> current["convert raw words to rail current"]
+    astral -->|yes| hwmon{"astral12vhpwr hwmon present?"}
+    hwmon -->|yes| rails["read six voltage/current pairs"]
+    hwmon -->|no| i2c["find NVIDIA adapter index 1"]
+    i2c --> rails2["SMBus block read: 24 bytes at 0x80"]
+    rails --> current["validate measured mV/mA"]
+    rails2 --> current
     current --> health["GOOD / WARNING / CRITICAL"]
     health --> output["CLI, JSON, GUI Power tab, TUI Drivers area"]
 ```
 
 ```mermaid
 flowchart LR
-    R0["Rail 0\n0x60"] --> Convert["byte-swap + current conversion"]
-    R1["Rail 1\n0x62"] --> Convert
-    R2["Rail 2\n0x64"] --> Convert
-    R3["Rail 3\n0x66"] --> Convert
-    R4["Rail 4\n0x68"] --> Convert
-    R5["Rail 5\n0x6A"] --> Convert
-    Convert --> Max["max rail current"]
-    Convert --> Total["sum rail current\n12V watts"]
-    Max --> Good["<= 7A: GOOD"]
-    Max --> Warning["> 7A: WARNING"]
-    Max --> Critical["> 9.2A: CRITICAL"]
+    Frame["0x80: 24-byte frame"] --> Reverse["reverse six pin records"]
+    Reverse --> Decode["big-endian mV + mA"]
+    Decode --> Power["sum voltage × current"]
+    Decode --> Health["load-gated voltage, current and balance rules"]
 ```
 
 Power Detector+ commands:

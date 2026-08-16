@@ -403,6 +403,12 @@ impl MultiMonitorManager {
             if enabled { "enabled" } else { "disabled" }
         );
 
+        if crate::wayland_integration::WaylandCompositor::detect()
+            == crate::wayland_integration::WaylandCompositor::Cosmic
+        {
+            return crate::wayland_integration::VrrController::new().set_vrr(connector, enabled);
+        }
+
         let status = Command::new("kscreen-doctor")
             .arg(format!(
                 "output.{}.vrrpolicy.{}",

@@ -1,6 +1,6 @@
 # Maintainer: Christopher Kelley <ckelley@ghostkellz.sh>
 pkgname=nvcontrol
-pkgver=0.8.11
+pkgver=0.8.12
 pkgrel=1
 pkgdesc="The Ultimate NVIDIA GPU Control Tool for Linux - Advanced overclocking, fan control, and gaming optimization"
 arch=('x86_64')
@@ -12,7 +12,6 @@ depends=(
 )
 makedepends=(
     'rust'
-    'cargo'
     'git'
 )
 optdepends=(
@@ -39,7 +38,7 @@ build() {
 check() {
     cd "$pkgname"
 
-    cargo test --release --lib -- --skip hardware --skip nvml || true
+    cargo test --release --lib -- --skip hardware --skip nvml
 }
 
 package() {

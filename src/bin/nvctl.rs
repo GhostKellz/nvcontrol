@@ -2077,16 +2077,32 @@ fn main() {
                                     );
                                 }
 
-                                // List displays with current vibrance
-                                if let Ok(displays) = vibrance_native::list_displays_native() {
+                                if let Ok(displays) =
+                                    vibrance_native::get_vibrance_connectors_native()
+                                {
                                     println!("\nConnected Displays:");
-                                    for (device_id, display_id, name, connected) in displays {
-                                        if connected {
-                                            // Get vibrance controller to check current vibrance
-                                            println!(
-                                                "  Device {}, Display {}: {} - Ready",
-                                                device_id, display_id, name
-                                            );
+                                    for display in displays {
+                                        if display.connected {
+                                            match display.current_vibrance {
+                                                Some(raw) => println!(
+                                                    "  Display {}: {} - {}% (raw: {})",
+                                                    display.connector_index,
+                                                    display.connector_type,
+                                                    vibrance_native::vibrance_to_percentage(raw),
+                                                    raw
+                                                ),
+                                                None => println!(
+                                                    "  Display {}: {} - value unavailable",
+                                                    display.connector_index, display.connector_type
+                                                ),
+                                            }
+                                            if let Some((minimum, maximum)) = display.vibrance_range
+                                            {
+                                                println!(
+                                                    "    Driver range: {}..={}",
+                                                    minimum, maximum
+                                                );
+                                            }
                                         }
                                     }
                                 }
@@ -2157,24 +2173,36 @@ fn main() {
                             }
                         }
                     }
-                    VibranceSubcommand::List => match vibrance_native::list_displays_native() {
-                        Ok(displays) => {
-                            println!("🖥️ Available Displays:");
-                            for (device_id, display_id, name, connected) in displays {
-                                let status = if connected {
-                                    "✅ Connected"
-                                } else {
-                                    "⭕ Disconnected"
-                                };
-                                println!(
-                                    "  Device {}, Display {} [{}]: {}",
-                                    device_id, display_id, display_id, name
-                                );
-                                println!("    Status: {}", status);
+                    VibranceSubcommand::List => {
+                        match vibrance_native::get_vibrance_connectors_native() {
+                            Ok(displays) => {
+                                println!("🖥️ Available Displays:");
+                                for display in displays {
+                                    let status = if display.connected {
+                                        "✅ Connected"
+                                    } else {
+                                        "⭕ Disconnected"
+                                    };
+                                    println!(
+                                        "  Device 0, Display {}: {}",
+                                        display.connector_index, display.connector_type
+                                    );
+                                    println!("    Status: {}", status);
+                                    if let Some(raw) = display.current_vibrance {
+                                        println!(
+                                            "    Vibrance: {}% (raw: {})",
+                                            vibrance_native::vibrance_to_percentage(raw),
+                                            raw
+                                        );
+                                    }
+                                    if let Some((minimum, maximum)) = display.vibrance_range {
+                                        println!("    Driver range: {}..={}", minimum, maximum);
+                                    }
+                                }
                             }
+                            Err(e) => eprintln!("❌ Failed to list displays: {}", e),
                         }
-                        Err(e) => eprintln!("❌ Failed to list displays: {}", e),
-                    },
+                    }
                     VibranceSubcommand::Reset => match vibrance_native::reset_vibrance_native() {
                         Ok(()) => println!("✅ Reset all displays to default vibrance (100%)"),
                         Err(e) => eprintln!("❌ Failed to reset vibrance: {}", e),
@@ -2788,13 +2816,39 @@ fn main() {
                                 "DISABLED"
                             }
                         );
-                        println!("    Supports VRR: {}", display.supports_vrr);
-                        println!("    G-SYNC Compatible: {}", display.supports_gsync);
-                        println!("    FreeSync: {}", display.supports_freesync);
                         println!(
-                            "    Refresh Range: {}-{} Hz",
-                            display.min_refresh, display.max_refresh
+                            "    VRR capability: {}",
+                            match display.supports_vrr {
+                                Some(true) => "reported",
+                                Some(false) => "not supported",
+                                None => "not reported",
+                            }
                         );
+                        println!(
+                            "    G-SYNC Compatible: {}",
+                            match display.supports_gsync {
+                                Some(true) => "yes",
+                                Some(false) => "no",
+                                None => "not reported",
+                            }
+                        );
+                        println!(
+                            "    FreeSync: {}",
+                            match display.supports_freesync {
+                                Some(true) => "yes",
+                                Some(false) => "no",
+                                None => "not reported",
+                            }
+                        );
+                        match (display.min_refresh, display.max_refresh) {
+                            (Some(min), Some(max)) => {
+                                println!("    Reported VRR Range: {min}-{max} Hz")
+                            }
+                            _ => println!("    VRR Range: not reported by compositor"),
+                        }
+                        if let Some(max_mode) = display.max_mode_refresh {
+                            println!("    Maximum Display Mode: {max_mode} Hz");
+                        }
                     }
                 }
                 Err(e) => eprintln!("Failed to detect VRR displays: {e}"),
@@ -6643,7 +6697,9 @@ fn main() {
                                     Ok(status) => println!("{}", status),
                                     Err(e) => {
                                         eprintln!("❌ Read error: {}", e);
-                                        eprintln!("   (May need root: sudo nvctl asus power -w)");
+                                        eprintln!(
+                                            "   Prefer astral-hwmon, or grant your user read/write access to the GPU's i2c device."
+                                        );
                                     }
                                 }
 
@@ -6666,7 +6722,9 @@ fn main() {
                                 Ok(status) => println!("{}", status),
                                 Err(e) => {
                                     eprintln!("❌ Failed to read power status: {}", e);
-                                    eprintln!("   (May need root: sudo nvctl asus power)");
+                                    eprintln!(
+                                        "   Prefer astral-hwmon, or grant your user read/write access to the GPU's i2c device."
+                                    );
                                 }
                             }
                         }

@@ -1,62 +1,80 @@
-# 0.8.10 Release Checklist
+# 0.8.12 Release Checklist
 
-Before shipping `v0.8.10`, verify:
+Before tagging `v0.8.12`, verify source, packaging, documentation, and the
+hardware-backed 595/610 paths.
 
 ```mermaid
 flowchart TD
-    source["reviewed source tree"] --> rust["fmt + check + clippy"]
-    rust --> audit["cargo audit"]
-    audit --> tests["cargo test or focused release suites"]
-    tests --> package["cargo package"]
-    package --> live["read-only 610+ live smoke"]
-    live --> install["install/update/uninstall smoke"]
-    install --> docs["docs and release notes drift check"]
-    docs --> decide{"ready to tag?"}
-    decide -->|no| fix["fix or defer explicitly"]
+    source["reviewed source tree"] --> rust["fmt + clippy + tests"]
+    rust --> audit["cargo audit + package"]
+    audit --> packages["Arch/Fedora/Debian/Flatpak metadata"]
+    packages --> docs["links + release notes"]
+    docs --> live["read-only Arch/Pop/Fedora smoke"]
+    live --> mutation{"approved no-change or reset test?"}
+    mutation -->|yes| vibrance["vibrance apply + readback + reset"]
+    mutation -->|no| decide{"ready to tag?"}
+    vibrance --> decide
+    decide -->|no| fix["fix or explicitly defer"]
     fix --> source
-    decide -->|yes| tag["tag and publish"]
-
-    live --> gated["hardware mutation gate\nvibrance opt-in only"]
-    gated --> docs
+    decide -->|yes| tag["commit, tag, publish"]
 ```
 
+## Rust gates
+
 ```bash
-cargo fmt --all --check
-cargo check --all-targets
+cargo fmt --all -- --check
+cargo clippy --all-features --all-targets --locked -- -D warnings
+cargo test --all-features --workspace --locked
 cargo audit
-cargo test
-
-nvctl setup check
-nvctl driver diagnose-release
-nvctl driver check
-nvctl driver validate --driver 610
-nvctl driver support-bundle --tarball --redact-paths --redact-ids --log-tail 80 --output ~/.local/state/nvcontrol/support/support.tar.gz
-nvctl doctor --support --output ~/.local/state/nvcontrol/support/doctor-support.tar.gz
-nvctl companion notify-test
+cargo package --allow-dirty
 ```
 
-Live vibrance mutation is tested separately and must be opted in:
+## Packaging gates
+
+- Cargo, `PKGBUILD`, `.SRCINFO`, release Arch PKGBUILD, Fedora spec, Debian
+  changelog, AppImage, and Flatpak all identify 0.8.12.
+- Arch, Debian, and Fedora package tests do not contain a failure-masking
+  `|| true`.
+- `flatpak/cargo-sources.json` matches `Cargo.lock`; the manifest uses the
+  Freedesktop 25.08 runtime and offline Cargo mode.
+- Desktop files pass `desktop-file-validate` and use one main category.
+- The source archive/tag checksum replaces `SKIP` where the publishing channel
+  requires immutable release sources.
+
+## Live diagnostics
 
 ```bash
-NVCONTROL_RUN_HARDWARE_TESTS=1 cargo test --test regressions live_vibrance_levels_apply_once -- --ignored
+nvctl setup check
+nvctl driver info
+nvctl driver diagnose-release
+nvctl vrr status
+nvctl display vibrance get
+nvctl asus detect
+nvctl asus power
 ```
 
-## Documentation Checks
+Required evidence for this release:
 
-- README support workflow is current
-- README installer URL matches `https://nv.cktech.sh`
-- `docs/drivers/nvidia-driver.md` remains the canonical compatibility matrix
-- driver command docs reflect the latest flags
-- issue-reporting docs reflect the latest support bundle workflow
-- release diagnostics interpretation doc is linked from the docs index
+- Arch RTX 5090/open 610.57.04: GUI, CLI, TUI, vibrance, VRR, Vulkan/GFN, and
+  six-pin Astral telemetry.
+- Fedora RTX 3070/open 610.57.04: build/tests, diagnostics, and vibrance no-change
+  apply/readback.
+- Pop!_OS COSMIC RTX 3070/open 595.84: 595 ABI selection, vibrance no-change
+  apply/readback, and preserved-mode COSMIC VRR.
 
-## Expected Artifacts
+Live mutation tests require explicit approval and must restore the prior value.
+Power Monitor+ is read-only and never performs an automatic shutdown or power
+limit change.
 
-- support tarball created successfully
-- support metadata JSON created or packaged successfully
-- no failing tests
-- no outstanding cargo audit advisories
-- release metadata is `0.8.10` across Cargo, Arch, Fedora, Debian, AppImage, and Flatpak surfaces
-- man page and shell completion artifacts reflect current clap commands
+## Documentation gates
 
-See [internals/release-validation.md](internals/release-validation.md) for the detailed gate matrix.
+- `CHANGELOG.md` contains `[0.8.12] - 2026-08-16` and matches the shipped diff.
+- The docs index links the distro matrix, GeForce NOW integration, Astral API,
+  NVIDIA 610 notes, and v0.8.12 release evidence.
+- VRR docs distinguish reported capability from inference and do not advertise
+  unsupported LFC/adaptive-sync flags.
+- Driver docs preserve both the 595 regression target and the validated 610.57.04
+  current path.
+
+See [release validation internals](internals/release-validation.md) and
+[v0.8.12 release notes](advisories/v0.8.12-release-notes.md).

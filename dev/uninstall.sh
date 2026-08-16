@@ -7,6 +7,7 @@ set -e
 INSTALL_DIR="$HOME/.local/bin"
 COMPLETIONS_DIR="$HOME/.local/share/bash-completion/completions"
 ZSH_COMPLETIONS_DIR="$HOME/.local/share/zsh/site-functions"
+FISH_COMPLETIONS_DIR="$HOME/.local/share/fish/vendor_completions.d"
 DESKTOP_DIR="$HOME/.local/share/applications"
 CONFIG_DIR="$HOME/.config/nvcontrol"
 MANGOHUD_CONFIG="$HOME/.config/MangoHud/MangoHud.conf"
@@ -59,6 +60,7 @@ if [[ "$FORCE" == "false" ]]; then
     [[ -f "$INSTALL_DIR/nvcontrol" ]] && echo "  - $INSTALL_DIR/nvcontrol"
     [[ -f "$COMPLETIONS_DIR/nvctl" ]] && echo "  - $COMPLETIONS_DIR/nvctl"
     [[ -f "$ZSH_COMPLETIONS_DIR/_nvctl" ]] && echo "  - $ZSH_COMPLETIONS_DIR/_nvctl"
+    [[ -f "$FISH_COMPLETIONS_DIR/nvctl.fish" ]] && echo "  - $FISH_COMPLETIONS_DIR/nvctl.fish"
     [[ -f "$DESKTOP_DIR/nvcontrol.desktop" ]] && echo "  - $DESKTOP_DIR/nvcontrol.desktop"
     if [[ "$REMOVE_CONFIG" == "true" ]]; then
         [[ -d "$CONFIG_DIR" ]] && echo "  - $CONFIG_DIR/ (config directory)"
@@ -97,6 +99,11 @@ fi
 if [[ -f "$ZSH_COMPLETIONS_DIR/_nvctl" ]]; then
     rm -f "$ZSH_COMPLETIONS_DIR/_nvctl"
     echo -e "${GREEN}  ✅ Removed zsh completions${NC}"
+fi
+
+if [[ -f "$FISH_COMPLETIONS_DIR/nvctl.fish" ]]; then
+    rm -f "$FISH_COMPLETIONS_DIR/nvctl.fish"
+    echo -e "${GREEN}  ✅ Removed fish completions${NC}"
 fi
 
 echo -e "${YELLOW}🗑️  Removing desktop integration...${NC}"

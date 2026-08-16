@@ -1,6 +1,12 @@
 # nvcontrol Integrations
 
-This directory documents nvcontrol's integrations with other tools in the CKTechX ecosystem.
+This directory documents nvcontrol's optional desktop, gaming, and container integrations.
+
+## Linux Gaming
+
+- [GeForce NOW Linux](geforce-now.md) - official Flatpak detection and H.265 Vulkan decode readiness
+- Gamescope - optional compositor integration exposed by `nvctl gamescope`
+- MangoHud and GameMode - optional OSD and game-performance helpers
 
 ## Experimental Integrations
 
@@ -73,3 +79,4 @@ flowchart TD
 
 - [Backend Architecture](../config/backend-architecture.md) - Internal backend design
 - [API Reference](../api/reference.md) - nvcontrol Rust API
+- [GeForce NOW Linux](geforce-now.md) - native client readiness and sandbox boundaries

@@ -12,6 +12,8 @@ This directory contains API documentation for nvcontrol's Rust library.
 | [Power](./power.md) | Power limits and profiles |
 | [Overclock](./overclock.md) | Clock offsets and stress testing |
 | [Backend](./backend.md) | Backend abstraction for testing and shared runtime access |
+| [ASUS Power Monitor](./asus-power-monitor.md) | Astral 12V-2x6 telemetry, history, health, and source selection |
+| [Driver Diagnostics](./driver.md) | NVIDIA branch gates, live 610 runtime probes, GFN, and support evidence |
 
 ## Quick Start
 

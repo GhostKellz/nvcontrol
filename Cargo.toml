@@ -1,6 +1,6 @@
 [package]
 name = "nvcontrol"
-version = "0.8.11"
+version = "0.8.12"
 edition = "2024"
 rust-version = "1.97"
 authors = ["Christopher Kelley <ckelley@ghostkellz.sh>"]
@@ -29,8 +29,8 @@ path = "src/bin/nvctl.rs"
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
-eframe = { version = "0.35", optional = true, default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
-egui_plot = { version = "0.36", optional = true }
+eframe = { version = "0.36", optional = true, default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
+egui_plot = { version = "0.37", optional = true }
 egui-phosphor = { version = "0.13", optional = true, default-features = false, features = ["regular", "bold", "fill"] }
 anyhow = "1"
 thiserror = "2"

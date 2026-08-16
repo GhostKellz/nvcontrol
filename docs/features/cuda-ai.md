@@ -2,7 +2,7 @@
 
 The CUDA/AI feature area is for Linux desktop systems where the same NVIDIA GPU is
 used for display, gaming, CUDA development, local inference, image generation, and
-containers. The current `v0.8.10` scope is intentionally diagnostic: expose what is
+containers. The current scope is intentionally diagnostic: expose what is
 installed, what the driver can see, and what is likely to work before the user starts
 changing services or workloads.
 

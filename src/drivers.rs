@@ -6,6 +6,7 @@ use crate::{NvControlError, NvResult};
 use flate2::{Compression, write::GzEncoder};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::{fmt::Write as _, fs};
 use tar::Builder;
@@ -484,8 +485,8 @@ fn collect_initramfs_findings(
     }
 
     if let Some(cmdline) = boot_cmdline {
-        if !cmdline.contains("nvidia_drm.modeset=1") {
-            findings.push("boot cmdline is missing nvidia_drm.modeset=1".to_string());
+        if cmdline.contains("nvidia_drm.modeset=0") {
+            findings.push("boot cmdline explicitly disables nvidia_drm.modeset".to_string());
         }
         if !cmdline.contains("nvidia.NVreg_PreserveVideoMemoryAllocations=1") {
             findings.push(
@@ -3031,13 +3032,20 @@ pub struct DriverCapabilities {
     pub has_fp16_egl_wayland: bool,
     pub has_dmabuf_mmap: bool,
     pub has_drm_color_pipeline: bool,
+    /// Runtime detection of VK_EXT_descriptor_heap, used by current VKD3D-Proton builds.
+    #[serde(default)]
+    pub has_vulkan_descriptor_heap: bool,
 }
 
 impl DriverCapabilities {
     /// Detect capabilities from the current driver
     pub fn detect() -> NvResult<Self> {
         let status = get_driver_status()?;
-        Self::from_version(&status.current_version)
+        let mut capabilities = Self::from_version(&status.current_version)?;
+        capabilities.has_vulkan_descriptor_heap = detect_vulkan_extensions()
+            .iter()
+            .any(|extension| extension == "VK_EXT_descriptor_heap");
+        Ok(capabilities)
     }
 
     /// Parse capabilities from a version string
@@ -3068,6 +3076,7 @@ impl DriverCapabilities {
             has_fp16_egl_wayland: major >= 610,
             has_dmabuf_mmap: major >= 610,
             has_drm_color_pipeline: major >= 610,
+            has_vulkan_descriptor_heap: false,
         })
     }
 
@@ -3174,23 +3183,88 @@ pub fn is_kernel_at_least(major: u32, minor: u32) -> bool {
     false
 }
 
+fn nvidia_drm_modeset_enabled() -> Option<bool> {
+    let sysfs = std::fs::read_to_string("/sys/module/nvidia_drm/parameters/modeset")
+        .ok()
+        .and_then(|value| parse_boolean_parameter(&value));
+    if sysfs.is_some() {
+        return sysfs;
+    }
+
+    Command::new("modprobe")
+        .arg("--showconfig")
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| parse_modeset_from_modprobe(&String::from_utf8_lossy(&output.stdout)))
+}
+
+fn parse_boolean_parameter(value: &str) -> Option<bool> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "y" | "1" | "yes" | "true" => Some(true),
+        "n" | "0" | "no" | "false" => Some(false),
+        _ => None,
+    }
+}
+
+fn parse_modeset_from_modprobe(config: &str) -> Option<bool> {
+    config
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace();
+            if fields.next()? != "options" || fields.next()? != "nvidia_drm" {
+                return None;
+            }
+            fields.find_map(|field| {
+                field
+                    .strip_prefix("modeset=")
+                    .and_then(parse_boolean_parameter)
+            })
+        })
+        .next_back()
+}
+
+fn drm_color_pipeline_status(
+    driver_ready: bool,
+    kernel_ready: bool,
+    modeset_enabled: Option<bool>,
+) -> &'static str {
+    if !driver_ready {
+        "No"
+    } else if !kernel_ready {
+        "Driver ready (kernel 6.19+ required)"
+    } else {
+        match modeset_enabled {
+            Some(true) => "Available (KMS enabled)",
+            Some(false) => "Unavailable (nvidia_drm modeset disabled)",
+            None => "Driver/kernel ready (KMS state unknown)",
+        }
+    }
+}
+
 /// Detect notable Vulkan extensions via vulkaninfo
 pub fn detect_vulkan_extensions() -> Vec<String> {
-    let notable = [
-        "VK_KHR_device_group_creation",
-        "VK_EXT_shader_long_vector",
-        "VK_KHR_internally_synchronized_queues",
-        "VK_NV_push_constant_bank",
-    ];
-
     let output = match overlay_safe_vulkaninfo_command().output() {
         Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).to_string(),
         _ => return Vec::new(),
     };
 
-    notable
+    parse_notable_vulkan_extensions(&output)
+}
+
+fn parse_notable_vulkan_extensions(output: &str) -> Vec<String> {
+    const NOTABLE: [&str; 6] = [
+        "VK_KHR_device_group_creation",
+        "VK_EXT_shader_long_vector",
+        "VK_KHR_internally_synchronized_queues",
+        "VK_KHR_video_decode_h265",
+        "VK_NV_push_constant_bank",
+        "VK_EXT_descriptor_heap",
+    ];
+
+    NOTABLE
         .iter()
-        .filter(|ext| output.contains(**ext))
+        .filter(|extension| output.contains(**extension))
         .map(|ext| ext.to_string())
         .collect()
 }
@@ -3198,7 +3272,6 @@ pub fn detect_vulkan_extensions() -> Vec<String> {
 fn overlay_safe_vulkaninfo_command() -> Command {
     let mut command = Command::new("vulkaninfo");
     command
-        .arg("--summary")
         // MangoHud is commonly installed as an implicit Vulkan layer. If it is
         // enabled globally, probing vulkaninfo can crash inside libMangoHud.
         .env("DISABLE_MANGOHUD", "1")
@@ -3377,21 +3450,51 @@ pub fn print_driver_info() -> NvResult<()> {
             "  DMABUF mmap (discrete GPU): {}",
             if caps.has_dmabuf_mmap { "Yes" } else { "No" }
         );
+        println!(
+            "  VK_EXT_descriptor_heap (runtime): {}",
+            if caps.has_vulkan_descriptor_heap {
+                "Available; let VKD3D-Proton select it per title"
+            } else {
+                "Not detected"
+            }
+        );
 
         let kernel_supports_color_pipeline = is_kernel_at_least(6, 19);
         println!(
             "  DRM color pipeline: {}",
-            if caps.has_drm_color_pipeline && kernel_supports_color_pipeline {
-                "Active"
-            } else if caps.has_drm_color_pipeline {
-                "Driver ready (kernel 6.19+ required)"
-            } else {
-                "No"
-            }
+            drm_color_pipeline_status(
+                caps.has_drm_color_pipeline,
+                kernel_supports_color_pipeline,
+                nvidia_drm_modeset_enabled(),
+            )
         );
     }
 
+    println!();
+    println!(
+        "GeForce NOW native Linux app: {}",
+        if is_geforce_now_flatpak_installed() {
+            "Installed (Flatpak)"
+        } else {
+            "Not installed (optional)"
+        }
+    );
+
     Ok(())
+}
+
+/// Detect the native GeForce NOW Linux Flatpak without conflating it with the
+/// Windows-only NVIDIA App control panel.
+pub fn is_geforce_now_flatpak_installed() -> bool {
+    let system_install = Path::new("/var/lib/flatpak/app/com.nvidia.geforcenow").is_dir();
+    let user_install = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .map(|home| {
+            home.join(".local/share/flatpak/app/com.nvidia.geforcenow")
+                .is_dir()
+        })
+        .unwrap_or(false);
+    system_install || user_install
 }
 
 /// Validate system for specific driver version (for CLI)
@@ -3667,6 +3770,10 @@ pub fn print_driver_info_full() -> NvResult<()> {
         }
     }
 
+    // Probe Vulkan once. The result is used for both driver feature reporting
+    // and the native GeForce NOW client's hardware decode prerequisite.
+    let vk_exts = detect_vulkan_extensions();
+
     // 610+ runtime feature detection
     let caps = DriverCapabilities::from_version(&driver_version);
     if let Ok(ref caps) = caps {
@@ -3675,11 +3782,15 @@ pub fn print_driver_info_full() -> NvResult<()> {
             println!("610+ Features:");
 
             // Vulkan extensions
-            let vk_exts = detect_vulkan_extensions();
             if !vk_exts.is_empty() {
                 println!("  Vulkan Extensions:");
                 for ext in &vk_exts {
                     println!("    - {}", ext);
+                }
+                if vk_exts.iter().any(|ext| ext == "VK_EXT_descriptor_heap") {
+                    println!(
+                        "    descriptor heap is available; let VKD3D-Proton select it per title"
+                    );
                 }
             } else {
                 println!("  Vulkan Extensions:  (vulkaninfo not available)");
@@ -3706,16 +3817,37 @@ pub fn print_driver_info_full() -> NvResult<()> {
             let kernel_ok = is_kernel_at_least(6, 19);
             println!(
                 "  DRM color pipeline: {}",
-                if caps.has_drm_color_pipeline && kernel_ok {
-                    "Active"
-                } else if caps.has_drm_color_pipeline {
-                    "Driver ready (kernel 6.19+ required)"
-                } else {
-                    "No"
-                }
+                drm_color_pipeline_status(
+                    caps.has_drm_color_pipeline,
+                    kernel_ok,
+                    nvidia_drm_modeset_enabled(),
+                )
             );
         }
     }
+
+    println!();
+    println!(
+        "GeForce NOW:    {}",
+        if is_geforce_now_flatpak_installed() {
+            "Installed (native Linux Flatpak)"
+        } else {
+            "Not installed (optional native Linux app)"
+        }
+    );
+    println!(
+        "GFN H.265 decode: {}",
+        if vk_exts.is_empty() {
+            "Unknown (vulkaninfo unavailable)"
+        } else if vk_exts
+            .iter()
+            .any(|extension| extension == "VK_KHR_video_decode_h265")
+        {
+            "Available"
+        } else {
+            "Not exposed by the active Vulkan device"
+        }
+    );
 
     Ok(())
 }
@@ -5064,6 +5196,52 @@ mod tests {
     }
 
     #[test]
+    fn modeset_default_is_not_reported_missing() {
+        let images = vec!["initramfs-test.img".to_string()];
+        let findings = collect_initramfs_findings("test", None, Some("quiet"), &images);
+        assert!(!findings.iter().any(|finding| finding.contains("modeset")));
+
+        let disabled =
+            collect_initramfs_findings("test", None, Some("nvidia_drm.modeset=0"), &images);
+        assert!(
+            disabled
+                .iter()
+                .any(|finding| finding == "boot cmdline explicitly disables nvidia_drm.modeset")
+        );
+    }
+
+    #[test]
+    fn drm_color_pipeline_status_requires_driver_kernel_and_kms() {
+        assert_eq!(drm_color_pipeline_status(false, true, Some(true)), "No");
+        assert_eq!(
+            drm_color_pipeline_status(true, false, Some(true)),
+            "Driver ready (kernel 6.19+ required)"
+        );
+        assert_eq!(
+            drm_color_pipeline_status(true, true, Some(false)),
+            "Unavailable (nvidia_drm modeset disabled)"
+        );
+        assert_eq!(
+            drm_color_pipeline_status(true, true, Some(true)),
+            "Available (KMS enabled)"
+        );
+        assert_eq!(
+            drm_color_pipeline_status(true, true, None),
+            "Driver/kernel ready (KMS state unknown)"
+        );
+    }
+
+    #[test]
+    fn parses_effective_modeset_from_modprobe_configuration() {
+        let config = "options nvidia NVreg_EnableGpuFirmware=1\noptions nvidia_drm modeset=1 fbdev=1\noptions nvidia_drm modeset=0\n";
+        assert_eq!(parse_modeset_from_modprobe(config), Some(false));
+        assert_eq!(
+            parse_modeset_from_modprobe("options nvidia_drm fbdev=1"),
+            None
+        );
+    }
+
+    #[test]
     fn test_detect_distribution() {
         let distro = detect_distribution();
         assert!(!distro.is_empty());
@@ -5177,6 +5355,19 @@ mod tests {
         let caps = DriverCapabilities::from_version("abc.def.ghi").unwrap();
         assert_eq!(caps.major_version, 0);
         assert!(!caps.has_vulkan_swapchain_perf);
+    }
+
+    #[test]
+    fn notable_vulkan_parser_includes_app_and_driver_extensions() {
+        let output = "VK_EXT_descriptor_heap extension revision 1\nVK_EXT_shader_long_vector\nVK_KHR_video_decode_h265";
+        assert_eq!(
+            parse_notable_vulkan_extensions(output),
+            vec![
+                "VK_EXT_shader_long_vector".to_string(),
+                "VK_KHR_video_decode_h265".to_string(),
+                "VK_EXT_descriptor_heap".to_string(),
+            ]
+        );
     }
 
     #[test]

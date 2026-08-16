@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.12] - 2026-08-16
+
+### Added
+- **Correct Astral 12V-2x6 Telemetry**: Read six IT8915 pin records with the documented 24-byte SMBus block transaction, big-endian millivolt/milliamp fields, and physical pin order instead of the previous guessed register scaling.
+- **Layered Astral Data Sources**: Prefer the standard `astral12vhpwr` Linux hwmon interface and retain a native, read-only SMBus fallback tied to the selected NVIDIA PCI device; no `i2cget` subprocess or unrelated bus scan is used.
+- **Per-Pin Connector Health**: Report measured voltage, current, and power for each pin plus connector total, load-gated current balance, history, trend, and warnings without automatic shutdown or power-limit actions.
+- **595/610 NVKMS Runtime Compatibility**: Native vibrance now selects the known `AllocDevice` ABI size for the loaded driver branch, retries only the alternate known layout on `EPERM`, and caches the accepted size.
+- **Native Vibrance Readback**: `nvctl display vibrance get` and `list` now query the live NVIDIA attribute value and driver-advertised range instead of reporting connector readiness as the current state.
+- **NVIDIA 610 Runtime Diagnostics**: Detect the notable 610 Vulkan extensions, `VK_EXT_descriptor_heap`, H.265 Vulkan video decode, active DRM color-pipeline state, and the native GeForce NOW Linux Flatpak from the live system.
+- **Cross-Distro Validation**: Validate the same source on Arch/RTX 5090 with open 610.57.04, Fedora/RTX 3070 with open 610.57.04, and Pop!_OS COSMIC/RTX 3070 with open 595.84.
+
+### Changed
+- **Driver Guidance**: Document 610.57.04 as the validated current open-driver target while retaining explicit 595 compatibility and historical pre-595 boundaries.
+- **Dependency Refresh**: Supersede the three open dependency PRs with Clap 4.6.6, clap_complete 4.6.9, eframe 0.36.1, egui_plot 0.37.0, and the latest Rust 1.97-compatible transitive dependencies; bridge egui-phosphor's public font bytes into the current egui font type without forking the icon crate.
+- **Release Packaging**: Synchronize Cargo, Arch, Fedora, Debian, AppImage, Flatpak, desktop metadata, `.SRCINFO`, generated Flatpak Cargo sources, and the v0.8.12 release documentation.
+
+### Fixed
+- **NVKMS Attribute Type ABI**: Corrected every `NvKmsAttributeType` discriminant to match NVIDIA's public header, fixing valid-value range decoding and eliminating an invalid Rust enum representation.
+- **Vibrance Percentage Display**: Round raw NVKMS values when converting back to percentages, so values such as raw 511 and 767 display as 150% and 175%.
+- **595 Native Vibrance**: A current binary once again supports NVIDIA 595 without requiring users to install an older nvcontrol release, while retaining the known-good 610 layout as the preferred 610 path.
+- **COSMIC VRR Application**: Preserve the output's active mode and use `cosmic-randr`'s current adaptive-sync syntax instead of issuing an unsupported standalone VRR command.
+- **DRM Color Pipeline Status**: Distinguish driver capability from active KMS state and account for the driver's default modeset behavior when sysfs is not readable.
+- **Truthful Display Reporting**: Native vibrance UI lists only connected outputs, while VRR diagnostics no longer infer G-SYNC, FreeSync, LFC, or panel refresh ranges from connector type and fixed defaults.
+- **COSMIC VRR Routing**: `nvctl monitors set-vrr` now reaches the COSMIC controller, preserves the active output mode, handles real ANSI-formatted `cosmic-randr` output, and supports both automatic and disabled adaptive-sync states.
+- **Fedora Package Checks**: RPM `%check` failures are no longer masked, and historical changelog dates parse cleanly with `rpmspec`.
+- **Package Test Enforcement**: Arch and Debian package builds no longer hide failed Rust tests; Flatpak now targets the supported 25.08 runtime and includes its offline Cargo source manifest.
+- **Local Install Cleanup**: The development uninstaller now removes Fish completions as well as Bash and Zsh completions while preserving user configuration by default.
+- **Desktop Menu Integration**: Use one freedesktop main category so nvcontrol does not appear twice in application menus.
+- **TUI Settings Launcher**: Menu option 3 and its direct keyboard shortcut now open the dashboard Settings tab instead of doing nothing.
+
+## [0.8.11] - 2026-08-04
+
+### Changed
+- Raised the Rust toolchain baseline to 1.97, migrated from deprecated `serde_yaml` to `serde_norway`, updated the egui/eframe stack to 0.35, and removed unused dependencies.
+
+### Fixed
+- Cleared the then-current RustSec advisories in `quick-xml`, `anyhow`, and `event-listener`; `cargo audit` was clean at release validation.
+
+## [0.8.10] - 2026-06-23
+
+### Fixed
+- Synchronized hotfix metadata, wired the documented fan auto/curve CLI commands, and refreshed the packaged man page and shell completions.
+
 ## [0.8.9] - 2026-06-23
 
 ### Added

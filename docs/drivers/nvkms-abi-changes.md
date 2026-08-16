@@ -22,7 +22,25 @@ All other NVKMS structs remained unchanged (AllocDeviceRequest=620, QueryDpyDyna
 - `mmap` on DMABUF file descriptors exported from discrete GPUs
 - Per-plane DRM color pipeline support (kernel 6.19+)
 
-**Fix:** Updated `_padding` in `NvKmsAllocDeviceReply` from `888 - 52 = 836` to `816 - 52 = 764`.
+The 610.57.04 open modules retain this 610 allocation layout on the validated
+RTX 5090 system.
+
+## Runtime selection in v0.8.12
+
+nvcontrol no longer compiles one driver branch's trailing allocation size into
+the only accepted request. The request and every field read by nvcontrol have
+stable offsets; only the total `AllocDevice` parameter size differs.
+
+| Loaded branch | Preferred parameter size | Alternate on `EPERM` |
+|---|---:|---:|
+| 610 | 1440 | 1512 |
+| 595 | 1512 | 1440 |
+
+The backing Rust struct is sized for the larger 1512-byte request. nvcontrol
+sends only the selected known size, rebuilds a zeroed real request before a retry,
+and caches the successful size for the process. It does not sweep arbitrary sizes:
+NVKMS collapses multiple failures to `EPERM`, so a blind size probe is not safe or
+diagnostic.
 
 ---
 

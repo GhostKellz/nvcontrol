@@ -67,8 +67,16 @@ impl NvControlApp {
         // Setup custom fonts: Phosphor Icons
         let mut fonts = egui::FontDefinitions::default();
 
-        // Add Phosphor icons (regular variant) for clean icons
-        egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
+        // The icon crate currently exposes FontData from a different egui
+        // release, so bridge its public bytes into eframe's active egui type.
+        let phosphor = egui_phosphor::Variant::Regular;
+        fonts.font_data.insert(
+            "phosphor".into(),
+            egui::FontData::from_static(phosphor.font_bytes()).into(),
+        );
+        if let Some(font_keys) = fonts.families.get_mut(&egui::FontFamily::Proportional) {
+            font_keys.insert(1, "phosphor".into());
+        }
 
         ctx.set_fonts(fonts);
     }

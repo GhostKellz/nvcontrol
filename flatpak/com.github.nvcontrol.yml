@@ -1,6 +1,6 @@
 app-id: com.github.nvcontrol
 runtime: org.freedesktop.Platform
-runtime-version: '23.08'
+runtime-version: '25.08'
 sdk: org.freedesktop.Sdk
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.rust-stable
@@ -34,6 +34,7 @@ modules:
       append-path: /usr/lib/sdk/rust-stable/bin
       env:
         CARGO_HOME: /run/build/nvcontrol/cargo
+        CARGO_NET_OFFLINE: 'true'
         CARGO_TARGET_DIR: /run/build/nvcontrol/target
     build-commands:
       - cargo --offline fetch --manifest-path Cargo.toml
@@ -46,5 +47,5 @@ modules:
     sources:
       - type: git
         url: https://github.com/GhostKellz/nvcontrol.git
-        tag: v0.8.11
+        tag: v0.8.12
       - cargo-sources.json

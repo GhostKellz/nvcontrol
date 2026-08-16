@@ -16,6 +16,7 @@ flowchart TD
     route -->|"Display/vibrance"| display["display backend"]
     route -->|"Profiles"| profiles["profile manager"]
     route -->|"CUDA/AI"| cuda["CUDA doctor"]
+    route -->|"Astral power"| asus["ASUS power detector"]
 
     nvml --> smi["nvidia-smi / NVML"]
     driver --> proc["/proc/driver/nvidia/version"]
@@ -25,6 +26,9 @@ flowchart TD
     display --> compositor["kscreen-doctor / hyprctl / gsettings"]
     profiles --> xdg["~/.config/nvcontrol"]
     cuda --> tools["nvidia-smi, nvcc, ollama, docker, nvidia-ctk"]
+    asus --> source{"astral12vhpwr hwmon?"}
+    source -->|yes| hwmon["in0..5 + curr1..6"]
+    source -->|no| smbus["selected GPU I2C adapter 1\n24-byte read at 0x80"]
 
     smi --> report["human / JSON / YAML output"]
     proc --> report
@@ -34,6 +38,8 @@ flowchart TD
     compositor --> report
     xdg --> report
     tools --> report
+    hwmon --> report
+    smbus --> report
 ```
 
 ## 610+ Runtime Capability Probe
@@ -49,11 +55,11 @@ flowchart TD
     gate -->|no| legacy["skip 610+ runtime section"]
     gate -->|yes| probes["runtime probes"]
 
-    probes --> vulkan["vulkaninfo --summary\nwith overlay-safe environment"]
+    probes --> vulkan["vulkaninfo\nwith overlay-safe environment"]
     probes --> egl["eglinfo / eglinfo -B"]
     probes --> kernel["uname -r\nkernel >= 6.19"]
 
-    vulkan --> vkext["notable Vulkan extensions"]
+    vulkan --> vkext["610 extensions + descriptor heap\n+ H.265 video decode"]
     egl --> fp16["FP16 EGL Wayland signal"]
     kernel --> drm["DRM color pipeline kernel readiness"]
 
@@ -61,6 +67,7 @@ flowchart TD
     fp16 --> output
     drm --> output
     version --> output
+    output --> gfn["GeForce NOW install + decode readiness"]
 ```
 
 ## Overlay-Safe Vulkan Probe
@@ -80,7 +87,7 @@ sequenceDiagram
     Cmd->>Cmd: set DISABLE_MANGOHUD=1
     Cmd->>Cmd: set DISABLE_VKBASALT=1
     Cmd->>Cmd: clear VK_INSTANCE_LAYERS, VK_LAYER_PATH, LD_PRELOAD
-    Cmd->>Loader: run vulkaninfo --summary
+    Cmd->>Loader: run full vulkaninfo
     Loader->>ICD: enumerate instance/device capabilities
     ICD-->>Loader: extensions and device facts
     Loader-->>Nvctl: stdout or non-zero exit
@@ -183,4 +190,3 @@ flowchart TD
     asus --> state
     state --> render
 ```
-

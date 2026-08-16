@@ -20,15 +20,16 @@
 
 ### Launch the TUI
 ```bash
-# Start live GPU monitoring dashboard
-nvctl gpu stat
+# Start the launcher (nvtop, dashboard, or settings)
+nvctl tui
 
-# Or use the full monitor command
-nvctl monitor
+# Start the dedicated views directly
+nvctl nvtop
+nvctl gpu stat
 ```
 
 ### System Requirements
-- **NVIDIA Open Kernel Modules 610+** (610.43.02 or newer recommended)
+- **NVIDIA Open Kernel Modules 595 or 610+** (610.57.04 is the current validated path)
 - **RTX 50/40/30 Series GPU** (Blackwell/Ada/Ampere)
 - **Arch Linux** with Wayland compositor (KDE/GNOME/Hyprland)
 - **Nerd Font** for proper icon display (JetBrainsMono Nerd Font recommended)
@@ -51,6 +52,9 @@ The TUI starts with default safe settings:
 - **1-9** - Jump directly to tab number
 - **←/→** - Previous/Next GPU (multi-GPU systems)
 - **↑/↓** - Previous/Next GPU (alternative)
+
+From the launcher, use `1`, `2`, or `3` directly, or highlight nvtop,
+dashboard, or Settings and press Enter.
 
 ### General Controls
 - **? / F1** - Toggle help overlay
@@ -176,6 +180,10 @@ Displays at-a-glance GPU status with color-coded gauges:
 - Cooling correlation
 
 **Perfect for:** Efficiency tuning, PSU planning
+
+On a supported ASUS Astral/Matrix card, this tab also shows the read-only
+Power Monitor+ source, six measured pin voltages/currents/power values, connector
+total, load-gated health, warnings, and trend history.
 
 ---
 

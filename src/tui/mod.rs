@@ -772,19 +772,24 @@ impl TuiApp {
             KeyCode::Down | KeyCode::Char('j') if self.menu_selection < 3 => {
                 self.menu_selection += 1;
             }
-            KeyCode::Enter => {
-                match self.menu_selection {
-                    0 => self.view_mode = ViewMode::Nvtop,
-                    1 => self.view_mode = ViewMode::Dashboard,
-                    2 => { /* Settings */ }
-                    3 => self.running = false,
-                    _ => {}
-                }
-            }
+            KeyCode::Enter => match self.menu_selection {
+                0 => self.view_mode = ViewMode::Nvtop,
+                1 => self.view_mode = ViewMode::Dashboard,
+                2 => self.open_settings_tab(),
+                3 => self.running = false,
+                _ => {}
+            },
             KeyCode::Char('1') => self.view_mode = ViewMode::Nvtop,
             KeyCode::Char('2') => self.view_mode = ViewMode::Dashboard,
+            KeyCode::Char('3') => self.open_settings_tab(),
             _ => {}
         }
+    }
+
+    fn open_settings_tab(&mut self) {
+        self.view_mode = ViewMode::Dashboard;
+        self.current_tab = Tab::count() - 1;
+        self.show_settings = false;
     }
 
     fn handle_nvtop_key(&mut self, code: KeyCode, _modifiers: KeyModifiers) {
@@ -1016,9 +1021,14 @@ impl TuiApp {
         self.asus_power_last_update = Instant::now();
 
         if let Some(ref detector) = self.asus_power_detector {
-            if let Ok(status) = detector.read_power_rails() {
-                self.asus_power_history.record(&status);
-                self.asus_power_status = Some(status);
+            match detector.read_power_rails() {
+                Ok(status) => {
+                    self.asus_power_history.record(&status);
+                    self.asus_power_status = Some(status);
+                }
+                Err(_) => {
+                    self.asus_power_status = None;
+                }
             }
         }
     }
@@ -2043,6 +2053,10 @@ impl TuiApp {
                                     .current_ma
                                     .map(|c| format!("{:.2}A", c as f32 / 1000.0))
                                     .unwrap_or_else(|| "-".to_string());
+                                let voltage_str = rail
+                                    .voltage_mv
+                                    .map(|v| format!("{:.2}V", v as f32 / 1000.0))
+                                    .unwrap_or_else(|| "-".to_string());
                                 let rail_color = if rail.warning { yellow } else { green };
                                 let sep = if i < status.rails.len() - 1 {
                                     " │ "
@@ -2051,9 +2065,11 @@ impl TuiApp {
                                 };
                                 vec![
                                     Span::styled(
-                                        format!("R{}: ", rail.rail_id),
+                                        format!("P{}: ", rail.rail_id + 1),
                                         Style::default().fg(fg_dark),
                                     ),
+                                    Span::styled(voltage_str, Style::default().fg(fg)),
+                                    Span::styled("/", Style::default().fg(fg_dark)),
                                     Span::styled(current_str, Style::default().fg(rail_color)),
                                     Span::styled(sep, Style::default().fg(fg_dark)),
                                 ]
@@ -2068,7 +2084,10 @@ impl TuiApp {
 
                         // Model info
                         lines.push(Line::from(vec![Span::styled(
-                            format!("  {} (I2C bus {})", status.model, status.i2c_bus),
+                            format!(
+                                "  {} ({}; I2C bus {})",
+                                status.model, status.source, status.i2c_bus
+                            ),
                             Style::default().fg(fg_dark),
                         )]));
 
@@ -3334,4 +3353,30 @@ pub fn launch_nvtop() -> NvResult<()> {
 pub fn launch_dashboard() -> NvResult<()> {
     let mut app = TuiApp::with_view(ViewMode::Dashboard);
     app.run()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn menu_settings_selection_opens_settings_tab() {
+        let mut app = TuiApp::with_view(ViewMode::Menu);
+        app.menu_selection = 2;
+
+        app.handle_menu_key(KeyCode::Enter);
+
+        assert_eq!(app.view_mode, ViewMode::Dashboard);
+        assert_eq!(Tab::from_index(app.current_tab), Tab::Settings);
+    }
+
+    #[test]
+    fn menu_settings_shortcut_opens_settings_tab() {
+        let mut app = TuiApp::with_view(ViewMode::Menu);
+
+        app.handle_menu_key(KeyCode::Char('3'));
+
+        assert_eq!(app.view_mode, ViewMode::Dashboard);
+        assert_eq!(Tab::from_index(app.current_tab), Tab::Settings);
+    }
 }

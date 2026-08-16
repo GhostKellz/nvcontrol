@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
 use std::os::unix::io::AsRawFd;
+use std::sync::OnceLock;
 
 /// Native Digital Vibrance Implementation using NVKMS ioctls
 /// Based on nvibrant's approach - iterate connectors, get dpyId from static data
@@ -15,13 +16,16 @@ const NVIDIA_MODESET_DEVICE: &str = "/dev/nvidia-modeset";
 const VIBRANCE_MIN: i64 = -1024;
 const VIBRANCE_MAX: i64 = 1023;
 
+static ALLOC_DEVICE_PARAM_SIZE: OnceLock<NvU32> = OnceLock::new();
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectorInfo {
     pub connector_index: u32,
     pub connector_type: String,
     pub dpy_id: u32,
     pub connected: bool,
-    pub current_vibrance: i64,
+    pub current_vibrance: Option<i64>,
+    pub vibrance_range: Option<(i64, i64)>,
 }
 
 #[derive(Debug)]
@@ -143,28 +147,60 @@ impl NativeVibranceController {
             .and_then(|s| s.parse().ok())
             .unwrap_or(0);
 
-        // Allocate NVKMS device (driver 595.45+ struct layout)
-        let mut alloc_params = NvKmsAllocDeviceParams {
-            request: NvKmsAllocDeviceRequest {
-                version_string,
-                device_id: NvKmsDeviceId {
-                    rm_device_id: gpu_index,
-                    mig_device: MIGDeviceId { value: 0 },
-                },
-                no3d: 1,                            // NV_TRUE (like nvibrant)
-                enable_console_hotplug_handling: 0, // NV_FALSE
-                _padding: [0; 2],
-                registry_keys,
-            },
-            reply: Zeroable::zeroed(),
-        };
+        let candidate_sizes = Self::alloc_device_candidate_sizes(driver_version)?;
+        let sizes: Vec<NvU32> = ALLOC_DEVICE_PARAM_SIZE
+            .get()
+            .copied()
+            .map(|size| vec![size])
+            .unwrap_or_else(|| candidate_sizes.to_vec());
+        let mut alloc_params = None;
 
-        // SAFETY: fd is valid (opened above), alloc_params matches AllocDevice command
-        unsafe {
-            nvkms_ioctl(fd, NvKmsIoctlCommand::AllocDevice, &mut alloc_params).map_err(|e| {
-                NvControlError::VibranceControlFailed(format!("AllocDevice ioctl failed: {}", e))
-            })?;
+        for (index, size) in sizes.iter().copied().enumerate() {
+            let mut candidate = NvKmsAllocDeviceParams {
+                request: NvKmsAllocDeviceRequest {
+                    version_string,
+                    device_id: NvKmsDeviceId {
+                        rm_device_id: gpu_index,
+                        mig_device: MIGDeviceId { value: 0 },
+                    },
+                    no3d: 1,
+                    enable_console_hotplug_handling: 0,
+                    _padding: [0; 2],
+                    registry_keys,
+                },
+                reply: Zeroable::zeroed(),
+            };
+
+            // SAFETY: the backing struct is 1512 bytes, and both sizes are
+            // verified AllocDevice ABIs with identical fields at the offsets read.
+            let result = unsafe {
+                nvkms_ioctl_sized(fd, NvKmsIoctlCommand::AllocDevice, &mut candidate, size)
+            };
+            match result {
+                Ok(_) => {
+                    let _ = ALLOC_DEVICE_PARAM_SIZE.set(size);
+                    alloc_params = Some(candidate);
+                    break;
+                }
+                Err(error) if Self::should_retry_alloc(error, index, sizes.len()) => continue,
+                Err(error) => {
+                    return Err(NvControlError::VibranceControlFailed(format!(
+                        "AllocDevice ioctl failed with paramSize {size}: {error}"
+                    )));
+                }
+            }
         }
+
+        let alloc_params = alloc_params.ok_or_else(|| {
+            NvControlError::VibranceControlFailed(format!(
+                "AllocDevice ioctl rejected known paramSize values: {}",
+                sizes
+                    .iter()
+                    .map(NvU32::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ))
+        })?;
 
         // Check status
         if alloc_params.reply.status != NvKmsAllocDeviceStatus::Success {
@@ -268,16 +304,94 @@ impl NativeVibranceController {
                 false
             };
 
+            let current_vibrance = if connected {
+                let mut get_params = NvKmsGetDpyAttributeParams {
+                    request: NvKmsGetDpyAttributeRequest {
+                        device_handle,
+                        disp_handle,
+                        dpy_id,
+                        attribute: NvKmsDpyAttribute::DigitalVibrance,
+                    },
+                    reply: NvKmsGetDpyAttributeReply { value: 0 },
+                };
+                // SAFETY: get_params matches GetDpyAttribute and the NVKMS handles
+                // were returned by the successful allocation above.
+                unsafe { nvkms_ioctl(fd, NvKmsIoctlCommand::GetDpyAttribute, &mut get_params) }
+                    .ok()
+                    .map(|_| get_params.reply.value)
+            } else {
+                None
+            };
+
+            let vibrance_range = if connected {
+                let mut range_params = NvKmsGetDpyAttributeValidValuesParams {
+                    request: NvKmsGetDpyAttributeValidValuesRequest {
+                        device_handle,
+                        disp_handle,
+                        dpy_id,
+                        attribute: NvKmsDpyAttribute::DigitalVibrance,
+                    },
+                    reply: Zeroable::zeroed(),
+                };
+                // SAFETY: range_params matches GetDpyAttributeValidValues and
+                // the returned union is read only when the driver identifies it as a range.
+                let queried = unsafe {
+                    nvkms_ioctl(
+                        fd,
+                        NvKmsIoctlCommand::GetDpyAttributeValidValues,
+                        &mut range_params,
+                    )
+                };
+                if queried.is_ok() && range_params.reply.attr_type == NvKmsAttributeType::Range {
+                    // SAFETY: attr_type selects the range member of the reply union.
+                    Some(unsafe {
+                        (
+                            range_params.reply.u.range.min,
+                            range_params.reply.u.range.max,
+                        )
+                    })
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
             connectors.push(ConnectorInfo {
                 connector_index: connector_idx as u32,
                 connector_type: connector_type.to_string(),
                 dpy_id,
                 connected,
-                current_vibrance: 0,
+                current_vibrance,
+                vibrance_range,
             });
         }
 
         Ok((device_handle, disp_handle, connectors))
+    }
+
+    fn alloc_device_candidate_sizes(driver_version: &str) -> NvResult<[NvU32; 2]> {
+        let major = driver_version
+            .split('.')
+            .next()
+            .and_then(|part| part.parse::<u32>().ok())
+            .ok_or_else(|| {
+                NvControlError::VibranceControlFailed(format!(
+                    "Cannot select NVKMS ABI for driver version {driver_version}"
+                ))
+            })?;
+
+        match major {
+            610.. => Ok([ALLOC_DEVICE_PARAM_SIZE_610, ALLOC_DEVICE_PARAM_SIZE_595]),
+            595..=609 => Ok([ALLOC_DEVICE_PARAM_SIZE_595, ALLOC_DEVICE_PARAM_SIZE_610]),
+            _ => Err(NvControlError::VibranceControlFailed(format!(
+                "Native vibrance supports NVIDIA driver branches 595 and newer; found {driver_version}"
+            ))),
+        }
+    }
+
+    fn should_retry_alloc(error: nix::errno::Errno, index: usize, total: usize) -> bool {
+        error == nix::errno::Errno::EPERM && index + 1 < total
     }
 
     /// Set vibrance for a specific connector by index
@@ -295,7 +409,10 @@ impl NativeVibranceController {
             ));
         }
 
-        let clamped_value = vibrance_value.clamp(VIBRANCE_MIN, VIBRANCE_MAX);
+        let (minimum, maximum) = connector
+            .vibrance_range
+            .unwrap_or((VIBRANCE_MIN, VIBRANCE_MAX));
+        let clamped_value = vibrance_value.clamp(minimum, maximum);
 
         let mut params = NvKmsSetDpyAttributeParams {
             request: NvKmsSetDpyAttributeRequest {
@@ -321,7 +438,7 @@ impl NativeVibranceController {
 
         // Update stored value
         if let Some(conn) = self.connectors.get_mut(connector_index) {
-            conn.current_vibrance = clamped_value;
+            conn.current_vibrance = Some(clamped_value);
         }
 
         Ok(())
@@ -372,12 +489,13 @@ impl NativeVibranceController {
     pub fn list_displays(&self) -> Vec<(u32, u32, String, bool)> {
         self.connectors
             .iter()
+            .filter(|connector| connector.connected)
             .map(|c| {
                 (
                     0,
                     c.connector_index,
                     format!("{}: {}", c.connector_index, c.connector_type),
-                    c.connected,
+                    true,
                 )
             })
             .collect()
@@ -443,9 +561,9 @@ pub fn percentage_to_vibrance(percentage: u32) -> i64 {
 /// Convert vibrance range (-1024 to 1023) to percentage (0-200%)
 pub fn vibrance_to_percentage(vibrance: i64) -> u32 {
     if vibrance <= 0 {
-        (((vibrance + 1024) as f64 / 1024.0) * 100.0) as u32
+        ((((vibrance + 1024) as f64 / 1024.0) * 100.0).round()) as u32
     } else {
-        (100.0 + (vibrance as f64 / 1023.0 * 100.0)) as u32
+        (100.0 + (vibrance as f64 / 1023.0 * 100.0)).round() as u32
     }
 }
 
@@ -508,10 +626,68 @@ pub fn list_displays_native() -> NvResult<Vec<(u32, u32, String, bool)>> {
     Ok(controller.list_displays())
 }
 
+pub fn get_vibrance_connectors_native() -> NvResult<Vec<ConnectorInfo>> {
+    let guard = get_vibrance_controller()?;
+    let controller = guard.as_ref().ok_or_else(|| {
+        NvControlError::VibranceControlFailed("Controller not initialized".to_string())
+    })?;
+    Ok(controller.connectors.clone())
+}
+
 pub fn reset_vibrance_native() -> NvResult<()> {
     let mut guard = get_vibrance_controller()?;
     let controller = guard.as_mut().ok_or_else(|| {
         NvControlError::VibranceControlFailed("Controller not initialized".to_string())
     })?;
     controller.reset_all_vibrance()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn alloc_size_order_tracks_driver_branch() {
+        assert_eq!(
+            NativeVibranceController::alloc_device_candidate_sizes("610.57.04").unwrap(),
+            [ALLOC_DEVICE_PARAM_SIZE_610, ALLOC_DEVICE_PARAM_SIZE_595]
+        );
+        assert_eq!(
+            NativeVibranceController::alloc_device_candidate_sizes("595.84").unwrap(),
+            [ALLOC_DEVICE_PARAM_SIZE_595, ALLOC_DEVICE_PARAM_SIZE_610]
+        );
+    }
+
+    #[test]
+    fn unknown_and_older_driver_branches_fail_closed() {
+        assert!(NativeVibranceController::alloc_device_candidate_sizes("590.48").is_err());
+        assert!(NativeVibranceController::alloc_device_candidate_sizes("not-a-version").is_err());
+    }
+
+    #[test]
+    fn alloc_retry_is_limited_to_eperm_and_an_available_fallback() {
+        assert!(NativeVibranceController::should_retry_alloc(
+            nix::errno::Errno::EPERM,
+            0,
+            2
+        ));
+        assert!(!NativeVibranceController::should_retry_alloc(
+            nix::errno::Errno::EPERM,
+            1,
+            2
+        ));
+        assert!(!NativeVibranceController::should_retry_alloc(
+            nix::errno::Errno::EIO,
+            0,
+            2
+        ));
+    }
+
+    #[test]
+    fn raw_vibrance_round_trips_to_user_percentages() {
+        assert_eq!(percentage_to_vibrance(100), 0);
+        assert_eq!(vibrance_to_percentage(percentage_to_vibrance(100)), 100);
+        assert_eq!(vibrance_to_percentage(percentage_to_vibrance(150)), 150);
+        assert_eq!(vibrance_to_percentage(percentage_to_vibrance(200)), 200);
+    }
 }

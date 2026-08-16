@@ -48,7 +48,7 @@ flowchart TD
     security --> policy["../SECURITY.md\nsecurity policy"]
     security --> accepted["advisories/accepted.md\naccepted risks"]
     security --> resolved["advisories/resolved.md\nresolved advisories"]
-    security --> upgrades["advisories/v0.8.10-hotfix-notes.md\nupgrade evidence"]
+    security --> upgrades["advisories/v0.8.12-release-notes.md\nrelease evidence"]
 ```
 
 ## Runtime Shape
@@ -95,7 +95,7 @@ flowchart TD
     task -->|"Using CUDA/Ollama"| cuda["features/cuda-ai.md"]
     task -->|"Understanding profile bundles"| config["commands/config.md"]
     task -->|"Understanding game automation"| gaming["commands/gaming.md"]
-    task -->|"Reviewing release evidence"| upgrades["advisories/v0.8.10-hotfix-notes.md"]
+    task -->|"Reviewing release evidence"| upgrades["advisories/v0.8.12-release-notes.md"]
     task -->|"Checking release gates"| release["internals/release-validation.md"]
 ```
 
@@ -112,6 +112,7 @@ flowchart TD
 | CUDA/AI diagnostics | [commands/cuda.md](commands/cuda.md), [features/cuda-ai.md](features/cuda-ai.md) | Read-only CUDA, Ollama, container runtime, and workload-fit checks |
 | Support artifacts | [integration/issue-reporting.md](integration/issue-reporting.md), [integration/support-bundle-sample.md](integration/support-bundle-sample.md) | Redacted support bundles and issue-reporting evidence |
 | Release validation | [release-checklist.md](release-checklist.md), [internals/release-validation.md](internals/release-validation.md) | Release gates, hardware mutation boundaries, install/package evidence |
+| Astral connector telemetry | [hardware/power-detection.md](hardware/power-detection.md), [api/asus-power-monitor.md](api/asus-power-monitor.md) | hwmon/SMBus source selection, per-pin measurements, health, and read-only safety |
 | Advisories | [advisories/accepted.md](advisories/accepted.md), [advisories/resolved.md](advisories/resolved.md) | Accepted dependency risk and resolved advisory history |
 
 ### Getting Started
@@ -204,6 +205,8 @@ Rust library API documentation.
 | [api/fan.md](api/fan.md) | Fan control API |
 | [api/display.md](api/display.md) | Display management API |
 | [api/backend.md](api/backend.md) | Backend abstraction |
+| [api/asus-power-monitor.md](api/asus-power-monitor.md) | ASUS Astral 12V-2x6 telemetry types, source selection, and safety contract |
+| [api/driver.md](api/driver.md) | Driver status, release diagnostics, NVIDIA 610 runtime probes, and GFN detection |
 
 ### Configuration
 
@@ -222,7 +225,18 @@ Rust library API documentation.
 | [integration/companion.md](integration/companion.md) | Lightweight desktop companion flow |
 | [integration/issue-reporting.md](integration/issue-reporting.md) | Driver/GSP issue reporting workflow |
 | [integration/support-bundle-sample.md](integration/support-bundle-sample.md) | Redacted support bundle example |
+| [integration/geforce-now.md](integration/geforce-now.md) | Official native GeForce NOW Flatpak detection and H.265 Vulkan readiness |
 | [release-checklist.md](release-checklist.md) | Final release verification checklist |
+
+### Distributions
+
+| Document | Description |
+|----------|-------------|
+| [distros/overview.md](distros/overview.md) | Support tiers and hardware-backed validation matrix |
+| [distros/arch.md](distros/arch.md) | Primary Arch platform, custom kernels, and local source install |
+| [distros/fedora.md](distros/fedora.md) | Fedora open-driver packaging and akmods validation |
+| [distros/popos-cosmic.md](distros/popos-cosmic.md) | Pop!_OS 24.04, COSMIC VRR, and NVIDIA 595 coverage |
+| [distros/cachyos.md](distros/cachyos.md) | CachyOS chwd, precompiled modules, and DKMS boundaries |
 
 ### Security And Advisories
 
@@ -233,6 +247,7 @@ Security policy, accepted dependency risk, and resolved upgrade records.
 | [../SECURITY.md](../SECURITY.md) | Security policy and current audit posture |
 | [advisories/accepted.md](advisories/accepted.md) | Accepted warnings or dependency risks for the active release |
 | [advisories/resolved.md](advisories/resolved.md) | Dependency or code advisories resolved by release work |
+| [advisories/v0.8.12-release-notes.md](advisories/v0.8.12-release-notes.md) | v0.8.12 scope, hardware matrix, and packaging evidence |
 | [advisories/v0.8.10-hotfix-notes.md](advisories/v0.8.10-hotfix-notes.md) | v0.8.10 hotfix scope, packaging updates, fan CLI fixes, and completion/manpage evidence |
 | [advisories/v0.8.9-upgrade-notes.md](advisories/v0.8.9-upgrade-notes.md) | v0.8.9 dependency upgrades, runtime fixes, and verification evidence |
 

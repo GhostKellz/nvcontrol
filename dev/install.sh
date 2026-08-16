@@ -11,7 +11,6 @@ COMPLETIONS_DIR="$HOME/.local/share/bash-completion/completions"
 ZSH_COMPLETIONS_DIR="$HOME/.local/share/zsh/site-functions"
 FISH_COMPLETIONS_DIR="$HOME/.local/share/fish/vendor_completions.d"
 DESKTOP_DIR="$HOME/.local/share/applications"
-MAN_DIR="$HOME/.local/share/man/man1"
 
 resolve_bin_dir() {
     local profile_dir="$1"
@@ -141,7 +140,7 @@ Exec=$INSTALL_DIR/nvcontrol
 Icon=nvidia-settings
 Terminal=false
 Type=Application
-Categories=System;Settings;HardwareSettings;
+Categories=Settings;HardwareSettings;
 Keywords=nvidia;gpu;graphics;wayland;overclocking;fan;
 StartupNotify=true
 EOF

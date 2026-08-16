@@ -1,30 +1,24 @@
-pkgbase = nvcontrol-git
-	pkgdesc = The Ultimate NVIDIA GPU Control Tool - Advanced overclocking, gaming integration, container support
-	pkgver = 0.7.0.r0.g41a9323
+pkgbase = nvcontrol
+	pkgdesc = The Ultimate NVIDIA GPU Control Tool for Linux - Advanced overclocking, fan control, and gaming optimization
+	pkgver = 0.8.12
 	pkgrel = 1
-	url = https://github.com/GhostKellz/nvcontrol
+	url = https://github.com/ghostkellz/nvcontrol
 	arch = x86_64
 	license = MIT
 	makedepends = rust
-	makedepends = cargo
 	makedepends = git
-	depends = nvidia-utils>=580
-	depends = wayland
-	depends = libxcb
-	depends = gtk3
-	depends = hicolor-icon-theme
+	depends = nvidia-utils>=610
+	depends = libxnvctrl
 	optdepends = gamescope: Gaming session compositor integration
-	optdepends = mangohud: Performance overlay and monitoring
-	optdepends = gamemode: Automatic gaming optimization
-	optdepends = nvibrant-cli: Digital vibrance for Wayland
+	optdepends = mangohud: Performance overlay support
+	optdepends = gamemode: Automatic performance optimization
 	optdepends = docker: Container GPU management
 	optdepends = podman: Rootless container GPU support
 	optdepends = nvidia-container-toolkit: NVIDIA Container Runtime
-	optdepends = libvirt: GPU passthrough for virtual machines
-	optdepends = gpu-burn: GPU stability testing
+	optdepends = libvirt: GPU passthrough for VMs
 	provides = nvcontrol
-	conflicts = nvcontrol
-	source = git+https://github.com/GhostKellz/nvcontrol.git
+	conflicts = nvcontrol-git
+	source = git+https://github.com/ghostkellz/nvcontrol.git#tag=v0.8.12
 	sha256sums = SKIP
 
-pkgname = nvcontrol-git
+pkgname = nvcontrol

@@ -2,15 +2,18 @@
 
 This document tracks remaining `unsafe` blocks in nvcontrol and plans for reducing them.
 
-## Current Status (v0.8.10)
+## Current Status (v0.8.12)
 
 | Category | Count | Status |
 |----------|-------|--------|
-| Environment variables | 0 | ✅ Moved to `safe_env.rs` |
-| NVKMS ioctl calls | 13 | Legitimate - kernel interface |
-| Union field access | 1 | Legitimate - FFI type |
-| libc::ioctl | 1 | Legitimate - system call |
-| **Total** | **15** | Down from 31 |
+| Environment wrapper internals | 2 | Encapsulated in `safe_env.rs` |
+| NVKMS binding/syscall blocks | 2 | Kernel ioctl boundary |
+| NVKMS caller operations | 13 | Display and vibrance FFI calls |
+| ASUS SMBus fallback | 4 | I2C ioctl and C union access |
+| **Unsafe blocks** | **21** | Audited, localized hardware/FFI boundaries |
+
+The bindings also contain eight `unsafe impl Zeroable` declarations for C-layout
+NVKMS types. They are tracked separately from executable unsafe blocks.
 
 ## Legitimate Unsafe (Cannot Eliminate)
 
@@ -23,7 +26,7 @@ unsafe { libc::ioctl(fd, NVKMS_IOCTL_IOWR, &params) }
 ```
 **Why unsafe?** `libc::ioctl` is a raw syscall with no Rust safety guarantees.
 
-### 2. `vibrance_native.rs` - NVKMS operations (7 blocks)
+### 2. `vibrance_native.rs` - NVKMS operations (9 blocks)
 - `AllocDevice` - Allocate NVKMS device handle
 - `QueryDisp` - Query display information
 - `QueryConnectorStaticData` - Get connector info
@@ -33,7 +36,16 @@ unsafe { libc::ioctl(fd, NVKMS_IOCTL_IOWR, &params) }
 
 **Why unsafe?** Calling `unsafe fn nvkms_ioctl()`.
 
-### 3. `display_controls.rs` - Display attribute access (4 blocks)
+### 3. `asus_power_detector.rs` - read-only SMBus fallback
+
+- select I2C slave address `0x2b`
+- issue `I2C_SMBUS_I2C_BLOCK_DATA`
+- read the C union's 24-byte result buffer
+
+**Why unsafe?** Linux I2C uses raw ioctl pointers and a C union. The public
+detector validates the returned frame and exposes no register-data write path.
+
+### 4. `display_controls.rs` - Display attribute access (4 blocks)
 - `GetDpyAttribute` - Read display attribute
 - `SetDpyAttribute` - Write display attribute
 - `GetDpyAttributeValidValues` - Get valid range

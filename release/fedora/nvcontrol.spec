@@ -1,7 +1,7 @@
 %global crate nvcontrol
 
 Name:           nvcontrol
-Version:        0.8.11
+Version:        0.8.12
 Release:        1%{?dist}
 Summary:        Modern NVIDIA Settings Manager for Linux + Wayland
 
@@ -78,7 +78,7 @@ Exec=nvcontrol
 Icon=nvcontrol
 Terminal=false
 Type=Application
-Categories=Settings;HardwareSettings;System;
+Categories=Settings;HardwareSettings;
 Keywords=nvidia;gpu;graphics;gaming;vibrance;vrr;hdr;
 StartupWMClass=nvcontrol
 EOF
@@ -110,7 +110,7 @@ install -Dm644 man/nvctl.1 %{buildroot}%{_mandir}/man1/nvctl.1
 install -Dm644 LICENSE %{buildroot}%{_licensedir}/%{name}/LICENSE
 
 %check
-cargo test --release --lib -- --skip hardware --skip nvml || true
+cargo test --release --lib -- --skip hardware --skip nvml
 
 %files
 %license LICENSE
@@ -122,6 +122,14 @@ cargo test --release --lib -- --skip hardware --skip nvml || true
 %{_mandir}/man1/nvctl.1*
 
 %changelog
+* Sun Aug 16 2026 CK Technology LLC <info@cktechx.com> - 0.8.12-1
+- Correct ASUS Astral 12V-2x6 telemetry and add hwmon integration
+- Add per-pin voltage, current, power, balance, history, and health reporting
+- Support native vibrance across the NVIDIA 595 and 610 NVKMS allocation ABIs
+- Report descriptor-heap, H.265 decode, DRM color, and GeForce NOW capabilities
+- Correct COSMIC VRR routing and remove inferred VRR certification/range claims
+- Refresh v0.8.12 packaging, documentation, and compatible dependencies
+
 * Tue Aug 04 2026 CK Technology LLC <info@cktechx.com> - 0.8.11-1
 - Clear RUSTSEC-2026-0194/0195 (quick-xml), RUSTSEC-2026-0190 (anyhow), and
   RUSTSEC-2026-0221 (event-listener); cargo audit is clean
@@ -139,7 +147,7 @@ cargo test --release --lib -- --skip hardware --skip nvml || true
 - Dependency refresh including memmap2 0.9.11 to clear the current RustSec warning
 - Release metadata and documentation refresh for the next Linux + NVIDIA 610+ release
 
-* Mon May 26 2026 CK Technology LLC <info@cktechx.com> - 0.8.8-1
+* Tue May 26 2026 CK Technology LLC <info@cktechx.com> - 0.8.8-1
 - NVIDIA driver 610.43.02 support (NVKMS ABI fix, capability flags, runtime detection)
 - 610+ feature surfacing in CLI output (Vulkan extensions, FP16 EGL, DMABUF, DRM color pipeline)
 - Minimum driver baseline updated to 610+ (NVIDIA open kernel modules required)
@@ -151,7 +159,7 @@ cargo test --release --lib -- --skip hardware --skip nvml || true
 - Support bundle expansion for boot/initramfs, package inventory, DKMS/source/runtime doctor output
 - GUI/TUI/CLI reliability and polish pass for release readiness
 
-* Mon Jan 13 2026 CK Technology LLC <info@cktechx.com> - 0.8.3-1
+* Tue Jan 13 2026 CK Technology LLC <info@cktechx.com> - 0.8.3-1
 - Legacy GPU detection with deprecation warnings for Maxwell/Pascal on driver 590+
 - Explicit Sync commands (nvctl wayland explicit-sync status/enable)
 - Top-level HDR command with status, enable, disable, config, set-brightness, tools, capabilities

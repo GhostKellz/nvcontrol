@@ -176,6 +176,7 @@ pub struct GuiState {
     // === ASUS Power Monitor+ ===
     pub asus_power_detector: Option<crate::asus_power_detector::AsusPowerDetector>,
     pub asus_power_status: Option<crate::asus_power_detector::PowerConnectorStatus>,
+    pub asus_power_error: Option<String>,
     pub asus_power_history: crate::asus_power_detector::PowerHistory,
     pub asus_power_last_update: std::time::Instant,
 
@@ -446,6 +447,7 @@ impl GuiState {
             driver_capabilities: crate::drivers::DriverCapabilities::detect().ok(),
             asus_power_detector,
             asus_power_status: None,
+            asus_power_error: None,
             asus_power_history: crate::asus_power_detector::PowerHistory::new(),
             asus_power_last_update: std::time::Instant::now(),
             latency_mode: "normal".to_string(),
@@ -639,10 +641,16 @@ impl GuiState {
     pub fn refresh_asus_power(&mut self) {
         if self.asus_power_last_update.elapsed() > std::time::Duration::from_secs(2) {
             if let Some(ref detector) = self.asus_power_detector {
-                if let Ok(status) = detector.read_power_rails() {
-                    // Record to history for trend analysis
-                    self.asus_power_history.record(&status);
-                    self.asus_power_status = Some(status);
+                match detector.read_power_rails() {
+                    Ok(status) => {
+                        self.asus_power_history.record(&status);
+                        self.asus_power_status = Some(status);
+                        self.asus_power_error = None;
+                    }
+                    Err(error) => {
+                        self.asus_power_status = None;
+                        self.asus_power_error = Some(error.to_string());
+                    }
                 }
                 self.asus_power_last_update = std::time::Instant::now();
             }

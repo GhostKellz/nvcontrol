@@ -92,9 +92,12 @@ nvctl fan set 0 35
 
 ### Power Detector Shows "Read failed"
 
-1. Install i2c-tools: `sudo pacman -S i2c-tools`
-2. Run with sudo: `sudo nvctl asus power`
-3. Check nvidia driver is loaded: `nvidia-smi`
+1. Prefer an `astral12vhpwr` hwmon device, or verify access to `/dev/i2c-N`
+2. Confirm NVIDIA adapter index 1 exists beneath the GPU in sysfs
+3. Check the NVIDIA driver is loaded: `nvidia-smi`
+
+Do not run the nvcontrol GUI as root. The native fallback does not require
+`i2c-tools`; a permission error should be fixed with scoped device-group access.
 
 ### Card Not Detected
 

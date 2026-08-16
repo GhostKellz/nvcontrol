@@ -321,12 +321,16 @@ impl ProfileManager {
             .and_then(|value| {
                 serde_json::from_value::<Vec<crate::vibrance_native::ConnectorInfo>>(value).ok()
             })
-            .map(|connectors| VibranceSettings {
-                display_levels: connectors
+            .and_then(|connectors| {
+                connectors
                     .into_iter()
-                    .map(|connector| connector.current_vibrance as i16)
-                    .collect(),
-                per_game_vibrance: false,
+                    .filter(|connector| connector.connected)
+                    .map(|connector| connector.current_vibrance.map(|value| value as i16))
+                    .collect::<Option<Vec<_>>>()
+                    .map(|display_levels| VibranceSettings {
+                        display_levels,
+                        per_game_vibrance: false,
+                    })
             });
 
         let display_layout = MultiMonitorManager::new()

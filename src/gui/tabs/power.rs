@@ -122,6 +122,16 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                         ui.label(egui::RichText::new(format!("{}", status.i2c_bus)).color(colors.fg.to_egui()));
                         ui.end_row();
 
+                        ui.label(egui::RichText::new("Source").color(colors.fg_dark.to_egui()));
+                        ui.label(egui::RichText::new(&status.source).color(colors.fg.to_egui()));
+                        ui.end_row();
+
+                        if let Some(balance) = status.current_balance_percent {
+                            ui.label(egui::RichText::new("Pin balance").color(colors.fg_dark.to_egui()));
+                            ui.label(egui::RichText::new(format!("{balance:.1}% min/max")).color(colors.fg.to_egui()));
+                            ui.end_row();
+                        }
+
                         ui.label(egui::RichText::new("Samples").color(colors.fg_dark.to_egui()));
                         ui.label(egui::RichText::new(format!("{}", state.asus_power_history.len())).color(colors.fg.to_egui()));
                         ui.end_row();
@@ -132,13 +142,22 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                     });
 
                 ui.add_space(8.0);
-                ui.label(egui::RichText::new("12V-2x6 rails").strong().color(colors.fg.to_egui()));
+                ui.label(egui::RichText::new("12V-2x6 pins").strong().color(colors.fg.to_egui()));
                 egui::Grid::new("asus_power_rail_grid")
-                    .num_columns(3)
+                    .num_columns(4)
                     .spacing([12.0, 4.0])
                     .show(ui, |ui| {
                         for rail in &status.rails {
-                            ui.label(egui::RichText::new(format!("Rail {}", rail.rail_id)).small().color(colors.fg_dark.to_egui()));
+                            ui.label(egui::RichText::new(format!("Pin {}", rail.rail_id + 1)).small().color(colors.fg_dark.to_egui()));
+                            ui.label(
+                                egui::RichText::new(
+                                    rail.voltage_mv
+                                        .map(|voltage_mv| format!("{:.3}V", voltage_mv as f32 / 1000.0))
+                                        .unwrap_or_else(|| "-".to_string()),
+                                )
+                                .small()
+                                .color(colors.fg.to_egui()),
+                            );
                             ui.label(
                                 egui::RichText::new(
                                     rail.current_ma
@@ -164,15 +183,19 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                 ui.add_space(8.0);
                 ui.label(
                     egui::RichText::new(
-                        "Read-only monitoring. Values are approximate and best used as connector-health guidance, not lab-grade power telemetry.",
+                        "Read-only IT8915 telemetry. Health rules are load-gated snapshots; nvcontrol never performs automatic shutdown or power-limit actions.",
                     )
                     .small()
                     .color(colors.comment.to_egui()),
                 );
             } else {
-                ui.label(egui::RichText::new("Initializing ASUS power monitoring...").color(colors.fg_dark.to_egui()));
+                let message = state
+                    .asus_power_error
+                    .as_deref()
+                    .unwrap_or("Initializing ASUS power monitoring...");
+                ui.label(egui::RichText::new(message).color(colors.fg_dark.to_egui()));
                 ui.label(
-                    egui::RichText::new("If this stays empty on an Astral/Matrix card, verify i2c-tools, i2c-dev, and i2c-nvidia_gpu access.")
+                    egui::RichText::new("Prefer astral-hwmon, or verify access to the GPU's i2c device for the direct SMBus fallback.")
                         .small()
                         .color(colors.comment.to_egui()),
                 );

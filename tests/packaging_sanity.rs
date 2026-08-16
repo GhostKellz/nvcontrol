@@ -76,6 +76,7 @@ fn release_and_packaging_assets_exist() {
         "completions/nvctl.bash",
         "completions/_nvctl",
         "completions/nvctl.fish",
+        "flatpak/cargo-sources.json",
     ] {
         assert_exists(path);
     }
@@ -174,6 +175,15 @@ fn root_readme_tracks_current_docs_surface() {
 }
 
 #[test]
+fn tui_docs_use_real_entry_points() {
+    let guide = read_repo_file("docs/tui-user-guide.md");
+    assert!(guide.contains("nvctl tui"));
+    assert!(guide.contains("nvctl nvtop"));
+    assert!(guide.contains("nvctl gpu stat"));
+    assert!(!guide.contains("nvctl dashboard"));
+}
+
+#[test]
 fn cuda_ai_docs_include_flow_diagrams() {
     for doc in [
         "docs/commands/cuda.md",
@@ -219,6 +229,26 @@ fn rust_version_is_consistent_across_core_release_metadata() {
 }
 
 #[test]
+fn package_checks_do_not_mask_test_failures() {
+    for path in [
+        "PKGBUILD",
+        "release/arch/PKGBUILD",
+        "release/deb/rules",
+        "release/fedora/nvcontrol.spec",
+    ] {
+        let package = read_repo_file(path);
+        assert!(
+            package.contains("cargo test --release --lib -- --skip hardware --skip nvml"),
+            "{path} is missing its package test command"
+        );
+        assert!(
+            !package.contains("cargo test --release --lib -- --skip hardware --skip nvml ||"),
+            "{path} masks package test failures"
+        );
+    }
+}
+
+#[test]
 fn packaging_references_current_service_name() {
     let root_pkgbuild = read_repo_file("PKGBUILD");
     let arch_pkgbuild = read_repo_file("release/arch/PKGBUILD");
@@ -232,7 +262,7 @@ fn packaging_references_current_service_name() {
 }
 
 #[test]
-fn release_metadata_targets_0_8_11() {
+fn release_metadata_targets_0_8_12() {
     let cargo_toml = read_repo_file("Cargo.toml");
     let root_pkgbuild = read_repo_file("PKGBUILD");
     let arch_pkgbuild = read_repo_file("release/arch/PKGBUILD");
@@ -240,14 +270,36 @@ fn release_metadata_targets_0_8_11() {
     let deb_changelog = read_repo_file("release/deb/changelog");
     let appimage = read_repo_file("appimage/AppImageBuilder.yml");
     let flatpak = read_repo_file("flatpak/com.github.nvcontrol.yml");
+    let srcinfo = read_repo_file(".SRCINFO");
+    let changelog = read_repo_file("CHANGELOG.md");
+    let docs_index = read_repo_file("docs/README.md");
 
-    assert!(cargo_toml.contains("version = \"0.8.11\""));
-    assert!(root_pkgbuild.contains("pkgver=0.8.11"));
-    assert!(arch_pkgbuild.contains("pkgver=0.8.11"));
-    assert!(fedora_spec.contains("Version:        0.8.11"));
-    assert!(deb_changelog.starts_with("nvcontrol (0.8.11-1)"));
-    assert!(appimage.contains("version: 0.8.11"));
-    assert!(flatpak.contains("tag: v0.8.11"));
+    assert!(cargo_toml.contains("version = \"0.8.12\""));
+    assert!(root_pkgbuild.contains("pkgver=0.8.12"));
+    assert!(arch_pkgbuild.contains("pkgver=0.8.12"));
+    assert!(fedora_spec.contains("Version:        0.8.12"));
+    assert!(deb_changelog.starts_with("nvcontrol (0.8.12-1)"));
+    assert!(appimage.contains("version: 0.8.12"));
+    assert!(flatpak.contains("tag: v0.8.12"));
+    assert!(flatpak.contains("runtime-version: '25.08'"));
+    assert!(flatpak.contains("CARGO_NET_OFFLINE: 'true'"));
+    assert!(srcinfo.contains("pkgver = 0.8.12"));
+    assert!(
+        srcinfo.contains("source = git+https://github.com/ghostkellz/nvcontrol.git#tag=v0.8.12")
+    );
+    assert!(changelog.contains("## [0.8.12] - 2026-08-16"));
+    for release_doc in [
+        "distros/overview.md",
+        "integration/geforce-now.md",
+        "api/asus-power-monitor.md",
+        "api/driver.md",
+        "advisories/v0.8.12-release-notes.md",
+    ] {
+        assert!(
+            docs_index.contains(release_doc),
+            "docs index is missing v0.8.12 surface: {release_doc}"
+        );
+    }
 }
 
 #[test]
