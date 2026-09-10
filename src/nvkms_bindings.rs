@@ -87,6 +87,65 @@ pub enum NvKmsIoctlCommand {
     GetDispAttributeValidValues = 27,
 }
 
+/// Command numbering is independent of the allocation buffer layout.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum NvKmsCommandAbi {
+    WithLutNotifier,
+    WithoutLutNotifier,
+}
+
+impl NvKmsCommandAbi {
+    fn from_driver_version(version: &str) -> Result<Self, nix::errno::Errno> {
+        match version
+            .trim()
+            .split('.')
+            .next()
+            .and_then(|v| v.parse::<u32>().ok())
+        {
+            Some(595..=614) => Ok(Self::WithLutNotifier),
+            Some(615..) => Ok(Self::WithoutLutNotifier),
+            _ => Err(nix::errno::Errno::ENOTSUP),
+        }
+    }
+
+    fn command_id(self, command: NvKmsIoctlCommand) -> Result<NvU32, nix::errno::Errno> {
+        let id = command as NvU32;
+        match self {
+            Self::WithoutLutNotifier if command == NvKmsIoctlCommand::CheckLutNotifier => {
+                Err(nix::errno::Errno::ENOTSUP)
+            }
+            Self::WithoutLutNotifier if id > NvKmsIoctlCommand::CheckLutNotifier as NvU32 => {
+                Ok(id - 1)
+            }
+            _ => Ok(id),
+        }
+    }
+}
+
+pub(crate) fn loaded_nvidia_version() -> Result<String, nix::errno::Errno> {
+    if let Ok(version) = std::fs::read_to_string("/sys/module/nvidia/version") {
+        return Ok(version.trim().to_string());
+    }
+    // Sandboxes may hide module sysfs. NVML reports the active driver, not
+    // an installed package version, and is supplied by the matching GL extension.
+    nvml_wrapper::Nvml::init()
+        .and_then(|nvml| nvml.sys_driver_version())
+        .map_err(|_| nix::errno::Errno::ENODEV)
+}
+
+fn loaded_command_abi() -> Result<NvKmsCommandAbi, nix::errno::Errno> {
+    static ABI: std::sync::OnceLock<NvKmsCommandAbi> = std::sync::OnceLock::new();
+    if let Some(abi) = ABI.get() {
+        return Ok(*abi);
+    }
+    // Use the loaded module, not a userspace package version. Never guess a
+    // command number: the wrong number could dispatch a different operation.
+    let version = loaded_nvidia_version()?;
+    let abi = NvKmsCommandAbi::from_driver_version(&version)?;
+    let _ = ABI.set(abi);
+    Ok(abi)
+}
+
 // ===== Display Attributes from nvkms-api.h (610+) =====
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -427,8 +486,8 @@ pub enum NvKmsAllocDeviceStatus {
     CoreChannelAllocFailed = 5,
 }
 
-// Backing storage uses the larger 595 reply. The 610 ioctl copies only its
-// smaller paramSize, while the fields nvcontrol reads retain identical offsets.
+// Backing storage covers the largest supported reply. Each ioctl copies only
+// its selected wire size; the fields read here retain identical offsets.
 // Key fields: status (offset 0), deviceHandle (offset 4), numDisps (offset 16), dispHandles (offset 20)
 // NOTE: align(8) required because Reply contains NvU64 fields (vtFbBaseAddress, vtFbSize)
 // History: 888 bytes in 595.45.04, reduced to 816 in 610.43.02
@@ -452,6 +511,7 @@ pub struct NvKmsAllocDeviceParams {
     pub reply: NvKmsAllocDeviceReply,
 }
 
+pub const ALLOC_DEVICE_PARAM_SIZE_615: NvU32 = 1448;
 pub const ALLOC_DEVICE_PARAM_SIZE_610: NvU32 = 1440;
 pub const ALLOC_DEVICE_PARAM_SIZE_595: NvU32 = 1512;
 
@@ -533,7 +593,8 @@ pub unsafe fn nvkms_ioctl_sized<T>(
     params: &mut T,
     size: NvU32,
 ) -> Result<i32, nix::Error> {
-    let ioctl_params = create_ioctl_params_sized(cmd, params, size);
+    let mut ioctl_params = create_ioctl_params_sized(cmd, params, size);
+    ioctl_params.cmd = loaded_command_abi()?.command_id(cmd)?;
 
     // SAFETY: Caller guarantees fd is valid and params matches the ioctl command.
     // NVKMS uses indirect parameter passing: ioctl_params contains a pointer to params.
@@ -591,5 +652,56 @@ mod tests {
         assert_eq!(NvKmsAttributeType::Bitmask as NvU32, 4);
         assert_eq!(NvKmsAttributeType::DpyId as NvU32, 5);
         assert_eq!(NvKmsAttributeType::DpyIdList as NvU32, 6);
+    }
+}
+
+#[cfg(test)]
+mod command_abi_tests {
+    use super::*;
+
+    #[test]
+    fn retained_branches_keep_attribute_commands() {
+        for version in ["595.45", "600.1", "610.57.04"] {
+            let abi = NvKmsCommandAbi::from_driver_version(version).unwrap();
+            assert_eq!(abi.command_id(NvKmsIoctlCommand::SetDpyAttribute), Ok(22));
+            assert_eq!(abi.command_id(NvKmsIoctlCommand::GetDpyAttribute), Ok(23));
+            assert_eq!(
+                abi.command_id(NvKmsIoctlCommand::GetDpyAttributeValidValues),
+                Ok(24)
+            );
+        }
+    }
+
+    #[test]
+    fn removed_notifier_shifts_only_later_commands() {
+        let abi = NvKmsCommandAbi::from_driver_version("615.71.09\n").unwrap();
+        assert_eq!(abi.command_id(NvKmsIoctlCommand::AllocDevice), Ok(0));
+        assert_eq!(
+            abi.command_id(NvKmsIoctlCommand::QueryDpyDynamicData),
+            Ok(6)
+        );
+        assert_eq!(abi.command_id(NvKmsIoctlCommand::SetLut), Ok(12));
+        assert_eq!(
+            abi.command_id(NvKmsIoctlCommand::CheckLutNotifier),
+            Err(nix::errno::Errno::ENOTSUP)
+        );
+        assert_eq!(abi.command_id(NvKmsIoctlCommand::IdleBaseChannel), Ok(13));
+        assert_eq!(abi.command_id(NvKmsIoctlCommand::SetDpyAttribute), Ok(21));
+        assert_eq!(abi.command_id(NvKmsIoctlCommand::GetDpyAttribute), Ok(22));
+        assert_eq!(
+            abi.command_id(NvKmsIoctlCommand::GetDpyAttributeValidValues),
+            Ok(23)
+        );
+        assert_eq!(
+            abi.command_id(NvKmsIoctlCommand::GetDispAttributeValidValues),
+            Ok(26)
+        );
+    }
+
+    #[test]
+    fn unsupported_or_missing_versions_do_not_guess() {
+        for version in ["", "unknown", "590.48.01"] {
+            assert!(NvKmsCommandAbi::from_driver_version(version).is_err());
+        }
     }
 }

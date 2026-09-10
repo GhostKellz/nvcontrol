@@ -213,19 +213,19 @@ fn cuda_ai_docs_include_flow_diagrams() {
 fn rust_version_is_consistent_across_core_release_metadata() {
     let cargo_toml = read_repo_file("Cargo.toml");
     let toolchain = read_repo_file("rust-toolchain.toml");
-    let ci_doc = read_repo_file("CI.md");
+    let ci_doc = read_repo_file("docs/testing/ci-workflow.md");
     let building_doc = read_repo_file("docs/building.md");
     let fedora_spec = read_repo_file("release/fedora/nvcontrol.spec");
     let deb_control = read_repo_file("release/deb/control");
     let pop_control = read_repo_file("release/popos-cosmic/control");
 
-    assert!(cargo_toml.contains("rust-version = \"1.97\""));
-    assert!(toolchain.contains("channel = \"1.97.1\""));
-    assert!(ci_doc.contains("Rust 1.97 stable toolchain"));
-    assert!(building_doc.contains("Rust 1.97+"));
-    assert!(fedora_spec.contains("BuildRequires:  rust >= 1.97"));
-    assert!(deb_control.contains("rustc (>= 1.97)"));
-    assert!(pop_control.contains("rustc (>= 1.97)"));
+    assert!(cargo_toml.contains("rust-version = \"1.98\""));
+    assert!(toolchain.contains("channel = \"1.98.1\""));
+    assert!(ci_doc.contains("rust-toolchain.toml"));
+    assert!(building_doc.contains("Rust 1.98+"));
+    assert!(fedora_spec.contains("BuildRequires:  rust >= 1.98"));
+    assert!(deb_control.contains("rustc (>= 1.98)"));
+    assert!(pop_control.contains("rustc (>= 1.98)"));
 }
 
 #[test]
@@ -262,7 +262,7 @@ fn packaging_references_current_service_name() {
 }
 
 #[test]
-fn release_metadata_targets_0_8_12() {
+fn release_metadata_targets_0_8_13() {
     let cargo_toml = read_repo_file("Cargo.toml");
     let root_pkgbuild = read_repo_file("PKGBUILD");
     let arch_pkgbuild = read_repo_file("release/arch/PKGBUILD");
@@ -274,30 +274,30 @@ fn release_metadata_targets_0_8_12() {
     let changelog = read_repo_file("CHANGELOG.md");
     let docs_index = read_repo_file("docs/README.md");
 
-    assert!(cargo_toml.contains("version = \"0.8.12\""));
-    assert!(root_pkgbuild.contains("pkgver=0.8.12"));
-    assert!(arch_pkgbuild.contains("pkgver=0.8.12"));
-    assert!(fedora_spec.contains("Version:        0.8.12"));
-    assert!(deb_changelog.starts_with("nvcontrol (0.8.12-1)"));
-    assert!(appimage.contains("version: 0.8.12"));
-    assert!(flatpak.contains("tag: v0.8.12"));
+    assert!(cargo_toml.contains("version = \"0.8.13\""));
+    assert!(root_pkgbuild.contains("pkgver=0.8.13"));
+    assert!(arch_pkgbuild.contains("pkgver=0.8.13"));
+    assert!(fedora_spec.contains("Version:        0.8.13"));
+    assert!(deb_changelog.starts_with("nvcontrol (0.8.13-1)"));
+    assert!(appimage.contains("version: 0.8.13"));
+    assert!(flatpak.contains("tag: v0.8.13"));
     assert!(flatpak.contains("runtime-version: '25.08'"));
     assert!(flatpak.contains("CARGO_NET_OFFLINE: 'true'"));
-    assert!(srcinfo.contains("pkgver = 0.8.12"));
+    assert!(srcinfo.contains("pkgver = 0.8.13"));
     assert!(
-        srcinfo.contains("source = git+https://github.com/ghostkellz/nvcontrol.git#tag=v0.8.12")
+        srcinfo.contains("source = git+https://github.com/ghostkellz/nvcontrol.git#tag=v0.8.13")
     );
-    assert!(changelog.contains("## [0.8.12] - 2026-08-16"));
+    assert!(changelog.contains("## [0.8.13] - 2026-09-10"));
     for release_doc in [
         "distros/overview.md",
         "integration/geforce-now.md",
         "api/asus-power-monitor.md",
         "api/driver.md",
-        "advisories/v0.8.12-release-notes.md",
+        "advisories/v0.8.13-release-notes.md",
     ] {
         assert!(
             docs_index.contains(release_doc),
-            "docs index is missing v0.8.12 surface: {release_doc}"
+            "docs index is missing v0.8.13 surface: {release_doc}"
         );
     }
 }
@@ -342,13 +342,14 @@ fn package_metadata_uses_platform_appropriate_driver_baseline() {
     let pop_control = read_repo_file("release/popos-cosmic/control");
     let appimage = read_repo_file("appimage/AppImageBuilder.yml");
 
-    assert!(root_pkgbuild.contains("nvidia-utils>=610"));
-    assert!(arch_pkgbuild.contains("nvidia-utils>=610"));
-    assert!(fedora_spec.contains("nvidia-driver-libs >= 610"));
-    assert!(deb_control.contains("nvidia-driver-libs (>= 535)"));
-    assert!(deb_control.contains("libnvidia-ml1 (>= 535)"));
-    assert!(pop_control.contains("nvidia-driver-libs (>= 535)"));
-    assert!(appimage.contains("nvidia-utils-610"));
+    assert!(root_pkgbuild.contains("nvidia-utils>=595"));
+    assert!(arch_pkgbuild.contains("nvidia-utils>=595"));
+    assert!(fedora_spec.contains("nvidia-driver-libs >= 3:595"));
+    assert!(deb_control.contains("nvidia-driver-libs (>= 595)"));
+    assert!(deb_control.contains("libnvidia-ml1 (>= 595)"));
+    assert!(pop_control.contains("nvidia-driver-libs (>= 595)"));
+    assert!(!appimage.contains("nvidia-utils-"));
+    assert!(!appimage.contains("- /usr/lib/x86_64-linux-gnu/libnvidia-ml.so*"));
 }
 
 #[test]
@@ -414,7 +415,7 @@ fn docs_do_not_reference_removed_service_or_completion_path() {
         "docs/README.md",
         "docs/commands.md",
         "CHANGELOG.md",
-        "CI.md",
+        "docs/testing/ci-workflow.md",
         "SECURITY.md",
     ] {
         let content = read_repo_file(doc);

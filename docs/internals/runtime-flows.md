@@ -22,7 +22,7 @@ flowchart TD
     driver --> proc["/proc/driver/nvidia/version"]
     driver --> modinfo["modinfo nvidia"]
     driver --> firmware["/lib/firmware/nvidia/*"]
-    display --> nvkms["/dev/nvidiactl + NVKMS ioctl"]
+    display --> nvkms["/dev/nvidia-modeset + NVKMS ioctl"]
     display --> compositor["kscreen-doctor / hyprctl / gsettings"]
     profiles --> xdg["~/.config/nvcontrol"]
     cuda --> tools["nvidia-smi, nvcc, ollama, docker, nvidia-ctk"]
@@ -59,7 +59,7 @@ flowchart TD
     probes --> egl["eglinfo / eglinfo -B"]
     probes --> kernel["uname -r\nkernel >= 6.19"]
 
-    vulkan --> vkext["610 extensions + descriptor heap\n+ H.265 video decode"]
+    vulkan --> vkext["610 extensions + descriptor heap\n+ low latency + cluster acceleration"]
     egl --> fp16["FP16 EGL Wayland signal"]
     kernel --> drm["DRM color pipeline kernel readiness"]
 

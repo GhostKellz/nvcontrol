@@ -296,3 +296,12 @@ nvctl gaming gamescope launch [OPTIONS] <command>
 ```bash
 nvctl gaming gamescope launch --preset competitive --width 1920 --height 1080 steam
 ```
+
+### Reflex status
+
+`nvctl gaming latency status --format json` reports advertised Reflex driver
+APIs and the Proton Vulkan-native path separately. `nvidia_reflex_state_known`
+is false until a game-specific state probe exists; consumers must not interpret
+`nvidia_reflex_enabled: false` as a measured disabled state when it is unknown.
+`estimated_input_lag_ms` is null when no measurement exists.
+See the [driver guide](../drivers/open-615.md) for requirements.

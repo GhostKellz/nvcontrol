@@ -1,8 +1,8 @@
 [package]
 name = "nvcontrol"
-version = "0.8.12"
+version = "0.8.13"
 edition = "2024"
-rust-version = "1.97"
+rust-version = "1.98"
 authors = ["Christopher Kelley <ckelley@ghostkellz.sh>"]
 license = "MIT"
 description = "Modern NVIDIA Settings Manager for Linux + Wayland"

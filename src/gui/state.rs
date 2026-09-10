@@ -182,6 +182,8 @@ pub struct GuiState {
 
     // === Latency Settings ===
     pub latency_mode: String,
+    pub cached_latency_info: Option<Result<crate::latency::LatencyInfo, String>>,
+    pub latency_last_update: std::time::Instant,
     pub reflex_enabled: bool,
 
     // === Gamescope ===
@@ -451,6 +453,8 @@ impl GuiState {
             asus_power_history: crate::asus_power_detector::PowerHistory::new(),
             asus_power_last_update: std::time::Instant::now(),
             latency_mode: "normal".to_string(),
+            cached_latency_info: None,
+            latency_last_update: std::time::Instant::now(),
             reflex_enabled: false,
             gamescope_config: None,
             cached_fans: Vec::new(),

@@ -1,18 +1,23 @@
 # Maintainer: Christopher Kelley <ckelley@ghostkellz.sh>
 pkgname=nvcontrol
-pkgver=0.8.12
+pkgver=0.8.13
 pkgrel=1
 pkgdesc="The Ultimate NVIDIA GPU Control Tool for Linux - Advanced overclocking, fan control, and gaming optimization"
 arch=('x86_64')
 url="https://github.com/ghostkellz/nvcontrol"
 license=('MIT')
 depends=(
-    'nvidia-utils>=610'
-    'libxnvctrl'
+    'nvidia-utils>=595'
+    'wayland'
+    'libxkbcommon'
+    'fontconfig'
+    'freetype2'
 )
 makedepends=(
     'rust'
     'git'
+    'clang'
+    'pkg-config'
 )
 optdepends=(
     'gamescope: Gaming session compositor integration'
@@ -54,11 +59,11 @@ package() {
     install -Dm644 "assets/nvcontrol.desktop" "$pkgdir/usr/share/applications/nvcontrol.desktop"
 
     # Install icon
-    install -Dm644 "assets/icons/icon-256x256.png" "$pkgdir/usr/share/icons/hicolor/256x256/apps/nvcontrol.png"
+    install -Dm644 "assets/app-icons/nvidia.png" "$pkgdir/usr/share/icons/hicolor/512x512/apps/nvcontrol.png"
 
     # Install shell completions
     install -Dm644 "completions/nvctl.bash" "$pkgdir/usr/share/bash-completion/completions/nvctl"
-    install -Dm644 "completions/nvctl.zsh" "$pkgdir/usr/share/zsh/site-functions/_nvctl"
+    install -Dm644 "completions/_nvctl" "$pkgdir/usr/share/zsh/site-functions/_nvctl"
     install -Dm644 "completions/nvctl.fish" "$pkgdir/usr/share/fish/vendor_completions.d/nvctl.fish"
 
     # Install man page

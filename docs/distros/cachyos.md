@@ -2,7 +2,7 @@
 
 CachyOS is Arch-based and should use nvcontrol's Arch userspace path, but its
 kernel and NVIDIA module packaging are distinct. It is not yet a dedicated
-nvcontrol hardware test target. The primary v0.8.12 workstation runs Arch Linux
+nvcontrol hardware test target. The primary development workstation runs Arch Linux
 with a CachyOS LTO kernel; that validates the custom-kernel/DKMS combination, not
 the complete CachyOS distribution.
 

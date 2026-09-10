@@ -1,6 +1,6 @@
 # Legacy Driver Support (590 And Earlier)
 
-Current nvcontrol supports the known 595 and 610 `AllocDevice` layouts at
+Current nvcontrol supports the known 595, 610, and 615 `AllocDevice` layouts at
 runtime. This legacy guidance applies to driver 590 and earlier.
 
 Use [nvidia-driver.md](nvidia-driver.md) as the source of truth for branch-to-version mapping. This document only expands on the older-build path.
@@ -81,7 +81,7 @@ When you upgrade to driver 610+ open:
 ## Troubleshooting
 
 **"No connected displays found" on driver 590:**
-- Make sure you're using an older vibrance-compatible build, not the current 610-targeted build
+- Make sure you're using an older vibrance-compatible build, not the current build
 - `v0.8.5` is the first fallback to try
 
 **595 compatibility issues:**
@@ -90,4 +90,4 @@ When you upgrade to driver 610+ open:
 
 **EPERM errors:**
 - Often an NVKMS parameter-size mismatch rather than a Unix permission error
-- Use current nvcontrol for 595/610; use the legacy build only for 590 and earlier
+- Use current nvcontrol for 595/610/615; use the legacy build only for 590 and earlier

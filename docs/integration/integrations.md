@@ -8,15 +8,10 @@ This directory documents nvcontrol's optional desktop, gaming, and container int
 - Gamescope - optional compositor integration exposed by `nvctl gamescope`
 - MangoHud and GameMode - optional OSD and game-performance helpers
 
-## Experimental Integrations
+## Archived proposals
 
-The following integration remains in `experimental/`:
-
-| Integration | Status | Description |
-|-------------|--------|-------------|
-| ghostwave | 🧪 Experimental | GPU-accelerated audio denoising |
-
-See [experimental/README.md](../../experimental/README.md) for details on these features.
+The [ghostwave proposal](../../archive/experimental/docs/GHOSTWAVE.md) is historical
+design material, not a shipped integration. Its source is no longer present.
 
 ## Container Runtime
 

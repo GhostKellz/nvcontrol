@@ -19,62 +19,72 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
     ));
     ui.add_space(4.0);
 
+    if state.cached_latency_info.is_none() || state.latency_last_update.elapsed().as_secs() >= 30 {
+        state.cached_latency_info = Some(latency::get_latency_info().map_err(|e| e.to_string()));
+        state.latency_last_update = std::time::Instant::now();
+    }
+
     // Current Latency Status
     Card::new(&colors)
         .title("Current Latency Status")
         .icon(icons::TARGET)
-        .show(ui, |ui| match latency::get_latency_info() {
-            Ok(info) => {
-                egui::Grid::new("latency_info_grid")
-                    .num_columns(2)
-                    .spacing([20.0, 4.0])
-                    .show(ui, |ui| {
-                        ui.label("NVIDIA Reflex:");
-                        if info.nvidia_reflex_available {
-                            let (text, color) = if info.nvidia_reflex_enabled {
+        .show(ui, |ui| {
+            match state
+                .cached_latency_info
+                .as_ref()
+                .expect("latency status initialized")
+            {
+                Ok(info) => {
+                    egui::Grid::new("latency_info_grid")
+                        .num_columns(2)
+                        .spacing([20.0, 4.0])
+                        .show(ui, |ui| {
+                            ui.label("Reflex driver API:");
+                            ui.label(if info.nvidia_reflex_available {
+                                "Available"
+                            } else {
+                                "Not detected"
+                            });
+                            ui.end_row();
+                            ui.label("Proton Vulkan-native Reflex:");
+                            ui.label(if info.proton_reflex_vulkan_supported {
+                                "Supported for games using NvLowLatencyVk.dll"
+                            } else {
+                                "Required extension revision not detected"
+                            });
+                            ui.end_row();
+                            ui.label("Reflex in-game state:");
+                            ui.label("Unknown — enable and verify in the game's settings");
+                            ui.end_row();
+
+                            ui.label("GPU Scheduling:");
+                            let (text, color) = if info.gpu_scheduling_enabled {
                                 ("✅ Enabled", colors.green.to_egui())
                             } else {
-                                ("⚠️ Available", colors.yellow.to_egui())
+                                ("❌ Disabled", colors.yellow.to_egui())
                             };
                             ui.colored_label(color, text);
-                        } else {
-                            ui.colored_label(colors.red.to_egui(), "❌ Not Available");
-                        }
-                        ui.end_row();
+                            ui.end_row();
 
-                        ui.label("GPU Scheduling:");
-                        let (text, color) = if info.gpu_scheduling_enabled {
-                            ("✅ Enabled", colors.green.to_egui())
-                        } else {
-                            ("❌ Disabled", colors.yellow.to_egui())
-                        };
-                        ui.colored_label(color, text);
-                        ui.end_row();
+                            ui.label("CPU Scheduler:");
+                            ui.label(&info.current_cpu_scheduler);
+                            ui.end_row();
 
-                        ui.label("CPU Scheduler:");
-                        ui.label(&info.current_cpu_scheduler);
-                        ui.end_row();
-
-                        ui.label("Estimated Input Lag:");
-                        let lag_color = if info.estimated_input_lag_ms < 10.0 {
-                            colors.green.to_egui()
-                        } else if info.estimated_input_lag_ms < 20.0 {
-                            colors.yellow.to_egui()
-                        } else {
-                            colors.red.to_egui()
-                        };
-                        ui.colored_label(
-                            lag_color,
-                            format!("{:.1}ms", info.estimated_input_lag_ms),
-                        );
-                        ui.end_row();
-                    });
-            }
-            Err(e) => {
-                ui.colored_label(
-                    colors.red.to_egui(),
-                    format!("Error getting latency info: {}", e),
-                );
+                            ui.label("Input Lag:");
+                            ui.label(
+                                info.estimated_input_lag_ms
+                                    .map(|ms| format!("{ms:.1} ms"))
+                                    .unwrap_or_else(|| "Not measured".to_string()),
+                            );
+                            ui.end_row();
+                        });
+                }
+                Err(e) => {
+                    ui.colored_label(
+                        colors.red.to_egui(),
+                        format!("Error getting latency info: {}", e),
+                    );
+                }
             }
         });
 

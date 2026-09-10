@@ -1,5 +1,12 @@
 version: 1
 
+script:
+  - cargo build --locked --release --bin nvctl --bin nvcontrol --features gui
+  - install -Dm755 target/release/nvctl AppDir/usr/bin/nvctl
+  - install -Dm755 target/release/nvcontrol AppDir/usr/bin/nvcontrol
+  - install -Dm644 assets/nvcontrol.desktop AppDir/usr/share/applications/nvcontrol.desktop
+  - install -Dm644 assets/app-icons/nvidia.png AppDir/usr/share/icons/hicolor/512x512/apps/nvcontrol.png
+
 AppDir:
   path: ./AppDir
 
@@ -7,27 +14,27 @@ AppDir:
     id: com.github.nvcontrol
     name: nvcontrol
     icon: nvcontrol
-    version: 0.8.12
+    version: 0.8.13
     exec: usr/bin/nvcontrol
     exec_args: $@
 
   apt:
     arch: amd64
     sources:
-      - sourceline: 'deb [arch=amd64] http://archive.ubuntu.com/ubuntu/ noble main restricted universe multiverse'
+      - sourceline: 'deb [arch=amd64 signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://archive.ubuntu.com/ubuntu/ noble main restricted universe multiverse'
 
     include:
-      - nvidia-utils-610
-      - libwayland-client0
       - libxcb1
 
   files:
     include:
-      - /usr/lib/x86_64-linux-gnu/libnvidia-ml.so*
-      - /usr/lib/x86_64-linux-gnu/libcuda.so*
-      - /usr/lib/x86_64-linux-gnu/libwayland-client.so*
       - /usr/lib/x86_64-linux-gnu/libxkbcommon.so*
     exclude:
+      # Mesa must use its host Wayland ABI, not the build distro's older library.
+      - usr/lib/**/libwayland*
+      - lib/**/libwayland*
+      - usr/lib/**/libnvidia*
+      - usr/lib/**/libcuda*
       - usr/share/man
       - usr/share/doc
 
@@ -39,9 +46,7 @@ AppDir:
   test:
     debian:
       image: ubuntu:24.04
-      command: ./AppRun --help
+      command: ./usr/bin/nvctl --help
 
 AppImage:
   arch: x86_64
-  update-information: guess
-  sign-key: None

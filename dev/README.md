@@ -337,3 +337,10 @@ The test environment automatically detects ASUS ROG cards and applies the Nord t
 3. **CI/CD Pipeline** - GitHub Actions with self-hosted runner
 4. **Multi-GPU Tests** - Test SLI/NVLink configurations
 5. **Hardware Validation** - Test on real ROG Astral 5090
+
+## Local diagnostics
+
+See [CI and local testing](../docs/testing/ci-workflow.md) for the current gates.
+Use `diagnose-arch.sh`, `diagnose-fedora.sh`, or `diagnose-popos.sh` on the target
+host. Set `NVCTL=/usr/bin/nvctl` to test the installed package; otherwise the
+checkout is built through Cargo. These scripts never update packages or drivers.

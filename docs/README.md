@@ -28,7 +28,8 @@ flowchart TD
     start --> commands["commands/reference.md\ncommand index"]
     start --> security["Security and advisories"]
 
-    matrix --> d610["drivers/open-610.md\ncurrent 610+ path"]
+    matrix --> d615["drivers/open-615.md\n615 support"]
+    matrix --> d610["drivers/open-610.md\nretained 610 path"]
     matrix --> legacy["drivers/legacy.md\n590/595 fallback builds"]
     d610 --> abi["drivers/nvkms-abi-changes.md\nNVKMS struct tracking"]
     d610 --> diag["drivers/diagnose-release.md\nrelease diagnostics"]
@@ -42,13 +43,13 @@ flowchart TD
     driver --> sample["integration/support-bundle-sample.md\nredacted example"]
     cuda --> ai_feature["features/cuda-ai.md\nread-only AI/ML diagnostics"]
     config --> runtime["internals/runtime-flows.md\nruntime flow diagrams"]
-    diag --> release_validation["internals/release-validation.md\nrelease gates"]
+    diag --> release_validation["testing/release-validation.md\nrelease gates"]
     runtime --> architecture["internals/architecture.md\nCLI architecture"]
 
     security --> policy["../SECURITY.md\nsecurity policy"]
     security --> accepted["advisories/accepted.md\naccepted risks"]
     security --> resolved["advisories/resolved.md\nresolved advisories"]
-    security --> upgrades["advisories/v0.8.12-release-notes.md\nrelease evidence"]
+    security --> upgrades["advisories/v0.8.13-release-notes.md\nrelease evidence"]
 ```
 
 ## Runtime Shape
@@ -95,8 +96,8 @@ flowchart TD
     task -->|"Using CUDA/Ollama"| cuda["features/cuda-ai.md"]
     task -->|"Understanding profile bundles"| config["commands/config.md"]
     task -->|"Understanding game automation"| gaming["commands/gaming.md"]
-    task -->|"Reviewing release evidence"| upgrades["advisories/v0.8.12-release-notes.md"]
-    task -->|"Checking release gates"| release["internals/release-validation.md"]
+    task -->|"Reviewing release evidence"| upgrades["advisories/v0.8.13-release-notes.md"]
+    task -->|"Checking release gates"| release["testing/release-validation.md"]
 ```
 
 ## Component Responsibilities
@@ -105,13 +106,13 @@ flowchart TD
 |-----------|--------------|----------------|
 | CLI and command router | [commands/reference.md](commands/reference.md), [commands.md](commands.md) | User-facing command surface, structured output, shell completion behavior |
 | Driver diagnostics | [commands/driver.md](commands/driver.md), [drivers/diagnose-release.md](drivers/diagnose-release.md) | Kernel/userspace/GSP alignment, DKMS/source checks, release supportability |
-| 610+ runtime probing | [drivers/open-610.md](drivers/open-610.md), [internals/runtime-flows.md](internals/runtime-flows.md) | Vulkan/EGL/kernel capability evidence for NVIDIA 610+ open-driver systems |
+| Driver runtime probing | [drivers/open-615.md](drivers/open-615.md), [internals/runtime-flows.md](internals/runtime-flows.md) | Loaded-driver ABI and Vulkan/EGL/kernel capability evidence |
 | Display controls | [features/vibrance.md](features/vibrance.md), [api/display.md](api/display.md) | Digital vibrance, display state, NVKMS-backed controls |
 | Profile bundles | [commands/config.md](commands/config.md), [config/configuration.md](config/configuration.md) | Capture, import, preview, diff, apply, and rollback profile state |
 | Game automation | [commands/gaming.md](commands/gaming.md) | Game detection, delayed profile application, systemd user-service lifecycle |
 | CUDA/AI diagnostics | [commands/cuda.md](commands/cuda.md), [features/cuda-ai.md](features/cuda-ai.md) | Read-only CUDA, Ollama, container runtime, and workload-fit checks |
 | Support artifacts | [integration/issue-reporting.md](integration/issue-reporting.md), [integration/support-bundle-sample.md](integration/support-bundle-sample.md) | Redacted support bundles and issue-reporting evidence |
-| Release validation | [release-checklist.md](release-checklist.md), [internals/release-validation.md](internals/release-validation.md) | Release gates, hardware mutation boundaries, install/package evidence |
+| Release validation | [release-checklist.md](release-checklist.md), [testing/release-validation.md](testing/release-validation.md) | Release gates, hardware mutation boundaries, install/package evidence |
 | Astral connector telemetry | [hardware/power-detection.md](hardware/power-detection.md), [api/asus-power-monitor.md](api/asus-power-monitor.md) | hwmon/SMBus source selection, per-pin measurements, health, and read-only safety |
 | Advisories | [advisories/accepted.md](advisories/accepted.md), [advisories/resolved.md](advisories/resolved.md) | Accepted dependency risk and resolved advisory history |
 
@@ -151,6 +152,7 @@ NVIDIA driver compatibility and optimization.
 | [drivers/gsp.md](drivers/gsp.md) | GPU System Processor firmware |
 | [drivers/diagnose-release.md](drivers/diagnose-release.md) | How to read release diagnostics |
 | [drivers/dkms.md](drivers/dkms.md) | Dynamic Kernel Module Support |
+| [drivers/open-615.md](drivers/open-615.md) | NVIDIA 615 ABI, features, and validation |
 | [drivers/open-610.md](drivers/open-610.md) | NVIDIA 610 open driver notes |
 | [drivers/kernel-580.md](drivers/kernel-580.md) | Historical kernel driver 580+ notes |
 
@@ -190,7 +192,7 @@ Architecture notes and data-flow diagrams.
 |----------|-------------|
 | [internals/architecture.md](internals/architecture.md) | CLI architecture and CUDA/AI diagnostic flow |
 | [internals/runtime-flows.md](internals/runtime-flows.md) | Runtime control-plane, 610+ probing, profile, gaming, support, and TUI flows |
-| [internals/release-validation.md](internals/release-validation.md) | Release validation gates and live 610+ smoke-test flow |
+| [testing/release-validation.md](testing/release-validation.md) | Release validation gates and live 610+ smoke-test flow |
 
 ### API Reference
 
@@ -247,13 +249,14 @@ Security policy, accepted dependency risk, and resolved upgrade records.
 | [../SECURITY.md](../SECURITY.md) | Security policy and current audit posture |
 | [advisories/accepted.md](advisories/accepted.md) | Accepted warnings or dependency risks for the active release |
 | [advisories/resolved.md](advisories/resolved.md) | Dependency or code advisories resolved by release work |
+| [advisories/v0.8.13-release-notes.md](advisories/v0.8.13-release-notes.md) | Driver support update and validation evidence |
 | [advisories/v0.8.12-release-notes.md](advisories/v0.8.12-release-notes.md) | v0.8.12 scope, hardware matrix, and packaging evidence |
 | [advisories/v0.8.10-hotfix-notes.md](advisories/v0.8.10-hotfix-notes.md) | v0.8.10 hotfix scope, packaging updates, fan CLI fixes, and completion/manpage evidence |
 | [advisories/v0.8.9-upgrade-notes.md](advisories/v0.8.9-upgrade-notes.md) | v0.8.9 dependency upgrades, runtime fixes, and verification evidence |
 
 ### Experimental
 
-Prototype integrations and parked code live outside `docs/` in [`../experimental/README.md`](../experimental/README.md).
+Historical integration material is retained in [`../archive/experimental/README.md`](../archive/experimental/README.md); it is not part of the build.
 
 ---
 
@@ -261,9 +264,9 @@ Prototype integrations and parked code live outside `docs/` in [`../experimental
 
 | Architecture | Example GPUs | Status |
 |--------------|--------------|--------|
-| **Blackwell** | RTX 5060-5090 | Primary 610+ target; RTX 5090 path has local validation, broader tester coverage still wanted |
+| **Blackwell** | RTX 5060-5090 | RTX 5090 validated on open 615; retained 610 coverage |
 | **Ada Lovelace** | RTX 4060-4090 | Expected 610+ path; repeat live smoke coverage still wanted |
-| **Ampere** | RTX 3060-3090 Ti | Expected 610+ path; repeat live smoke coverage still wanted |
+| **Ampere** | RTX 3060-3090 Ti | RTX 3070 validated on Fedora/Pop!_OS with open 615; retained 595/610 coverage |
 | **Turing** | RTX 2060-2080 Ti | Supported where the loaded driver exposes the required NVML/display paths |
 | **Pascal** | GTX 1060-1080 Ti | Basic/legacy support; use the driver compatibility matrix before assuming current-main behavior |
 
@@ -315,3 +318,12 @@ nvctl doctor --support
 - [Contributing](../CONTRIBUTING.md) - Development guidelines
 - [Changelog](../CHANGELOG.md) - Version history
 - [GitHub Issues](https://github.com/ghostkellz/nvcontrol/issues)
+
+- [CI and local testing](testing/ci-workflow.md) — current workflow, distro diagnostics, and future GPU coverage.
+
+## Testing
+
+- [Methodology](testing/methodology.md) — local gates, installed artifacts, and acceptance evidence.
+- [Test beds](testing/test-beds.md) — Arch, Fedora, Pop!_OS, and planned coverage.
+- [CI workflow](testing/ci-workflow.md) — current automation and on-demand scripts.
+- [Release validation](testing/release-validation.md) — release decision gates.

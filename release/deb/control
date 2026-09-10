@@ -4,7 +4,7 @@ Priority: optional
 Maintainer: CK Technology LLC <info@cktechx.com>
 Build-Depends: debhelper-compat (= 13),
                cargo,
-               rustc (>= 1.97),
+               rustc (>= 1.98),
                libclang-dev,
                pkg-config,
                libwayland-dev,
@@ -21,7 +21,7 @@ Package: nvcontrol
 Architecture: amd64
 Depends: ${shlibs:Depends},
          ${misc:Depends},
-         nvidia-driver-libs (>= 535) | libnvidia-ml1 (>= 535),
+         libnvidia-ml.so.1 (>= 595) | nvidia-driver-libs (>= 595) | libnvidia-ml1 (>= 595),
          libwayland-client0,
          libxkbcommon0,
          libfontconfig1,

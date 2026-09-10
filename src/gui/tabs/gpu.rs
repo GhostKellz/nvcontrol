@@ -169,8 +169,8 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, ctx: &egui::Context) {
                             ui.label(egui::RichText::new("VRAM:").color(colors.cyan.to_egui()));
                             ui.label(
                                 egui::RichText::new(format!(
-                                    "{:.0} GB GDDR7",
-                                    stats.memory_total as f64 / 1e9
+                                    "{:.0} GiB",
+                                    stats.memory_total as f64 / 1024_f64.powi(3)
                                 ))
                                 .strong()
                                 .color(colors.green.to_egui()),
@@ -250,9 +250,9 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, ctx: &egui::Context) {
                             .color(colors.fg.to_egui()),
                     );
                     let mem_bar = egui::ProgressBar::new(mem_percent).text(format!(
-                        "{:.1} / {:.1} GB",
-                        stats.memory_used as f64 / 1e9,
-                        stats.memory_total as f64 / 1e9
+                        "{:.1} / {:.1} GiB",
+                        stats.memory_used as f64 / 1024_f64.powi(3),
+                        stats.memory_total as f64 / 1024_f64.powi(3)
                     ));
                     ui.add(mem_bar);
 

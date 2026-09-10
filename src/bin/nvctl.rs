@@ -1733,9 +1733,6 @@ enum RecordingSubcommand {
     Presets,
 }
 
-// NOTE: BoltSubcommand and NvbindSubcommand removed - experimental features
-// moved to experimental/ directory for future re-integration
-
 #[derive(Subcommand)]
 enum ContainerSubcommand {
     /// List GPU-enabled containers
@@ -5441,8 +5438,6 @@ fn main() {
                 }
             },
         },
-        // NOTE: Command::Bolt and Command::Nvbind removed - experimental features
-        // moved to experimental/ directory for future re-integration
         Command::Container { subcommand } => match subcommand {
             ContainerSubcommand::List => {
                 use nvcontrol::container_runtime::NvContainerRuntime;

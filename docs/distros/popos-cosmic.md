@@ -1,8 +1,11 @@
 # Pop!_OS COSMIC
 
-v0.8.12 was validated on Pop!_OS 24.04 with COSMIC, an RTX 3070 passthrough GPU,
-and the open 595.84 driver. This is the regression target proving one nvcontrol
-binary can select the NVIDIA 595 or 610 NVKMS allocation ABI at runtime.
+The current release was tested on Pop!_OS 24.04 with COSMIC and an RTX 3070
+passthrough GPU, first on open 595 and then on matching open 615 modules and
+multilib userspace. The native Debian package, GUI/TUI, vibrance, and distro
+DKMS diagnostics passed. The newer guest kernel also has its NVIDIA module
+installed automatically. See the [release evidence](../advisories/v0.8.13-release-notes.md)
+for exact versions and results.
 
 System76 provides an NVIDIA install image and the `system76-driver-nvidia`
 package; see the official [installation guide](https://support.system76.com/support/articles/install-pop/).

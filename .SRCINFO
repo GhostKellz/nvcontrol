@@ -1,14 +1,19 @@
 pkgbase = nvcontrol
 	pkgdesc = The Ultimate NVIDIA GPU Control Tool for Linux - Advanced overclocking, fan control, and gaming optimization
-	pkgver = 0.8.12
+	pkgver = 0.8.13
 	pkgrel = 1
 	url = https://github.com/ghostkellz/nvcontrol
 	arch = x86_64
 	license = MIT
 	makedepends = rust
 	makedepends = git
-	depends = nvidia-utils>=610
-	depends = libxnvctrl
+	makedepends = clang
+	makedepends = pkg-config
+	depends = nvidia-utils>=595
+	depends = wayland
+	depends = libxkbcommon
+	depends = fontconfig
+	depends = freetype2
 	optdepends = gamescope: Gaming session compositor integration
 	optdepends = mangohud: Performance overlay support
 	optdepends = gamemode: Automatic performance optimization
@@ -18,7 +23,7 @@ pkgbase = nvcontrol
 	optdepends = libvirt: GPU passthrough for VMs
 	provides = nvcontrol
 	conflicts = nvcontrol-git
-	source = git+https://github.com/ghostkellz/nvcontrol.git#tag=v0.8.12
+	source = git+https://github.com/ghostkellz/nvcontrol.git#tag=v0.8.13
 	sha256sums = SKIP
 
 pkgname = nvcontrol

@@ -2,6 +2,20 @@
 
 Tracks breaking NVKMS ioctl struct size changes across NVIDIA open driver releases. When struct sizes don't match the driver's expectations, `ioctl()` returns `-EPERM` — the kernel validates `paramSize != dispatch[cmd].paramSize` and returns `NV_FALSE` immediately.
 
+## Driver 615
+
+Independent C probes against the upstream headers confirm an allocation reply
+of 824 bytes and total parameters of 1448 bytes. The request remains 620 bytes,
+reply offset 624, and the reply fields used here remain at offsets 0, 4, 16, 20.
+`GetDpyAttributeParams` is 24 bytes; `SetDpyAttributeParams` is 32 bytes.
+
+
+The driver also removes `NVKMS_IOCTL_CHECK_LUT_NOTIFIER`. Commands after that
+entry shift down by one: set/get/valid-values display attributes use 21/22/23,
+while the retained branches use 22/23/24. The ioctl dispatch helper selects the
+command map from the loaded module independently of allocation-size fallback.
+The removed command is rejected instead of accidentally dispatching its successor.
+
 ## Driver 610.43.02
 
 **Breaking change:** `NvKmsAllocDeviceReply` reduced from 888 to **816 bytes** (72 bytes removed from internal capability fields).
@@ -25,7 +39,7 @@ All other NVKMS structs remained unchanged (AllocDeviceRequest=620, QueryDpyDyna
 The 610.57.04 open modules retain this 610 allocation layout on the validated
 RTX 5090 system.
 
-## Runtime selection in v0.8.12
+## Runtime selection
 
 nvcontrol no longer compiles one driver branch's trailing allocation size into
 the only accepted request. The request and every field read by nvcontrol have
@@ -33,8 +47,9 @@ stable offsets; only the total `AllocDevice` parameter size differs.
 
 | Loaded branch | Preferred parameter size | Alternate on `EPERM` |
 |---|---:|---:|
-| 610 | 1440 | 1512 |
-| 595 | 1512 | 1440 |
+| 615 and newer | 1448 | 1440, then 1512 |
+| 610–614 | 1440 | 1448, then 1512 |
+| 595–609 | 1512 | 1440, then 1448 |
 
 The backing Rust struct is sized for the larger 1512-byte request. nvcontrol
 sends only the selected known size, rebuilds a zeroed real request before a retry,

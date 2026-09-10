@@ -74,7 +74,7 @@ extract_root="$(find "$TMP_DIR" -mindepth 1 -maxdepth 1 -type d \( -name 'nvcont
 install -d \
   "${INSTALL_PREFIX}/bin" \
   "${INSTALL_PREFIX}/share/applications" \
-  "${INSTALL_PREFIX}/share/icons/hicolor/256x256/apps" \
+  "${INSTALL_PREFIX}/share/icons/hicolor/512x512/apps" \
   "${INSTALL_PREFIX}/share/bash-completion/completions" \
   "${INSTALL_PREFIX}/share/zsh/site-functions" \
   "${INSTALL_PREFIX}/share/fish/vendor_completions.d" \
@@ -95,8 +95,8 @@ if [[ -f "${extract_root}/assets/nvcontrol.desktop" ]]; then
   log "Installed desktop entry"
 fi
 
-if [[ -f "${extract_root}/assets/icons/icon-256x256.png" ]]; then
-  install -m644 "${extract_root}/assets/icons/icon-256x256.png" "${INSTALL_PREFIX}/share/icons/hicolor/256x256/apps/nvcontrol.png"
+if [[ -f "${extract_root}/assets/app-icons/nvidia.png" ]]; then
+  install -m644 "${extract_root}/assets/app-icons/nvidia.png" "${INSTALL_PREFIX}/share/icons/hicolor/512x512/apps/nvcontrol.png"
   log "Installed application icon"
 fi
 

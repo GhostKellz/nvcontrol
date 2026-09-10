@@ -29,7 +29,7 @@ nvctl gpu stat
 ```
 
 ### System Requirements
-- **NVIDIA Open Kernel Modules 595 or 610+** (610.57.04 is the current validated path)
+- **NVIDIA Open Kernel Modules**: see the [driver compatibility matrix](drivers/nvidia-driver.md) for supported branches
 - **RTX 50/40/30 Series GPU** (Blackwell/Ada/Ampere)
 - **Arch Linux** with Wayland compositor (KDE/GNOME/Hyprland)
 - **Nerd Font** for proper icon display (JetBrainsMono Nerd Font recommended)
@@ -730,3 +730,10 @@ nvctl fan curve apply aggressive
 ---
 
 **Made for the Arch Linux + NVIDIA + Wayland community**
+
+### Help at smaller terminal sizes
+
+Open help with `?` or `F1`. Arrow keys scroll it vertically or horizontally;
+`PageUp`/`PageDown` scroll vertically, `Home` returns to the beginning, and `Esc`
+closes the overlay. This keeps long command examples and the final sections
+reachable without changing the active dashboard tab.

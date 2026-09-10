@@ -4,14 +4,13 @@ Priority: optional
 Maintainer: CK Technology LLC <info@cktechx.com>
 Build-Depends: debhelper-compat (= 13),
                cargo,
-               rustc (>= 1.97),
+               rustc (>= 1.98),
                libclang-dev,
                pkg-config,
                libwayland-dev,
                libxkbcommon-dev,
                libfontconfig1-dev,
-               libfreetype6-dev,
-               libcosmic-dev
+               libfreetype6-dev
 Standards-Version: 4.6.2
 Homepage: https://github.com/GhostKellz/nvcontrol
 Vcs-Git: https://github.com/GhostKellz/nvcontrol.git
@@ -21,7 +20,7 @@ Package: nvcontrol
 Architecture: amd64
 Depends: ${shlibs:Depends},
          ${misc:Depends},
-         system76-driver-nvidia | nvidia-driver-libs (>= 535),
+         libnvidia-ml.so.1 (>= 595) | system76-driver-nvidia | nvidia-driver-libs (>= 595),
          libwayland-client0,
          libxkbcommon0,
          libfontconfig1,

@@ -20,7 +20,7 @@ NVIDIA driver compatibility, installation, and optimization guides.
 - **Need the version matrix first?** See [nvidia-driver.md](nvidia-driver.md)
 - **Using driver 595 or earlier?** See [legacy.md](legacy.md)
 - **Tracking NVKMS ABI breakage across releases?** See [nvkms-abi-changes.md](nvkms-abi-changes.md)
-- **Using the current open driver branch?** See [open-610.md](open-610.md)
+- **Using the current open driver branch?** See [open-615.md](open-615.md)
 - **DKMS build failures?** See [dkms.md](dkms.md)
 
 ## Compatibility Note

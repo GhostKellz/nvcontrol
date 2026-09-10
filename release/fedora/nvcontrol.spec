@@ -1,7 +1,7 @@
 %global crate nvcontrol
 
 Name:           nvcontrol
-Version:        0.8.12
+Version:        0.8.13
 Release:        1%{?dist}
 Summary:        Modern NVIDIA Settings Manager for Linux + Wayland
 
@@ -10,7 +10,7 @@ URL:            https://github.com/GhostKellz/nvcontrol
 Source0:        %{url}/archive/v%{version}/%{crate}-%{version}.tar.gz
 
 # Rust requirements
-BuildRequires:  rust >= 1.97
+BuildRequires:  rust >= 1.98
 BuildRequires:  cargo
 BuildRequires:  clang-devel
 BuildRequires:  pkgconfig
@@ -20,8 +20,9 @@ BuildRequires:  fontconfig-devel
 BuildRequires:  freetype-devel
 
 # Runtime dependencies
-Requires:       nvidia-driver-libs >= 610
-Requires:       wayland
+Requires:       (nvidia-driver-libs >= 3:595 or xorg-x11-drv-nvidia-libs >= 3:595)
+Requires:       libnvidia-ml.so.1()(64bit)
+Requires:       libwayland-client
 Requires:       libxkbcommon
 Requires:       fontconfig
 Requires:       freetype
@@ -69,36 +70,14 @@ cargo build --release --bin nvcontrol --features gui
 install -Dm755 target/release/nvctl %{buildroot}%{_bindir}/nvctl
 install -Dm755 target/release/nvcontrol %{buildroot}%{_bindir}/nvcontrol
 
-# Desktop file
-install -Dm644 /dev/stdin %{buildroot}%{_datadir}/applications/nvcontrol.desktop << 'EOF'
-[Desktop Entry]
-Name=nvcontrol
-Comment=NVIDIA GPU Control Panel for Linux
-Exec=nvcontrol
-Icon=nvcontrol
-Terminal=false
-Type=Application
-Categories=Settings;HardwareSettings;
-Keywords=nvidia;gpu;graphics;gaming;vibrance;vrr;hdr;
-StartupWMClass=nvcontrol
-EOF
-
-# Systemd user service
-install -Dm644 /dev/stdin %{buildroot}%{_userunitdir}/nvcontrol-game-profile-auto.service << 'EOF'
-[Unit]
-Description=nvcontrol Game Profile Auto Service
-Documentation=https://github.com/GhostKellz/nvcontrol
-After=graphical-session.target
-
-[Service]
-Type=simple
-ExecStart=%{_bindir}/nvctl gaming auto daemon
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=graphical-session.target
-EOF
+# Shared desktop integration
+install -Dm644 assets/nvcontrol.desktop %{buildroot}%{_datadir}/applications/nvcontrol.desktop
+install -Dm644 assets/app-icons/nvidia.png %{buildroot}%{_datadir}/icons/hicolor/512x512/apps/nvcontrol.png
+install -Dm644 completions/nvctl.bash %{buildroot}%{_datadir}/bash-completion/completions/nvctl
+install -Dm644 completions/_nvctl %{buildroot}%{_datadir}/zsh/site-functions/_nvctl
+install -Dm644 completions/nvctl.fish %{buildroot}%{_datadir}/fish/vendor_completions.d/nvctl.fish
+install -Dm644 release/arch/nvcontrol-game-profile-auto.service %{buildroot}%{_userunitdir}/nvcontrol-game-profile-auto.service
+install -Dm644 release/arch/nvcontrol-monitor.service %{buildroot}%{_userunitdir}/nvcontrol-monitor.service
 
 # Documentation
 install -Dm644 README.md %{buildroot}%{_docdir}/%{name}/README.md
@@ -118,10 +97,19 @@ cargo test --release --lib -- --skip hardware --skip nvml
 %{_bindir}/nvctl
 %{_bindir}/nvcontrol
 %{_datadir}/applications/nvcontrol.desktop
+%{_datadir}/icons/hicolor/512x512/apps/nvcontrol.png
+%{_datadir}/bash-completion/completions/nvctl
+%{_datadir}/zsh/site-functions/_nvctl
+%{_datadir}/fish/vendor_completions.d/nvctl.fish
+%{_userunitdir}/nvcontrol-monitor.service
 %{_userunitdir}/nvcontrol-game-profile-auto.service
 %{_mandir}/man1/nvctl.1*
 
 %changelog
+* Thu Sep 10 2026 CK Technology LLC <info@cktechx.com> - 0.8.13-1
+- Support NVIDIA 615 native vibrance and runtime capability reporting
+- Preserve earlier driver ABI fallbacks and sync merged dependency sources
+
 * Sun Aug 16 2026 CK Technology LLC <info@cktechx.com> - 0.8.12-1
 - Correct ASUS Astral 12V-2x6 telemetry and add hwmon integration
 - Add per-pin voltage, current, power, balance, history, and health reporting

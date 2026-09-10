@@ -5,8 +5,8 @@
 
   **Modern NVIDIA Settings Manager for Linux + Wayland**
 
-  [![Rust](https://img.shields.io/badge/Rust-1.97+-orange.svg?style=for-the-badge)](https://www.rust-lang.org)
-  [![NVIDIA](https://img.shields.io/badge/NVIDIA-Driver%20610+-green.svg?style=for-the-badge)](https://github.com/NVIDIA/open-gpu-kernel-modules)
+  [![Rust](https://img.shields.io/badge/Rust-1.98+-orange.svg?style=for-the-badge)](https://www.rust-lang.org)
+  [![NVIDIA](https://img.shields.io/badge/NVIDIA-Driver%20615%20%2F%20610%20%2F%20595-green.svg?style=for-the-badge)](https://github.com/NVIDIA/open-gpu-kernel-modules)
   [![Wayland](https://img.shields.io/badge/Wayland-Native-brightgreen.svg?style=for-the-badge)](https://wayland.freedesktop.org/)
   [![TUI](https://img.shields.io/badge/TUI-ratatui-orange.svg?style=for-the-badge)](https://github.com/ratatui/ratatui)
   [![GUI](https://img.shields.io/badge/GUI-egui-blue.svg?style=for-the-badge)](https://github.com/emilk/egui)
@@ -44,7 +44,9 @@ curl -fsSL https://nv.cktech.sh | sudo bash
 
 `https://nv.cktech.sh` redirects to the current installer script at `https://raw.githubusercontent.com/GhostKellz/nvcontrol/main/release/install-system.sh`.
 
-nvcontrol currently targets the NVIDIA 610 open driver branch as the primary Linux driver path.
+nvcontrol currently targets the NVIDIA 615 open driver branch as the primary Linux driver path, with retained 595/610 support. Branch 600 retains the existing fallback but still needs hardware validation.
+
+Native digital vibrance selects the loaded driver’s allocation layout and ioctl command map automatically; see the [vibrance guide](docs/features/vibrance.md). The [615 guide](docs/drivers/open-615.md) explains Proton Reflex support and the Vulkan fixes delivered by matching NVIDIA userland libraries.
 
 For the full nvcontrol-to-driver compatibility matrix, see [docs/drivers/nvidia-driver.md](docs/drivers/nvidia-driver.md).
 
@@ -66,8 +68,8 @@ nvctl ai workloads
 nvctl cuda env
 nvctl cuda smoke --dry-run
 
-# Validate a 610 open-driver setup
-nvctl driver validate --driver 610
+# Validate the current open-driver setup
+nvctl driver validate --driver 615
 
 # Full TUI dashboard
 nvctl gpu stat
@@ -244,9 +246,9 @@ nvctl completion fish > nvctl.fish
 
 | Generation | GPUs | Status |
 |------------|------|--------|
-| RTX 50 (Blackwell) | 5090, 5080, 5070 Ti/5070, 5060 Ti/5060 | Primary 610+ target; RTX 5090 path has local validation |
+| RTX 50 (Blackwell) | 5090, 5080, 5070 Ti/5070, 5060 Ti/5060 | RTX 5090 validated on open 615; retained 610 coverage |
 | RTX 40 (Ada) | 4090, 4080, 4070 Ti/4070, 4060 Ti/4060 | Expected 610+ path; repeat live smoke coverage still wanted |
-| RTX 30 (Ampere) | 3090/3080/3070/3060 series | Expected 610+ path; repeat live smoke coverage still wanted |
+| RTX 30 (Ampere) | 3090/3080/3070/3060 series | RTX 3070 validated on Fedora and Pop!_OS with open 615; retained 595/610 coverage |
 | RTX 20 (Turing) | 2080/2070/2060 series | Supported where the loaded driver exposes required NVML/display paths |
 | GTX 16/10 | 1660/1650/1080/1070/1060 | Basic/legacy support; check the driver compatibility matrix |
 
@@ -345,18 +347,18 @@ Change theme with `t` in TUI or via Settings in GUI.
 
 | Platform | Package | Status |
 |----------|---------|--------|
-| **Arch Linux** | PKGBUILD | Premier |
-| **Fedora** | .rpm | Tier 1 |
-| **Nobara** | .rpm | Tier 1 (Gaming) |
-| **Bazzite** | rpm-ostree | Tier 1 (Gaming) |
-| **Pop!_OS** | .deb + COSMIC | Tier 1 |
-| Debian/Ubuntu | .deb | Full |
+| **Arch Linux** | PKGBUILD | Primary; native package and live RTX 5090 validated |
+| **Fedora** | .rpm | Native package and live RTX 3070 validated |
+| **Nobara** | .rpm | Compatibility target; not independently validated |
+| **Bazzite** | rpm-ostree | Compatibility target; not independently validated |
+| **Pop!_OS** | .deb + COSMIC | Native package and live RTX 3070 validated |
+| Debian/Ubuntu | .deb | Pop!_OS validates the Ubuntu-family path; standalone testing pending |
 
 ## Requirements
 
-- **NVIDIA Driver**: 610+ (NVIDIA open kernel modules required)
+- **NVIDIA Driver**: see the [supported driver matrix](docs/drivers/nvidia-driver.md); matching NVIDIA open modules and userland are required
 - **Linux Kernel**: 6.6+ (7.0+ recommended)
-- **Rust**: 1.97+ (for building from source)
+- **Rust**: 1.98+ (for building from source)
 
 ## Contributing
 
@@ -391,3 +393,5 @@ Copyright (c) 2025 CK Technology LLC
 [![GitHub Stars](https://img.shields.io/github/stars/GhostKellz/nvcontrol?style=social)](https://github.com/GhostKellz/nvcontrol)
 
 </div>
+
+Local verification and future test coverage: [CI and local testing](docs/testing/ci-workflow.md).

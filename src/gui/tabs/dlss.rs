@@ -120,8 +120,14 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                         ui.label(&controller.capabilities.driver_version);
                         ui.end_row();
 
-                        ui.label("DLSS Version:");
-                        ui.label(format!("{:?}", controller.version));
+                        ui.label("Game DLSS DLL:");
+                        ui.label(
+                            controller
+                                .capabilities
+                                .dlss_dll_version
+                                .as_deref()
+                                .unwrap_or("Not detected"),
+                        );
                         ui.end_row();
 
                         ui.label("Super Resolution:");

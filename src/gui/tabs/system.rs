@@ -111,13 +111,7 @@ impl DriverInfo {
             for entry in entries.flatten() {
                 info.kernels_count += 1;
                 let kernel = entry.file_name().to_string_lossy().to_string();
-                let paths = [
-                    format!("/lib/modules/{}/kernel/drivers/video/nvidia.ko.zst", kernel),
-                    format!("/lib/modules/{}/kernel/drivers/video/nvidia.ko", kernel),
-                    format!("/lib/modules/{}/extramodules/nvidia.ko.zst", kernel),
-                    format!("/lib/modules/{}/extramodules/nvidia.ko", kernel),
-                ];
-                if paths.iter().any(|p| std::path::Path::new(p).exists()) {
+                if drivers::kernel_has_nvidia_module(&kernel) {
                     info.kernels_with_nvidia += 1;
                 }
             }
@@ -141,9 +135,9 @@ impl DriverInfo {
 }
 
 fn get_hostname() -> String {
-    fs::read_to_string("/etc/hostname")
-        .map(|s| s.trim().to_string())
-        .unwrap_or_else(|_| "unknown".to_string())
+    sysinfo::System::host_name()
+        .filter(|name| !name.trim().is_empty())
+        .unwrap_or_else(|| "unknown".to_string())
 }
 
 fn get_os() -> String {

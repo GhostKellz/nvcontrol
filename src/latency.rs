@@ -8,11 +8,13 @@ use std::process::Command;
 pub struct LatencyInfo {
     pub nvidia_reflex_available: bool,
     pub nvidia_reflex_enabled: bool,
+    pub nvidia_reflex_state_known: bool,
+    pub proton_reflex_vulkan_supported: bool,
     pub current_cpu_scheduler: String,
     pub gpu_scheduling_enabled: bool,
     pub preemption_timeout: Option<u32>,
     pub frame_time_consistency: f32,
-    pub estimated_input_lag_ms: f32,
+    pub estimated_input_lag_ms: Option<f32>,
     pub optimizations_applied: Vec<String>,
 }
 
@@ -40,6 +42,8 @@ pub fn get_latency_info() -> NvResult<LatencyInfo> {
     let mut info = LatencyInfo {
         nvidia_reflex_available: false,
         nvidia_reflex_enabled: false,
+        nvidia_reflex_state_known: false,
+        proton_reflex_vulkan_supported: false,
         current_cpu_scheduler: get_cpu_scheduler()?,
         gpu_scheduling_enabled: is_gpu_scheduling_enabled()?,
         preemption_timeout: get_preemption_timeout()?,
@@ -49,8 +53,9 @@ pub fn get_latency_info() -> NvResult<LatencyInfo> {
     };
 
     // Check NVIDIA Reflex availability
-    info.nvidia_reflex_available = check_nvidia_reflex_support()?;
-    info.nvidia_reflex_enabled = check_nvidia_reflex_enabled()?;
+    let (available, proton) = crate::drivers::detect_reflex_support();
+    info.nvidia_reflex_available = available;
+    info.proton_reflex_vulkan_supported = proton;
 
     // Get current optimizations
     info.optimizations_applied = get_applied_optimizations()?;
@@ -462,28 +467,6 @@ fn disable_cpu_mitigations() -> NvResult<bool> {
 
 // NVIDIA-specific optimizations
 
-fn check_nvidia_reflex_support() -> NvResult<bool> {
-    // Check if NVIDIA Reflex is supported (RTX 20 series and newer)
-    if let Ok(output) = std::process::Command::new("nvidia-smi")
-        .args(&["--query-gpu=name"])
-        .arg("--format=csv,noheader,nounits")
-        .output()
-    {
-        if output.status.success() {
-            let gpu_name = String::from_utf8_lossy(&output.stdout);
-            return Ok(gpu_name.contains("RTX 20")
-                || gpu_name.contains("RTX 30")
-                || gpu_name.contains("RTX 40"));
-        }
-    }
-    Ok(false)
-}
-
-fn check_nvidia_reflex_enabled() -> NvResult<bool> {
-    // Check if Reflex is currently enabled (would need game-specific detection)
-    Ok(false)
-}
-
 fn enable_nvidia_reflex() -> NvResult<bool> {
     println!("NVIDIA Reflex requires game-specific implementation");
     Ok(false)
@@ -595,9 +578,9 @@ fn measure_frame_time_consistency() -> NvResult<f32> {
     Ok(0.0)
 }
 
-fn estimate_input_lag() -> NvResult<f32> {
-    // Estimate input lag (placeholder)
-    Ok(0.0)
+fn estimate_input_lag() -> NvResult<Option<f32>> {
+    // No end-to-end latency measurement backend is connected.
+    Ok(None)
 }
 
 fn get_applied_optimizations() -> NvResult<Vec<String>> {

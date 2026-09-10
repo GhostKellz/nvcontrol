@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.13] - 2026-09-10
+
+### Fixed
+
+- Detect the NVIDIA driver through NVML when sandboxed sysfs is unavailable,
+  including native vibrance command selection in Flatpak.
+- Use host Wayland libraries in AppImage to avoid conflicts with newer Mesa drivers.
+- Check beta userspace versions against the loaded driver and multilib stack
+  instead of warning solely because firmware belongs to a beta package.
+
+- Report GPU memory in GiB without assuming a memory technology; make TUI help scrollable.
+
+- Use advertised Vulkan APIs for Reflex support, including the Proton Vulkan-native
+  path; distinguish unknown in-game state and unmeasured latency.
+- Set GUI application identity and the bundled window icon.
+
+- Map NVKMS attribute commands to the loaded driver after removal of the LUT
+  notifier command, preserving earlier branch command numbers.
+
+- Select the verified NVIDIA 615 NVKMS allocation size for native digital
+  vibrance while retaining the earlier allocation fallbacks.
+- Discover DKMS logs for both open and proprietary module package names without
+  inventing a driver version when detection fails.
+
+- Resolve installed NVIDIA modules through the kernel module resolver, including
+  Fedora's compressed modules, and detect the actual PCI chip instead of guessing.
+- Use distro package databases and kernel hooks for support/DKMS diagnostics;
+  preserve registrations during repair and propagate failed builds.
+- Prefer matching-release firmware over unrelated per-chip firmware files.
+- Correct RTX 20/30 ray reconstruction reporting, Settings memory units and
+  shortcut labels, and scrolling on smaller GUI windows.
+
+### Added
+
+- Runtime detection of `VK_NV_low_latency` revision 2 and
+  `VK_EXT_cluster_acceleration_structure`, plus low-latency extension reporting.
+- Driver support reporting for GPU memory partitioning, 12 bpc color reporting,
+  the optional display-clock power override, and the active suspend-notifier setting.
+
+### Changed
+
+- Pin Rust 1.98.1 and synchronize current compiler build requirements.
+- Move CI/testing documentation into `docs/testing` and add on-demand Arch,
+  Fedora and Pop!_OS diagnostic scripts with explicit failure reporting and
+  Arch-derivative detection.
+- Archive the unused experimental integration proposals under `archive/experimental`.
+- Replace the obsolete root tray-test script with feature checks under `dev/`.
+
+- Synchronize release metadata and Flatpak offline sources with the merged
+  dependency update; retain earlier driver compatibility guidance.
+
 ## [0.8.12] - 2026-08-16
 
 ### Added

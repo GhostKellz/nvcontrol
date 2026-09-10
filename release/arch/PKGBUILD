@@ -3,14 +3,14 @@
 # Premier platform: Arch Linux
 
 pkgname=nvcontrol
-pkgver=0.8.12
+pkgver=0.8.13
 pkgrel=1
 pkgdesc="Modern NVIDIA Settings Manager for Linux + Wayland - Digital Vibrance, VRR, HDR, Overclocking"
 arch=('x86_64')
 url="https://github.com/GhostKellz/nvcontrol"
 license=('MIT')
 depends=(
-    'nvidia-utils>=610'     # NVIDIA open drivers 610+ required
+    'nvidia-utils>=595'     # Must match the loaded NVIDIA kernel module
     'wayland'               # Wayland protocol support
     'libxkbcommon'          # Keyboard handling
     'fontconfig'            # Font configuration
@@ -80,19 +80,8 @@ package() {
     # Install GUI binary
     install -Dm755 "target/release/nvcontrol" "$pkgdir/usr/bin/nvcontrol"
 
-    # Install desktop file
-    install -Dm644 /dev/stdin "$pkgdir/usr/share/applications/nvcontrol.desktop" << 'EOF'
-[Desktop Entry]
-Name=nvcontrol
-Comment=NVIDIA GPU Control Panel for Linux
-Exec=nvcontrol
-Icon=nvcontrol
-Terminal=false
-Type=Application
-Categories=Settings;HardwareSettings;
-Keywords=nvidia;gpu;graphics;gaming;vibrance;vrr;hdr;
-StartupWMClass=nvcontrol
-EOF
+    install -Dm644 assets/nvcontrol.desktop "$pkgdir/usr/share/applications/nvcontrol.desktop"
+    install -Dm644 assets/app-icons/nvidia.png "$pkgdir/usr/share/icons/hicolor/512x512/apps/nvcontrol.png"
 
     # Install shell completions
     install -dm755 "$pkgdir/usr/share/bash-completion/completions"

@@ -6,18 +6,23 @@ This guide covers building nvcontrol from source for all supported platforms.
 
 ### Required
 
-- **Rust 1.97+** (edition 2024)
+- **Rust 1.98+** (edition 2024)
 - **Cargo** (comes with Rust)
 - **NVIDIA Driver** compatible with your target nvcontrol build
 - **Linux kernel 6.0+** (6.6+ recommended)
 
 Use [drivers/nvidia-driver.md](drivers/nvidia-driver.md) as the source of truth for mapping NVIDIA driver branches to the correct nvcontrol version.
 
+The repository pins its compiler in `rust-toolchain.toml`. Distro Rust packages
+may be older; check the compiler before building. If rustup supplies Rust, Debian
+package dependency checks still require matching package metadata; the acceptance
+run checked all other dependencies separately before bypassing that check.
+
 ### Build Dependencies
 
 #### Arch Linux (Premier Platform)
 ```bash
-sudo pacman -S rust cargo clang pkg-config wayland libxkbcommon fontconfig freetype2
+sudo pacman -S rust clang pkg-config wayland libxkbcommon fontconfig freetype2
 ```
 
 #### Debian/Ubuntu
@@ -85,8 +90,10 @@ Output: `target/release/nvcontrol`
 
 | Feature | Description | Default |
 |---------|-------------|---------|
-| `gui` | Enable GUI application with egui | No |
-| `tui` | Enable TUI dashboard with ratatui | Yes |
+| `gui` | Enable GUI application with egui | Yes |
+
+The TUI is included independently; there is no `tui` feature flag. Use
+`--no-default-features --bin nvctl` for a CLI-only build.
 
 ### Build Profiles
 
@@ -98,7 +105,7 @@ cargo build
 cargo build --release
 
 # Release with debug info
-cargo build --release --profile release-with-debug
+CARGO_PROFILE_RELEASE_DEBUG=true cargo build --release
 ```
 
 ## Cross-Compilation
@@ -135,13 +142,18 @@ makepkg -si
 
 #### Debian/Ubuntu
 ```bash
-# Build .deb package
-dpkg-buildpackage -us -uc
+# Stage the Debian recipe in the source checkout
+cp -a release/deb debian
+dpkg-checkbuilddeps
+dpkg-buildpackage -b -us -uc
 sudo dpkg -i ../nvcontrol_*.deb
 ```
 
 #### Fedora
 ```bash
+# Requires rpmdevtools; downloads the source referenced by the spec
+rpmdev-setuptree
+spectool -g -R release/fedora/nvcontrol.spec
 rpmbuild -ba release/fedora/nvcontrol.spec
 sudo rpm -i ~/rpmbuild/RPMS/x86_64/nvcontrol-*.rpm
 ```
@@ -198,9 +210,9 @@ sudo apt install nvidia-driver-610-open
 sudo dnf install akmod-nvidia
 ```
 
-For nvcontrol's current primary path, prefer the NVIDIA 610 open kernel module packages where your distribution provides them.
+For nvcontrol's current primary path, prefer the NVIDIA 615 open kernel module packages where your distribution provides them.
 
-For older 590/595-era stacks, use the compatibility matrix instead of assuming the current `main` branch is correct.
+The current release retains native 595/610 support; 590 uses the separate legacy path. See the driver matrix.
 
 ### Permission Denied on /dev/nvidia-modeset
 ```bash
@@ -246,15 +258,8 @@ After building, verify the installation:
 ./target/release/nvcontrol &
 
 # Test vibrance (requires NVIDIA GPU)
-./target/release/nvctl vibrance 100
+./target/release/nvctl display vibrance get
 ```
-
-## Performance Notes
-
-- Release builds are ~10x faster than debug builds
-- GUI requires ~50MB additional dependencies
-- First build may take 2-5 minutes (caching speeds up subsequent builds)
-- Incremental builds are typically <30 seconds
 
 ## Next Steps
 

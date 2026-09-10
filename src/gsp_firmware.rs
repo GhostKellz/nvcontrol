@@ -11,6 +11,31 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+fn chip_code_from_pci_description(description: &str) -> Option<String> {
+    let pattern = regex::Regex::new(r"\b((?:GB|AD|GA|TU|GH)[0-9]{3})\b").ok()?;
+    pattern
+        .captures(description)
+        .map(|capture| capture[1].to_lowercase())
+}
+
+fn select_firmware_candidate(
+    release: &str,
+    mut candidates: Vec<(PathBuf, &'static str)>,
+) -> Option<(PathBuf, &'static str)> {
+    candidates.sort_by_key(|(path, _)| {
+        let release_directory = path
+            .parent()
+            .and_then(Path::file_name)
+            .is_some_and(|name| name == release);
+        let release_filename = path.file_name().is_some_and(|name| {
+            name == format!("gsp-{release}.bin").as_str()
+                || name == format!("gsp-{release}.bin.zst").as_str()
+        });
+        (!release_directory, !release_filename, path.clone())
+    });
+    candidates.into_iter().next()
+}
+
 // ==================== Data Structures ====================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -159,54 +184,27 @@ impl GspManager {
         false
     }
 
-    /// Detect GPU architecture code (e.g., "gb202", "ad102", "ga102")
+    /// Read the chip code for the first NVIDIA GPU from its PCI description.
     pub fn detect_gpu_arch() -> Option<String> {
-        // Get GPU name from nvidia-smi
         let output = Command::new("nvidia-smi")
-            .args(["--query-gpu=name", "--format=csv,noheader"])
+            .args(["--query-gpu=pci.bus_id", "--format=csv,noheader"])
             .output()
             .ok()?;
-
         if !output.status.success() {
             return None;
         }
-
-        let gpu_name = String::from_utf8_lossy(&output.stdout).to_lowercase();
-
-        // Map GPU series to architecture code
-        // Blackwell (RTX 50 series)
-        if gpu_name.contains("5090") || gpu_name.contains("5080") {
-            return Some("gb202".to_string());
+        let text = String::from_utf8_lossy(&output.stdout);
+        let (domain, address) = text.lines().next()?.trim().split_once(':')?;
+        let domain = u16::from_str_radix(domain, 16).ok()?;
+        let bus_id = format!("{domain:04x}:{address}");
+        let output = Command::new("lspci")
+            .args(["-D", "-s", &bus_id])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
         }
-        if gpu_name.contains("5070") || gpu_name.contains("5060") {
-            return Some("gb205".to_string());
-        }
-
-        // Ada Lovelace (RTX 40 series)
-        if gpu_name.contains("4090") || gpu_name.contains("4080") {
-            return Some("ad102".to_string());
-        }
-        if gpu_name.contains("4070") || gpu_name.contains("4060") {
-            return Some("ad104".to_string());
-        }
-
-        // Ampere (RTX 30 series)
-        if gpu_name.contains("3090") || gpu_name.contains("3080") || gpu_name.contains("3070") {
-            return Some("ga102".to_string());
-        }
-        if gpu_name.contains("3060") || gpu_name.contains("3050") {
-            return Some("ga106".to_string());
-        }
-
-        // Turing (RTX 20 / GTX 16 series)
-        if gpu_name.contains("2080") || gpu_name.contains("2070") {
-            return Some("tu102".to_string());
-        }
-        if gpu_name.contains("2060") || gpu_name.contains("1660") || gpu_name.contains("1650") {
-            return Some("tu106".to_string());
-        }
-
-        None
+        chip_code_from_pci_description(&String::from_utf8_lossy(&output.stdout))
     }
 
     // ==================== Deep GSP Status ====================
@@ -362,55 +360,40 @@ impl GspManager {
             return (None, None, None);
         };
 
-        // New layout: /lib/firmware/nvidia/<arch>/gsp/gsp-<ver>.bin.zst
+        // Distro firmware packages can leave unrelated per-chip blobs installed.
+        // Prefer the running release's directory over those generic files.
+        let mut locations = vec![(self.firmware_dir.join(&driver_version), "legacy-versioned")];
         if let Some(arch) = gpu_arch {
-            let new_path = self.firmware_dir.join(arch).join("gsp");
-            if new_path.exists() {
-                if let Ok(entries) = fs::read_dir(&new_path) {
-                    for entry in entries.flatten() {
-                        let name = entry.file_name();
-                        let name_str = name.to_string_lossy();
-                        if name_str.contains("gsp")
-                            && (name_str.ends_with(".bin.zst") || name_str.ends_with(".bin"))
-                        {
-                            return (
-                                Some(new_path.display().to_string()),
-                                Some(entry.path().display().to_string()),
-                                Some("per-chip".to_string()),
-                            );
-                        }
+            locations.push((self.firmware_dir.join(arch).join("gsp"), "per-chip"));
+        }
+        let mut candidates = Vec::new();
+        for (directory, layout) in &locations {
+            if let Ok(entries) = fs::read_dir(directory) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    let name = entry.file_name();
+                    let name = name.to_string_lossy();
+                    if name.starts_with("gsp")
+                        && (name.ends_with(".bin") || name.ends_with(".bin.zst"))
+                        && path.is_file()
+                    {
+                        candidates.push((path, *layout));
                     }
                 }
-
-                return (
-                    Some(new_path.display().to_string()),
-                    None,
-                    Some("per-chip".to_string()),
-                );
             }
         }
-
-        // Legacy layout: /lib/firmware/nvidia/<version>/gsp_*.bin
-        let legacy_path = self.firmware_dir.join(&driver_version);
-        if legacy_path.exists() {
-            // Find actual firmware file
-            if let Ok(entries) = fs::read_dir(&legacy_path) {
-                for entry in entries.flatten() {
-                    let name = entry.file_name();
-                    let name_str = name.to_string_lossy();
-                    if name_str.starts_with("gsp_") && name_str.ends_with(".bin") {
-                        return (
-                            Some(legacy_path.display().to_string()),
-                            Some(entry.path().display().to_string()),
-                            Some("legacy-versioned".to_string()),
-                        );
-                    }
-                }
-            }
+        if let Some((file, layout)) = select_firmware_candidate(&driver_version, candidates) {
             return (
-                Some(legacy_path.display().to_string()),
+                file.parent().map(|path| path.display().to_string()),
+                Some(file.display().to_string()),
+                Some(layout.to_string()),
+            );
+        }
+        if let Some((directory, layout)) = locations.iter().find(|(path, _)| path.exists()) {
+            return (
+                Some(directory.display().to_string()),
                 None,
-                Some("legacy-versioned".to_string()),
+                Some((*layout).to_string()),
             );
         }
 
@@ -1084,6 +1067,60 @@ impl GspManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn firmware_selection_prefers_matching_release_over_unrelated_chip_blob() {
+        let candidates = vec![
+            (
+                PathBuf::from("/firmware/ga104/gsp/gsp-570.144.bin"),
+                "per-chip",
+            ),
+            (
+                PathBuf::from("/firmware/615.71.09/gsp_ga10x.bin"),
+                "legacy-versioned",
+            ),
+        ];
+        assert_eq!(
+            select_firmware_candidate("615.71.09", candidates)
+                .unwrap()
+                .0,
+            PathBuf::from("/firmware/615.71.09/gsp_ga10x.bin")
+        );
+        let candidates = vec![
+            (
+                PathBuf::from("/firmware/ga104/gsp/gsp-570.144.bin"),
+                "per-chip",
+            ),
+            (
+                PathBuf::from("/firmware/ga104/gsp/gsp-615.71.09.bin.zst"),
+                "per-chip",
+            ),
+        ];
+        assert_eq!(
+            select_firmware_candidate("615.71.09", candidates)
+                .unwrap()
+                .0,
+            PathBuf::from("/firmware/ga104/gsp/gsp-615.71.09.bin.zst")
+        );
+    }
+
+    #[test]
+    fn chip_code_uses_pci_description_instead_of_product_series() {
+        assert_eq!(
+            chip_code_from_pci_description(
+                "0000:01:00.0 VGA compatible controller: NVIDIA Corporation GA104 [GeForce RTX 3070] (rev a1)"
+            ),
+            Some("ga104".to_string())
+        );
+        assert_eq!(
+            chip_code_from_pci_description("NVIDIA GeForce RTX 3070"),
+            None
+        );
+        assert_eq!(
+            chip_code_from_pci_description("Device 1234:1111 (rev 02)"),
+            None
+        );
+    }
 
     #[test]
     fn test_gsp_manager_creation() {

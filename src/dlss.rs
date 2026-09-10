@@ -504,9 +504,10 @@ impl DlssController {
                     // Check for RTX series and capabilities
                     let gpu_lower = caps.gpu_model.to_lowercase();
 
-                    // RTX 20 series (Turing) - DLSS 2
+                    // Turing supports reconstruction, but not NVIDIA frame generation.
                     if gpu_lower.contains("rtx 20") {
                         caps.supports_dlss = true;
+                        caps.supports_ray_reconstruction = true;
                         caps.supports_frame_generation = false;
                         caps.supports_multi_frame_generation = false;
                         caps.max_frame_multiplier = 0;
@@ -515,9 +516,10 @@ impl DlssController {
                         caps.optical_flow_accelerator_version = 0;
                         caps.tensor_cores = 272; // Approximate for RTX 2080
                     }
-                    // RTX 30 series (Ampere) - DLSS 2
+                    // Ampere retains reconstruction support without frame generation.
                     else if gpu_lower.contains("rtx 30") {
                         caps.supports_dlss = true;
+                        caps.supports_ray_reconstruction = true;
                         caps.supports_frame_generation = false;
                         caps.supports_multi_frame_generation = false;
                         caps.max_frame_multiplier = 0;
@@ -529,10 +531,10 @@ impl DlssController {
                     // RTX 40 series (Ada Lovelace) - DLSS 3 with Frame Generation
                     else if gpu_lower.contains("rtx 40") {
                         caps.supports_dlss = true;
+                        caps.supports_ray_reconstruction = true;
                         caps.supports_frame_generation = true;
                         caps.supports_multi_frame_generation = false;
                         caps.max_frame_multiplier = 2;
-                        caps.supports_ray_reconstruction = true;
                         caps.supports_reflex = true;
                         caps.optical_flow_accelerator = true;
                         caps.optical_flow_accelerator_version = 3;
@@ -541,10 +543,10 @@ impl DlssController {
                     // RTX 50 series (Blackwell) - DLSS 4 Multi-Frame Generation
                     else if gpu_lower.contains("rtx 50") {
                         caps.supports_dlss = true;
+                        caps.supports_ray_reconstruction = true;
                         caps.supports_frame_generation = true;
                         caps.supports_multi_frame_generation = true;
                         caps.max_frame_multiplier = 4;
-                        caps.supports_ray_reconstruction = true;
                         caps.supports_reflex = true;
                         caps.optical_flow_accelerator = true;
                         caps.optical_flow_accelerator_version = 4; // Gen 4 OFA

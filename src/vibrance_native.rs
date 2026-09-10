@@ -69,9 +69,8 @@ impl NativeVibranceController {
 
     /// Get NVIDIA driver version from /sys/module/nvidia/version
     fn get_driver_version() -> NvResult<String> {
-        // First try sysfs (most reliable)
-        if let Ok(version) = std::fs::read_to_string("/sys/module/nvidia/version") {
-            return Ok(version.trim().to_string());
+        if let Ok(version) = loaded_nvidia_version() {
+            return Ok(version);
         }
 
         // Fallback to nvidia-smi
@@ -171,8 +170,8 @@ impl NativeVibranceController {
                 reply: Zeroable::zeroed(),
             };
 
-            // SAFETY: the backing struct is 1512 bytes, and both sizes are
-            // verified AllocDevice ABIs with identical fields at the offsets read.
+            // SAFETY: every candidate fits in the backing struct and uses
+            // verified AllocDevice fields at the same offsets.
             let result = unsafe {
                 nvkms_ioctl_sized(fd, NvKmsIoctlCommand::AllocDevice, &mut candidate, size)
             };
@@ -370,7 +369,7 @@ impl NativeVibranceController {
         Ok((device_handle, disp_handle, connectors))
     }
 
-    fn alloc_device_candidate_sizes(driver_version: &str) -> NvResult<[NvU32; 2]> {
+    fn alloc_device_candidate_sizes(driver_version: &str) -> NvResult<[NvU32; 3]> {
         let major = driver_version
             .split('.')
             .next()
@@ -382,8 +381,21 @@ impl NativeVibranceController {
             })?;
 
         match major {
-            610.. => Ok([ALLOC_DEVICE_PARAM_SIZE_610, ALLOC_DEVICE_PARAM_SIZE_595]),
-            595..=609 => Ok([ALLOC_DEVICE_PARAM_SIZE_595, ALLOC_DEVICE_PARAM_SIZE_610]),
+            615.. => Ok([
+                ALLOC_DEVICE_PARAM_SIZE_615,
+                ALLOC_DEVICE_PARAM_SIZE_610,
+                ALLOC_DEVICE_PARAM_SIZE_595,
+            ]),
+            610..=614 => Ok([
+                ALLOC_DEVICE_PARAM_SIZE_610,
+                ALLOC_DEVICE_PARAM_SIZE_615,
+                ALLOC_DEVICE_PARAM_SIZE_595,
+            ]),
+            595..=609 => Ok([
+                ALLOC_DEVICE_PARAM_SIZE_595,
+                ALLOC_DEVICE_PARAM_SIZE_610,
+                ALLOC_DEVICE_PARAM_SIZE_615,
+            ]),
             _ => Err(NvControlError::VibranceControlFailed(format!(
                 "Native vibrance supports NVIDIA driver branches 595 and newer; found {driver_version}"
             ))),
@@ -648,13 +660,45 @@ mod tests {
 
     #[test]
     fn alloc_size_order_tracks_driver_branch() {
+        for version in ["615.71.09", "615.71.09-beta", "616.1"] {
+            let sizes = NativeVibranceController::alloc_device_candidate_sizes(version).unwrap();
+            assert_eq!(
+                sizes,
+                [
+                    ALLOC_DEVICE_PARAM_SIZE_615,
+                    ALLOC_DEVICE_PARAM_SIZE_610,
+                    ALLOC_DEVICE_PARAM_SIZE_595
+                ]
+            );
+            assert!(
+                sizes
+                    .iter()
+                    .all(|size| *size as usize <= std::mem::size_of::<NvKmsAllocDeviceParams>())
+            );
+        }
         assert_eq!(
             NativeVibranceController::alloc_device_candidate_sizes("610.57.04").unwrap(),
-            [ALLOC_DEVICE_PARAM_SIZE_610, ALLOC_DEVICE_PARAM_SIZE_595]
+            [
+                ALLOC_DEVICE_PARAM_SIZE_610,
+                ALLOC_DEVICE_PARAM_SIZE_615,
+                ALLOC_DEVICE_PARAM_SIZE_595
+            ]
+        );
+        assert_eq!(
+            NativeVibranceController::alloc_device_candidate_sizes("600.1").unwrap(),
+            [
+                ALLOC_DEVICE_PARAM_SIZE_595,
+                ALLOC_DEVICE_PARAM_SIZE_610,
+                ALLOC_DEVICE_PARAM_SIZE_615
+            ]
         );
         assert_eq!(
             NativeVibranceController::alloc_device_candidate_sizes("595.84").unwrap(),
-            [ALLOC_DEVICE_PARAM_SIZE_595, ALLOC_DEVICE_PARAM_SIZE_610]
+            [
+                ALLOC_DEVICE_PARAM_SIZE_595,
+                ALLOC_DEVICE_PARAM_SIZE_610,
+                ALLOC_DEVICE_PARAM_SIZE_615
+            ]
         );
     }
 
@@ -666,20 +710,25 @@ mod tests {
 
     #[test]
     fn alloc_retry_is_limited_to_eperm_and_an_available_fallback() {
-        assert!(NativeVibranceController::should_retry_alloc(
-            nix::errno::Errno::EPERM,
-            0,
-            2
-        ));
+        for index in 0..3 {
+            assert_eq!(
+                NativeVibranceController::should_retry_alloc(nix::errno::Errno::EPERM, index, 3),
+                index < 2
+            );
+            for error in [
+                nix::errno::Errno::EIO,
+                nix::errno::Errno::EINVAL,
+                nix::errno::Errno::EACCES,
+            ] {
+                assert!(!NativeVibranceController::should_retry_alloc(
+                    error, index, 3
+                ));
+            }
+        }
         assert!(!NativeVibranceController::should_retry_alloc(
             nix::errno::Errno::EPERM,
-            1,
-            2
-        ));
-        assert!(!NativeVibranceController::should_retry_alloc(
-            nix::errno::Errno::EIO,
             0,
-            2
+            1
         ));
     }
 

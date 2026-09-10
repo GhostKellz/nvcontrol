@@ -1,419 +1,121 @@
-# Digital Vibrance - Pure Rust Implementation
+# Digital vibrance
 
-## Overview
+nvcontrol's native backend uses NVIDIA NVKMS ioctls through
+`/dev/nvidia-modeset`. CLI, TUI and GUI share the driver-aware backend.
+It works independently of compositor color controls; access to the NVIDIA
+character devices and a compatible, matching module/userspace stack are required.
 
-nvcontrol implements native digital vibrance control for NVIDIA Linux systems. The current primary path is the Rust NVKMS backend used by the CLI, TUI, and GUI; older fallback behavior is kept only for compatibility where it still applies.
+## Driver compatibility
 
-## Quick Start
+| Driver | Native path |
+| --- | --- |
+| Open 615 | Allocation size and renumbered commands supported |
+| Open 610 | Earlier allocation size and command map retained |
+| Open 595 | Larger allocation layout retained |
+| 600 | Existing 595-family fallback retained; no live hardware result |
+| 590 and earlier | Use the separate legacy build described in the driver matrix |
+
+See the [driver matrix](../drivers/nvidia-driver.md) and
+[release evidence](../advisories/v0.8.13-release-notes.md) for supported builds
+and actual hardware coverage. Do not infer support for an unknown future ABI
+from its version number alone.
+
+## Usage
 
 ```bash
-# Set vibrance to 150% (enhanced colors)
-nvctl vibrance 150
+# Read before changing anything
+nvctl display vibrance get
+nvctl display vibrance list
 
-# Shorthand alias
+# Apply to connected displays
+nvctl vibrance 150
 nvctl vibe 150
 
-# Reset to default (100%)
+# Apply to the display ID reported by list
+nvctl display vibrance set-display 4 150
+
+# Neutral saturation
 nvctl vibrance 100
-
-# Maximum saturation (200%)
-nvctl vibrance 200
-
-# Reduced saturation (50%)
-nvctl vibrance 50
 ```
 
-## How It Works
+Display IDs are discovered from the current system; do not copy another
+machine's ID. The current native controller targets one GPU. Setting every
+display to 100% is a reset, not a read-only test or restoration of arbitrary
+previous values.
 
-### Architecture
+| Percentage | Meaning |
+| --- | --- |
+| 0 | Grayscale |
+| 50 | Reduced saturation |
+| 100 | Neutral, raw NVKMS value zero |
+| 150 | Increased saturation |
+| 200 | Maximum, raw NVKMS value 1023 |
 
-nvcontrol uses a capability-based approach:
+The range is 0–200%, mapped to the driver's raw range -1024–1023. Increasing
+saturation can help a user's preferred appearance under HDR, but does not
+calibrate the display or repair its tone mapping.
 
-1. **Primary: NVKMS ioctls** (requires permissions)
-   - Direct `/dev/nvidia-modeset` device communication
-   - Uses NVIDIA's official NVKMS API from open-gpu-kernel-modules
-   - Zero overhead, instant response
-   - Requires: user in `video` group OR sudo
-
-2. **Fallback: nvidia-settings** (legacy/X11 compatibility)
-   - Calls `nvidia-settings -a DigitalVibrance=X`
-   - X11-oriented and not the preferred current Wayland path
-   - Kept for systems where the native backend is unavailable
-
-### Vibrance Range
-
-| Percentage | Raw Value | Effect |
-|------------|-----------|--------|
-| 0%         | -1024     | Grayscale |
-| 50%        | -512      | Desaturated |
-| 100%       | 0         | Default (no effect) |
-| 150%       | 511       | Enhanced colors (+50%) |
-| 200%       | 1023      | Maximum saturation |
-
-**Formula:**
-- `0-100%` maps to `-1024` to `0`
-- `100-200%` maps to `0` to `1023`
-
-## Advanced Usage
-
-### Per-Display Control
-
-```bash
-# Set specific display
-nvctl display vibrance set-display 0 150
-
-# Query current value
-nvctl display vibrance get
-
-# List all displays
-nvctl display vibrance list
-```
-
-### Display Information
-
-```bash
-# Show comprehensive vibrance info
-nvctl display vibrance info
-```
-
-**Output:**
-```
-🌈 Pure Rust Digital Vibrance Information:
-══════════════════════════════════════════════════
-  Driver Version: "610.57.04"
-  NVIDIA Open Drivers: ✅ Yes
-
-💡 Features:
-  ✅ Direct driver integration (no external deps)
-  ✅ Works on Wayland and X11
-  ✅ Per-display control
-  ✅ Real-time adjustment
-
-🖥️ Supported Displays: 2
-
-🔧 Requirements:
-  • NVIDIA Open Drivers 595+ (610+ recommended)
-  • nvidia_drm.modeset=1 kernel parameter
-  • /dev/nvidia-modeset access (or run as root)
-```
-
-### Systemd Auto-Start
-
-Create `~/.config/systemd/user/nvctl-vibrance.service`:
-
-```ini
-[Unit]
-Description=Apply digital vibrance on startup
-After=graphical.target
-
-[Service]
-Type=oneshot
-ExecStartPre=/bin/sleep 3
-ExecStart=/usr/local/bin/nvctl vibrance 150
-
-[Install]
-WantedBy=default.target
-```
-
-Enable it:
-```bash
-systemctl --user enable --now nvctl-vibrance.service
-```
-
-### Shell Integration
-
-Add to `~/.zshrc` or `~/.bashrc`:
-
-```bash
-# Quick vibrance control
-alias vibe='nvctl vibrance'
-alias vibe-reset='nvctl vibrance 100'
-alias vibe-max='nvctl vibrance 200'
-alias vibe-gaming='nvctl vibrance 150'
-```
-
-## Compatibility
-
-### Supported Drivers
-
-For the exact nvcontrol build to use with each NVIDIA driver branch, see [`../drivers/nvidia-driver.md`](../drivers/nvidia-driver.md).
-
-- NVIDIA Open 610+ is the current recommended path
-- NVIDIA Open 595 is supported by runtime selection of its older allocation layout
-- Proprietary driver support depends on whether the loaded stack exposes the required interfaces
-- Legacy branches should be checked against [`../drivers/nvidia-driver.md`](../drivers/nvidia-driver.md)
-- Nouveau is not supported because it lacks the NVIDIA vibrance API
-
-### Display Servers
-
-- ✅ **Wayland** (KDE, GNOME, Hyprland, Sway, etc.)
-- ✅ **X11** (traditional setups)
-- ✅ **XWayland** (mixed environments)
-
-### Display Connectors
-
-- ✅ HDMI
-- ✅ DisplayPort (including MST)
-- ✅ DVI
-- ✅ USB-C (with DP alt mode)
-
-## Technical Details
-
-### NVKMS API
-
-nvcontrol uses the official NVIDIA Kernel Mode-Setting (NVKMS) API:
-
-```rust
-// From archive/open-gpu-kernel-modules/src/nvidia-modeset/interface/nvkms-api.h
-enum NvKmsDpyAttribute {
-    NV_KMS_DPY_ATTRIBUTE_DIGITAL_VIBRANCE = 10,
-    // Range: -1024 to 1023
-}
-```
-
-**ioctl Flow:**
-1. Open `/dev/nvidia-modeset`
-2. `NVKMS_IOCTL_ALLOC_DEVICE` - Allocate device handle
-3. `NVKMS_IOCTL_QUERY_DISP` - Query connected displays
-4. `NVKMS_IOCTL_SET_DPY_ATTRIBUTE` - Set digital vibrance
-5. `NVKMS_IOCTL_FREE_DEVICE` - Clean up
-
-### Implementation Files
-
-| File | Purpose |
-|------|---------|
-| `src/nvkms_bindings.rs` | NVKMS API bindings (structs, enums, ioctls) |
-| `src/vibrance_native.rs` | Pure Rust vibrance controller |
-| `src/vibrance.rs` | Legacy fallback (nvidia-settings) |
-
-### Reference Implementation
-
-Our implementation is based on **[nvibrant](https://github.com/Tremeschin/nvibrant)** by @Tremeschin:
-- nvibrant pioneered the NVKMS ioctl approach for Wayland
-- nvcontrol extends this with full Rust implementation
-- Added multi-display support, range validation, GUI integration
-
-## Permissions Setup
-
-### Option 1: Udev Rules (Recommended)
-
-```bash
-# Auto-setup
-nvctl setup permissions
-
-# Manual setup
-sudo tee /etc/udev/rules.d/99-nvidia.rules <<EOF
-# Allow access to nvidia-modeset for vibrance control
-KERNEL=="nvidia-modeset", MODE="0666"
-EOF
-
-# Reload udev rules
-sudo udevadm control --reload-rules
-sudo udevadm trigger
-```
-
-### Option 2: User Group
-
-```bash
-# Add user to video group
-sudo usermod -aG video $USER
-
-# Re-login for changes to take effect
-```
-
-### Option 3: Sudo (Quick Test)
-
-```bash
-sudo nvctl vibrance 150
-```
-
-## GUI Integration
-
-### Slider Control
-
-The nvcontrol GUI includes a vibrance slider:
+## ABI selection
 
 ```mermaid
 flowchart LR
-    GUI["GUI vibrance slider"] --> Value["0-200% user value"]
-    Value --> Preview["preview/apply request"]
-    Preview --> Display["display backend"]
-    Display --> NVKMS["NVKMS vibrance ioctl"]
-    NVKMS --> Result["per-display result"]
-    Result --> Profile["optional saved profile"]
+    driver[Loaded driver] --> mapping[Allocation size and command map]
+    mapping --> allocate[Allocate NVKMS device]
+    allocate --> result{Result}
+    result -->|Success| displays[Enumerate and read displays]
+    result -->|EPERM| retry[Try remaining verified sizes]
+    retry --> allocate
+    result -->|Other failure| error[Report error]
+    displays --> explicit[Explicit user apply]
+    explicit --> readback[Read current values]
 ```
 
-- Real-time preview
-- Per-display control
-- Save as profile
-- Auto-apply per-game
+The backing buffer accommodates the known layouts. Only `EPERM` triggers a
+retry with another verified allocation size; other errors are returned. A
+successful size is cached for the process. Command numbering is selected
+separately from the loaded driver. See the [ABI record](../drivers/nvkms-abi-changes.md).
 
-## Comparison with Alternatives
-
-| Feature | nvctl | nvibrant | nvidia-settings | vibrantLinux |
-|---------|-------|----------|-----------------|--------------|
-| **Wayland Support** | ✅ | ✅ | ❌ (X11 only) | ⚠️ (hacky) |
-| **Pure Rust** | ✅ | ❌ (C++) | ❌ (C) | ❌ (C++) |
-| **GUI** | ✅ | ❌ | ✅ | ❌ |
-| **Per-Display** | ✅ | ✅ | ✅ | ❌ |
-| **CLI Simplicity** | `vibrance 150` | `nvibrant 512` | Complex | Complex |
-| **Auto-Apply** | ✅ | ⚠️ Manual | ⚠️ Manual | ⚠️ Manual |
-| **GPU Controls** | ✅ Full suite | ❌ | ✅ Limited | ❌ |
-
-## Troubleshooting
-
-### "Failed to allocate NVKMS device"
-
-**Cause:** Permission denied or driver version mismatch
-
-**Solutions:**
-1. Check driver version:
-   ```bash
-   cat /sys/module/nvidia/version
-   # 610+ is the current recommended open-driver baseline
-   ```
-
-2. Verify modeset is enabled:
-   ```bash
-   cat /proc/cmdline | grep nvidia_drm.modeset
-   # Should show: nvidia_drm.modeset=1
-   ```
-
-3. Add to kernel parameters if missing:
-   ```bash
-   # GRUB
-   sudo nano /etc/default/grub
-   # Add: nvidia_drm.modeset=1
-   sudo update-grub
-
-   # systemd-boot
-   sudo nano /boot/loader/entries/arch.conf
-   # Add to options: nvidia_drm.modeset=1
-   ```
-
-4. Use fallback (works without modeset):
-   ```bash
-   # Fallback automatically activates
-    nvctl vibrance 150
-   ```
-
-### "nvidia-settings failed"
-
-**Cause:** nvidia-settings not installed
-
-**Solution:**
-```bash
-# Arch
-sudo pacman -S nvidia-settings
-
-# Ubuntu/Debian
-sudo apt install nvidia-settings
-
-# Fedora
-sudo dnf install nvidia-settings
-```
-
-### Vibrance resets on reboot
-
-**Solution:** Use systemd service (see Auto-Start section above)
-
-### Different vibrance on each monitor
-
-**Expected behavior!** Use per-display control:
-```bash
-# Monitor 1: 150%, Monitor 2: 100%
-nvctl display vibrance set-display 0 150
-nvctl display vibrance set-display 1 100
-```
-
-## API Reference
-
-### Rust API
-
-```rust
-use nvcontrol::vibrance_native;
-
-// Set all displays to 150%
-vibrance_native::set_vibrance_all_native(150)?;
-
-// Set specific display
-vibrance_native::set_display_vibrance_native(0, 0, 150)?;
-
-// Get status
-let status = vibrance_native::get_vibrance_status_native()?;
-
-// List displays
-let displays = vibrance_native::list_displays_native()?;
-
-// Reset to default
-vibrance_native::reset_vibrance_native()?;
-```
-
-### CLI API
+## Permissions and troubleshooting
 
 ```bash
-# Set all displays
-nvctl vibrance <0-200>
-
-# Shorthand alias
-nvctl vibe <0-200>
-
-# Advanced control
-nvctl display vibrance set-display <id> <0-200>
-nvctl display vibrance get
-nvctl display vibrance reset
+nvctl driver diagnose-release
 nvctl display vibrance info
-nvctl display vibrance list
+ls -l /dev/nvidia-modeset /dev/nvidiactl
+cat /sys/module/nvidia/version
 ```
 
-## Performance
+An allocation failure can indicate an ABI mismatch as well as a permissions
+problem. Verify the driver and nvcontrol compatibility before changing device
+permissions. Use the distribution's device access policy; membership in `video`
+only helps when the device's ownership and mode grant that group access.
 
-| Operation | NVKMS ioctl | nvidia-settings |
-|-----------|-------------|-----------------|
-| Set vibrance | < 1ms | ~50ms |
-| Get vibrance | < 1ms | ~50ms |
-| List displays | < 1ms | ~100ms |
-| **Startup overhead** | None | ~200ms |
+DRM KMS is important for the desktop, but an explicit `nvidia_drm.modeset=1`
+boot argument is not a prerequisite for native vibrance: the Fedora test guest
+passed native vibrance with DRM KMS disabled. Do not change the bootloader solely
+because that argument is absent. The effective DRM value, when needed, is in
+`/sys/module/nvidia_drm/parameters/modeset`.
 
-**Recommendation:** NVKMS ioctls for real-time control (gaming, color grading), fallback is fine for one-time setup.
+The older `nvidia-settings` integration is X11-oriented. Do not assume it will
+transparently recover a failed native Wayland operation.
 
-## Known Issues
+Vibrance can reset after reboot, suspend or a display reconfiguration. Reapply
+an explicit preferred value in the user's graphical session. Avoid generic
+root sleep hooks that guess the desktop user or overwrite different per-display
+preferences.
 
-1. **NVKMS requires permissions** - Working as designed. Use udev rules or fallback.
-2. **Vibrance resets after suspend** - Add resume hook:
-   ```bash
-   sudo tee /lib/systemd/system-sleep/nvctl-vibrance <<'EOF'
-   #!/bin/bash
-   if [ "$1" = "post" ]; then
-        su - $USER -c "nvctl vibrance 150"
-   fi
-   EOF
-   sudo chmod +x /lib/systemd/system-sleep/nvctl-vibrance
-   ```
+## Verification and implementation
 
-## Future Enhancements
+The GUI provides per-display sliders and presets. For an opted-in development
+regression that captures, applies, reads back and restores the original values:
 
-- [ ] Per-application auto-apply (game detection)
-- [ ] Smooth vibrance transitions
-- [ ] HDR + vibrance interaction
-- [ ] Save/load vibrance profiles
-- [ ] Wayland protocol extension (compositor-level)
-- [ ] AMD/Intel GPU support (via different APIs)
+```bash
+NVCONTROL_RUN_HARDWARE_TESTS=1 dev/test-hardware.sh --vibrance
+```
 
-## Credits
+Do not run this while another process is changing display settings.
+Implementation lives in `src/vibrance_native.rs` and `src/nvkms_bindings.rs`;
+NVIDIA's tagged headers define the wire ABI. The approach builds on prior NVKMS
+work by [nvibrant](https://github.com/Tremeschin/nvibrant).
 
-- **nvibrant** by [@Tremeschin](https://github.com/Tremeschin) - Pioneer of NVKMS vibrance control
-- **NVIDIA open-gpu-kernel-modules** - Official NVKMS API headers
-- **vibrantLinux** - Early Wayland vibrance work
-
-## License
-
-MIT License - See LICENSE file
-
----
-
-**For more GPU controls, see:**
-- [VRR/G-SYNC](./vrr-gsync.md)
-- [HDR Control](./hdr.md)
-- [Image Sharpening](./image-sharpening.md)
-- [Overclocking](./overclocking.md)
+Related: [HDR](hdr.md), [VRR](vrr-gsync.md),
+[local testing](../testing/methodology.md).

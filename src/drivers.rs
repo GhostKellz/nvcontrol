@@ -1,4 +1,3 @@
-use crate::arch_integration::ArchIntegration;
 use crate::container_runtime::NvContainerRuntime;
 use crate::cuda;
 use crate::gsp_firmware::GspManager;
@@ -254,6 +253,14 @@ fn determine_driver_type(_version: &str) -> String {
     }
 }
 
+/// Ask kmod to resolve the module, including distro-specific paths and compression.
+pub fn kernel_has_nvidia_module(kernel: &str) -> bool {
+    Command::new("modinfo")
+        .args(["-k", kernel, "-F", "filename", "nvidia"])
+        .output()
+        .is_ok_and(|output| output.status.success())
+}
+
 fn normalize_pci_bus_id(bus_id: &str) -> Option<String> {
     let trimmed = bus_id.trim();
     if trimmed.is_empty() {
@@ -357,7 +364,43 @@ fn detect_chip_code_by_pci_id(device_id: &str) -> Option<String> {
         .find_map(|(start, end, chip)| (id >= *start && id <= *end).then(|| (*chip).to_string()))
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PackageDatabase {
+    Arch,
+    Rpm,
+    Debian,
+    Unknown,
+}
+
+fn package_database_from_os_release(content: &str) -> PackageDatabase {
+    let field = |name: &str| {
+        content
+            .lines()
+            .find_map(|line| {
+                let (key, value) = line.split_once('=')?;
+                (key == name).then(|| value.trim_matches(['\"', '\'']))
+            })
+            .unwrap_or("")
+    };
+    for id in std::iter::once(field("ID")).chain(field("ID_LIKE").split_whitespace()) {
+        match id {
+            "arch" | "cachyos" | "endeavouros" | "manjaro" => return PackageDatabase::Arch,
+            "fedora" | "rhel" | "centos" | "suse" | "opensuse" => return PackageDatabase::Rpm,
+            "debian" | "ubuntu" | "pop" => return PackageDatabase::Debian,
+            _ => {}
+        }
+    }
+    PackageDatabase::Unknown
+}
+
+fn package_database() -> PackageDatabase {
+    package_database_from_os_release(&fs::read_to_string("/etc/os-release").unwrap_or_default())
+}
+
 fn collect_arch_package_diagnostics() -> Vec<PackageDiagnostic> {
+    if package_database() != PackageDatabase::Arch {
+        return Vec::new();
+    }
     let packages = [
         "nvidia",
         "nvidia-dkms",
@@ -365,6 +408,8 @@ fn collect_arch_package_diagnostics() -> Vec<PackageDiagnostic> {
         "nvidia-open-dkms",
         "nvidia-utils",
         "lib32-nvidia-utils",
+        "nvidia-utils-beta",
+        "lib32-nvidia-utils-beta",
         "linux-firmware",
         "linux-firmware-nvidia",
         "dkms",
@@ -442,13 +487,33 @@ fn list_initramfs_images() -> Vec<String> {
     if let Ok(dir) = fs::read_dir("/boot") {
         for entry in dir.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            if name.starts_with("initramfs-") && name.ends_with(".img") {
+            if (name.starts_with("initramfs-") && name.ends_with(".img"))
+                || name.starts_with("initrd.img-")
+            {
                 images.push(name);
             }
         }
     }
     images.sort();
     images
+}
+
+fn expected_initramfs_image(
+    kernel: &str,
+    tool: Option<&str>,
+    package_base: Option<&str>,
+) -> String {
+    match tool {
+        Some("update-initramfs") => format!("initrd.img-{kernel}"),
+        Some("mkinitcpio") => format!(
+            "initramfs-{}.img",
+            package_base
+                .map(str::trim)
+                .filter(|name| !name.is_empty())
+                .unwrap_or(kernel)
+        ),
+        _ => format!("initramfs-{kernel}.img"),
+    }
 }
 
 fn collect_initramfs_findings(
@@ -458,7 +523,9 @@ fn collect_initramfs_findings(
     initramfs_images: &[String],
 ) -> Vec<String> {
     let mut findings = Vec::new();
-    let expected_image = format!("initramfs-{}.img", running_kernel);
+    let package_base = fs::read_to_string(format!("/lib/modules/{running_kernel}/pkgbase")).ok();
+    let expected_image =
+        expected_initramfs_image(running_kernel, initramfs_tool, package_base.as_deref());
 
     if !initramfs_images
         .iter()
@@ -488,11 +555,8 @@ fn collect_initramfs_findings(
         if cmdline.contains("nvidia_drm.modeset=0") {
             findings.push("boot cmdline explicitly disables nvidia_drm.modeset".to_string());
         }
-        if !cmdline.contains("nvidia.NVreg_PreserveVideoMemoryAllocations=1") {
-            findings.push(
-                "boot cmdline is missing nvidia.NVreg_PreserveVideoMemoryAllocations=1".to_string(),
-            );
-        }
+        // Module options may come from modprobe configuration or driver defaults.
+        // Absence from the command line does not establish a suspend problem.
     }
 
     findings.sort();
@@ -502,6 +566,38 @@ fn collect_initramfs_findings(
 
 fn collect_package_inventory() -> Vec<String> {
     let mut lines = Vec::new();
+    let inventory = match package_database() {
+        PackageDatabase::Rpm => Some(
+            Command::new("rpm")
+                .args(["-qa", "--qf", "%{NAME} %{VERSION}-%{RELEASE} %{ARCH}\n"])
+                .output(),
+        ),
+        PackageDatabase::Debian => Some(
+            Command::new("dpkg-query")
+                .args(["-W", "-f=${binary:Package} ${Version} ${Architecture}\n"])
+                .output(),
+        ),
+        PackageDatabase::Unknown => return lines,
+        PackageDatabase::Arch => None,
+    };
+    if let Some(result) = inventory {
+        if let Ok(output) = result
+            && output.status.success()
+        {
+            lines.extend(
+                String::from_utf8_lossy(&output.stdout)
+                    .lines()
+                    .filter(|line| {
+                        line.contains("nvidia")
+                            || line.contains("dkms")
+                            || line.starts_with("kernel")
+                            || line.starts_with("linux-image")
+                    })
+                    .map(str::to_string),
+            );
+        }
+        return lines;
+    }
     if let Ok(output) = Command::new("pacman")
         .args([
             "-Q",
@@ -550,8 +646,20 @@ fn collect_package_findings(
     let has_open_dkms = package_version("nvidia-open-dkms").is_some();
     let has_prop = package_version("nvidia").is_some();
     let has_prop_dkms = package_version("nvidia-dkms").is_some();
-    let utils = package_version("nvidia-utils");
-    let lib32_utils = package_version("lib32-nvidia-utils");
+    let utils = package_version("nvidia-utils").or_else(|| package_version("nvidia-utils-beta"));
+    let lib32_utils = package_version("lib32-nvidia-utils")
+        .or_else(|| package_version("lib32-nvidia-utils-beta"));
+    // Package epochs and packaging revisions do not change the NVIDIA ABI.
+    let upstream_version = |version: &str| {
+        version
+            .rsplit(':')
+            .next()
+            .unwrap_or(version)
+            .split('-')
+            .next()
+            .unwrap_or(version)
+            .to_string()
+    };
     let firmware_nvidia = package_version("linux-firmware-nvidia");
 
     if (has_open || has_open_dkms) && (has_prop || has_prop_dkms) {
@@ -561,7 +669,7 @@ fn collect_package_findings(
     }
 
     if let (Some(driver), Some(utils_version)) = (driver_version, utils) {
-        if !utils_version.starts_with(driver) {
+        if upstream_version(utils_version) != driver {
             findings.push(format!(
                 "nvidia-utils version {} does not match detected driver {}",
                 utils_version, driver
@@ -577,7 +685,7 @@ fn collect_package_findings(
     }
 
     if let (Some(utils_version), Some(lib32_version)) = (utils, lib32_utils)
-        && utils_version != lib32_version
+        && upstream_version(utils_version) != upstream_version(lib32_version)
     {
         findings.push(format!(
             "lib32-nvidia-utils version {} does not match nvidia-utils version {}",
@@ -585,7 +693,7 @@ fn collect_package_findings(
         ));
     }
 
-    if utils.is_some() && firmware_nvidia.is_none() {
+    if package_version("nvidia-utils").is_some() && firmware_nvidia.is_none() {
         findings.push(
             "nvidia-utils is installed but linux-firmware-nvidia is missing; firmware packaging may be incomplete on Arch/CachyOS"
                 .to_string(),
@@ -606,21 +714,9 @@ fn collect_package_findings(
         );
     }
 
-    if ownership.iter().any(|item| item.owner.is_none()) {
+    if !arch_packages.is_empty() && ownership.iter().any(|item| item.owner.is_none()) {
         findings.push(
             "At least one expected firmware path has no owning Arch package; firmware installation may be incomplete"
-                .to_string(),
-        );
-    }
-
-    if ownership.iter().any(|item| {
-        item.owner
-            .as_deref()
-            .map(|owner| owner.contains("nvidia-utils-beta") || owner.contains("nvidia-open-beta"))
-            .unwrap_or(false)
-    }) {
-        findings.push(
-            "Firmware ownership points to beta packages; verify that your loaded driver branch matches the installed beta userspace stack"
                 .to_string(),
         );
     }
@@ -688,33 +784,54 @@ fn collect_ownership_diagnostics(paths: &[String]) -> Vec<OwnershipDiagnostic> {
     let mut diagnostics = Vec::new();
 
     for path in paths {
-        let owner = Command::new("pacman")
-            .args(["-Qo", path])
+        let database = package_database();
+        let resolved = fs::canonicalize(path).unwrap_or_else(|_| PathBuf::from(path));
+        let mut query = match database {
+            PackageDatabase::Arch => {
+                let mut command = Command::new("pacman");
+                command.arg("-Qoq");
+                command
+            }
+            PackageDatabase::Rpm => {
+                let mut command = Command::new("rpm");
+                command.args(["-qf", "--qf", "%{NAME}\n"]);
+                command
+            }
+            PackageDatabase::Debian => {
+                let mut command = Command::new("dpkg-query");
+                command.arg("-S");
+                command
+            }
+            PackageDatabase::Unknown => {
+                diagnostics.push(OwnershipDiagnostic {
+                    path: path.clone(),
+                    owner: None,
+                    package_check: Some(
+                        "Package ownership check unavailable on this OS".to_string(),
+                    ),
+                });
+                continue;
+            }
+        };
+        let owner = query
+            .arg(&resolved)
             .output()
             .ok()
             .filter(|output| output.status.success())
-            .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string());
-
-        let package_check = owner.as_ref().and_then(|owner_line| {
-            owner_line
-                .split_whitespace()
-                .last()
-                .map(|pkg| pkg.trim().to_string())
-                .and_then(|pkg| {
-                    Command::new("pacman")
-                        .args(["-Qkk", &pkg])
-                        .output()
-                        .ok()
-                        .filter(|output| output.status.success())
-                        .map(|output| {
-                            String::from_utf8_lossy(&output.stdout)
-                                .lines()
-                                .next()
-                                .unwrap_or("")
-                                .to_string()
-                        })
-                })
-        });
+            .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+            .filter(|value| !value.is_empty());
+        let package_check = if database == PackageDatabase::Arch {
+            owner.as_ref().and_then(|packages| {
+                Command::new("pacman")
+                    .arg("-Qkk")
+                    .args(packages.lines())
+                    .output()
+                    .ok()
+                    .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+            })
+        } else {
+            None
+        };
 
         diagnostics.push(OwnershipDiagnostic {
             path: path.clone(),
@@ -1086,7 +1203,7 @@ pub fn write_support_bundle_with_options(
         let fp16_egl = detect_egl_fp16();
         let kernel_color_pipeline = is_kernel_at_least(6, 19);
         let _ = writeln!(report);
-        let _ = writeln!(report, "[610 runtime capabilities]");
+        let _ = writeln!(report, "[driver runtime capabilities]");
         let _ = writeln!(report, "driver_major={}", caps.major_version);
         let _ = writeln!(
             report,
@@ -1215,7 +1332,7 @@ pub fn write_support_bundle_with_options(
     }
 
     let _ = writeln!(report);
-    let _ = writeln!(report, "[pacman package inventory]");
+    let _ = writeln!(report, "[system package inventory]");
     if diagnostics.package_inventory.is_empty() {
         let _ = writeln!(report, "unavailable");
     } else {
@@ -1795,49 +1912,8 @@ pub fn rollback_driver() -> NvResult<()> {
 }
 
 pub fn fix_dkms_issues() -> NvResult<()> {
-    println!("Attempting to fix DKMS issues...");
-
-    // Common DKMS fixes
-    let fixes = vec![
-        (
-            vec!["sudo", "dkms", "autoinstall"],
-            "Rebuilding all DKMS modules",
-        ),
-        (
-            vec!["sudo", "dkms", "remove", "nvidia", "--all"],
-            "Removing old NVIDIA modules",
-        ),
-        (
-            vec!["sudo", "dkms", "add", "nvidia"],
-            "Re-adding NVIDIA modules",
-        ),
-        (
-            vec!["sudo", "dkms", "build", "nvidia"],
-            "Building NVIDIA modules",
-        ),
-        (
-            vec!["sudo", "dkms", "install", "nvidia"],
-            "Installing NVIDIA modules",
-        ),
-    ];
-
-    for (cmd, description) in fixes {
-        println!("{description}...");
-        if let Ok(output) = Command::new(cmd[0]).args(&cmd[1..]).output() {
-            if output.status.success() {
-                println!("✓ {description} succeeded");
-            } else {
-                println!("✗ {description} failed");
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                if !stderr.is_empty() {
-                    println!("  Error: {stderr}");
-                }
-            }
-        }
-    }
-
-    println!("DKMS repair attempts completed. Reboot may be required.");
-    Ok(())
+    // Repair missing builds without removing installed modules or registrations.
+    build_dkms_nvidia(None, false)
 }
 
 // ==================== DKMS Setup & Management ====================
@@ -1858,7 +1934,7 @@ pub enum DkmsSourceType {
 impl std::fmt::Display for DkmsSourceType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Packaged => write!(f, "packaged (nvidia-open-dkms)"),
+            Self::Packaged => write!(f, "managed by system package database"),
             Self::Git { remote_url } => {
                 if let Some(url) = remote_url {
                     write!(f, "git ({})", url)
@@ -1875,6 +1951,8 @@ impl std::fmt::Display for DkmsSourceType {
 /// Information about DKMS setup status
 #[derive(Debug)]
 pub struct DkmsSetupInfo {
+    pub module_name: Option<String>,
+    pub registered_version: Option<String>,
     pub dkms_installed: bool,
     pub nvidia_registered: bool,
     pub nvidia_version: Option<String>,
@@ -1902,13 +1980,11 @@ fn detect_dkms_source_type(source_path: &str) -> DkmsSourceType {
         return DkmsSourceType::Git { remote_url };
     }
 
-    // Check if it's from a package (nvidia-open-dkms)
-    let is_packaged = Command::new("pacman")
-        .args(["-Qo", source_path])
-        .output()
-        .is_ok_and(|o| {
-            o.status.success() && String::from_utf8_lossy(&o.stdout).contains("nvidia-open-dkms")
-        });
+    // Package ownership is authoritative for both RPM and Debian sources too.
+    let config = path.join("dkms.conf").display().to_string();
+    let is_packaged = collect_ownership_diagnostics(&[config])
+        .iter()
+        .any(|item| item.owner.is_some());
 
     if is_packaged {
         return DkmsSourceType::Packaged;
@@ -1922,9 +1998,60 @@ fn detect_dkms_source_type(source_path: &str) -> DkmsSourceType {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DkmsRegistration {
+    module: String,
+    version: String,
+    kernel: Option<String>,
+    installed: bool,
+}
+
+fn parse_nvidia_dkms_status(status: &str) -> Vec<DkmsRegistration> {
+    status
+        .lines()
+        .filter_map(|line| {
+            let (identity, state) = line.split_once(':')?;
+            let mut fields = identity.split(',').map(str::trim);
+            let (module, version) = fields.next()?.split_once('/')?;
+            if !matches!(module, "nvidia" | "nvidia-open") || version.is_empty() {
+                return None;
+            }
+            Some(DkmsRegistration {
+                module: module.to_string(),
+                version: version.to_string(),
+                kernel: fields.next().map(str::to_string),
+                installed: state.split_whitespace().next() == Some("installed"),
+            })
+        })
+        .collect()
+}
+
+fn select_dkms_registration<'a>(
+    entries: &'a [DkmsRegistration],
+    loaded: Option<&str>,
+) -> Option<&'a DkmsRegistration> {
+    let candidates: Vec<_> = entries
+        .iter()
+        .filter(|entry| loaded.is_none_or(|version| entry.version == version))
+        .collect();
+    let first = *candidates.first()?;
+    candidates
+        .iter()
+        .all(|entry| entry.module == first.module && entry.version == first.version)
+        .then_some(first)
+}
+
+fn dkms_identity(info: &DkmsSetupInfo) -> NvResult<(&str, &str)> {
+    info.module_name.as_deref().zip(info.registered_version.as_deref()).ok_or_else(|| {
+        NvControlError::ConfigError("No unambiguous NVIDIA DKMS registration matching the detected driver; inspect dkms status and matching userland before rebuilding".to_string())
+    })
+}
+
 /// Get detailed DKMS setup information
 pub fn get_dkms_setup_info() -> DkmsSetupInfo {
     let mut info = DkmsSetupInfo {
+        module_name: None,
+        registered_version: None,
         dkms_installed: false,
         nvidia_registered: false,
         nvidia_version: None,
@@ -1950,59 +2077,53 @@ pub fn get_dkms_setup_info() -> DkmsSetupInfo {
         .output()
     {
         if output.status.success() {
-            info.nvidia_version = Some(String::from_utf8_lossy(&output.stdout).trim().to_string());
+            info.nvidia_version = String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .next()
+                .map(|line| line.trim().to_string())
+                .filter(|version| !version.is_empty());
         }
     }
 
-    // Check DKMS status for nvidia
-    if let Ok(output) = Command::new("dkms").arg("status").output() {
-        if output.status.success() {
-            let status = String::from_utf8_lossy(&output.stdout);
-            for line in status.lines() {
-                if line.contains("nvidia") {
-                    info.nvidia_registered = true;
-                    // Parse kernel versions that have nvidia built
-                    // Format: nvidia/<version>, <kernel>, x86_64: installed
-                    let parts: Vec<&str> = line.split(',').collect();
-                    if parts.len() >= 2 {
-                        let kernel = parts[1].trim();
-                        if line.contains("installed") {
-                            info.kernels_built.push(kernel.to_string());
-                        }
-                    }
-                }
-            }
+    if let Ok(output) = Command::new("dkms").arg("status").output()
+        && output.status.success()
+    {
+        let registrations = parse_nvidia_dkms_status(&String::from_utf8_lossy(&output.stdout));
+        info.nvidia_registered = !registrations.is_empty();
+        if let Some(selected) =
+            select_dkms_registration(&registrations, info.nvidia_version.as_deref())
+        {
+            info.module_name = Some(selected.module.clone());
+            info.registered_version = Some(selected.version.clone());
+            info.kernels_built = registrations
+                .iter()
+                .filter(|entry| {
+                    entry.module == selected.module
+                        && entry.version == selected.version
+                        && entry.installed
+                })
+                .filter_map(|entry| entry.kernel.clone())
+                .collect();
         }
     }
 
-    // Check for nvidia source - first try DKMS registered source, then /usr/src
-    let source_path = if let Some(ref ver) = info.nvidia_version {
-        let dkms_source = format!("/var/lib/dkms/nvidia/{}/source", ver);
-        if std::path::Path::new(&dkms_source).exists() {
-            // Follow symlink to get actual source path
-            std::fs::read_link(&dkms_source)
-                .ok()
-                .map(|p| p.display().to_string())
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-
-    // Fallback to scanning /usr/src if DKMS source not found
-    let source_path = source_path.or_else(|| {
-        std::fs::read_dir("/usr/src").ok().and_then(|entries| {
-            for entry in entries.flatten() {
-                let name = entry.file_name();
-                let name_str = name.to_string_lossy();
-                if name_str.starts_with("nvidia-") || name_str.starts_with("nvidia-open-") {
-                    return Some(entry.path().display().to_string());
-                }
-            }
-            None
+    let source_path = info
+        .module_name
+        .as_ref()
+        .zip(info.registered_version.as_ref())
+        .and_then(|(module, version)| {
+            fs::canonicalize(format!("/var/lib/dkms/{module}/{version}/source")).ok()
         })
-    });
+        .map(|path| path.display().to_string())
+        .or_else(|| {
+            let version = info.nvidia_version.as_ref()?;
+            let candidates: Vec<_> = ["nvidia", "nvidia-open"]
+                .iter()
+                .map(|module| PathBuf::from(format!("/usr/src/{module}-{version}")))
+                .filter(|path| path.join("dkms.conf").is_file())
+                .collect();
+            (candidates.len() == 1).then(|| candidates[0].display().to_string())
+        });
 
     if let Some(ref path) = source_path {
         info.source_path = Some(path.clone());
@@ -2014,18 +2135,7 @@ pub fn get_dkms_setup_info() -> DkmsSetupInfo {
         for entry in entries.flatten() {
             let kernel = entry.file_name().to_string_lossy().to_string();
             if !info.kernels_built.contains(&kernel) {
-                // Check if nvidia module exists for this kernel
-                let module_paths = [
-                    format!("/lib/modules/{}/kernel/drivers/video/nvidia.ko.zst", kernel),
-                    format!("/lib/modules/{}/kernel/drivers/video/nvidia.ko", kernel),
-                    format!("/lib/modules/{}/extramodules/nvidia.ko.zst", kernel),
-                    format!("/lib/modules/{}/extramodules/nvidia.ko", kernel),
-                    format!("/lib/modules/{}/updates/dkms/nvidia.ko.zst", kernel),
-                    format!("/lib/modules/{}/updates/dkms/nvidia.ko", kernel),
-                ];
-                let has_module = module_paths
-                    .iter()
-                    .any(|p| std::path::Path::new(p).exists());
+                let has_module = kernel_has_nvidia_module(&kernel);
                 if !has_module {
                     info.kernels_missing.push(kernel);
                 }
@@ -2096,8 +2206,20 @@ pub fn setup_dkms_nvidia_open() -> NvResult<()> {
         path
     } else {
         println!("\nNo nvidia source found in /usr/src");
-        println!("For Arch Linux, install nvidia-open-dkms:");
-        println!("  sudo pacman -S nvidia-open-dkms");
+        match package_database() {
+            PackageDatabase::Arch => {
+                println!("Install matching nvidia-open-dkms and kernel headers using pacman.")
+            }
+            PackageDatabase::Rpm => println!(
+                "Use the configured NVIDIA DKMS or RPM Fusion akmods package family; do not mix them."
+            ),
+            PackageDatabase::Debian => println!(
+                "Install the matching NVIDIA open DKMS package and kernel headers from the configured distribution repository."
+            ),
+            PackageDatabase::Unknown => println!(
+                "Install matching NVIDIA DKMS source and kernel headers through your distribution."
+            ),
+        }
         println!();
         println!("Or clone and set up manually:");
         println!("  git clone https://github.com/NVIDIA/open-gpu-kernel-modules.git");
@@ -2121,29 +2243,17 @@ pub fn setup_dkms_nvidia_open() -> NvResult<()> {
         ));
     }
 
-    // Step 6: Register with DKMS
-    println!("\nRegistering nvidia with DKMS...");
-    let version_part = source_path
-        .split('/')
-        .next_back()
-        .unwrap_or(&driver_version)
-        .replace("nvidia-", "")
-        .replace("nvidia-open-", "");
-
-    let add_result = Command::new("sudo")
-        .args(["dkms", "add", "-m", "nvidia", "-v", &version_part])
-        .status();
-
-    match add_result {
-        Ok(status) if status.success() => {
-            println!("nvidia registered with DKMS");
-        }
-        _ => {
-            println!("Failed to register. Trying alternative method...");
-            let _ = Command::new("sudo")
-                .args(["dkms", "add", &source_path])
-                .status();
-        }
+    println!("\nRegistering DKMS source: {}", source_path);
+    let status = Command::new("sudo")
+        .args(["dkms", "add", &source_path])
+        .status()
+        .map_err(|error| {
+            NvControlError::CommandFailed(format!("DKMS registration failed: {error}"))
+        })?;
+    if !status.success() {
+        return Err(NvControlError::CommandFailed(
+            "DKMS registration failed".to_string(),
+        ));
     }
 
     println!("\nTo build for all kernels: nvctl driver dkms build");
@@ -2157,6 +2267,10 @@ fn print_dkms_conf_template(version: &str) {
     println!(
         r#"PACKAGE_NAME="nvidia"
 PACKAGE_VERSION="{}"
+BUILT_MODULE_LOCATION[0]="kernel-open"
+BUILT_MODULE_LOCATION[1]="kernel-open"
+BUILT_MODULE_LOCATION[2]="kernel-open"
+BUILT_MODULE_LOCATION[3]="kernel-open"
 BUILT_MODULE_NAME[0]="nvidia"
 BUILT_MODULE_NAME[1]="nvidia-modeset"
 BUILT_MODULE_NAME[2]="nvidia-drm"
@@ -2166,7 +2280,7 @@ DEST_MODULE_LOCATION[1]="/kernel/drivers/video"
 DEST_MODULE_LOCATION[2]="/kernel/drivers/video"
 DEST_MODULE_LOCATION[3]="/kernel/drivers/video"
 AUTOINSTALL="yes"
-MAKE[0]="make -j$(nproc) NV_KERNEL_MODULES=1 NV_KERNEL_SOURCES=/lib/modules/$kernelver/build modules"
+MAKE[0]="make -j4 KERNEL_UNAME=$kernelver NV_KERNEL_SOURCES=/lib/modules/$kernelver/build NV_KERNEL_OUTPUT=/lib/modules/$kernelver/build modules"
 CLEAN="make clean""#,
         version
     );
@@ -2189,10 +2303,7 @@ pub fn build_dkms_nvidia(kernel: Option<&str>, force: bool) -> NvResult<()> {
         ));
     }
 
-    let version = info
-        .nvidia_version
-        .as_ref()
-        .ok_or_else(|| NvControlError::ConfigError("Cannot detect nvidia version".to_string()))?;
+    let (module, version) = dkms_identity(&info)?;
 
     let force_flag = if force { vec!["--force"] } else { vec![] };
 
@@ -2204,7 +2315,7 @@ pub fn build_dkms_nvidia(kernel: Option<&str>, force: bool) -> NvResult<()> {
                 k,
                 if force { " (force)" } else { "" }
             );
-            let mut args = vec!["dkms", "install", "-m", "nvidia", "-v", version, "-k", k];
+            let mut args = vec!["dkms", "install", "-m", module, "-v", version, "-k", k];
             args.extend(force_flag.iter().copied());
 
             let status = Command::new("sudo").args(&args).status().map_err(|e| {
@@ -2249,11 +2360,10 @@ pub fn build_dkms_nvidia(kernel: Option<&str>, force: bool) -> NvResult<()> {
             kernels.sort();
             println!("Found {} kernels with headers", kernels.len());
 
+            let mut failed = false;
             for kernel in &kernels {
                 print!("  Building for {}... ", kernel);
-                let mut args = vec![
-                    "dkms", "install", "-m", "nvidia", "-v", version, "-k", kernel,
-                ];
+                let mut args = vec!["dkms", "install", "-m", module, "-v", version, "-k", kernel];
                 args.extend(force_flag.iter().copied());
 
                 let status = Command::new("sudo").args(&args).output();
@@ -2264,17 +2374,20 @@ pub fn build_dkms_nvidia(kernel: Option<&str>, force: bool) -> NvResult<()> {
                         let stderr = String::from_utf8_lossy(&output.stderr);
                         let stdout = String::from_utf8_lossy(&output.stdout);
                         let combined = format!("{}{}", stdout, stderr);
-                        if combined.contains("already installed") {
-                            println!("already installed (use --force to rebuild)");
-                        } else {
-                            println!("failed");
-                            if !stderr.is_empty() {
-                                println!("    {}", stderr.lines().next().unwrap_or(""));
-                            }
-                        }
+                        failed = true;
+                        println!("failed: {}", combined.trim());
                     }
-                    Err(e) => println!("error: {}", e),
+                    Err(e) => {
+                        failed = true;
+                        println!("error: {}", e);
+                    }
                 }
+            }
+
+            if failed {
+                return Err(NvControlError::CommandFailed(
+                    "One or more NVIDIA DKMS builds failed".to_string(),
+                ));
             }
 
             println!("\nBuild complete. Check status with: nvctl driver dkms status");
@@ -2293,21 +2406,18 @@ pub fn unregister_dkms_nvidia() -> NvResult<()> {
         return Ok(());
     }
 
-    let version = info
-        .nvidia_version
-        .as_ref()
-        .ok_or_else(|| NvControlError::ConfigError("Cannot detect nvidia version".to_string()))?;
+    let (module, version) = dkms_identity(&info)?;
 
     println!("Unregistering nvidia {} from DKMS...", version);
 
     let status = Command::new("sudo")
-        .args(["dkms", "remove", "-m", "nvidia", "-v", version, "--all"])
+        .args(["dkms", "remove", "-m", module, "-v", version, "--all"])
         .status()
         .map_err(|e| NvControlError::CommandFailed(format!("dkms remove failed: {}", e)))?;
 
     if status.success() {
         println!("nvidia unregistered from DKMS");
-        println!("\nNote: Existing modules in /lib/modules are not removed.");
+        println!("\nDKMS removes installed modules when unregistering with --all.");
         println!("You may need to reinstall nvidia-open for the current kernel.");
     } else {
         return Err(NvControlError::CommandFailed(
@@ -2356,12 +2466,16 @@ pub fn print_dkms_logs(kernel: Option<&str>, tail: Option<usize>) -> NvResult<()
     }
 
     // Check DKMS internal logs
-    let version = info
+    let dkms_bases: Vec<_> = info
         .nvidia_version
-        .unwrap_or_else(|| "610.43.02".to_string());
-    let dkms_base = format!("/var/lib/dkms/nvidia/{}", version);
+        .iter()
+        .flat_map(|version| {
+            ["nvidia-open", "nvidia"].map(|module| format!("/var/lib/dkms/{module}/{version}"))
+        })
+        .filter(|path| std::path::Path::new(path).exists())
+        .collect();
 
-    if std::path::Path::new(&dkms_base).exists() {
+    for dkms_base in dkms_bases {
         if kernel.is_some() || !found_logs {
             println!("DKMS Build Logs ({})", dkms_base);
             println!("────────────────────────────────────────");
@@ -2479,162 +2593,36 @@ fn print_log_file(path: &str, kernel: &str, tail: Option<usize>) -> NvResult<()>
 
 /// Install Arch Linux pacman hooks for automatic DKMS rebuilds
 pub fn install_pacman_hooks() -> NvResult<()> {
-    println!("Installing Pacman Hooks for NVIDIA DKMS\n");
-
-    let distro = detect_distribution();
-    if distro != "arch" && distro != "cachyos" && distro != "endeavouros" {
-        return Err(NvControlError::ConfigError(
-            "Pacman hooks are only for Arch-based distributions".to_string(),
-        ));
+    if package_database() != PackageDatabase::Arch {
+        return Err(NvControlError::ConfigError("Pacman hooks apply only to Arch derivatives; use the distribution's DKMS/kernel package integration".to_string()));
     }
-
-    let hook_dir = "/etc/pacman.d/hooks";
-    let hook_path = format!("{}/nvidia-dkms.hook", hook_dir);
-
-    // Check if hook already exists
-    if std::path::Path::new(&hook_path).exists() {
-        println!("Hook already exists at {}", hook_path);
-        if let Ok(content) = std::fs::read_to_string(&hook_path) {
-            println!("\nCurrent hook content:");
-            println!("────────────────────────────────────────");
-            println!("{}", content);
-            println!("────────────────────────────────────────");
-        }
-        return Ok(());
-    }
-
-    // Create hook content - uses wrapper script for logging
-    let hook_content = format!(
-        r#"[Trigger]
-Operation = Install
-Operation = Upgrade
-Operation = Remove
-Type = Package
-Target = nvidia-open
-Target = nvidia-open-dkms
-{}
-
-[Action]
-Description = Rebuilding NVIDIA modules via DKMS...
-Depends = dkms
-When = PostTransaction
-NeedsTargets
-Exec = /usr/local/bin/nvidia-dkms-build
-"#,
-        ArchIntegration::pacman_kernel_targets()
-            .into_iter()
-            .map(|target| format!("Target = {}", target))
-            .collect::<Vec<_>>()
-            .join("\n")
-    );
-
-    // Wrapper script with logging and notification
-    let wrapper_script = r#"#!/bin/bash
-# NVIDIA DKMS build wrapper with logging
-# Installed by nvctl
-
-LOG_DIR="/var/log/nvidia-dkms"
-LOG_FILE="$LOG_DIR/build-$(date +%Y%m%d-%H%M%S).log"
-LATEST_LOG="$LOG_DIR/latest.log"
-
-mkdir -p "$LOG_DIR"
-
-echo "=== NVIDIA DKMS Build $(date) ===" | tee "$LOG_FILE"
-echo "Kernels to build for:" | tee -a "$LOG_FILE"
-
-# Run dkms autoinstall with PIPESTATUS to capture actual exit code
-/usr/bin/dkms autoinstall 2>&1 | tee -a "$LOG_FILE"
-DKMS_EXIT=${PIPESTATUS[0]}
-
-ln -sf "$LOG_FILE" "$LATEST_LOG"
-
-# Exit code 0 = success, 6 = already installed (not an error)
-if [ $DKMS_EXIT -eq 0 ]; then
-    echo "" | tee -a "$LOG_FILE"
-    echo "Build completed successfully" | tee -a "$LOG_FILE"
-    if command -v notify-send &>/dev/null && [ -n "$DISPLAY" -o -n "$WAYLAND_DISPLAY" ]; then
-        notify-send -u low "NVIDIA DKMS" "Modules rebuilt successfully"
-    fi
-elif [ $DKMS_EXIT -eq 6 ]; then
-    echo "" | tee -a "$LOG_FILE"
-    echo "Modules already installed (use --force to rebuild)" | tee -a "$LOG_FILE"
-    if command -v notify-send &>/dev/null && [ -n "$DISPLAY" -o -n "$WAYLAND_DISPLAY" ]; then
-        notify-send -u low "NVIDIA DKMS" "Modules already up to date"
-    fi
-else
-    echo "" | tee -a "$LOG_FILE"
-    echo "Build FAILED with exit code $DKMS_EXIT" | tee -a "$LOG_FILE"
-    if command -v notify-send &>/dev/null && [ -n "$DISPLAY" -o -n "$WAYLAND_DISPLAY" ]; then
-        notify-send -u critical "NVIDIA DKMS FAILED" "Check: nvctl driver dkms logs"
-    fi
-    echo ""
-    echo "╔════════════════════════════════════════════════════════════╗"
-    echo "║  NVIDIA DKMS build failed! Check logs:                     ║"
-    echo "║    nvctl driver dkms logs                                  ║"
-    echo "║    cat $LATEST_LOG                                         ║"
-    echo "╚════════════════════════════════════════════════════════════╝"
-fi
-"#;
-
-    let wrapper_path = "/usr/local/bin/nvidia-dkms-build";
-
-    println!("Hook to be installed:");
-    println!("────────────────────────────────────────");
-    println!("{}", hook_content);
-    println!("────────────────────────────────────────");
-
-    println!("\nWrapper script (with logging + notifications):");
-    println!("────────────────────────────────────────");
-    println!("  Logs to: /var/log/nvidia-dkms/");
-    println!("  Desktop notifications on success/failure");
-    println!("────────────────────────────────────────");
-
-    // Check if running as root
-    if !nix::unistd::geteuid().is_root() {
-        println!("\nTo install, run as root:");
-        println!("  sudo mkdir -p {}", hook_dir);
-        println!("  sudo tee {} << 'EOF'\n{}EOF", hook_path, hook_content);
+    if Path::new("/usr/share/libalpm/hooks/70-dkms-install.hook").is_file() {
+        println!("The DKMS package already provides automatic kernel/header update hooks.");
         println!(
-            "  sudo tee {} << 'EOF'\n{}EOF",
-            wrapper_path, wrapper_script
+            "No extra nvcontrol hook is needed. Verify AUTOINSTALL in the registered source's dkms.conf."
         );
-        println!("  sudo chmod +x {}", wrapper_path);
         return Ok(());
     }
-
-    // Create hooks directory
-    std::fs::create_dir_all(hook_dir).map_err(|e| {
-        NvControlError::ConfigError(format!("Failed to create hooks directory: {}", e))
-    })?;
-
-    // Write hook
-    std::fs::write(&hook_path, hook_content)
-        .map_err(|e| NvControlError::ConfigError(format!("Failed to write hook: {}", e)))?;
-    println!("Hook installed at {}", hook_path);
-
-    // Write wrapper script
-    std::fs::write(wrapper_path, wrapper_script).map_err(|e| {
-        NvControlError::ConfigError(format!("Failed to write wrapper script: {}", e))
-    })?;
-
-    // Make wrapper executable
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(wrapper_path, std::fs::Permissions::from_mode(0o755))
-        .map_err(|e| NvControlError::ConfigError(format!("Failed to set permissions: {}", e)))?;
-    println!("Wrapper script installed at {}", wrapper_path);
-
-    // Create log directory
-    let _ = std::fs::create_dir_all("/var/log/nvidia-dkms");
-
-    println!("\nThis hook will automatically rebuild NVIDIA DKMS modules");
-    println!("when nvidia-open or kernel packages are updated.");
-    println!("\nLogs will be saved to: /var/log/nvidia-dkms/");
-    println!("View with: nvctl driver dkms logs");
-
-    Ok(())
+    Err(NvControlError::ConfigError("Standard DKMS package hook is missing; verify or reinstall the Arch dkms package before enabling automatic rebuilds".to_string()))
 }
 
-/// Print comprehensive DKMS status for nvidia
+fn arch_dkms_hook_message(
+    database: PackageDatabase,
+    standard: bool,
+    custom: bool,
+) -> Option<&'static str> {
+    if database != PackageDatabase::Arch {
+        return None;
+    }
+    Some(if standard {
+        "Kernel integration: standard DKMS package hooks present"
+    } else if custom {
+        "Kernel integration: custom pacman hook present; verify its behavior"
+    } else {
+        "Kernel integration: standard DKMS hook missing; verify the Arch dkms package"
+    })
+}
+
 pub fn print_dkms_status_detailed() -> NvResult<()> {
     let info = get_dkms_setup_info();
 
@@ -2668,6 +2656,28 @@ pub fn print_dkms_status_detailed() -> NvResult<()> {
         if info.nvidia_registered { "yes" } else { "no" }
     );
 
+    if let (Some(module), Some(version)) = (&info.module_name, &info.registered_version) {
+        println!("Registration:   {module}/{version}");
+    }
+    for hook in match package_database() {
+        PackageDatabase::Arch => vec!["/usr/share/libalpm/hooks/70-dkms-install.hook"],
+        PackageDatabase::Rpm => vec!["/usr/lib/kernel/install.d/40-dkms.install"],
+        PackageDatabase::Debian => vec![
+            "/etc/kernel/postinst.d/dkms",
+            "/etc/kernel/header_postinst.d/dkms",
+        ],
+        PackageDatabase::Unknown => vec![],
+    } {
+        println!(
+            "Kernel hook:    {hook} ({})",
+            if Path::new(hook).is_file() {
+                "present"
+            } else {
+                "not found"
+            }
+        );
+    }
+
     // Source path and type
     if let Some(ref path) = info.source_path {
         println!("Source:         {}", path);
@@ -2698,17 +2708,7 @@ pub fn print_dkms_status_detailed() -> NvResult<()> {
     println!("Installed Kernels ({}):", all_kernels.len());
     for kernel in &all_kernels {
         let has_headers = std::path::Path::new(&format!("/lib/modules/{}/build", kernel)).exists();
-        let has_nvidia = {
-            let paths = [
-                format!("/lib/modules/{}/kernel/drivers/video/nvidia.ko.zst", kernel),
-                format!("/lib/modules/{}/kernel/drivers/video/nvidia.ko", kernel),
-                format!("/lib/modules/{}/extramodules/nvidia.ko.zst", kernel),
-                format!("/lib/modules/{}/extramodules/nvidia.ko", kernel),
-                format!("/lib/modules/{}/updates/dkms/nvidia.ko.zst", kernel),
-                format!("/lib/modules/{}/updates/dkms/nvidia.ko", kernel),
-            ];
-            paths.iter().any(|p| std::path::Path::new(p).exists())
-        };
+        let has_nvidia = kernel_has_nvidia_module(kernel);
         let in_dkms = info.kernels_built.contains(kernel);
 
         let running = if kernel == &running_kernel {
@@ -2748,12 +2748,12 @@ pub fn print_dkms_status_detailed() -> NvResult<()> {
         println!("  -> Build for missing kernels: nvctl driver dkms build");
     }
 
-    // Check for pacman hook
-    if std::path::Path::new("/etc/pacman.d/hooks/nvidia-dkms.hook").exists() {
-        println!("\nPacman Hook:    installed (auto-rebuild enabled)");
-    } else {
-        println!("\nPacman Hook:    not installed");
-        println!("  -> Install: nvctl driver dkms hook");
+    if let Some(message) = arch_dkms_hook_message(
+        package_database(),
+        Path::new("/usr/share/libalpm/hooks/70-dkms-install.hook").is_file(),
+        Path::new("/etc/pacman.d/hooks/nvidia-dkms.hook").is_file(),
+    ) {
+        println!("\n{message}");
     }
 
     Ok(())
@@ -2823,27 +2823,19 @@ pub fn doctor_dkms() -> DkmsDoctorReport {
         ));
     }
 
-    if let Some(version) = &info.nvidia_version {
-        let symlink_path = format!("/usr/src/nvidia-{}", version);
-        if let Ok(target) = std::fs::read_link(&symlink_path) {
-            if let Some(source_path) = &info.source_path {
-                if target.display().to_string() != *source_path {
-                    if severity != DiagnosticSeverity::Broken {
-                        severity = DiagnosticSeverity::Warning;
-                    }
-                    findings.push(format!(
-                        "{} points to {} instead of {}",
-                        symlink_path,
-                        target.display(),
-                        source_path
-                    ));
-                    fixes.push(format!(
-                        "Update the DKMS source symlink: sudo ln -sf {} {}",
-                        source_path, symlink_path
-                    ));
-                }
-            }
-        }
+    if info.nvidia_registered && info.module_name.is_none() {
+        severity = DiagnosticSeverity::Warning;
+        findings.push(
+            "NVIDIA DKMS registration is ambiguous or differs from the detected driver".to_string(),
+        );
+        fixes.push(
+            "Inspect dkms status and align source/userland versions before rebuilding".to_string(),
+        );
+    }
+    if info.nvidia_registered && info.source_path.is_none() {
+        severity = DiagnosticSeverity::Broken;
+        findings.push("Registered NVIDIA DKMS source is unavailable".to_string());
+        fixes.push("Restore the registered source or reinstall its owning package; do not remove working modules first".to_string());
     }
 
     if findings.is_empty() {
@@ -3035,6 +3027,22 @@ pub struct DriverCapabilities {
     /// Runtime detection of VK_EXT_descriptor_heap, used by current VKD3D-Proton builds.
     #[serde(default)]
     pub has_vulkan_descriptor_heap: bool,
+    /// Runtime evidence; a driver branch alone does not establish availability.
+    #[serde(default)]
+    pub has_vulkan_low_latency_rev2: bool,
+    #[serde(default)]
+    pub has_vulkan_cluster_acceleration_structure: bool,
+    /// Driver support; kernel/controller configuration is required separately.
+    #[serde(default)]
+    pub has_cgroups_memory_partitioning: bool,
+    /// Reporting capability, not the active depth of any connected display.
+    #[serde(default)]
+    pub has_12bpc_color_reporting: bool,
+    #[serde(default)]
+    pub has_display_glitch_perf_limit_override: bool,
+    /// The effective loaded module setting, if readable.
+    #[serde(default)]
+    pub kernel_suspend_notifiers_enabled: Option<bool>,
 }
 
 impl DriverCapabilities {
@@ -3042,10 +3050,32 @@ impl DriverCapabilities {
     pub fn detect() -> NvResult<Self> {
         let status = get_driver_status()?;
         let mut capabilities = Self::from_version(&status.current_version)?;
-        capabilities.has_vulkan_descriptor_heap = detect_vulkan_extensions()
-            .iter()
-            .any(|extension| extension == "VK_EXT_descriptor_heap");
+        capabilities.apply_vulkan_runtime(&vulkaninfo_output().unwrap_or_default());
+        if let Ok(params) = std::fs::read_to_string("/proc/driver/nvidia/params") {
+            capabilities.kernel_suspend_notifiers_enabled = params.lines().find_map(|line| {
+                let (name, value) = line.split_once(':')?;
+                (name.trim() == "UseKernelSuspendNotifiers")
+                    .then(|| parse_boolean_parameter(value.trim()))
+                    .flatten()
+            });
+        }
         Ok(capabilities)
+    }
+
+    fn apply_vulkan_runtime(&mut self, output: &str) {
+        let extensions = parse_notable_vulkan_extensions(output);
+        self.has_vulkan_descriptor_heap =
+            extensions.iter().any(|ext| ext == "VK_EXT_descriptor_heap");
+        self.has_vulkan_cluster_acceleration_structure = extensions
+            .iter()
+            .any(|ext| ext == "VK_EXT_cluster_acceleration_structure");
+        self.has_vulkan_low_latency_rev2 = output.lines().any(|line| {
+            line.split_whitespace().next() == Some("VK_NV_low_latency")
+                && line
+                    .split_once("extension revision ")
+                    .and_then(|(_, revision)| revision.trim().parse::<u32>().ok())
+                    .is_some_and(|revision| revision >= 2)
+        });
     }
 
     /// Parse capabilities from a version string
@@ -3077,6 +3107,12 @@ impl DriverCapabilities {
             has_dmabuf_mmap: major >= 610,
             has_drm_color_pipeline: major >= 610,
             has_vulkan_descriptor_heap: false,
+            has_vulkan_low_latency_rev2: false,
+            has_vulkan_cluster_acceleration_structure: false,
+            has_cgroups_memory_partitioning: major >= 615,
+            has_12bpc_color_reporting: major >= 615,
+            has_display_glitch_perf_limit_override: major >= 615,
+            kernel_suspend_notifiers_enabled: None,
         })
     }
 
@@ -3244,27 +3280,51 @@ fn drm_color_pipeline_status(
 
 /// Detect notable Vulkan extensions via vulkaninfo
 pub fn detect_vulkan_extensions() -> Vec<String> {
-    let output = match overlay_safe_vulkaninfo_command().output() {
-        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).to_string(),
-        _ => return Vec::new(),
-    };
+    parse_notable_vulkan_extensions(&vulkaninfo_output().unwrap_or_default())
+}
 
-    parse_notable_vulkan_extensions(&output)
+/// Return advertised Reflex API support and the Proton Vulkan-native path.
+pub fn detect_reflex_support() -> (bool, bool) {
+    reflex_support_from_vulkan(&vulkaninfo_output().unwrap_or_default())
+}
+
+fn reflex_support_from_vulkan(output: &str) -> (bool, bool) {
+    let mut caps = DriverCapabilities::from_version("").expect("empty version is supported");
+    caps.apply_vulkan_runtime(output);
+    let extensions = parse_notable_vulkan_extensions(output);
+    let available = extensions.iter().any(|ext| ext == "VK_NV_low_latency2")
+        || caps.has_vulkan_low_latency_rev2;
+    (available, caps.has_vulkan_low_latency_rev2)
+}
+
+fn vulkaninfo_output() -> Option<String> {
+    let output = overlay_safe_vulkaninfo_command().output().ok()?;
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
 fn parse_notable_vulkan_extensions(output: &str) -> Vec<String> {
-    const NOTABLE: [&str; 6] = [
+    const NOTABLE: [&str; 9] = [
         "VK_KHR_device_group_creation",
         "VK_EXT_shader_long_vector",
         "VK_KHR_internally_synchronized_queues",
         "VK_KHR_video_decode_h265",
         "VK_NV_push_constant_bank",
         "VK_EXT_descriptor_heap",
+        "VK_NV_low_latency",
+        "VK_NV_low_latency2",
+        "VK_EXT_cluster_acceleration_structure",
     ];
 
     NOTABLE
         .iter()
-        .filter(|extension| output.contains(**extension))
+        .filter(|extension| {
+            output
+                .lines()
+                .any(|line| line.split_whitespace().next() == Some(**extension))
+        })
         .map(|ext| ext.to_string())
         .collect()
 }
@@ -3470,6 +3530,43 @@ pub fn print_driver_info() -> NvResult<()> {
         );
     }
 
+    println!();
+    if caps.major_version >= 615 {
+        println!("Driver release capabilities:");
+        println!("  GPU memory partitioning: driver supported; kernel/controller setup required");
+        println!(
+            "  12 bpc reporting: driver supported; actual depth depends on the display/compositor"
+        );
+        println!(
+            "  RmDisableDisplayGlitchPerfLimit: opt-in idle-power override; may cause display glitches"
+        );
+    }
+    println!(
+        "  Kernel suspend notifiers: {}",
+        match caps.kernel_suspend_notifiers_enabled {
+            Some(true) => "Enabled",
+            Some(false) => "Disabled",
+            None => "Unknown",
+        }
+    );
+    println!();
+    println!("Vulkan runtime capabilities:");
+    println!(
+        "  VK_NV_low_latency revision 2: {}",
+        if caps.has_vulkan_low_latency_rev2 {
+            "Detected"
+        } else {
+            "Not detected"
+        }
+    );
+    println!(
+        "  VK_EXT_cluster_acceleration_structure: {}",
+        if caps.has_vulkan_cluster_acceleration_structure {
+            "Detected"
+        } else {
+            "Not detected"
+        }
+    );
     println!();
     println!(
         "GeForce NOW native Linux app: {}",
@@ -3978,17 +4075,7 @@ pub fn print_dkms_status() -> NvResult<()> {
 
     // Check if any kernel is missing nvidia module
     for kernel in &installed_kernels {
-        let module_path = format!(
-            "/usr/lib/modules/{}/kernel/drivers/video/nvidia.ko.zst",
-            kernel
-        );
-        let module_path_alt = format!("/usr/lib/modules/{}/kernel/drivers/video/nvidia.ko", kernel);
-        let module_path_extra = format!("/usr/lib/modules/{}/extramodules/nvidia.ko.zst", kernel);
-
-        if !std::path::Path::new(&module_path).exists()
-            && !std::path::Path::new(&module_path_alt).exists()
-            && !std::path::Path::new(&module_path_extra).exists()
-        {
+        if !kernel_has_nvidia_module(kernel) {
             issues.push(format!("Kernel {} may be missing nvidia module", kernel));
         }
     }
@@ -4095,19 +4182,7 @@ pub fn print_driver_check() -> NvResult<()> {
     if installed_kernels.len() > 1 {
         let mut kernels_without_nvidia = Vec::new();
         for kernel in &installed_kernels {
-            let module_paths = [
-                format!(
-                    "/usr/lib/modules/{}/kernel/drivers/video/nvidia.ko.zst",
-                    kernel
-                ),
-                format!("/usr/lib/modules/{}/kernel/drivers/video/nvidia.ko", kernel),
-                format!("/usr/lib/modules/{}/extramodules/nvidia.ko.zst", kernel),
-                format!("/usr/lib/modules/{}/extramodules/nvidia.ko", kernel),
-            ];
-
-            let has_module = module_paths
-                .iter()
-                .any(|p| std::path::Path::new(p).exists());
+            let has_module = kernel_has_nvidia_module(kernel);
             if !has_module {
                 kernels_without_nvidia.push(kernel.clone());
             }
@@ -4578,11 +4653,7 @@ pub fn print_source_status() -> NvResult<()> {
                 }
             }
 
-            // Show if there are updates available
-            let _ = Command::new("git")
-                .args(["-C", path, "fetch", "--tags", "--quiet"])
-                .status();
-
+            // Read-only status uses locally known tags; update performs fetch.
             if let Ok(output) = Command::new("git")
                 .args(["-C", path, "tag", "--sort=-v:refname"])
                 .output()
@@ -4590,7 +4661,7 @@ pub fn print_source_status() -> NvResult<()> {
                 if output.status.success() {
                     let tags = String::from_utf8_lossy(&output.stdout);
                     if let Some(latest) = tags.lines().next() {
-                        println!("Latest Tag:     {}", latest);
+                        println!("Latest Local Tag: {}", latest);
                     }
                 }
             }
@@ -4672,57 +4743,26 @@ pub fn init_source_build(path: &str) -> NvResult<()> {
         println!("Created dkms.conf");
     }
 
-    // Create symlink in /usr/src
-    let usr_src_link = format!("/usr/src/nvidia-{}", version);
-    println!();
-
-    if std::path::Path::new(&usr_src_link).exists() {
-        println!("Symlink already exists: {}", usr_src_link);
-        // Check if it points to the right place
-        if let Ok(target) = std::fs::read_link(&usr_src_link) {
-            if target.display().to_string() != expanded_path {
-                println!("  Warning: Points to different path: {}", target.display());
-                println!("  Run with sudo to update if needed");
-            }
-        }
-    } else {
-        println!("Creating symlink: {} -> {}", usr_src_link, expanded_path);
-        if nix::unistd::geteuid().is_root() {
-            std::os::unix::fs::symlink(&expanded_path, &usr_src_link).map_err(|e| {
-                NvControlError::ConfigError(format!("Failed to create symlink: {}", e))
-            })?;
-        } else {
-            println!("  Run as root:");
-            println!("  sudo ln -sf {} {}", expanded_path, usr_src_link);
-        }
+    // DKMS reads PACKAGE_NAME/PACKAGE_VERSION from the source and manages its
+    // destination. Do not invent a nvidia symlink for a nvidia-open registration.
+    if !nix::unistd::geteuid().is_root() {
+        return Err(NvControlError::ConfigError(format!(
+            "Source configuration is ready; run source init as root to register {} with DKMS",
+            expanded_path
+        )));
     }
-
-    // Register with DKMS
-    println!();
-    let info = get_dkms_setup_info();
-    if info.nvidia_registered {
-        println!("Already registered with DKMS");
-    } else {
-        println!("Registering with DKMS...");
-        if nix::unistd::geteuid().is_root() {
-            let status = Command::new("dkms")
-                .args(["add", "nvidia", &version])
-                .status();
-            match status {
-                Ok(s) if s.success() => println!("Registered nvidia/{} with DKMS", version),
-                Ok(_) => println!("Registration may have failed - check with: dkms status"),
-                Err(e) => println!("Failed to register: {}", e),
-            }
-        } else {
-            println!("  Run as root:");
-            println!("  sudo dkms add nvidia/{}", version);
-        }
+    let status = Command::new("dkms")
+        .args(["add", &expanded_path])
+        .status()
+        .map_err(|error| {
+            NvControlError::CommandFailed(format!("DKMS registration failed: {error}"))
+        })?;
+    if !status.success() {
+        return Err(NvControlError::CommandFailed(
+            "DKMS source registration failed; inspect dkms status before retrying".to_string(),
+        ));
     }
-
-    println!();
-    println!("Setup complete! Next steps:");
-    println!("  Build modules: nvctl driver source sync");
-    println!("  Update source: nvctl driver source update");
+    println!("Source registered. Build with: nvctl driver source sync");
 
     Ok(())
 }
@@ -4853,6 +4893,13 @@ pub fn update_source(rebuild: bool) -> NvResult<()> {
             return Ok(());
         }
 
+        // Registered source must remain reproducible for the next kernel update.
+        if info.nvidia_registered {
+            return Err(NvControlError::ConfigError(format!(
+                "New tag {latest_tag} requires a staged driver upgrade: prepare a separate source tree, build it before replacing modules, and match userland. Refusing to change a registered DKMS source in place."
+            )));
+        }
+
         // Checkout latest tag
         println!("\nChecking out {}...", latest_tag);
         let status = Command::new("git")
@@ -4874,7 +4921,10 @@ pub fn update_source(rebuild: bool) -> NvResult<()> {
         if let Some(ref old_ver) = info.nvidia_version {
             if old_ver != &new_version {
                 println!("\nVersion changed, may need to re-register with DKMS:");
-                println!("  sudo dkms remove nvidia/{} --all", old_ver);
+                println!(
+                    "  Keep the existing registration {} until new modules are built and matching userland is ready",
+                    old_ver
+                );
                 println!(
                     "  sudo ln -sf {} /usr/src/nvidia-{}",
                     source_path, new_version
@@ -4990,7 +5040,7 @@ pub fn cleanup_old_kernels(keep: usize, execute: bool) -> NvResult<()> {
 
     // Get nvidia version for DKMS removal
     let info = get_dkms_setup_info();
-    let version = info.nvidia_version.as_deref().unwrap_or("unknown");
+    let (module, version) = dkms_identity(&info)?;
 
     println!("\nRemoving...");
     for kernel in &to_remove {
@@ -4998,15 +5048,22 @@ pub fn cleanup_old_kernels(keep: usize, execute: bool) -> NvResult<()> {
 
         // Remove from DKMS
         let status = Command::new("sudo")
-            .args([
-                "dkms", "remove", "-m", "nvidia", "-v", version, "-k", kernel,
-            ])
+            .args(["dkms", "remove", "-m", module, "-v", version, "-k", kernel])
             .output();
 
         match status {
             Ok(output) if output.status.success() => println!("done"),
-            Ok(_) => println!("skipped (not in DKMS)"),
-            Err(e) => println!("error: {}", e),
+            Ok(output) => {
+                return Err(NvControlError::CommandFailed(format!(
+                    "DKMS removal failed: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                )));
+            }
+            Err(error) => {
+                return Err(NvControlError::CommandFailed(format!(
+                    "DKMS removal failed: {error}"
+                )));
+            }
         }
     }
 
@@ -5181,6 +5238,138 @@ fn detect_gpu_architecture(gpu_name: &str) -> (String, bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn non_arch_dkms_status_never_recommends_pacman_hooks() {
+        for database in [
+            PackageDatabase::Rpm,
+            PackageDatabase::Debian,
+            PackageDatabase::Unknown,
+        ] {
+            for standard in [false, true] {
+                for custom in [false, true] {
+                    assert_eq!(arch_dkms_hook_message(database, standard, custom), None);
+                }
+            }
+        }
+        assert!(
+            arch_dkms_hook_message(PackageDatabase::Arch, true, false)
+                .unwrap()
+                .contains("standard DKMS package hooks present")
+        );
+        assert!(
+            arch_dkms_hook_message(PackageDatabase::Arch, false, false)
+                .unwrap()
+                .contains("missing")
+        );
+    }
+
+    #[test]
+    fn initramfs_names_follow_distribution_tool() {
+        assert_eq!(
+            expected_initramfs_image("test-kernel", Some("mkinitcpio"), Some("linux-zen\n")),
+            "initramfs-linux-zen.img"
+        );
+        assert_eq!(
+            expected_initramfs_image("test-kernel", Some("dracut"), None),
+            "initramfs-test-kernel.img"
+        );
+        assert_eq!(
+            expected_initramfs_image("test-kernel", Some("update-initramfs"), None),
+            "initrd.img-test-kernel"
+        );
+    }
+
+    #[test]
+    fn dkms_identity_tracks_name_version_and_installed_state() {
+        let entries = parse_nvidia_dkms_status(
+            "nvidia-open/615.71.09, kernel-a, x86_64: installed\nnvidia-open/615.71.09, kernel-b, x86_64: built\nnvidia/610.57.04, old-kernel, x86_64: installed\nv4l2loopback/1, kernel-a, x86_64: installed",
+        );
+        assert_eq!(entries.len(), 3);
+        let selected = select_dkms_registration(&entries, Some("615.71.09")).unwrap();
+        assert_eq!(selected.module, "nvidia-open");
+        assert!(selected.installed);
+        assert!(!entries[1].installed);
+        assert!(select_dkms_registration(&entries, None).is_none());
+        assert!(select_dkms_registration(&entries, Some("999.1")).is_none());
+    }
+
+    #[test]
+    fn dkms_ambiguous_module_names_are_not_guessed() {
+        let entries =
+            parse_nvidia_dkms_status("nvidia/615.71.09: added\nnvidia-open/615.71.09: added");
+        assert!(select_dkms_registration(&entries, Some("615.71.09")).is_none());
+        assert_eq!(
+            select_dkms_registration(&entries[..1], None)
+                .unwrap()
+                .module,
+            "nvidia"
+        );
+    }
+
+    #[test]
+    fn package_database_respects_host_distribution() {
+        for (release, expected) in [
+            ("ID=arch", PackageDatabase::Arch),
+            ("ID=cachyos\nID_LIKE=arch", PackageDatabase::Arch),
+            ("ID=fedora", PackageDatabase::Rpm),
+            ("ID=custom\nID_LIKE=\"fedora rhel\"", PackageDatabase::Rpm),
+            ("ID=pop\nID_LIKE=\"ubuntu debian\"", PackageDatabase::Debian),
+            ("ID=debian", PackageDatabase::Debian),
+            ("ID=unknown", PackageDatabase::Unknown),
+        ] {
+            assert_eq!(package_database_from_os_release(release), expected);
+        }
+    }
+
+    #[test]
+    fn non_arch_ownership_does_not_generate_arch_repair_advice() {
+        let ownership = vec![OwnershipDiagnostic {
+            path: "/lib/firmware/nvidia/example".to_string(),
+            owner: None,
+            package_check: None,
+        }];
+        assert!(collect_package_findings(None, &[], &ownership).is_empty());
+    }
+
+    #[test]
+    fn beta_packages_warn_only_for_actual_version_mismatches() {
+        let mut packages = vec![
+            PackageDiagnostic {
+                package: "nvidia-utils-beta".into(),
+                installed_version: Some("1:615.71.09-0.1".into()),
+                status: "installed".into(),
+            },
+            PackageDiagnostic {
+                package: "lib32-nvidia-utils-beta".into(),
+                installed_version: Some("615.71.09-2".into()),
+                status: "installed".into(),
+            },
+        ];
+        let ownership = vec![OwnershipDiagnostic {
+            path: "/lib/firmware/nvidia/test".into(),
+            owner: Some("nvidia-utils-beta".into()),
+            package_check: None,
+        }];
+        assert!(collect_package_findings(Some("615.71.09"), &packages, &ownership).is_empty());
+        assert!(
+            collect_package_findings(Some("610.57.04"), &packages, &ownership)
+                .iter()
+                .any(|finding| finding.contains("does not match detected driver"))
+        );
+        packages[1].installed_version = Some("610.57.04-1".into());
+        assert!(
+            collect_package_findings(Some("615.71.09"), &packages, &ownership)
+                .iter()
+                .any(|finding| finding.contains("lib32-nvidia-utils version"))
+        );
+    }
+
+    #[test]
+    fn optional_module_settings_need_not_be_on_boot_command_line() {
+        let images = vec!["initramfs-test.img".to_string()];
+        assert!(collect_initramfs_findings("test", None, Some("quiet"), &images).is_empty());
+    }
 
     #[test]
     fn test_driver_type_parsing() {
@@ -5371,6 +5560,37 @@ mod tests {
     }
 
     #[test]
+    fn new_driver_capabilities_require_runtime_evidence() {
+        let mut caps = DriverCapabilities::from_version("615.71.09").unwrap();
+        assert!(caps.has_vulkan_device_group && caps.has_drm_color_pipeline);
+        assert!(caps.has_cgroups_memory_partitioning);
+        assert!(caps.has_12bpc_color_reporting);
+        assert!(caps.has_display_glitch_perf_limit_override);
+        for version in ["590.48.01", "595.84", "600.1", "610.57.04"] {
+            let previous = DriverCapabilities::from_version(version).unwrap();
+            assert!(!previous.has_cgroups_memory_partitioning);
+            assert!(!previous.has_12bpc_color_reporting);
+            assert!(!previous.has_display_glitch_perf_limit_override);
+        }
+        assert!(!caps.has_vulkan_low_latency_rev2);
+        assert!(!caps.has_vulkan_cluster_acceleration_structure);
+        caps.apply_vulkan_runtime(
+            "VK_NV_low_latency2 : extension revision 2\nVK_NV_low_latency : extension revision 1",
+        );
+        assert!(!caps.has_vulkan_low_latency_rev2);
+        caps.apply_vulkan_runtime("VK_NV_low_latency : extension revision 2\nVK_EXT_cluster_acceleration_structure : extension revision 1");
+        assert!(caps.has_vulkan_low_latency_rev2);
+        assert!(caps.has_vulkan_cluster_acceleration_structure);
+        caps.apply_vulkan_runtime("");
+        assert!(!caps.has_vulkan_low_latency_rev2);
+        assert!(!caps.has_vulkan_cluster_acceleration_structure);
+        assert_eq!(
+            parse_notable_vulkan_extensions("VK_NV_low_latency2 : extension revision 2"),
+            vec!["VK_NV_low_latency2"]
+        );
+    }
+
+    #[test]
     fn test_vulkaninfo_probe_disables_overlay_layers() {
         let command = overlay_safe_vulkaninfo_command();
         let envs: std::collections::HashMap<_, _> = command.get_envs().collect();
@@ -5538,5 +5758,26 @@ mod tests {
         let diagnostics = collect_release_diagnostics();
         assert!(!diagnostics.running_kernel.is_empty());
         assert!(!diagnostics.module_kernel.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod reflex_runtime_tests {
+    use super::reflex_support_from_vulkan;
+    #[test]
+    fn reflex_paths_require_advertised_apis() {
+        assert_eq!(reflex_support_from_vulkan(""), (false, false));
+        assert_eq!(
+            reflex_support_from_vulkan("VK_NV_low_latency2 : extension revision 1"),
+            (true, false)
+        );
+        assert_eq!(
+            reflex_support_from_vulkan("VK_NV_low_latency : extension revision 2"),
+            (true, true)
+        );
+        assert_eq!(
+            reflex_support_from_vulkan("VK_NV_low_latency : extension revision 1"),
+            (false, false)
+        );
     }
 }

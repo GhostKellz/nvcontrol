@@ -1,6 +1,6 @@
 # Historical NVIDIA Open Kernel Modules 580.105.08 Notes
 
-This page is retained as historical 580-era research. The current primary driver path is NVIDIA 610+ open drivers; use [open-610.md](open-610.md) and [nvidia-driver.md](nvidia-driver.md) for current release guidance.
+This page is retained as historical 580-era research. The current primary driver path is NVIDIA 615 open drivers; use [open-615.md](open-615.md) and [nvidia-driver.md](nvidia-driver.md) for current release guidance.
 
 ## Driver Information
 
@@ -405,10 +405,10 @@ nvctl dlss status
 2. Check current nvcontrol guidance: `nvctl driver info`
 3. Run release diagnostics: `nvctl driver diagnose-release`
 4. Set up DKMS for auto-rebuild if your distro/package path requires it
-5. Use [open-610.md](open-610.md) for current 610+ release guidance
+5. Use [open-615.md](open-615.md) for current release guidance
 
 ### 📚 Documentation
 - Driver README: `archive/open-gpu-kernel-modules/README.md`
 - Kernel optimizations: This document
-- Current 610+ driver guidance: [open-610.md](open-610.md)
+- Current driver guidance: [open-615.md](open-615.md)
 - ASUS Astral features: [hardware/asus-astral.md](../hardware/asus-astral.md)

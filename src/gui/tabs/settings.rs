@@ -138,7 +138,7 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, ctx: &egui::Context) {
                             ui.end_row();
 
                             ui.label("VRAM:");
-                            ui.label(format!("{:.0} GB", stats.memory_total as f64 / 1e9));
+                            ui.label(format!("{:.0} GiB", stats.memory_total as f64 / 1024_f64.powi(3)));
                             ui.end_row();
                         });
                 }
@@ -185,12 +185,12 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, ctx: &egui::Context) {
                     {
                         if let Some(ref stats) = state.gpu_stats {
                             let info = format!(
-                                "nvcontrol v{}\n\nGPU: {}\nArchitecture: {}\nDriver: {}\nVRAM: {:.0} GB\nTheme: {}",
+                                "nvcontrol v{}\n\nGPU: {}\nArchitecture: {}\nDriver: {}\nVRAM: {:.0} GiB\nTheme: {}",
                                 env!("CARGO_PKG_VERSION"),
                                 stats.name,
                                 stats.architecture,
                                 stats.driver_version,
-                                stats.memory_total as f64 / 1e9,
+                                stats.memory_total as f64 / 1024_f64.powi(3),
                                 state.current_theme.name()
                             );
                             ctx.copy_text(info);
@@ -296,14 +296,14 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, ctx: &egui::Context) {
             .show(&mut columns[1], |ui| {
                 let tab_shortcuts = [
                     ("1", "GPU Status"),
-                    ("2", "Overclock"),
-                    ("3", "Fan Control"),
-                    ("4", "Display"),
+                    ("2", "Fan Control"),
+                    ("3", "Display"),
+                    ("4", "Power"),
                     ("5", "Vibrance"),
                     ("6", "HDR"),
                     ("7", "Profiles"),
                     ("8", "OSD"),
-                    ("9", "Settings"),
+                    ("9", "Support"),
                 ];
 
                 egui::Grid::new("tab_shortcuts")

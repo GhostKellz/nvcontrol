@@ -3,7 +3,7 @@
 
 export DH_VERBOSE = 1
 export CARGO_HOME = $(CURDIR)/debian/.cargo
-export RUSTUP_TOOLCHAIN = 1.97.1
+export RUSTUP_TOOLCHAIN = 1.98.1
 export CARGO_TARGET_DIR = $(CURDIR)/target
 
 %:
@@ -20,6 +20,11 @@ override_dh_auto_install:
 
 	# Install desktop file
 	install -Dm644 assets/nvcontrol.desktop debian/nvcontrol/usr/share/applications/nvcontrol.desktop
+
+	install -Dm644 assets/app-icons/nvidia.png debian/nvcontrol/usr/share/icons/hicolor/512x512/apps/nvcontrol.png
+	install -Dm644 completions/nvctl.bash debian/nvcontrol/usr/share/bash-completion/completions/nvctl
+	install -Dm644 completions/_nvctl debian/nvcontrol/usr/share/zsh/site-functions/_nvctl
+	install -Dm644 completions/nvctl.fish debian/nvcontrol/usr/share/fish/vendor_completions.d/nvctl.fish
 
 	# Install systemd user services
 	install -Dm644 release/arch/nvcontrol-monitor.service debian/nvcontrol/usr/lib/systemd/user/nvcontrol-monitor.service

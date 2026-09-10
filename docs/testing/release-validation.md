@@ -12,7 +12,7 @@ flowchart TD
     static --> tests["test suites\nunit + focused CLI/docs/packaging"]
     tests --> audit["dependency audit\ncargo audit + dependency review"]
     audit --> package["package creation\ncargo package"]
-    package --> live["live 610+ smoke tests"]
+    package --> live["live supported-driver smoke tests"]
     live --> install["install/update/uninstall smoke"]
     install --> docs["docs and release notes"]
     docs --> tag{"tag candidate?"}
@@ -26,17 +26,17 @@ flowchart TD
 | Gate | Command Or Evidence | Mutates System | Release Meaning |
 |------|---------------------|----------------|-----------------|
 | Formatting | `cargo fmt --all --check` | No | Rust style is stable |
-| Compile | `cargo check --all-targets` | No | All targets typecheck |
-| Clippy | `cargo clippy --all-targets -- -D warnings` | No | No accepted warning debt |
-| Tests | `cargo test` or focused release suites | No by default | Parser, docs, packaging, regressions pass |
+| Compile | `cargo check --locked --all-targets --all-features` | No | All targets typecheck |
+| Clippy | `cargo clippy --locked --all-targets --all-features -- -D warnings` | No | No accepted warning debt |
+| Tests | `cargo test --locked --all-features` | No by default | Parser, docs, packaging, regressions pass |
 | Audit | `cargo audit` | No | No known RustSec vulnerabilities |
-| Package | `cargo package --allow-dirty --no-verify` | No | Crate package can be assembled |
-| Driver live smoke | `nvctl driver info`, `diagnose-release`, `validate --driver 610` | Read-only | Actual GPU/driver path is visible |
+| Package | `cargo package --allow-dirty --locked` | No | Crate package assembles and verifies |
+| Driver live smoke | `dev/diagnose.sh` against the target driver | Read-only | Actual GPU/driver path is visible |
 | Support smoke | `nvctl doctor --support` and support-bundle creation | Writes support artifact | Support artifacts are usable |
 | Install smoke | installer, desktop file, icons, completions, services | Yes | Release artifact installs and removes cleanly |
-| Vibrance regression | `NVCONTROL_RUN_HARDWARE_TESTS=1 ... --ignored` | Yes | Explicit live display mutation path works |
+| Vibrance regression | `NVCONTROL_RUN_HARDWARE_TESTS=1 dev/test-hardware.sh --vibrance` | Yes | Explicit live display mutation path works |
 
-## Live 610+ Smoke Flow
+## Live supported-driver Smoke Flow
 
 ```mermaid
 sequenceDiagram
@@ -47,8 +47,8 @@ sequenceDiagram
 
     Operator->>Nvctl: nvctl driver info
     Nvctl->>Driver: query NVML, GSP, modules, runtime probes
-    Driver-->>Nvctl: 610+ open-driver facts
-    Nvctl-->>Operator: 610+ feature section
+    Driver-->>Nvctl: loaded open-driver facts
+    Nvctl-->>Operator: runtime feature section
 
     Operator->>Nvctl: nvctl driver diagnose-release
     Nvctl->>Driver: kernel/userspace/GSP alignment checks

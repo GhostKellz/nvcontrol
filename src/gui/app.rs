@@ -13,6 +13,13 @@ use super::widgets::{HeaderBar, StatusState};
 pub fn run() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
+            .with_app_id(std::env::var("FLATPAK_ID").unwrap_or_else(|_| "nvcontrol".to_string()))
+            .with_icon(
+                eframe::icon_data::from_png_bytes(include_bytes!(
+                    "../../assets/app-icons/nvidia.png"
+                ))
+                .expect("bundled application icon must be valid"),
+            )
             .with_inner_size([900.0, 600.0])
             .with_min_inner_size([800.0, 500.0])
             .with_title("nvcontrol - NVIDIA Settings Manager"),
@@ -149,30 +156,38 @@ impl NvControlApp {
 
                 ui.add_space(8.0);
 
-                // Tab buttons
-                for (tab, icon, label) in Tab::sidebar_tabs() {
-                    let selected = self.state.tab == tab;
-                    let response = ui.add(
-                        egui::Button::new(
-                            egui::RichText::new(format!("{} {}", icon, label)).color(if selected {
-                                colors.cyan.to_egui()
-                            } else {
-                                colors.fg.to_egui()
-                            }),
-                        )
-                        .fill(if selected {
-                            colors.selection.to_egui()
-                        } else {
-                            egui::Color32::TRANSPARENT
-                        })
-                        .stroke(egui::Stroke::NONE)
-                        .min_size(egui::vec2(170.0, 28.0)),
-                    );
+                egui::ScrollArea::vertical()
+                    .id_salt("sidebar-navigation")
+                    .max_height((ui.available_height() - 32.0).max(0.0))
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        // Tab buttons
+                        for (tab, icon, label) in Tab::sidebar_tabs() {
+                            let selected = self.state.tab == tab;
+                            let response = ui.add(
+                                egui::Button::new(
+                                    egui::RichText::new(format!("{} {}", icon, label)).color(
+                                        if selected {
+                                            colors.cyan.to_egui()
+                                        } else {
+                                            colors.fg.to_egui()
+                                        },
+                                    ),
+                                )
+                                .fill(if selected {
+                                    colors.selection.to_egui()
+                                } else {
+                                    egui::Color32::TRANSPARENT
+                                })
+                                .stroke(egui::Stroke::NONE)
+                                .min_size(egui::vec2(170.0, 28.0)),
+                            );
 
-                    if response.clicked() {
-                        self.state.tab = tab;
-                    }
-                }
+                            if response.clicked() {
+                                self.state.tab = tab;
+                            }
+                        }
+                    });
 
                 // Version at bottom
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
@@ -254,23 +269,30 @@ impl eframe::App for NvControlApp {
                 self.render_sidebar(ui);
             });
 
-        egui::CentralPanel::default().show(ui, |ui| match self.state.tab {
-            Tab::Gpu => super::tabs::gpu::render(ui, &mut self.state, &ctx),
-            Tab::Fan => super::tabs::fan::render(ui, &mut self.state, &ctx),
-            Tab::Display => super::tabs::display::render(ui, &mut self.state, &ctx),
-            Tab::Power => super::tabs::power::render(ui, &mut self.state, &ctx),
-            Tab::Vibrance => super::tabs::vibrance::render(ui, &mut self.state, &ctx),
-            Tab::Hdr => super::tabs::hdr::render(ui, &mut self.state, &ctx),
-            Tab::Vrr => super::tabs::vrr::render(ui, &mut self.state, &ctx),
-            Tab::GameProfiles => super::tabs::game_profiles::render(ui, &mut self.state, &ctx),
-            Tab::Dlss => super::tabs::dlss::render(ui, &mut self.state, &ctx),
-            Tab::Osd => super::tabs::osd::render(ui, &mut self.state, &ctx),
-            Tab::Latency => super::tabs::latency::render(ui, &mut self.state, &ctx),
-            Tab::Gamescope => super::tabs::gamescope::render(ui, &mut self.state, &ctx),
-            Tab::Recording => super::tabs::recording::render(ui, &mut self.state, &ctx),
-            Tab::System => super::tabs::system::render(ui, &mut self.state, &ctx),
-            Tab::Support => super::tabs::support::render(ui, &mut self.state, &ctx),
-            Tab::Settings => super::tabs::settings::render(ui, &mut self.state, &ctx),
+        egui::CentralPanel::default().show(ui, |ui| {
+            egui::ScrollArea::vertical()
+                .id_salt(format!("tab-content-{:?}", self.state.tab))
+                .auto_shrink([false, false])
+                .show(ui, |ui| match self.state.tab {
+                    Tab::Gpu => super::tabs::gpu::render(ui, &mut self.state, &ctx),
+                    Tab::Fan => super::tabs::fan::render(ui, &mut self.state, &ctx),
+                    Tab::Display => super::tabs::display::render(ui, &mut self.state, &ctx),
+                    Tab::Power => super::tabs::power::render(ui, &mut self.state, &ctx),
+                    Tab::Vibrance => super::tabs::vibrance::render(ui, &mut self.state, &ctx),
+                    Tab::Hdr => super::tabs::hdr::render(ui, &mut self.state, &ctx),
+                    Tab::Vrr => super::tabs::vrr::render(ui, &mut self.state, &ctx),
+                    Tab::GameProfiles => {
+                        super::tabs::game_profiles::render(ui, &mut self.state, &ctx)
+                    }
+                    Tab::Dlss => super::tabs::dlss::render(ui, &mut self.state, &ctx),
+                    Tab::Osd => super::tabs::osd::render(ui, &mut self.state, &ctx),
+                    Tab::Latency => super::tabs::latency::render(ui, &mut self.state, &ctx),
+                    Tab::Gamescope => super::tabs::gamescope::render(ui, &mut self.state, &ctx),
+                    Tab::Recording => super::tabs::recording::render(ui, &mut self.state, &ctx),
+                    Tab::System => super::tabs::system::render(ui, &mut self.state, &ctx),
+                    Tab::Support => super::tabs::support::render(ui, &mut self.state, &ctx),
+                    Tab::Settings => super::tabs::settings::render(ui, &mut self.state, &ctx),
+                });
         });
 
         let colors = self.state.theme_colors();

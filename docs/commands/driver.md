@@ -11,7 +11,7 @@ nvctl driver check
 nvctl driver capabilities
 
 # Branch validation
-nvctl driver validate --driver 610
+nvctl driver validate --driver 615
 
 # Release alignment diagnostics
 nvctl driver diagnose-release
@@ -38,6 +38,11 @@ nvctl driver source status
 nvctl driver source doctor
 ```
 
+`nvctl driver capabilities` reports detected Reflex/Vulkan extensions and the
+loaded suspend-notifier setting. Driver support for memory partitioning, 12 bpc
+reporting, and the optional display-clock override is distinguished from active
+hardware configuration. See [615 driver support](../drivers/open-615.md).
+
 For driver branch compatibility, see [driver compatibility](../drivers/nvidia-driver.md).
 
 ## Diagnostic Flow
@@ -48,7 +53,7 @@ flowchart TD
 
     mode -->|"info / capabilities"| caps["collect driver version\nand runtime capability probes"]
     mode -->|"check"| health["quick health summary"]
-    mode -->|"validate --driver 610"| branch["branch-specific expectations"]
+    mode -->|"validate --driver 615"| branch["branch-specific expectations"]
     mode -->|"diagnose-release"| release["kernel/userspace/GSP alignment"]
     mode -->|"support-bundle"| bundle["support artifact pipeline"]
     mode -->|"dkms / source"| build["build and package state"]

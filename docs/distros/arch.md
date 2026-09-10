@@ -5,6 +5,12 @@ v0.8.12 was validated on KDE Wayland with an RTX 5090, NVIDIA open 610.57.04,
 and a CachyOS LTO kernel. That is an Arch installation using a third-party kernel,
 not a CachyOS distro installation.
 
+The current support update also passed native vibrance apply/readback on the
+same RTX 5090 with NVIDIA open 615.71.09 using Rust 1.98.1. The regression restored both displays to their original raw values; the user
+subsequently requested 200% on both. The final native pacman package was installed
+and passed file-integrity and live diagnostic checks. See the
+[release evidence](../advisories/v0.8.13-release-notes.md) for the complete status.
+
 ## Driver and kernel
 
 For Blackwell, follow the [Arch NVIDIA guide](https://wiki.archlinux.org/title/NVIDIA).

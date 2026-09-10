@@ -100,14 +100,28 @@ fn support_bundle_plain_text_still_writes_metadata_sidecar() {
 }
 
 #[test]
-fn dev_scripts_gate_hardware_mutating_vibrance_tests() {
-    for script in ["dev/test-cli.sh", "dev/test-all.sh"] {
-        let content = std::fs::read_to_string(script).unwrap();
-        assert!(
-            !content.contains("vibrance 100") || content.contains("NVCONTROL_RUN_HARDWARE_TESTS"),
-            "{script} must gate live vibrance mutation behind NVCONTROL_RUN_HARDWARE_TESTS"
-        );
+fn dev_cli_script_propagates_failures() {
+    for (binary, expected) in [("/bin/true", 0), ("/bin/false", 1)] {
+        let output = std::process::Command::new("bash")
+            .arg("dev/test-cli.sh")
+            .env("NVCTL", binary)
+            .env_remove("DISPLAY")
+            .env_remove("WAYLAND_DISPLAY")
+            .output()
+            .expect("Run headless CLI gate with controlled command status");
+        assert_eq!(output.status.code(), Some(expected));
     }
+}
+
+#[test]
+fn dev_hardware_mutation_requires_explicit_opt_in() {
+    let output = std::process::Command::new("bash")
+        .args(["dev/test-hardware.sh", "--vibrance"])
+        .env_remove("NVCONTROL_RUN_HARDWARE_TESTS")
+        .output()
+        .expect("Run mutation gate without permission");
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("opt into"));
 }
 
 #[test]
@@ -182,21 +196,81 @@ fn vibrance_alias_still_works() {
 #[test]
 #[ignore = "mutates live display vibrance; run explicitly with NVCONTROL_RUN_HARDWARE_TESTS=1"]
 fn live_vibrance_levels_apply_once() {
+    use nvcontrol::vibrance_native::{
+        NativeVibranceController, percentage_to_vibrance, vibrance_to_percentage,
+    };
     if std::env::var("NVCONTROL_RUN_HARDWARE_TESTS").as_deref() != Ok("1") {
         eprintln!("skipping live vibrance regression; set NVCONTROL_RUN_HARDWARE_TESTS=1");
         return;
     }
 
-    for level in ["100", "150", "200"] {
-        let output = common::nvctl_command()
-            .args(["vibrance", level])
-            .output()
-            .unwrap_or_else(|_| panic!("Failed to set vibrance level {level}"));
+    struct RestoreVibrance {
+        controller: NativeVibranceController,
+        values: Vec<(usize, i64)>,
+    }
+    impl Drop for RestoreVibrance {
+        fn drop(&mut self) {
+            for &(index, raw) in &self.values {
+                if let Err(error) = self.controller.set_vibrance(index, raw) {
+                    eprintln!("Failed to restore display {index} to raw {raw}: {error}");
+                }
+            }
+        }
+    }
 
+    let controller = NativeVibranceController::new().expect("Open live NVKMS controller");
+    let values: Vec<_> = controller
+        .connectors
+        .iter()
+        .filter(|c| c.connected)
+        .map(|c| {
+            (
+                c.connector_index as usize,
+                c.current_vibrance
+                    .expect("Read original vibrance before changing it"),
+            )
+        })
+        .collect();
+    assert!(!values.is_empty(), "No connected displays to test");
+    let original = values.clone();
+    let mut restore = RestoreVibrance { controller, values };
+    for &(index, raw) in &original {
+        let percentage = vibrance_to_percentage(raw);
+        let target = if percentage < 200 {
+            percentage + 1
+        } else {
+            percentage - 1
+        };
+        let output = std::process::Command::new(env!("CARGO_BIN_EXE_nvctl"))
+            .args([
+                "display",
+                "vibrance",
+                "set-display",
+                &index.to_string(),
+                &target.to_string(),
+            ])
+            .output()
+            .expect("Execute built CLI vibrance command");
         assert!(
             output.status.success(),
-            "vibrance level {level} failed: {}",
+            "{}",
             String::from_utf8_lossy(&output.stderr)
         );
+        let readback =
+            NativeVibranceController::new().expect("Reopen controller for hardware readback");
+        assert_eq!(
+            readback.connectors[index].current_vibrance,
+            Some(percentage_to_vibrance(target))
+        );
+        restore
+            .controller
+            .set_vibrance(index, raw)
+            .expect("Restore original raw value");
+        eprintln!("Display {index}: raw {raw} -> {target}% -> raw {raw}");
+    }
+    drop(restore);
+    let restored = NativeVibranceController::new().expect("Verify final restored values");
+    for (index, raw) in original {
+        assert_eq!(restored.connectors[index].current_vibrance, Some(raw));
     }
 }

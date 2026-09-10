@@ -256,6 +256,7 @@ pub struct TuiApp {
     selected_gpu: usize,
     /// Show help overlay
     show_help: bool,
+    help_scroll: (u16, u16),
     /// Show settings overlay
     show_settings: bool,
     /// Paused state
@@ -390,6 +391,7 @@ impl TuiApp {
             current_tab: saved_state.current_tab.min(Tab::count() - 1),
             selected_gpu: saved_state.selected_gpu,
             show_help: false,
+            help_scroll: (0, 0),
             show_settings: false,
             paused: false,
             update_interval: Duration::from_secs(1),
@@ -694,6 +696,25 @@ impl TuiApp {
         }
 
         if self.show_help {
+            match code {
+                KeyCode::Up => self.help_scroll.0 = self.help_scroll.0.saturating_sub(1),
+                KeyCode::Down => self.help_scroll.0 = self.help_scroll.0.saturating_add(1),
+                KeyCode::Left => self.help_scroll.1 = self.help_scroll.1.saturating_sub(1),
+                KeyCode::Right => self.help_scroll.1 = self.help_scroll.1.saturating_add(1),
+                KeyCode::PageUp => self.help_scroll.0 = self.help_scroll.0.saturating_sub(10),
+                KeyCode::PageDown => self.help_scroll.0 = self.help_scroll.0.saturating_add(10),
+                KeyCode::Home => self.help_scroll = (0, 0),
+                KeyCode::Esc => self.show_help = false,
+                _ => {}
+            }
+            let (width, height) = crossterm::terminal::size().unwrap_or((80, 24));
+            self.help_scroll.0 = self.help_scroll.0.min(
+                (HELP_TEXT.lines().count() as u16).saturating_sub(height.saturating_sub(6).min(46)),
+            );
+            self.help_scroll.1 = self.help_scroll.1.min(
+                (HELP_TEXT.lines().map(str::len).max().unwrap_or(0) as u16)
+                    .saturating_sub(width.saturating_sub(6).min(90)),
+            );
             return;
         }
 
@@ -3263,8 +3284,8 @@ impl TuiApp {
         let fg = self.theme.fg.to_ratatui();
 
         // Center popup
-        let popup_width = 60.min(area.width - 4);
-        let popup_height = 28.min(area.height - 4);
+        let popup_width = 92.min(area.width.saturating_sub(4));
+        let popup_height = 48.min(area.height.saturating_sub(4));
         let popup_x = (area.width - popup_width) / 2;
         let popup_y = (area.height - popup_height) / 2;
         let popup_area = Rect::new(popup_x, popup_y, popup_width, popup_height);
@@ -3272,7 +3293,46 @@ impl TuiApp {
         // Clear background
         f.render_widget(Clear, popup_area);
 
-        let help_text = r#"
+        let help = Paragraph::new(HELP_TEXT)
+            .scroll(self.help_scroll)
+            .block(
+                Block::default()
+                    .title(" Help — arrows/PgUp/PgDn scroll; Esc closes ")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(accent)),
+            )
+            .style(Style::default().fg(fg));
+
+        f.render_widget(help, popup_area);
+    }
+}
+
+impl Default for TuiApp {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// Public launch functions for CLI
+/// Launch TUI with menu
+pub fn launch_menu() -> NvResult<()> {
+    let mut app = TuiApp::with_view(ViewMode::Menu);
+    app.run()
+}
+
+/// Launch nvtop-style monitor
+pub fn launch_nvtop() -> NvResult<()> {
+    let mut app = TuiApp::with_view(ViewMode::Nvtop);
+    app.run()
+}
+
+/// Launch full dashboard
+pub fn launch_dashboard() -> NvResult<()> {
+    let mut app = TuiApp::with_view(ViewMode::Dashboard);
+    app.run()
+}
+
+const HELP_TEXT: &str = r#"
  Keyboard Shortcuts
 
  Global:
@@ -3316,44 +3376,6 @@ impl TuiApp {
     diff         nvctl config diff --current live --target <profile>
     apply        nvctl config apply --input <profile>
 "#;
-
-        let help = Paragraph::new(help_text)
-            .block(
-                Block::default()
-                    .title(" Help ")
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(accent)),
-            )
-            .style(Style::default().fg(fg));
-
-        f.render_widget(help, popup_area);
-    }
-}
-
-impl Default for TuiApp {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-// Public launch functions for CLI
-/// Launch TUI with menu
-pub fn launch_menu() -> NvResult<()> {
-    let mut app = TuiApp::with_view(ViewMode::Menu);
-    app.run()
-}
-
-/// Launch nvtop-style monitor
-pub fn launch_nvtop() -> NvResult<()> {
-    let mut app = TuiApp::with_view(ViewMode::Nvtop);
-    app.run()
-}
-
-/// Launch full dashboard
-pub fn launch_dashboard() -> NvResult<()> {
-    let mut app = TuiApp::with_view(ViewMode::Dashboard);
-    app.run()
-}
 
 #[cfg(test)]
 mod tests {

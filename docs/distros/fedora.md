@@ -1,9 +1,11 @@
 # Fedora
 
-v0.8.12 was validated on Fedora 44 with an RTX 3070 passed through to the guest
-and the open 610.57.04 kernel modules. The test covered compilation, the Rust test
-suite, NVML/Vulkan diagnostics, native vibrance readback and no-change apply,
-and the official GeForce NOW Flatpak.
+The current support update was tested on Fedora 44 with an RTX 3070, first on
+the retained open 610 driver and then on open 615 after a full system update.
+Both runs passed the full test suite and native vibrance apply/readback/exact
+restoration. The native RPM built and installed successfully; its CLI and TUI
+passed live acceptance. GUI visual acceptance is tracked separately in the
+[release evidence](../advisories/v0.8.13-release-notes.md).
 
 ## Driver packaging
 
@@ -13,8 +15,9 @@ documents the open-module package path. RPM Fusion users should follow its NVIDI
 Howto and verify the final transaction before accepting it, especially when
 multilib gaming libraries are involved.
 
-After an update, wait for akmods to finish before rebooting and verify the loaded
-and packaged versions agree:
+After an update, wait for the module build to finish (akmods with RPM Fusion,
+DKMS with NVIDIA's packages) before rebooting. Verify the loaded and packaged
+versions agree:
 
 ```bash
 nvctl driver info
@@ -28,6 +31,9 @@ modules are intended.
 
 ## Package validation
 
-The Fedora spec requires Rust 1.97+, builds both binaries, and runs library tests
-without masking failures. Optional gaming recommendations are Gamescope,
+The Fedora spec requires Rust 1.98+, builds both binaries, and runs library tests
+without masking failures. Its runtime dependencies accept either NVIDIA or RPM
+Fusion library packages and require NVML explicitly. The package uses the shared
+NVIDIA icon and matching desktop/application identity. Optional gaming
+recommendations are Gamescope,
 MangoHud, and GameMode.
