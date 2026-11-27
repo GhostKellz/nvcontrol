@@ -101,8 +101,8 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
         .show(ui, |ui| {
             // Try native controller first
             match crate::vibrance_native::get_vibrance_controller() {
-                Ok(guard) => {
-                    if let Some(controller) = guard.as_ref() {
+                Ok(mut guard) => {
+                    if let Some(controller) = guard.as_mut() {
                         let displays = controller.list_displays();
                         if displays.is_empty() {
                             ui.label(egui::RichText::new("No displays detected").weak().italics());
@@ -136,13 +136,12 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
                                         )
                                         .changed()
                                     {
-                                        if let Err(e) =
-                                            crate::vibrance_native::set_display_vibrance_native(
-                                                0,
-                                                *connector_idx,
+                                        if let Err(e) = controller.set_vibrance(
+                                            *connector_idx as usize,
+                                            crate::vibrance_native::percentage_to_vibrance(
                                                 percentage as u32,
-                                            )
-                                        {
+                                            ),
+                                        ) {
                                             state
                                                 .toasts
                                                 .error(format!("Failed to set vibrance: {}", e));
@@ -269,13 +268,12 @@ pub fn render(ui: &mut egui::Ui, state: &mut GuiState, _ctx: &egui::Context) {
 /// Apply vibrance to all displays
 fn apply_vibrance_to_all(state: &mut GuiState, percentage: u32) {
     // Try native first
-    if let Ok(guard) = crate::vibrance_native::get_vibrance_controller() {
-        if let Some(controller) = guard.as_ref() {
+    if let Ok(mut guard) = crate::vibrance_native::get_vibrance_controller() {
+        if let Some(controller) = guard.as_mut() {
             for (_device_id, connector_idx, _name, _connected) in controller.list_displays() {
-                let _ = crate::vibrance_native::set_display_vibrance_native(
-                    0,
-                    connector_idx,
-                    percentage,
+                let _ = controller.set_vibrance(
+                    connector_idx as usize,
+                    crate::vibrance_native::percentage_to_vibrance(percentage),
                 );
             }
             state
